@@ -1,0 +1,17 @@
+---
+
+# Define a stream that points to another. This allows 3.7 images to track a version of RHEL appropriate for them
+# and to change that target with a single change if the RHEL version bumps. 
+rhel-for-ocp-3.7:
+  stream: rhel7-7.3
+
+# The target image for a given version of RHEL does not change often. When it does, it is for a embargoed CVE. 
+# In the past, we have forgotten to return the FROM field of a Dockerfiler back to the non-CVE image name
+# and continued to build off the special CVE version for too long. The override/expires date will be programmatically
+# honored and return back to the correct image.
+rhel7-7.3:
+  image: rhel7/rhel7-7.3released
+  override:
+    image:  rhel7/rhel7-7.3cve873
+    expires: Aug 28 2017
+    
