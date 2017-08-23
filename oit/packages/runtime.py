@@ -33,11 +33,12 @@ class Runtime(object):
             '_ocp_git_repo: &OCP_GIT_REPO "git@github.com:openshift/ose.git"',
         ]
 
-        self.distgit_repos = {}
+        # Map of dist-git repo name -> ImageMetadata object. Populated when group is set.
+        self.images = {}
 
-        # Map of source code repo alias (e.g. "ose") to a path on the filesystem where it has been cloned.
+        # Map of source code repo aliases (e.g. "ose") to a path on the filesystem where it has been cloned.
         # See registry_repo.
-        self.source_repos = {}
+        self.source_alias = {}
 
         pass
 
@@ -67,7 +68,7 @@ class Runtime(object):
         self.info("Searching group directory: %s" % self.group_dir)
         with Dir(self.group_dir):
             for distgit_repo_name in [x for x in os.listdir(".") if os.path.isdir(x)]:
-                self.distgit_repos[distgit_repo_name] = ImageMetadata(
+                self.images[distgit_repo_name] = ImageMetadata(
                     self, distgit_repo_name, distgit_repo_name)
 
     def verbose(self, message):
@@ -90,10 +91,12 @@ class Runtime(object):
         """
         self.info("Cloning all distgit repos into: %s" % self.distgits_dir)
 
-        for image in self.distgit_repos.values():
+        for image in self.images.values():
             image.clone_distgit()
 
-    def register_repo(self, alias, path):
+    def register_source_alias(self, alias, path):
         self.info("Registering source repo %s: %s" % (alias, path))
-        assert_dir(path, "Error registering repo alias %s" % alias)
-        self.source_repos[alias] = path
+        path = os.path.abspath(path)
+        assert_dir(path, "Error registering source alias %s" % alias)
+        self.source_alias[alias] = path
+
