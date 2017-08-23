@@ -1,11 +1,11 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
-from packages import *
-
+from packages import Runtime
 import click
 import os
 
 pass_runtime = click.make_pass_decorator(Runtime)
+
 
 @click.group()
 @click.option("--metadata-dir", default=None, metavar='PATH', help="Directory containing groups metadata directory if not current.")
@@ -14,16 +14,20 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.version_option("0.1")
 @click.pass_context
 def cli(ctx, metadata_dir, user, verbose):
-
     if metadata_dir is None:
         metadata_dir = os.getcwd()
 
     # @pass_runtime
     ctx.obj = Runtime(metadata_dir, user, verbose)
 
-option_working_dir = click.option("--working-dir", metavar='PATH', help="Existing directory in which operations should be performed.", required=True)
-option_group = click.option("--group", default=None, metavar='NAME', help="The group of images on which to operate.", required=True)
-option_branch = click.option("--branch", default=None, metavar='NAME', help="The distgit branch each group member must switch to.", required=True)
+
+option_working_dir = click.option("--working-dir", metavar='PATH',
+                                  help="Existing directory in which operations should be performed.", required=True)
+option_group = click.option("--group", default=None, metavar='NAME',
+                            help="The group of images on which to operate.", required=True)
+option_branch = click.option("--branch", default=None, metavar='NAME',
+                             help="The distgit branch each group member must switch to.", required=True)
+
 
 @cli.command("clone-distgits", help="Clone a group's distgit repos.")
 @option_working_dir
@@ -59,5 +63,3 @@ def update_dockerfiles(runtime, working_dir, group, branch, repo):
 
 if __name__ == '__main__':
     cli(obj={})
-
-

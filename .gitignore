@@ -1,0 +1,11 @@
+# Python Ignores
+*.pyc
+build
+dist
+*.so
+*.pyc
+.cache
+.coverage
+htmlcov
+.eggs
+.cache

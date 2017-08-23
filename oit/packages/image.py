@@ -1,8 +1,9 @@
 import yaml
 import string
+import os
 
-from common import *
-from model import *
+from common import assert_file, assert_exec, Dir
+from model import Model, Missing
 
 
 class ImageMetadata(object):
@@ -27,7 +28,7 @@ class ImageMetadata(object):
         runtime.verbose(config_yml_content)
         self.config = Model(yaml.load(config_yml_content))
 
-        self.type = "rpms" # default type is rpms
+        self.type = "rpms"  # default type is rpms
         if self.config.repo.type is not Missing:
             self.type = self.config.repo.type
 
@@ -51,11 +52,6 @@ class ImageMetadata(object):
             # Clone the distgit repository
             assert_exec(self.runtime, cmd_list)
 
-
             with Dir(self.distgit_dir):
                 # Switch to the target branch
                 assert_exec(self.runtime, ["rhpkg", "switch-branch", self.runtime.distgit_branch])
-
-
-
-
