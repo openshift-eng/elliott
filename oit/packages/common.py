@@ -2,6 +2,7 @@ import os
 import errno
 import subprocess
 
+
 class Dir(object):
 
     def __init__(self, dir):
@@ -14,6 +15,7 @@ class Dir(object):
 
     def __exit__(self, *args):
         os.chdir(self.previousDir)
+
 
 # Create FileNotFound for Python2
 try:
@@ -39,6 +41,6 @@ def assert_rc0(rc, msg):
 
 def assert_exec(runtime, cmd_list):
     runtime.verbose("Executing: %s" % cmd_list)
-    #process = subprocess.Popen(cmd_list, stdout=runtime.debug_log, stderr=runtime.debug_log)
+    # process = subprocess.Popen(cmd_list, stdout=runtime.debug_log, stderr=runtime.debug_log)
     process = subprocess.Popen(cmd_list)
     assert_rc0(process.wait(), "Error running %s. See debug log." % cmd_list)

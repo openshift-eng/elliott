@@ -3,7 +3,7 @@ import errno
 import click
 import atexit
 
-from common import *
+from common import assert_dir, Dir
 from image import ImageMetadata
 
 
@@ -27,7 +27,6 @@ class Runtime(object):
 
         self.user = user
 
-
         # Setup global aliases
         self.global_yaml_lines = [
             '_ocp_dist_git_branch: &OCP_DIST_GIT_BRANCH "master"  # TODO: determine what branch for the particular version of OSE being built',
@@ -35,7 +34,6 @@ class Runtime(object):
         ]
 
         self.distgit_repos = {}
-
 
         # Map of source code repo alias (e.g. "ose") to a path on the filesystem where it has been cloned.
         # See registry_repo.
@@ -69,7 +67,8 @@ class Runtime(object):
         self.info("Searching group directory: %s" % self.group_dir)
         with Dir(self.group_dir):
             for distgit_repo_name in [x for x in os.listdir(".") if os.path.isdir(x)]:
-                self.distgit_repos[distgit_repo_name] = ImageMetadata(self, distgit_repo_name, distgit_repo_name)
+                self.distgit_repos[distgit_repo_name] = ImageMetadata(
+                    self, distgit_repo_name, distgit_repo_name)
 
     def verbose(self, message):
         if self._verbose:
