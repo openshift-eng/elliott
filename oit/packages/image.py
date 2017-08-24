@@ -1,6 +1,7 @@
 import yaml
 import shutil
 import os
+import filecmp
 
 from common import assert_file, assert_exec, assert_dir, Dir, recursive_overwrite
 from model import Model, Missing
@@ -34,27 +35,43 @@ class ImageMetadata(object):
 
         self.qualified_name = "%s/%s" % (self.type, name)
 
-        self.distgit_dir = None
+        self._distgit_repo = None
 
-    def clone_distgit(self):
-        with Dir(self.runtime.distgits_dir):
+    def distgit_repo(self):
+        if self._distgit_repo is None:
+            self._distgit_repo = DistGitRepo(self)
+        return self._distgit_repo
+
+
+class DistGitRepo(object):
+
+    def __init__(self, metadata):
+        self.metadata = metadata
+        self.config = metadata.config
+        self.runtime = metadata.runtime
+        self.distgit_dir = None
+        self.notify_owner = False
+        self.clone_distgit(self.runtime.distgits_dir, self.runtime.distgit_branch)
+
+    def clone_distgit(self, root_dir, distgit_branch):
+        with Dir(root_dir):
             cmd_list = ["rhpkg"]
 
             if self.runtime.user is not None:
                 cmd_list.append("--user=%s" % self.runtime.user)
 
-            cmd_list.extend(["clone", self.qualified_name])
+            cmd_list.extend(["clone", self.metadata.qualified_name])
 
-            self.distgit_dir = os.path.abspath(os.path.join(os.getcwd(), self.name))
+            self.distgit_dir = os.path.abspath(os.path.join(os.getcwd(), self.metadata.name))
 
-            self.runtime.info("Cloning distgit repository: %s" % self.qualified_name, self.distgit_dir)
+            self.runtime.info("Cloning distgit repository %s [branch:%s] into: %s" % (self.metadata.qualified_name, distgit_branch, self.distgit_dir))
 
             # Clone the distgit repository
             assert_exec(self.runtime, cmd_list)
 
             with Dir(self.distgit_dir):
                 # Switch to the target branch
-                assert_exec(self.runtime, ["rhpkg", "switch-branch", self.runtime.distgit_branch])
+                assert_exec(self.runtime, ["rhpkg", "switch-branch", distgit_branch])
 
     def source_path(self):
         """
@@ -80,49 +97,74 @@ class ImageMetadata(object):
         assert_dir(path, "Unable to find path within source [%s] for config: %s" % (path, self.dir))
         return path
 
-    def populate_distgit_dir(self):
+
+    def _merge_source(self):
+        # Clean up any files not special to the distgit repo
+        for ent in os.listdir("."):
+
+            # Do not delete anything that is hidden
+            # protects .oit, .gitignore, others
+            if ent.startswith("."):
+                continue
+
+            # Skip special files that aren't hidden
+            if ent in ["additional-tags"]:
+                continue
+
+            # Otherwise, clean up the entry
+            if os.path.isfile(ent):
+                os.remove(ent)
+            else:
+                shutil.rmtree(ent)
+
+        # Copy all files and overwrite where necessary
+        recursive_overwrite(self.source_path(), self.distgit_dir)
+
+        # See if the config is telling us a file other than "Dockerfile" defines the
+        # distgit image content.
+        dockerfile_name = self.config.content.source.dockerfile
+        if dockerfile_name is not Missing and dockerfile_name != "Dockerfile":
+
+            # Does a non-distgit Dockerfile already exists from copying source; remove if so
+            if os.path.isfile("Dockerfile"):
+                os.remove("Dockerfile")
+
+            # Rename our distgit source Dockerfile appropriately
+            os.rename(dockerfile_name, "Dockerilfe")
+
+        # Clean up any extraneous Dockerfile.* that might be distractions (e.g. Dockerfile.centos)
+        for ent in os.listdir("."):
+            if ent.startswith("Dockerfile."):
+                os.remove(ent)
+
+        dockerfile_git_last_path = ".oit/Dockerfile.git.last"
+
+        # Do we have a copy of the last time we reconciled?
+        if os.path.isfile(dockerfile_git_last_path):
+            # See if it equals the Dockerfile we just pulled from source control
+            if not filecmp.cmp(dockerfile_git_last_path, "Dockerfile", False):
+                # Something has changed about the file in source control
+                self.notify_owner = True
+                # Update our .oit copy so we can detect the next change of this reconciliation
+                os.remove(dockerfile_git_last_path)
+                shutil.copy("Dockerfile", dockerfile_git_last_path)
+        else:
+            # We've never reconciled, so let the owner know about the change
+            self.notify_owner = True
+
+    def update_distgit_dir(self):
 
         with Dir(self.distgit_dir):
 
+            # Make our metadata directory if it does not exist
+            if not os.path.isdir(".oit"):
+                os.mkdir(".oit")
+
             # If content.source is defined, pull in content from local source directory
             if self.config.content.source is not Missing:
+                self._merge_source()
 
-                # Clean up any files not special to the distgit repo
-                for ent in os.listdir("."):
+            # Source or not, we should find a Dockerfile in the root at this point or something is wrong
+            assert_file("Dockerfile", "Unable to find Dockerfile in distgit root")
 
-                    # Do not delete anything that is hidden
-                    # protects .oit, .gitignore, others
-                    if ent.startswith("."):
-                        continue
-
-                    # Skip special files that aren't hidden
-                    if ent in ["additional-tags"]:
-                        continue
-
-                    # Otherwise, clean up the entry
-                    shutil.rmtree(ent)
-
-                # Copy all files and overwrite where necessary
-                recursive_overwrite(self.source_path(), self.distgit_dir)
-
-                # See if the config is telling us a file other than "Dockerfile" defines the
-                # distgit image content.
-                dockerfile_name = self.config.content.source.dockerfile
-                if dockerfile_name is not Missing and dockerfile_name != "Dockerfile":
-
-                    # Does a non-distgit Dockerfile already exists from copying source; remove if so
-                    if os.path.isfile("Dockerfile"):
-                        os.remove("Dockerfile")
-
-                    # Rename our distgit source Dockerfile appropriately
-                    os.rename(dockerfile_name, "Dockerilfe")
-
-                # Clean up any extraneous Dockerfile.* that might be distractions (e.g. Dockerfile.centos)
-                for ent in os.listdir("."):
-                    if __name__ == '__main__':
-                        if ent.startswith("Dockerfile."):
-                            os.remove(ent)
-
-            # In any case, we need to update things like version, release, FROM, etc.
-
-
+            # Update version, release, etc.

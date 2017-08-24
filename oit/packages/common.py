@@ -40,10 +40,12 @@ def assert_rc0(rc, msg):
 
 
 def assert_exec(runtime, cmd_list):
-    runtime.verbose("Executing: %s" % cmd_list)
-    # process = subprocess.Popen(cmd_list, stdout=runtime.debug_log, stderr=runtime.debug_log)
-    process = subprocess.Popen(cmd_list)
-    assert_rc0(process.wait(), "Error running %s. See debug log." % cmd_list)
+    runtime.verbose("\nExecuting: %s" % cmd_list)
+    # https://stackoverflow.com/a/7389473
+    runtime.debug_log.flush()
+    process = subprocess.Popen(cmd_list, stdout=runtime.debug_log, stderr=runtime.debug_log)
+    runtime.verbose("Process exited with: %d\n" % process.wait())
+    assert_rc0(process.wait(), "Error running %s. See debug log: %s." % (cmd_list, runtime.debug_log_path))
 
 
 def recursive_overwrite(src, dest, ignore=None):
