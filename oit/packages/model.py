@@ -95,6 +95,10 @@ class ListModel(list):
         # Otherwise, trigger out of bounds exception
         return super(self.__class__, self).__getitem__(index)
 
+    def __iter__(self):
+        for i in range(0, super(self.__class__, self).__len__()):
+            yield self[i]
+
     def _element_can_match(self, master, test):
         if master is Missing:
             return False

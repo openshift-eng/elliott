@@ -3,9 +3,11 @@ import click
 import tempfile
 import shutil
 import atexit
+import yaml
 
 from common import assert_dir, Dir
 from image import ImageMetadata
+from model import Model
 
 
 def remove_tmp_working_dir(runtime):
@@ -41,7 +43,14 @@ class Runtime(object):
         # Map of source code repo aliases (e.g. "ose") to a path on the filesystem where it has been cloned.
         # See registry_repo.
         self.source_alias = {}
+
+        # Map of stream alias to image name.
+        self.stream_alias_overrides = {}
+
         self.initialized = False
+
+        # Will be loaded with the streams.yml Model
+        self.streams = None
 
     def initialize(self):
 
@@ -87,6 +96,12 @@ class Runtime(object):
         if len(self.image_map) == 0:
             raise IOError("No image metadata directories found within: %s" % group_dir)
 
+        # Read in the streams definite for this group if one exists
+        streams_path = os.path.join(group_dir, "streams.yml")
+        if os.path.isfile(streams_path):
+            with open(streams_path, "r") as s:
+                self.streams = Model(yaml.load(s.read()))
+
     def verbose(self, message):
         self.debug_log.write(message + "\n")
         if self._verbose:
@@ -105,8 +120,27 @@ class Runtime(object):
         return self.image_map.values()
 
     def register_source_alias(self, alias, path):
-        self.info("Registering source repo %s: %s" % (alias, path))
+        self.info("Registering source alias %s: %s" % (alias, path))
         path = os.path.abspath(path)
         assert_dir(path, "Error registering source alias %s" % alias)
         self.source_alias[alias] = path
 
+    def register_stream_alias(self, alias, image):
+        self.info("Registering image stream alias override %s: %s" % (alias, image))
+        self.stream_alias_overrides[alias] = image
+
+    def resolve_image(self, distgit_name):
+        if distgit_name not in self.image_map:
+            raise IOError("Unable to find image metadata in group: %s" % distgit_name)
+        return self.image_map[distgit_name]
+
+    def resolve_stream(self, stream_name):
+
+        # If the stream has an override from the command line, return it.
+        if stream_name in self.stream_alias_overrides:
+            return self.stream_alias_overrides[stream_name]
+
+        if stream_name not in self.streams:
+            raise IOError("Unable to find definition for stream: %s" % stream_name)
+
+        return self.streams[stream_name]

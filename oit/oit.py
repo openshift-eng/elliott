@@ -20,7 +20,6 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("--branch", default=None, metavar='NAME',
               help="The distgit branch each group member must switch to.")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
-@click.version_option("0.1")
 @click.pass_context
 def cli(ctx, metadata_dir, working_dir, group, branch, user, verbose):
     if metadata_dir is None:
@@ -49,21 +48,30 @@ def distgits_clone(runtime):
 @option_commit_message
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
               help="Associate a path with a given source alias.  [multiple]")
+@click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
+              help="Associate an image name with a given stream alias.  [multiple]")
+@click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.", required=True)
+@click.option("--release", metavar='RELEASE', default="1", help="Release string to populate in Dockerfiles.")
 @pass_runtime
-def distgits_update(runtime, source, message, push):
+def distgits_update(runtime, source, stream, message, version, release, push):
     runtime.initialize()
 
     # If not pushing, do not clean up our work
-    runtime.remove_tmp_working_dir = not push
+    runtime.remove_tmp_working_dir = push
 
     # For each "--source alias path" on the command line, register its existence with
     # the runtime.
     for r in source:
         runtime.register_source_alias(r[0], r[1])
 
+    # For each "--stream alias image" on the command line, register its existence with
+    # the runtime.
+    for s in stream:
+        runtime.register_stream_alias(s[0], s[1])
+
     for image in runtime.images():
         dgr = image.distgit_repo()
-        dgr.update_distgit_dir()
+        dgr.update_distgit_dir(version, release)
 
 
 # ./oit/oit.py --group=ocp-3.7 --branch=rhaos-3.7-rhel-7 distgits:foreach -m Test --dry-run -- echo -n hello
@@ -81,14 +89,32 @@ def distgits_foreach(runtime, message, push, cmd):
     """
     runtime.initialize()
 
+    # TODO: implement
+    click.echo("Not yet implemented")
+
     # If not pushing, do not clean up our work
-    runtime.remove_tmp_working_dir = not push
+    runtime.remove_tmp_working_dir = push
 
     dgrs = [image.distgit_repo() for image in runtime.images()]
     for dgr in dgrs:
         with Dir(dgr.distgit_dir):
             # TODO
             click.echo("Should run %s in distgit directory: %s" % (cmd, os.getcwd()))
+
+
+@cli.command("distgits:copy", help="Copy content of source branch to target.")
+@option_push
+@option_commit_message
+@click.option("--to-branch", metavar="TARGET_BRANCH", help="Branch to populate from source branch.")
+@click.option('--overwrite', default=False, is_flag=True, help='Overwrite files found in target.')
+@click.option("--replace", metavar="MATCH REPLACEMENT", nargs=2, multiple=True,
+              help="String replacement in target Dockerfile.  [multiple]")
+@pass_runtime
+def distgits_copy(runtime, message, push, to_branch, overwrite, cmd):
+    runtime.initialize()
+
+    # TODO: implement
+    click.echo("Not yet implemented")
 
 
 if __name__ == '__main__':

@@ -2,13 +2,17 @@ import yaml
 import shutil
 import os
 import filecmp
+import re
+
+from dockerfile_parse import DockerfileParser
 
 from common import assert_file, assert_exec, assert_dir, Dir, recursive_overwrite
 from model import Model, Missing
 
+OIT_COMMENT_PREFIX = '#oit## '
+
 
 class ImageMetadata(object):
-
     def __init__(self, runtime, dir, name):
         self.runtime = runtime
         self.dir = os.path.abspath(dir)
@@ -29,6 +33,12 @@ class ImageMetadata(object):
         runtime.verbose(config_yml_content)
         self.config = Model(yaml.load(config_yml_content))
 
+        # Basic config validation. All images currently required to have a name in the metadata.
+        # This is required because from.member uses these data to populate FROM in images.
+        # It would be possible to query this data from the distgit Dockerflie label, but
+        # not implementing this until we actually need it.
+        assert (self.config.name is not Missing)
+
         self.type = "rpms"  # default type is rpms
         if self.config.repo.type is not Missing:
             self.type = self.config.repo.type
@@ -44,7 +54,6 @@ class ImageMetadata(object):
 
 
 class DistGitRepo(object):
-
     def __init__(self, metadata):
         self.metadata = metadata
         self.config = metadata.config
@@ -52,6 +61,7 @@ class DistGitRepo(object):
         self.distgit_dir = None
         self.notify_owner = False
         self.clone_distgit(self.runtime.distgits_dir, self.runtime.distgit_branch)
+        self.oit_comments = []
 
     def clone_distgit(self, root_dir, distgit_branch):
         with Dir(root_dir):
@@ -64,7 +74,8 @@ class DistGitRepo(object):
 
             self.distgit_dir = os.path.abspath(os.path.join(os.getcwd(), self.metadata.name))
 
-            self.runtime.info("Cloning distgit repository %s [branch:%s] into: %s" % (self.metadata.qualified_name, distgit_branch, self.distgit_dir))
+            self.runtime.info("Cloning distgit repository %s [branch:%s] into: %s" % (
+                self.metadata.qualified_name, distgit_branch, self.distgit_dir))
 
             # Clone the distgit repository
             assert_exec(self.runtime, cmd_list)
@@ -82,10 +93,10 @@ class DistGitRepo(object):
         # TODO: enable source to be something other than an alias?
         #       A fixed git URL and branch for example?
         if alias is Missing:
-            raise IOError("Can't find source alias in image config: %s" % self.dir)
+            raise IOError("Can't find source alias in image config: %s" % self.metadata.dir)
 
         if alias not in self.runtime.source_alias:
-            raise IOError("Required source alias has not been registered [%s] for image config: %s" % (alias, self.dir))
+            raise IOError("Required source alias has not been registered [%s] for image config: %s" % (alias, self.metadata.dir))
 
         source_root = self.runtime.source_alias[alias]
         sub_path = self.config.content.source.path
@@ -94,11 +105,15 @@ class DistGitRepo(object):
         if sub_path is not Missing:
             path = os.path.join(source_root, sub_path)
 
-        assert_dir(path, "Unable to find path within source [%s] for config: %s" % (path, self.dir))
+        assert_dir(path, "Unable to find path within source [%s] for config: %s" % (path, self.metadata.dir))
         return path
 
-
     def _merge_source(self):
+        """
+        Pulls source defined in content.source and overwrites most things in the distgit
+        clone with content from that source.
+        """
+
         # Clean up any files not special to the distgit repo
         for ent in os.listdir("."):
 
@@ -152,7 +167,50 @@ class DistGitRepo(object):
             # We've never reconciled, so let the owner know about the change
             self.notify_owner = True
 
-    def update_distgit_dir(self):
+        self.oit_comments.extend(
+            ["The content of this file is managed from external source.",
+             "Changes made directly in distgit will be lost during the next",
+             "reconciliation process.",
+             ""])
+
+    def _run_modifications(self):
+        """
+        Interprets and applies content.source.modify steps in the image metadata.
+        """
+
+        with open("Dockerfile", 'r') as df:
+            dockerfile_data = df.read()
+
+        self.runtime.verbose("\nAbout to start modifying Dockerfile [%s]:\n%s\n" %
+                             (self.metadata.name, dockerfile_data))
+
+        for modification in self.config.content.source.modifications:
+            if modification.action == "replace":
+                match = modification.match
+                assert (match is not Missing)
+                replacement = modification.replacement
+                assert (replacement is not Missing)
+                pre = dockerfile_data
+                dockerfile_data = pre.replace(match, replacement)
+                if dockerfile_data == pre:
+                    raise IOError("Replace (%s->%s) modification did not make a change to the Dockerfile content" % (match, replacement))
+                self.runtime.verbose("\nPerformed string replace '%s' -> '%s':\n%s\n" %
+                                     (match, replacement, dockerfile_data))
+            else:
+                raise IOError("Don't know how to perform modification action: %s" % modification.action)
+
+        with open('Dockerfile', 'w') as df:
+            df.write(dockerfile_data)
+
+    def update_distgit_dir(self, version, release):
+
+        # A collection of comment lines that will be included in the generated Dockerfile. They
+        # will be prefix by the OIT_COMMENT_PREFIX and followed by newlines in the Dockerfile.
+        self.oit_comments = [
+            "This file is managed by the OpenShift Image tool: github.com/openshift/enterprise-images",
+            "by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).",
+            ""
+        ]
 
         with Dir(self.distgit_dir):
 
@@ -163,8 +221,67 @@ class DistGitRepo(object):
             # If content.source is defined, pull in content from local source directory
             if self.config.content.source is not Missing:
                 self._merge_source()
+            else:
+                self.oit_comments.extend([
+                    "Some aspects of this file may be managed programmatically. For example, the image name, labels (version,",
+                    "release, and other), and the base FROM. Changes made directly in distgit may be lost during the next",
+                    "reconciliation.",
+                    ""])
 
             # Source or not, we should find a Dockerfile in the root at this point or something is wrong
             assert_file("Dockerfile", "Unable to find Dockerfile in distgit root")
 
-            # Update version, release, etc.
+            if self.config.content.source.modifications is not Missing:
+                self._run_modifications()
+
+            dfp = DockerfileParser(path="Dockerfile")
+
+            self.runtime.verbose("Dockerfile has parsed labels:")
+            for k, v in dfp.labels.iteritems():
+                self.runtime.verbose("  '%s'='%s'" % (k, v))
+
+            # Set all labels in from config into the Dockerfile content
+            if self.config.labels is not Missing:
+                for k, v in self.config.labels.iteritems():
+                    dfp.labels[k] = v
+
+            # Set the image name
+            dfp.labels["name"] = self.config.name
+
+            # Set the distgit repo name
+            dfp.labels["com.redhat.component"] = self.metadata.name
+
+            # Does this image inherit from an image defined in a different distgit?
+            if self.config["from"].member is not Missing:
+                from_image_metadata = self.runtime.resolve_image(self.config["from"].member)
+                # Everything in the group is going to be built with the same version and release,
+                # so just assume it will exist with the version-release we are using for this
+                # repo.
+                dfp.baseimage = "%s:%s-%s" % (from_image_metadata.config.name, version, release)
+
+            # Is this image FROM another literal image name:tag?
+            if self.config["from"].image is not Missing:
+                dfp.baseimage = self.config["from"].image
+
+            if self.config["from"].stream is not Missing:
+                stream = self.runtime.resolve_stream(self.config["from"].stream)
+                # TODO: implement expriring images?
+                dfp.baseimage = stream.image
+
+            # Set image name in case it has changed
+            dfp.labels["name"] = self.config.name
+
+            # Set version and release fields
+            dfp.labels["version"] = version
+            dfp.labels["release"] = release
+
+            # Remove any programmatic oit comments from previous management
+            df_lines = dfp.content.splitlines(False)
+            df_lines = [line for line in df_lines if not line.strip().startswith(OIT_COMMENT_PREFIX)]
+
+            df_content = "\n".join(df_lines)
+
+            with open('Dockerfile', 'w') as df:
+                for comment in self.oit_comments:
+                    df.write("%s%s\n" % (OIT_COMMENT_PREFIX, comment))
+                df.write(df_content)
