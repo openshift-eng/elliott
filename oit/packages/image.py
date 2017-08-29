@@ -59,12 +59,18 @@ class DistGitRepo(object):
         self.config = metadata.config
         self.runtime = metadata.runtime
         self.distgit_dir = None
-        self.notify_owner = False
-        self.clone_distgit(self.runtime.distgits_dir, self.runtime.distgit_branch)
         self.oit_comments = []
+        # Initialize our distgit directory, if necessary
+        self.clone_distgit(self.runtime.distgits_dir, self.runtime.distgit_branch)
 
-    def clone_distgit(self, root_dir, distgit_branch):
-        with Dir(root_dir):
+    def clone_distgit(self, distgits_root_dir, distgit_branch):
+        with Dir(distgits_root_dir):
+
+            self.distgit_dir = os.path.abspath(os.path.join(os.getcwd(), self.metadata.name))
+            if os.path.isdir(self.distgit_dir):
+                self.runtime.verbose("Distgit directory already exists in working directory; skipping clone")
+                return
+
             cmd_list = ["rhpkg"]
 
             if self.runtime.user is not None:
@@ -72,7 +78,6 @@ class DistGitRepo(object):
 
             cmd_list.extend(["clone", self.metadata.qualified_name])
 
-            self.distgit_dir = os.path.abspath(os.path.join(os.getcwd(), self.metadata.name))
 
             self.runtime.info("Cloning distgit repository %s [branch:%s] into: %s" % (
                 self.metadata.qualified_name, distgit_branch, self.distgit_dir))
@@ -154,18 +159,25 @@ class DistGitRepo(object):
 
         dockerfile_git_last_path = ".oit/Dockerfile.git.last"
 
+        notify_owner = False
+
         # Do we have a copy of the last time we reconciled?
         if os.path.isfile(dockerfile_git_last_path):
             # See if it equals the Dockerfile we just pulled from source control
             if not filecmp.cmp(dockerfile_git_last_path, "Dockerfile", False):
                 # Something has changed about the file in source control
-                self.notify_owner = True
+                notify_owner = True
                 # Update our .oit copy so we can detect the next change of this reconciliation
                 os.remove(dockerfile_git_last_path)
                 shutil.copy("Dockerfile", dockerfile_git_last_path)
         else:
             # We've never reconciled, so let the owner know about the change
-            self.notify_owner = True
+            notify_owner = True
+
+        # Leave a record for external processes that owners will need to notified.
+        if notify_owner and self.config.owners is not Missing:
+            owners_list = ", ".join(self.config.owners)
+            self.runtime.add_record("dockerfile_notify", distgit=self.metadata.name, dockerfile=os.path.abspath("Dockerfile"), owners=owners_list)
 
         self.oit_comments.extend(
             ["The content of this file is managed from external source.",

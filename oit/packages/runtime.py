@@ -10,6 +10,11 @@ from image import ImageMetadata
 from model import Model
 
 
+# Registered atexit to close out debug/record logs
+def close_file(f):
+    f.close()
+
+
 def remove_tmp_working_dir(runtime):
     if runtime.remove_tmp_working_dir:
         shutil.rmtree(runtime.working_dir)
@@ -28,6 +33,9 @@ class Runtime(object):
         self.group = group
         self.distgits_dir = None
         self.distgit_branch = branch
+
+        self.record_log = None
+        self.record_log_path = None
 
         self.debug_log = None
         self.debug_log_path = None
@@ -79,10 +87,16 @@ class Runtime(object):
             assert_dir(self.working_dir, "Invalid working directory")
 
         self.distgits_dir = os.path.join(self.working_dir, "distgits")
-        os.mkdir(self.distgits_dir)
+        if not os.path.isdir(self.distgits_dir):
+            os.mkdir(self.distgits_dir)
 
         self.debug_log_path = os.path.join(self.working_dir, "debug.log")
         self.debug_log = open(self.debug_log_path, 'a')
+        atexit.register(close_file, self.debug_log)
+
+        self.record_log_path = os.path.join(self.working_dir, "record.log")
+        self.record_log = open(self.record_log_path, 'a')
+        atexit.register(close_file, self.record_log)
 
         group_dir = os.path.join(self.metadata_dir, "groups", self.group)
         assert_dir(group_dir, "Cannot find group directory")
@@ -128,6 +142,28 @@ class Runtime(object):
     def register_stream_alias(self, alias, image):
         self.info("Registering image stream alias override %s: %s" % (alias, image))
         self.stream_alias_overrides[alias] = image
+
+    def add_record(self, record_type, **kwargs):
+        """
+        Records an action taken by oit that needs to be communicated to outside systems. For example,
+        the update a Dockerfile which needs to be reviewed by an owner. Each record is encoded on a single
+        line in the record.log. Records cannot contain line feeds -- if you need to communicate multi-line
+        data, create a record with a path to a file in the working directory.
+        :param record_type: The type of record to create.
+        :param kwargs: key/value pairs
+
+        A record line is designed to be easily parsed and formatted as:
+        record_type|key1=value1|key2=value2|...|
+        """
+        record = "%s|" % record_type
+        for k, v in kwargs.iteritems():
+            assert("\n" not in str(k))
+            assert("\n" not in str(v))
+            record += "%s=%s|" % (k, v)
+
+        # Add the record to the file
+        self.record_log.write("%s\n" % record)
+        self.record_log.flush()
 
     def resolve_image(self, distgit_name):
         if distgit_name not in self.image_map:
