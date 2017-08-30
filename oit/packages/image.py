@@ -312,12 +312,14 @@ class DistGitRepo(object):
             finally:
                 self.runtime.add_record(action, **record)
 
-    def wait_for_build(self):
+    def wait_for_build(self, who_is_waiting):
         # This lock is in an acquired state until this image definitively succeeds or fails.
         # It is then released. Child images waiting on this image should block here.
         with self.build_lock:
             if not self.build_status:
-                raise IOError("Error building image: %s" % self.metadata.qualified_name)
+                raise IOError("Error building image: %s (%s was waiting)" % (self.metadata.qualified_name, who_is_waiting))
+            else:
+                self.runtime.info("  %s successfully waited for %s build" % (who_is_waiting, self.metadata.qualified_name))
 
     def build_distgit_dir(self, repo_urls, push_to_list, scratch=False):
         """
@@ -346,7 +348,7 @@ class DistGitRepo(object):
             # If this image is FROM another group member, we need to wait on that group member
             if self.config["from"].member is not Missing:
                 parent_dgr = self.runtime.resolve_image(self.config["from"].member).distgit_repo()
-                parent_dgr.wait_for_build()
+                parent_dgr.wait_for_build(self.metadata.qualified_name)
 
             self.runtime.info("Building image for: %s" % self.metadata.qualified_name)
 
@@ -379,13 +381,13 @@ class DistGitRepo(object):
 
             # Look for a line like: "Created task: 13949050" . Extract the identifier.
             task_id = next((created_line.split(":")[1]).strip() for created_line in out_lines if
-                           out_lines.startswith("Created task:"))
+                           created_line.startswith("Created task:"))
 
             record["task_id"] = task_id
 
             # Look for a line like: "Task info: https://brewweb.engineering.redhat.com/brew/taskinfo?taskID=13948942"
-            task_url = next((created_line.split(":", 1)[1]).strip() for created_line in out_lines if
-                            out_lines.startswith("Task info:"))
+            task_url = next((info_line.split(":", 1)[1]).strip() for info_line in out_lines if
+                            info_line.startswith("Task info:"))
 
             record["task_url"] = task_url
 
@@ -401,17 +403,17 @@ class DistGitRepo(object):
                 # An error occurred during watch-task. We don't have a viable build.
                 raise IOError("Error building image: out=%s  ; err=%s" % (out, err))
 
+            self.runtime.info("Successfully built %s : %s" % (self.metadata.qualified_name, task_url))
+            record["message"] = "Success"
+            record["status"] = 0
+            self.build_status = True
+
             if scratch:
                 # If this is a scratch build, we aren't going to be pushing. We might be able to determine the
                 # image name by parsing the build log, but not worth the effort until we need scratch builds.
                 # The image name for a scratch build looks something like:
                 # brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-base:rhaos-3.7-rhel-7-docker-candidate-16066-20170829214444
-                return 0
-
-            self.runtime.info("Successfully built %s : %s", self.metadata.qualified_name, task_url)
-            record["message"] = "Success"
-            record["status"] = 0
-            self.build_status = True
+                return True
 
         except Exception as err:
             record["message"] = "Exception occurred: %s" % str(err)
@@ -423,14 +425,11 @@ class DistGitRepo(object):
             self.build_lock.release()
 
         if self.build_status:
-            if len(push_to_list) == 0:
-                # Nothing to push to? Just exit.
-                return rc
-
-            # To ensure we don't overwhelm the system building, pull & push synchronously
-            with self.runtime.mutex:
-                rc = self.push_distgit_image(push_to_list)
-                return rc
+            if len(push_to_list) > 0:
+                # To ensure we don't overwhelm the system building, pull & push synchronously
+                with self.runtime.mutex:
+                    rc = self.push_distgit_image(push_to_list)
+                    return rc
 
         return self.build_status
 

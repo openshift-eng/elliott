@@ -137,7 +137,7 @@ def build_image(tuple):
 
     dgr = image.distgit_repo()
     if not dgr.build_distgit_dir(repo_conf, push_to, scratch):
-        image.runtime.info("Error building: %s" % image.qualified_name)
+        image.runtime.info("  Async error in image build thread: %s" % image.qualified_name)
         return False
     return True
 
