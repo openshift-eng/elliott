@@ -4,6 +4,7 @@ from packages import Runtime
 from packages import Dir
 import click
 import os
+import yaml
 from multiprocessing.dummy import Pool as ThreadPool
 
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -96,6 +97,8 @@ def distgits_update(runtime, stream, version, release, message, push):
 @cli.command("distgits:rebase", short_help="Refresh a group's distgit content from source content.")
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
               help="Associate a path with a given source alias.  [multiple]")
+@click.option("--sources", metavar="YAML_PATH",
+              help="YAML dict associating sources with their alias. Same as using --source multiple times.")
 @click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
               help="Associate an image name with a given stream alias.  [multiple]")
 @click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.", required=True)
@@ -103,7 +106,7 @@ def distgits_update(runtime, stream, version, release, message, push):
 @option_commit_message
 @option_push
 @pass_runtime
-def distgits_rebase(runtime, source, stream, version, release, message, push):
+def distgits_rebase(runtime, source, sources, stream, version, release, message, push):
     """
     Many of the Dockerfiles stored in distgit are based off of content managed in GitHub.
     For example, openshift-enterprise-node-docker should always closely reflect the changes
@@ -128,6 +131,14 @@ def distgits_rebase(runtime, source, stream, version, release, message, push):
     # the runtime.
     for r in source:
         runtime.register_source_alias(r[0], r[1])
+
+    if sources:
+        with open(sources, 'r') as sf:
+            source_dict = yaml.load(sf)
+            if not isinstance(source_dict, dict):
+                raise ValueError('--sources param must be a yaml file containing a single dict.')
+            for key, val in source_dict.items():
+                runtime.register_source_alias(key, val)
 
     # For each "--stream alias image" on the command line, register its existence with
     # the runtime.
@@ -203,7 +214,7 @@ def build_image(tuple):
 
     dgr = image.distgit_repo()
     if not dgr.build_container(repo_conf, push_to, scratch):
-        image.runtime.info("  Async error in image build thread: %s" % image.qualified_name)
+        dgr.info("Async error in image build thread: %s" % image.qualified_name)
         return False
     return True
 
