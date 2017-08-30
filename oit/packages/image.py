@@ -343,6 +343,8 @@ class DistGitRepo(object):
             "status": -1,      # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
         }
 
+        target_image = "%s:%s-%s" % (self.org_image_name, self.org_version, self.org_release)
+
         try:
 
             # If this image is FROM another group member, we need to wait on that group member
@@ -350,7 +352,7 @@ class DistGitRepo(object):
                 parent_dgr = self.runtime.resolve_image(self.config["from"].member).distgit_repo()
                 parent_dgr.wait_for_build(self.metadata.qualified_name)
 
-            self.runtime.info("Building image for: %s" % self.metadata.qualified_name)
+            self.runtime.info("Building image for: %s -> %s" % (self.metadata.qualified_name, target_image))
 
             cmd_list = ["rhpkg", "--path=%s" % self.distgit_dir]
 
@@ -397,6 +399,7 @@ class DistGitRepo(object):
             # Looking for somethine like the following to conclude the image has already been built:
             # "13949407 buildContainer (noarch): FAILED: BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961"
             if "already exists" in out:
+                self.runtime.info("  Image already built for: %s -> %s" % (self.metadata.qualified_name, target_image))
                 rc = 0
 
             if rc != 0:
