@@ -4,6 +4,7 @@ from packages import Runtime
 from packages import Dir
 import click
 import os
+from multiprocessing.dummy import Pool as ThreadPool
 
 pass_runtime = click.make_pass_decorator(Runtime)
 
@@ -126,6 +127,61 @@ def distgits_copy(runtime, message, push, to_branch, overwrite, cmd):
 
     # TODO: implement
     click.echo("Not yet implemented")
+
+
+def build_image(tuple):
+    image = tuple[0]
+    repo_conf = tuple[1]
+    push_to = tuple[2]
+    scratch = tuple[3]
+
+    dgr = image.distgit_repo()
+    if not dgr.build_distgit_dir(repo_conf, push_to, scratch):
+        image.runtime.info("Error building: %s" % image.qualified_name)
+        return False
+    return True
+
+
+@cli.command("distgits:build", help="Build images for the group.")
+@click.option("--repo-conf", default=[], metavar="URL", multiple=True,
+              help="Repo configuration file.  [multiple]")
+@click.option("--push-to", default=[], metavar="REGISTRY", multiple=True,
+              help="Registry to push to when image build completes.  [multiple]")
+@click.option('--scratch', default=False, is_flag=True, help='Perform a scratch build.')
+@pass_runtime
+def distgits_build(runtime, repo_conf, push_to, scratch):
+    runtime.initialize()
+
+    items = []
+
+    # Initialize all distgit directories before trying to build. This is
+    # for clarity in the logs.
+    for image in runtime.images():
+        image.distgit_repo()
+        items.append((image, repo_conf, push_to, scratch))
+
+    pool = ThreadPool(len(items))
+    results = pool.map(build_image, items)
+
+    # Wait for results
+    pool.close()
+    pool.join()
+
+    for result in results:
+        if not result:
+            runtime.info("At least one image build/push failed")
+            exit(1)
+
+@cli.command("distgits:push", help="Push the images referenced in distgit to mirrors.")
+@click.option("--to", metavar="REGISTRY", multiple=True,
+              help="Registry to push to when image build completes.  [multiple]")
+@pass_runtime
+def distgits_push(runtime, to):
+    runtime.initialize()
+
+    for image in runtime.images():
+        dgr = image.distgit_repo()
+        dgr.push_distgit_image(to)
 
 
 if __name__ == '__main__':

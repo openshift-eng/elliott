@@ -8,6 +8,7 @@ import yaml
 from common import assert_dir, Dir
 from image import ImageMetadata
 from model import Model
+from multiprocessing import Lock
 
 
 # Registered atexit to close out debug/record logs
@@ -23,6 +24,12 @@ def remove_tmp_working_dir(runtime):
 
 
 class Runtime(object):
+
+    # Use any time it is necessary to synchronize feedback from multiple threads.
+    mutex = Lock()
+
+    # Serialize access to the debug_log and console
+    log_lock = Lock()
 
     def __init__(self, metadata_dir, working_dir, group, branch, user, verbose):
         self._verbose = verbose
@@ -117,9 +124,11 @@ class Runtime(object):
                 self.streams = Model(yaml.load(s.read()))
 
     def verbose(self, message):
-        self.debug_log.write(message + "\n")
-        if self._verbose:
-            click.echo(message)
+        with self.log_lock:
+            if self._verbose:
+                click.echo(message)
+            self.debug_log.write(message + "\n")
+            self.debug_log.flush()
 
     def info(self, message, debug=None):
         if self._verbose:
@@ -128,7 +137,8 @@ class Runtime(object):
             else:
                 self.verbose(message)
         else:
-            click.echo(message)
+            with self.log_lock:
+                click.echo(message)
 
     def images(self):
         return self.image_map.values()
@@ -155,15 +165,20 @@ class Runtime(object):
         A record line is designed to be easily parsed and formatted as:
         record_type|key1=value1|key2=value2|...|
         """
-        record = "%s|" % record_type
-        for k, v in kwargs.iteritems():
-            assert("\n" not in str(k))
-            assert("\n" not in str(v))
-            record += "%s=%s|" % (k, v)
 
-        # Add the record to the file
-        self.record_log.write("%s\n" % record)
-        self.record_log.flush()
+        # Multiple image build processes could be calling us with action simultaneously, so
+        # synchronize output to the file.
+        with self.mutex:
+            record = "%s|" % record_type
+            for k, v in kwargs.iteritems():
+                assert("\n" not in str(k))
+                # Make sure the values have no linefeeds as this would interfere with simple parsing.
+                v = str(v).replace("\n", " ;;; ").replace("\r", "")
+                record += "%s=%s|" % (k, v)
+
+            # Add the record to the file
+            self.record_log.write("%s\n" % record)
+            self.record_log.flush()
 
     def resolve_image(self, distgit_name):
         if distgit_name not in self.image_map:

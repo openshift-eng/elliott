@@ -2,12 +2,13 @@ import yaml
 import shutil
 import os
 import filecmp
-import re
-
+import time
+from multiprocessing import Lock
 from dockerfile_parse import DockerfileParser
 
-from common import assert_file, assert_exec, assert_dir, Dir, recursive_overwrite
+from common import assert_file, assert_exec, assert_dir, gather_exec, Dir, recursive_overwrite
 from model import Model, Missing
+
 
 OIT_COMMENT_PREFIX = '#oit## '
 
@@ -60,6 +61,9 @@ class DistGitRepo(object):
         self.runtime = metadata.runtime
         self.distgit_dir = None
         self.oit_comments = []
+        self.build_status = False
+        self.build_lock = Lock()
+        self.build_lock.acquire()
         # Initialize our distgit directory, if necessary
         self.clone_distgit(self.runtime.distgits_dir, self.runtime.distgit_branch)
 
@@ -78,7 +82,6 @@ class DistGitRepo(object):
 
             cmd_list.extend(["clone", self.metadata.qualified_name])
 
-
             self.runtime.info("Cloning distgit repository %s [branch:%s] into: %s" % (
                 self.metadata.qualified_name, distgit_branch, self.distgit_dir))
 
@@ -88,6 +91,12 @@ class DistGitRepo(object):
             with Dir(self.distgit_dir):
                 # Switch to the target branch
                 assert_exec(self.runtime, ["rhpkg", "switch-branch", distgit_branch])
+
+                # Read in information about the image we are about to build
+                dfp = DockerfileParser(path="Dockerfile")
+                self.org_image_name = dfp.labels["name"]
+                self.org_version = dfp.labels["version"]
+                self.org_release = dfp.labels["release"]
 
     def source_path(self):
         """
@@ -101,7 +110,8 @@ class DistGitRepo(object):
             raise IOError("Can't find source alias in image config: %s" % self.metadata.dir)
 
         if alias not in self.runtime.source_alias:
-            raise IOError("Required source alias has not been registered [%s] for image config: %s" % (alias, self.metadata.dir))
+            raise IOError(
+                "Required source alias has not been registered [%s] for image config: %s" % (alias, self.metadata.dir))
 
         source_root = self.runtime.source_alias[alias]
         sub_path = self.config.content.source.path
@@ -177,7 +187,8 @@ class DistGitRepo(object):
         # Leave a record for external processes that owners will need to notified.
         if notify_owner and self.config.owners is not Missing:
             owners_list = ", ".join(self.config.owners)
-            self.runtime.add_record("dockerfile_notify", distgit=self.metadata.name, dockerfile=os.path.abspath("Dockerfile"), owners=owners_list)
+            self.runtime.add_record("dockerfile_notify", distgit=self.metadata.qualified_name, image=self.config.name,
+                                    dockerfile=os.path.abspath("Dockerfile"), owners=owners_list)
 
         self.oit_comments.extend(
             ["The content of this file is managed from external source.",
@@ -205,7 +216,8 @@ class DistGitRepo(object):
                 pre = dockerfile_data
                 dockerfile_data = pre.replace(match, replacement)
                 if dockerfile_data == pre:
-                    raise IOError("Replace (%s->%s) modification did not make a change to the Dockerfile content" % (match, replacement))
+                    raise IOError("Replace (%s->%s) modification did not make a change to the Dockerfile content" % (
+                        match, replacement))
                 self.runtime.verbose("\nPerformed string replace '%s' -> '%s':\n%s\n" %
                                      (match, replacement, dockerfile_data))
             else:
@@ -213,6 +225,214 @@ class DistGitRepo(object):
 
         with open('Dockerfile', 'w') as df:
             df.write(dockerfile_data)
+
+    def push_distgit_image(self, push_to_list):
+
+        with Dir(self.distgit_dir):
+
+            # Read in information about the image we are about to build
+            dfp = DockerfileParser(path="Dockerfile")
+            image_name = dfp.labels["name"]
+            version = dfp.labels["version"]
+            release = dfp.labels["release"]
+
+            push_tags = [
+                "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
+                "%s" % version,  # e.g. "v3.7.0"
+            ]
+
+            # In v3.7, we use the last .0 in the release as a bump field to differentiate
+            # image refreshes. Strip this off since OCP will have no knowledge of it when reaching
+            # out for its node image.
+            if "." in release:
+                # Strip off the last field; "0.114.0.0" -> "0.114.0"
+                push_tags.append("%s-%s" % (version, release.rsplit(".", 1)[0]))
+
+            # Push as v3.X; "v3.7.0" -> "v3.7"
+            push_tags.append("%s" % (version.rsplit(".", 1)[0]))
+
+            action = "push"
+            record = {
+                "dir": self.distgit_dir,
+                "dockerfile": "%s/Dockerfile" % self.distgit_dir,
+                "image": image_name,
+                "version": version,
+                "release": release,
+                "message": "Unknown failure",
+                "tags": ",".join(push_tags),
+                "registries": ",".join(push_to_list),
+                "status": -1,
+            # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
+            }
+
+            try:
+                image_name_and_version = "%s:%s-%s" % (image_name, version, release)
+                brew_image_url = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/%s" % image_name_and_version
+
+                for retry in range(3):
+                    self.runtime.info("Pulling new image [retry=%d]: %s" % (retry, brew_image_url))
+                    rc, out, err = gather_exec(self.runtime, ["docker", "pull", brew_image_url])
+                    if rc == 0:
+                        break
+                    self.runtime.info("  Error -- retrying in 60 seconds")
+                    time.sleep(60)
+
+                if rc != 0:
+                    # We could not pull the image
+                    raise IOError("Unable to pull source image from pulp")
+
+                for push_to in push_to_list:
+                    for push_tag in push_tags:
+                        push_url = "%s/%s:%s" % (push_to, image_name, push_tag)
+                        rc, out, err = gather_exec(self.runtime, ["docker", "tag", brew_image_url, push_url])
+
+                        if rc != 0:
+                            # Unable to tag the image
+                            raise IOError("Error tagging image as: %s" % push_url)
+
+                        for retry in range(10):
+                            self.runtime.info("  Pushing image to mirror [retry=%d]: %s" % (retry, push_url))
+                            rc, out, err = gather_exec(self.runtime, ["docker", "push", push_url])
+                            if rc == 0:
+                                break
+                            self.runtime.info("    Error -- retrying in 60 seconds")
+                            time.sleep(60)
+
+                        if rc != 0:
+                            # Unable to push to registry
+                            raise IOError("Error pushing image: %s" % push_url)
+
+                record["message"] = "Successfully pushed all tags"
+                record["status"] = 0
+
+            except Exception as err:
+                record["message"] = "Exception occurred: %s" % str(err)
+                self.runtime.info("Error pushing %s: %s" % (self.metadata.qualified_name, str(err)))
+
+            finally:
+                self.runtime.add_record(action, **record)
+
+    def wait_for_build(self):
+        # This lock is in an acquired state until this image definitively succeeds or fails.
+        # It is then released. Child images waiting on this image should block here.
+        with self.build_lock:
+            if not self.build_status:
+                raise IOError("Error building image: %s" % self.metadata.qualified_name)
+
+    def build_distgit_dir(self, repo_urls, push_to_list, scratch=False):
+        """
+        This method is designed to be thread-safe. Multiple builds should take place in brew
+        at the same time. After a build, images are pushed serially to all mirrors.
+        DONT try to change cwd during this time, all threads active will change cwd
+        :param repo_urls: Repo configuration files to pass to rkpkg container-build
+        :param push_to_list: A list of registries resultant builds should be pushed to.
+        :param scratch: Whether this is a scratch build. UNTESTED.
+        :return: True if the build was successful
+        """
+
+        action = "build"
+        record = {
+            "dir": self.distgit_dir,
+            "dockerfile": "%s/Dockerfile" % self.distgit_dir,
+            "image": self.org_image_name,
+            "version": self.org_version,
+            "release": self.org_release,
+            "message": "Unknown failure",
+            "status": -1,      # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
+        }
+
+        try:
+
+            # If this image is FROM another group member, we need to wait on that group member
+            if self.config["from"].member is not Missing:
+                parent_dgr = self.runtime.resolve_image(self.config["from"].member).distgit_repo()
+                parent_dgr.wait_for_build()
+
+            self.runtime.info("Building image for: %s" % self.metadata.qualified_name)
+
+            cmd_list = ["rhpkg", "--path=%s" % self.distgit_dir]
+
+            if self.runtime.user is not None:
+                cmd_list.append("--user=%s" % self.runtime.user)
+
+            cmd_list.append("container-build")
+
+            cmd_list.append("--nowait")
+
+            if scratch:
+                cmd_list.append("--scratch")
+
+            if len(repo_urls) > 0:
+                cmd_list.append("--repo")
+                for repo_url in repo_urls:
+                    cmd_list.append(repo_url)
+
+            # Run the build with --nowait so that we can immdiately get information about the brew task
+            rc, out, err = gather_exec(self.runtime, cmd_list)
+
+            if rc != 0:
+                # Probably no point in continuing.. can't contact brew?
+                raise IOError("Unable to create brew task: out=%s  ; err=%s" % (out, err))
+
+            # Otherwise, we should have a brew task we can monitor listed in the stdout.
+            out_lines = out.splitlines()
+
+            # Look for a line like: "Created task: 13949050" . Extract the identifier.
+            task_id = next((created_line.split(":")[1]).strip() for created_line in out_lines if
+                           out_lines.startswith("Created task:"))
+
+            record["task_id"] = task_id
+
+            # Look for a line like: "Task info: https://brewweb.engineering.redhat.com/brew/taskinfo?taskID=13948942"
+            task_url = next((created_line.split(":", 1)[1]).strip() for created_line in out_lines if
+                            out_lines.startswith("Task info:"))
+
+            record["task_url"] = task_url
+
+            # Now that we have the basics about the task, wait for it to complete
+            rc, out, err = gather_exec(self.runtime, ["brew", "watch-task", task_id])
+
+            # Looking for somethine like the following to conclude the image has already been built:
+            # "13949407 buildContainer (noarch): FAILED: BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961"
+            if "already exists" in out:
+                rc = 0
+
+            if rc != 0:
+                # An error occurred during watch-task. We don't have a viable build.
+                raise IOError("Error building image: out=%s  ; err=%s" % (out, err))
+
+            if scratch:
+                # If this is a scratch build, we aren't going to be pushing. We might be able to determine the
+                # image name by parsing the build log, but not worth the effort until we need scratch builds.
+                # The image name for a scratch build looks something like:
+                # brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-base:rhaos-3.7-rhel-7-docker-candidate-16066-20170829214444
+                return 0
+
+            self.runtime.info("Successfully built %s : %s", self.metadata.qualified_name, task_url)
+            record["message"] = "Success"
+            record["status"] = 0
+            self.build_status = True
+
+        except Exception as err:
+            record["message"] = "Exception occurred: %s" % str(err)
+            self.runtime.info("Exception occurred building %s: %s" % (self.metadata.qualified_name, str(err)))
+
+        finally:
+            self.runtime.add_record(action, **record)
+            # Regardless of success, allow other images depending on this one to progress or fail.
+            self.build_lock.release()
+
+        if self.build_status:
+            if len(push_to_list) == 0:
+                # Nothing to push to? Just exit.
+                return rc
+
+            # To ensure we don't overwhelm the system building, pull & push synchronously
+            with self.runtime.mutex:
+                rc = self.push_distgit_image(push_to_list)
+                return rc
+
+        return self.build_status
 
     def update_distgit_dir(self, version, release):
 

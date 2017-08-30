@@ -48,6 +48,17 @@ def assert_exec(runtime, cmd_list):
     assert_rc0(process.wait(), "Error running %s. See debug log: %s." % (cmd_list, runtime.debug_log_path))
 
 
+def gather_exec(runtime, cmd_list):
+    """
+    Runs a command and returns rc,stdout,stderr as a tuple
+    :param runtime: The runtime object
+    :param cmd_list: The command and arguments to execute
+    :return: (rc,stdout,stderr)
+    """
+    p = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = p.communicate()
+    return p.returncode, out, err
+
 def recursive_overwrite(src, dest, ignore=None):
     if os.path.isdir(src):
         if not os.path.isdir(dest):
