@@ -67,6 +67,10 @@ class DistGitRepo(object):
         # Initialize our distgit directory, if necessary
         self.clone_distgit(self.runtime.distgits_dir, self.runtime.distgit_branch)
 
+    def info(self, msg, debug=None):
+        msg = "[%s] %s" % (self.metadata.qualified_name, msg)
+        self.runtime.info(msg, debug)
+
     def clone_distgit(self, distgits_root_dir, distgit_branch):
         with Dir(distgits_root_dir):
 
@@ -82,8 +86,7 @@ class DistGitRepo(object):
 
             cmd_list.extend(["clone", self.metadata.qualified_name])
 
-            self.runtime.info("Cloning distgit repository %s [branch:%s] into: %s" % (
-                self.metadata.qualified_name, distgit_branch, self.distgit_dir))
+            self.info("Cloning distgit repository [branch:%s] into: %s" % (distgit_branch, self.distgit_dir))
 
             # Clone the distgit repository
             assert_exec(self.runtime, cmd_list)
@@ -286,11 +289,11 @@ class DistGitRepo(object):
                 brew_image_url = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/%s" % image_name_and_version
 
                 for retry in range(3):
-                    self.runtime.info("Pulling new image [retry=%d]: %s" % (retry, brew_image_url))
+                    self.info("Pulling new image [retry=%d]: %s" % (retry, brew_image_url))
                     rc, out, err = gather_exec(self.runtime, ["docker", "pull", brew_image_url])
                     if rc == 0:
                         break
-                    self.runtime.info("  Error -- retrying in 60 seconds")
+                    self.info("Error pulling image -- retrying in 60 seconds")
                     time.sleep(60)
 
                 if rc != 0:
@@ -321,11 +324,11 @@ class DistGitRepo(object):
                             raise IOError("Error tagging image as: %s" % push_url)
 
                         for retry in range(10):
-                            self.runtime.info("  Pushing image to mirror [retry=%d]: %s" % (retry, push_url))
+                            self.info("Pushing image to mirror [retry=%d]: %s" % (retry, push_url))
                             rc, out, err = gather_exec(self.runtime, ["docker", "push", push_url])
                             if rc == 0:
                                 break
-                            self.runtime.info("    Error -- retrying in 60 seconds")
+                            self.info("Error pushing image -- retrying in 60 seconds")
                             time.sleep(60)
 
                         if rc != 0:
@@ -337,7 +340,8 @@ class DistGitRepo(object):
 
             except Exception as err:
                 record["message"] = "Exception occurred: %s" % str(err)
-                self.runtime.info("Error pushing %s: %s" % (self.metadata.qualified_name, str(err)))
+                self.info("Error pushing %s: %s" % str(err))
+                raise err
 
             finally:
                 self.runtime.add_record(action, **record)
@@ -349,7 +353,7 @@ class DistGitRepo(object):
             if not self.build_status:
                 raise IOError("Error building image: %s (%s was waiting)" % (self.metadata.qualified_name, who_is_waiting))
             else:
-                self.runtime.info("  %s successfully waited for %s build" % (who_is_waiting, self.metadata.qualified_name))
+                self.info("repo successfully waited for me to build: %s" % who_is_waiting)
 
     def build_distgit_dir(self, repo_urls, push_to_list, scratch=False):
         """
@@ -382,7 +386,7 @@ class DistGitRepo(object):
                 parent_dgr = self.runtime.resolve_image(self.config["from"].member).distgit_repo()
                 parent_dgr.wait_for_build(self.metadata.qualified_name)
 
-            self.runtime.info("Building image for: %s -> %s" % (self.metadata.qualified_name, target_image))
+            self.info("Building image: %s" % target_image)
 
             cmd_list = ["rhpkg", "--path=%s" % self.distgit_dir]
 
@@ -429,14 +433,14 @@ class DistGitRepo(object):
             # Looking for somethine like the following to conclude the image has already been built:
             # "13949407 buildContainer (noarch): FAILED: BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961"
             if "already exists" in out:
-                self.runtime.info("  Image already built for: %s -> %s" % (self.metadata.qualified_name, target_image))
+                self.info("Image already built for: %s" % target_image)
                 rc = 0
 
             if rc != 0:
                 # An error occurred during watch-task. We don't have a viable build.
                 raise IOError("Error building image: out=%s  ; err=%s" % (out, err))
 
-            self.runtime.info("Successfully built %s : %s" % (self.metadata.qualified_name, task_url))
+            self.info("Successfully built image: %s ; %s" % (target_image, task_url))
             record["message"] = "Success"
             record["status"] = 0
             self.build_status = True
@@ -450,8 +454,9 @@ class DistGitRepo(object):
 
         except Exception as err:
             record["message"] = "Exception occurred: %s" % str(err)
-            self.runtime.info("Exception occurred building %s: %s" % (self.metadata.qualified_name, str(err)))
-
+            self.info("Exception occurred during build: %s" % str(err))
+            # This is designed to fall through to finally. Since this method is designed to be
+            # threaded, we should throw and exception; instead return False.
         finally:
             self.runtime.add_record(action, **record)
             # Regardless of success, allow other images depending on this one to progress or fail.
@@ -461,8 +466,11 @@ class DistGitRepo(object):
             if len(push_to_list) > 0:
                 # To ensure we don't overwhelm the system building, pull & push synchronously
                 with self.runtime.mutex:
-                    rc = self.push_distgit_image(push_to_list)
-                    return rc
+                    try:
+                        self.push_distgit_image(push_to_list)
+                    except Exception as push_e:
+                        self.info("Error during push after successful build: %s" % str(push_e))
+                        return False
 
         return self.build_status
 
