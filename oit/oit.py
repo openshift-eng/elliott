@@ -44,17 +44,6 @@ def distgits_clone(runtime):
     [r.distgit_repo() for r in runtime.images()]
 
 
-@cli.command("distgits:push", help="Push a group of distgits previously populated in working directory.")
-# Unlike other actions, message is optional. If not specified, assume that a commit was already made and only push.
-@click.option("--message", "-m", metavar='MSG', help="Add a commit message for the push.")
-@pass_runtime
-def distgits_push(runtime):
-    runtime.initialize()
-
-    # TODO: implement
-    click.echo("Not yet implemented")
-
-
 @cli.command("distgits:update", help="Update a group's distgit content/Dockerfile.")
 @option_push
 @option_commit_message
@@ -173,7 +162,7 @@ def distgits_build(runtime, repo_conf, push_to, scratch):
             exit(1)
 
     # Push all late images
-    for image in runtime.images:
+    for image in runtime.images():
         image.distgit_repo().push_distgit_image(push_to, True)
 
 
@@ -193,7 +182,7 @@ def distgits_push(runtime, to):
         image.distgit_repo().push_distgit_image(to)
 
     # Push all late images
-    for image in runtime.images:
+    for image in runtime.images():
         image.distgit_repo().push_distgit_image(to, True)
 
 
