@@ -9,8 +9,7 @@ from dockerfile_parse import DockerfileParser
 from common import assert_file, assert_exec, assert_dir, gather_exec, Dir, recursive_overwrite
 from model import Model, Missing
 
-
-OIT_COMMENT_PREFIX = '#oit## '
+OIT_COMMENT_PREFIX = '#oit##'
 
 
 class ImageMetadata(object):
@@ -60,23 +59,22 @@ class DistGitRepo(object):
         self.config = metadata.config
         self.runtime = metadata.runtime
         self.distgit_dir = None
-        self.oit_comments = []
         self.build_status = False
         self.build_lock = Lock()
         self.build_lock.acquire()
         # Initialize our distgit directory, if necessary
-        self.clone_distgit(self.runtime.distgits_dir, self.runtime.distgit_branch)
+        self.clone(self.runtime.distgits_dir, self.runtime.distgit_branch)
 
     def info(self, msg, debug=None):
         msg = "[%s] %s" % (self.metadata.qualified_name, msg)
         self.runtime.info(msg, debug)
 
-    def clone_distgit(self, distgits_root_dir, distgit_branch):
+    def clone(self, distgits_root_dir, distgit_branch):
         with Dir(distgits_root_dir):
 
             self.distgit_dir = os.path.abspath(os.path.join(os.getcwd(), self.metadata.name))
             if os.path.isdir(self.distgit_dir):
-                self.runtime.verbose("Distgit directory already exists in working directory; skipping clone")
+                self.runtime.info("Distgit directory already exists in working directory; skipping clone")
             else:
                 cmd_list = ["rhpkg"]
 
@@ -91,8 +89,14 @@ class DistGitRepo(object):
                 assert_exec(self.runtime, cmd_list)
 
             with Dir(self.distgit_dir):
-                # Switch to the target branch
-                assert_exec(self.runtime, ["rhpkg", "switch-branch", distgit_branch])
+
+                out, err, rc = gather_exec(self.runtime, ["git", "rev-parse", "--abbrev-ref", "HEAD"])
+
+                # Only switch if we are not already in the branch. This allows us to work in
+                # working directories with uncommit changes.
+                if out != distgit_branch:
+                    # Switch to the target branch
+                    assert_exec(self.runtime, ["rhpkg", "switch-branch", distgit_branch])
 
                 # Read in information about the image we are about to build
                 dfp = DockerfileParser(path="Dockerfile")
@@ -192,12 +196,6 @@ class DistGitRepo(object):
             self.runtime.add_record("dockerfile_notify", distgit=self.metadata.qualified_name, image=self.config.name,
                                     dockerfile=os.path.abspath("Dockerfile"), owners=owners_list)
 
-        self.oit_comments.extend(
-            ["The content of this file is managed from external source.",
-             "Changes made directly in distgit will be lost during the next",
-             "reconciliation process.",
-             ""])
-
     def _run_modifications(self):
         """
         Interprets and applies content.source.modify steps in the image metadata.
@@ -228,7 +226,7 @@ class DistGitRepo(object):
         with open('Dockerfile', 'w') as df:
             df.write(dockerfile_data)
 
-    def push_distgit_image(self, push_to_list, push_late=False):
+    def push_image(self, push_to_list, push_late=False):
 
         # Late pushes allow certain images to be the last of a group to be
         # pushed to mirrors. CI/CD systems may initiate operations based on the
@@ -244,7 +242,7 @@ class DistGitRepo(object):
             is_late_push = self.config.push.late
 
         if push_late != is_late_push:
-                return
+            return
 
         with Dir(self.distgit_dir):
 
@@ -280,7 +278,7 @@ class DistGitRepo(object):
                 "tags": ",".join(push_tags),
                 "registries": ",".join(push_to_list),
                 "status": -1,
-            # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
+                # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
             }
 
             try:
@@ -350,11 +348,12 @@ class DistGitRepo(object):
         # It is then released. Child images waiting on this image should block here.
         with self.build_lock:
             if not self.build_status:
-                raise IOError("Error building image: %s (%s was waiting)" % (self.metadata.qualified_name, who_is_waiting))
+                raise IOError(
+                    "Error building image: %s (%s was waiting)" % (self.metadata.qualified_name, who_is_waiting))
             else:
                 self.info("repo successfully waited for me to build: %s" % who_is_waiting)
 
-    def build_distgit_dir(self, repo_urls, push_to_list, scratch=False):
+    def build_container(self, repo_urls, push_to_list, scratch=False):
         """
         This method is designed to be thread-safe. Multiple builds should take place in brew
         at the same time. After a build, images are pushed serially to all mirrors.
@@ -373,7 +372,8 @@ class DistGitRepo(object):
             "version": self.org_version,
             "release": self.org_release,
             "message": "Unknown failure",
-            "status": -1,      # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
+            "status": -1,
+            # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
         }
 
         target_image = "%s:%s-%s" % (self.org_image_name, self.org_version, self.org_release)
@@ -466,44 +466,49 @@ class DistGitRepo(object):
                 # To ensure we don't overwhelm the system building, pull & push synchronously
                 with self.runtime.mutex:
                     try:
-                        self.push_distgit_image(push_to_list)
+                        self.push_image(push_to_list)
                     except Exception as push_e:
                         self.info("Error during push after successful build: %s" % str(push_e))
                         return False
 
         return self.build_status
 
-    def update_distgit_dir(self, version, release, commit_message, push=False):
+    def commit(self, commit_message):
+        with Dir(self.distgit_dir):
+            self.info("Adding commit to local repo: %s" % commit_message)
+            assert_exec(self.runtime, ["git", "add", "-A", "."])
+            assert_exec(self.runtime, ["git", "commit", "-m", commit_message])
+
+    def push(self):
+        with Dir(self.distgit_dir):
+            self.info("Pushing repository")
+            assert_exec(self.runtime, ["rhpkg", "push"])
+
+    def update_dockerfile(self, version, release):
 
         # A collection of comment lines that will be included in the generated Dockerfile. They
         # will be prefix by the OIT_COMMENT_PREFIX and followed by newlines in the Dockerfile.
-        self.oit_comments = [
-            "This file is managed by the OpenShift Image tool: github.com/openshift/enterprise-images",
+        oit_comments = [
+            "This file is managed by the OpenShift Image Tool: github.com/openshift/enterprise-images",
             "by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).",
             ""
         ]
 
+        if self.config.content.source is not Missing:
+            oit_comments.extend(["The content of this file is managed from external source.",
+                                 "Changes made directly in distgit will be lost during the next",
+                                 "reconciliation process.",
+                                 ""])
+        else:
+            oit_comments.extend([
+                "Some aspects of this file may be managed programmatically. For example, the image name, labels (version,",
+                "release, and other), and the base FROM. Changes made directly in distgit may be lost during the next",
+                "reconciliation.",
+                ""])
+
         with Dir(self.distgit_dir):
-
-            # Make our metadata directory if it does not exist
-            if not os.path.isdir(".oit"):
-                os.mkdir(".oit")
-
-            # If content.source is defined, pull in content from local source directory
-            if self.config.content.source is not Missing:
-                self._merge_source()
-            else:
-                self.oit_comments.extend([
-                    "Some aspects of this file may be managed programmatically. For example, the image name, labels (version,",
-                    "release, and other), and the base FROM. Changes made directly in distgit may be lost during the next",
-                    "reconciliation.",
-                    ""])
-
             # Source or not, we should find a Dockerfile in the root at this point or something is wrong
             assert_file("Dockerfile", "Unable to find Dockerfile in distgit root")
-
-            if self.config.content.source.modifications is not Missing:
-                self._run_modifications()
 
             dfp = DockerfileParser(path="Dockerfile")
 
@@ -553,12 +558,26 @@ class DistGitRepo(object):
             df_content = "\n".join(df_lines)
 
             with open('Dockerfile', 'w') as df:
-                for comment in self.oit_comments:
-                    df.write("%s%s\n" % (OIT_COMMENT_PREFIX, comment))
+                for comment in oit_comments:
+                    df.write("%s %s\n" % (OIT_COMMENT_PREFIX, comment))
                 df.write(df_content)
 
-            assert_exec(self.runtime, ["git", "add", "-A"])
-            assert_exec(self.runtime, ["git", "commit", "-m", commit_message])
+    def rebase_dir(self, version, release):
 
-            if push:
-                raise IOError("Not yet implemented")
+        with Dir(self.distgit_dir):
+
+            # Make our metadata directory if it does not exist
+            if not os.path.isdir(".oit"):
+                os.mkdir(".oit")
+
+            # If content.source is defined, pull in content from local source directory
+            if self.config.content.source is not Missing:
+                self._merge_source()
+
+            # Source or not, we should find a Dockerfile in the root at this point or something is wrong
+            assert_file("Dockerfile", "Unable to find Dockerfile in distgit root")
+
+            if self.config.content.source.modifications is not Missing:
+                self._run_modifications()
+
+        self.update_dockerfile(version, release)

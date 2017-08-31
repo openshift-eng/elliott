@@ -47,3 +47,23 @@ Action: Just open an issue and assign Justin Pierce as the owner.
 2. You need to make a change to an image built for OCP (e.g. changing the name of image built for OCP).
 Action: Feel free to open a PR against the image metadata you want to change. Or just open an issue. In either case,
 assigned Justin Pierce as the owner.
+
+
+## Using oit
+
+### Making changes to a group of distgit repos
+
+Clone a group locally. A working directory will be created with all distgits.
+`$ ./oit/oit.py [--user=ocp-build] --group openshift-3.7 --branch rhaos-3.7-rhel-7 distgits:clone`
+
+This command will output the working-directory created for the operation (e.g. /tmp/oit-X.tmp).
+Use that for the remaining commands.
+
+Set the version and release for all images in the group, but do not push changes to distgit yet.
+`$ ./oit/oit.py --working-dir /tmp/oit-X.tmp --group openshift-3.7 --branch rhaos-3.7-rhel-7 distgits:update-dockerfile --version=3.7.0 --release=0.999.0.0 -m "Bumping version" --no-push`
+
+Run some custom modification script
+`$ ./oit/oit.py --working-dir /tmp/oit-X.tmp --group openshift-3.7 --branch rhaos-3.7-rhel-7 distgits:foreach --no-push --message "my change" --cmd -- sed ..`
+
+Push the commits
+`$ ./oit/oit.py --working-dir /tmp/oit-X.tmp --group openshift-3.7 --branch rhaos-3.7-rhel-7 distgits:push`

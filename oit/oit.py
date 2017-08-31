@@ -35,26 +35,90 @@ option_push = click.option('--push/--no-push', default=True, is_flag=True,
                            help='Pushes to distgit after local changes by default.')
 
 
-@cli.command("distgits:clone", help="Clone a group's distgit repos.")
+@cli.command("distgits:clone", help="Clone a group's distgit repos locally.")
 @pass_runtime
 def distgits_clone(runtime):
     runtime.initialize()
     # Never delete after clone; defeats the purpose of cloning
-    runtime.remove_working_dir = False
+    runtime.remove_tmp_working_dir = False
     [r.distgit_repo() for r in runtime.images()]
 
 
-@cli.command("distgits:update", help="Update a group's distgit content/Dockerfile.")
-@option_push
+@cli.command("distgits:push", short_help="Push all distgist repos in working-dir.")
+@pass_runtime
+def distgits_push(runtime):
+    """
+    Run to execute an rhpkg push on all locally cloned distgit
+    repositories. This is useful following a series of modifications
+    in the local clones.
+    """
+    runtime.initialize()
+
+    for image in runtime.images():
+        dgr = image.distgit_repo()
+        dgr.push()
+
+@cli.command("distgits:update-dockerfile", short_help="Update a group's distgit Dockerfile from metadata.")
+@click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
+              help="Associate an image name with a given stream alias.  [multiple]")
+@click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.", required=True)
+@click.option("--release", metavar='RELEASE', default="1", help="Release string to populate in Dockerfiles.")
 @option_commit_message
+@option_push
+@pass_runtime
+def distgits_update(runtime, stream, version, release, message, push):
+    """
+    Updates the Dockerfile in each distgit repository with the latest metadata and
+    the version/release information specified. This does not update the Dockerfile
+    from any external source. For that, use distgits:rebase.
+    """
+    runtime.initialize()
+
+    # If not pushing, do not clean up our work
+    runtime.remove_tmp_working_dir = push
+
+    # For each "--stream alias image" on the command line, register its existence with
+    # the runtime.
+    for s in stream:
+        runtime.register_stream_alias(s[0], s[1])
+
+    for image in runtime.images():
+        dgr = image.distgit_repo()
+        dgr.update_dockerfile(version, release)
+        dgr.commit(message)
+
+    if push:
+        for image in runtime.images():
+            dgr = image.distgit_repo()
+            dgr.push()
+
+
+@cli.command("distgits:rebase", short_help="Refresh a group's distgit content from source content.")
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
               help="Associate a path with a given source alias.  [multiple]")
 @click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
               help="Associate an image name with a given stream alias.  [multiple]")
 @click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.", required=True)
 @click.option("--release", metavar='RELEASE', default="1", help="Release string to populate in Dockerfiles.")
+@option_commit_message
+@option_push
 @pass_runtime
-def distgits_update(runtime, source, stream, message, version, release, push):
+def distgits_rebase(runtime, source, stream, version, release, message, push):
+    """
+    Many of the Dockerfiles stored in distgit are based off of content managed in GitHub.
+    For example, openshift-enterprise-node-docker should always closely reflect the changes
+    being made upstream in github.com/openshift/ose/images/node. This operation
+    goes out and pulls the current source Dockerfile (and potentially other supporting
+    files) into distgit and applies any transformations defined in the config.yml associated
+    with the distgit repo.
+
+    This operation will also set the version and release in the file according to the
+    command line arguments provided.
+
+    If a distgit repo does not have associated source (i.e. it is managed directly in
+    distgit), the Dockerfile in distgit will not be rebased, but other aspects of the
+    metadata may be applied (base image, tags, etc) along with the version and release.
+    """
     runtime.initialize()
 
     # If not pushing, do not clean up our work
@@ -72,16 +136,21 @@ def distgits_update(runtime, source, stream, message, version, release, push):
 
     for image in runtime.images():
         dgr = image.distgit_repo()
-        dgr.update_distgit_dir(version, release, message, push)
+        dgr.rebase_dir(version, release)
+        dgr.commit(message)
+
+    if push:
+        for image in runtime.images():
+            dgr = image.distgit_repo()
+            dgr.push()
 
 
-# ./oit/oit.py --group=ocp-3.7 --branch=rhaos-3.7-rhel-7 distgits:foreach -m Test --dry-run -- echo -n hello
 @cli.command("distgits:foreach", help="Run a command relative to each distgit dir.")
-@option_push
-@option_commit_message
 @click.argument("cmd", nargs=-1)
+@click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.", required=False)
+@option_push
 @pass_runtime
-def distgits_foreach(runtime, message, push, cmd):
+def distgits_foreach(runtime, cmd, message, push):
     """
     Clones all distgit repos found in the specified group and runs an arbitrary
     command once for each local distgit directory. If the command runs without
@@ -102,16 +171,24 @@ def distgits_foreach(runtime, message, push, cmd):
             # TODO
             click.echo("Should run %s in distgit directory: %s" % (cmd, os.getcwd()))
 
+        if message is not None:
+            dgr.commit(message)
+
+    if push:
+        for image in runtime.images():
+            dgr = image.distgit_repo()
+            dgr.push()
+
 
 @cli.command("distgits:copy", help="Copy content of source branch to target.")
-@option_push
-@option_commit_message
 @click.option("--to-branch", metavar="TARGET_BRANCH", help="Branch to populate from source branch.")
 @click.option('--overwrite', default=False, is_flag=True, help='Overwrite files found in target.')
 @click.option("--replace", metavar="MATCH REPLACEMENT", nargs=2, multiple=True,
               help="String replacement in target Dockerfile.  [multiple]")
+@option_commit_message
+@option_push
 @pass_runtime
-def distgits_copy(runtime, message, push, to_branch, overwrite, cmd):
+def distgits_copy(runtime, to_branch, overwrite, cmd, message, push):
     runtime.initialize()
 
     # TODO: implement
@@ -125,20 +202,31 @@ def build_image(tuple):
     scratch = tuple[3]
 
     dgr = image.distgit_repo()
-    if not dgr.build_distgit_dir(repo_conf, push_to, scratch):
+    if not dgr.build_container(repo_conf, push_to, scratch):
         image.runtime.info("  Async error in image build thread: %s" % image.qualified_name)
         return False
     return True
 
 
-@cli.command("distgits:build", help="Build images for the group.")
+@cli.command("distgits:build-images", short_help="Build images for the group.")
 @click.option("--repo-conf", default=[], metavar="URL", multiple=True,
               help="Repo configuration file.  [multiple]")
 @click.option("--push-to", default=[], metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
 @click.option('--scratch', default=False, is_flag=True, help='Perform a scratch build.')
 @pass_runtime
-def distgits_build(runtime, repo_conf, push_to, scratch):
+def distgits_build_images(runtime, repo_conf, push_to, scratch):
+    """
+    Attempts to build container images for all of the distgit repositories
+    in a group. If an image has already been built, it will be treated as
+    a successful operation.
+
+    If docker registries as specified, this action will push resultant
+    images to those mirrors as they become available. Note that this should
+    be more performant than running distgits:push-images since pushes can
+    be performed in parallel with other images building.
+    """
+
     runtime.initialize()
 
     items = []
@@ -163,14 +251,23 @@ def distgits_build(runtime, repo_conf, push_to, scratch):
 
     # Push all late images
     for image in runtime.images():
-        image.distgit_repo().push_distgit_image(push_to, True)
+        image.distgit_repo().push_image(push_to, True)
 
 
-@cli.command("distgits:push", help="Push the images referenced in distgit to mirrors.")
+@cli.command("distgits:push-images", short_help="Push the most recent images to mirrors.")
 @click.option("--to", default=[], metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
 @pass_runtime
-def distgits_push(runtime, to):
+def distgits_push_images(runtime, to):
+    """
+    Each distgit repository will be cloned and the version and release information
+    will be extracted. That information will be used to determine the most recently
+    built image associated with the distgit repository.
+
+    An attempt will be made to pull that image and push it to one or more
+    docker registries specified on the command line.
+    """
+
     runtime.initialize()
 
     if len(to) == 0:
@@ -179,11 +276,11 @@ def distgits_push(runtime, to):
 
     # Push early images
     for image in runtime.images():
-        image.distgit_repo().push_distgit_image(to)
+        image.distgit_repo().push_image(to)
 
     # Push all late images
     for image in runtime.images():
-        image.distgit_repo().push_distgit_image(to, True)
+        image.distgit_repo().push_image(to, True)
 
 
 if __name__ == '__main__':
