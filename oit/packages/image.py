@@ -226,7 +226,23 @@ class DistGitRepo(object):
         with open('Dockerfile', 'w') as df:
             df.write(dockerfile_data)
 
-    def push_distgit_image(self, push_to_list):
+    def push_distgit_image(self, push_to_list, push_late=False):
+
+        # Late pushes allow certain images to be the last of a group to be
+        # pushed to mirrors. CI/CD systems may initiate operations based on the
+        # update a given image and all other images need to be in place
+        # when that special image is updated. The special images are there
+        # pushed "late"
+        # Actions that need to push all images need to push all images
+        # need to make two passes/invocations of this method: one
+        # with push_late=False and one with push_late=True.
+
+        is_late_push = False
+        if self.config.push.late is not Missing:
+            is_late_push = self.config.push.late
+
+        if push_late != is_late_push:
+                return
 
         with Dir(self.distgit_dir):
 
@@ -283,7 +299,21 @@ class DistGitRepo(object):
 
                 for push_to in push_to_list:
                     for push_tag in push_tags:
-                        push_url = "%s/%s:%s" % (push_to, image_name, push_tag)
+
+                        # If someone passed in a URL with a trailling slash, prevent it from triggering our
+                        # namespace override logic.
+                        push_to = push_to.rstrip("/")
+
+                        if "/" not in push_to:
+                            push_url = "%s/%s:%s" % (push_to, image_name, push_tag)
+                        else:
+                            # This is not typical at the moment, but we support it. If there is a slash in the push
+                            # url, we override the namespace/project into which we push the image.
+                            # For example, if the image is openshift3/node and the registry url is
+                            # "registry.reg-aws.openshift.com:443/online", we would push to
+                            # "registry.reg-aws.openshift.com:443/online/node".
+                            push_url = "%s/%s:%s" % (push_to, image_name.split("/", 1)[1], push_tag)
+
                         rc, out, err = gather_exec(self.runtime, ["docker", "tag", brew_image_url, push_url])
 
                         if rc != 0:

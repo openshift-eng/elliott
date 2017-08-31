@@ -172,6 +172,11 @@ def distgits_build(runtime, repo_conf, push_to, scratch):
             runtime.info("At least one image build/push failed")
             exit(1)
 
+    # Push all late images
+    for image in runtime.images:
+        image.distgit_repo().push_distgit_image(push_to, True)
+
+
 @cli.command("distgits:push", help="Push the images referenced in distgit to mirrors.")
 @click.option("--to", metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
@@ -179,9 +184,13 @@ def distgits_build(runtime, repo_conf, push_to, scratch):
 def distgits_push(runtime, to):
     runtime.initialize()
 
+    # Push early images
     for image in runtime.images():
-        dgr = image.distgit_repo()
-        dgr.push_distgit_image(to)
+        image.distgit_repo().push_distgit_image(to)
+
+    # Push all late images
+    for image in runtime.images:
+        image.distgit_repo().push_distgit_image(to, True)
 
 
 if __name__ == '__main__':
