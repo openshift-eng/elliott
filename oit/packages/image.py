@@ -473,7 +473,7 @@ class DistGitRepo(object):
 
         return self.build_status
 
-    def update_distgit_dir(self, version, release):
+    def update_distgit_dir(self, version, release, commit_message, push=False):
 
         # A collection of comment lines that will be included in the generated Dockerfile. They
         # will be prefix by the OIT_COMMENT_PREFIX and followed by newlines in the Dockerfile.
@@ -556,3 +556,9 @@ class DistGitRepo(object):
                 for comment in self.oit_comments:
                     df.write("%s%s\n" % (OIT_COMMENT_PREFIX, comment))
                 df.write(df_content)
+
+            assert_exec(self.runtime, ["git", "add", "-A"])
+            assert_exec(self.runtime, ["git", "commit", "-m", commit_message])
+
+            if push:
+                raise IOError("Not yet implemented")

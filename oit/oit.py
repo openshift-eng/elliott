@@ -83,7 +83,7 @@ def distgits_update(runtime, source, stream, message, version, release, push):
 
     for image in runtime.images():
         dgr = image.distgit_repo()
-        dgr.update_distgit_dir(version, release)
+        dgr.update_distgit_dir(version, release, message, push)
 
 
 # ./oit/oit.py --group=ocp-3.7 --branch=rhaos-3.7-rhel-7 distgits:foreach -m Test --dry-run -- echo -n hello
