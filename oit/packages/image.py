@@ -77,19 +77,18 @@ class DistGitRepo(object):
             self.distgit_dir = os.path.abspath(os.path.join(os.getcwd(), self.metadata.name))
             if os.path.isdir(self.distgit_dir):
                 self.runtime.verbose("Distgit directory already exists in working directory; skipping clone")
-                return
+            else:
+                cmd_list = ["rhpkg"]
 
-            cmd_list = ["rhpkg"]
+                if self.runtime.user is not None:
+                    cmd_list.append("--user=%s" % self.runtime.user)
 
-            if self.runtime.user is not None:
-                cmd_list.append("--user=%s" % self.runtime.user)
+                cmd_list.extend(["clone", self.metadata.qualified_name])
 
-            cmd_list.extend(["clone", self.metadata.qualified_name])
+                self.info("Cloning distgit repository [branch:%s] into: %s" % (distgit_branch, self.distgit_dir))
 
-            self.info("Cloning distgit repository [branch:%s] into: %s" % (distgit_branch, self.distgit_dir))
-
-            # Clone the distgit repository
-            assert_exec(self.runtime, cmd_list)
+                # Clone the distgit repository
+                assert_exec(self.runtime, cmd_list)
 
             with Dir(self.distgit_dir):
                 # Switch to the target branch

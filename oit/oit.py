@@ -178,11 +178,15 @@ def distgits_build(runtime, repo_conf, push_to, scratch):
 
 
 @cli.command("distgits:push", help="Push the images referenced in distgit to mirrors.")
-@click.option("--to", metavar="REGISTRY", multiple=True,
+@click.option("--to", default=[], metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
 @pass_runtime
 def distgits_push(runtime, to):
     runtime.initialize()
+
+    if len(to) == 0:
+        click.echo("You need specify at least one destination registry.")
+        exit(1)
 
     # Push early images
     for image in runtime.images():
