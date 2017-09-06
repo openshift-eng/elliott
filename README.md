@@ -63,7 +63,7 @@ Set the version and release for all images in the group, but do not push changes
 `$ ./oit/oit.py --working-dir /tmp/oit-X.tmp --group openshift-3.7 --branch rhaos-3.7-rhel-7 distgits:update-dockerfile --version=3.7.0 --release=0.999.0.0 -m "Bumping version" --no-push`
 
 Run some custom modification script
-`$ ./oit/oit.py --working-dir /tmp/oit-X.tmp --group openshift-3.7 --branch rhaos-3.7-rhel-7 distgits:foreach --no-push --message "my change" --cmd -- sed ..`
+`$ ./oit/oit.py --working-dir /tmp/oit-X.tmp --group openshift-3.7 --branch rhaos-3.7-rhel-7 distgits:foreach --no-push --message "my change" -- 'echo -n "hello from distgit directory $PWD"'
 
 Push the commits
 `$ ./oit/oit.py --working-dir /tmp/oit-X.tmp --group openshift-3.7 --branch rhaos-3.7-rhel-7 distgits:push`

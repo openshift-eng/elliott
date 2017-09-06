@@ -5,6 +5,7 @@ from packages import Dir
 import click
 import os
 import yaml
+import subprocess
 from multiprocessing.dummy import Pool as ThreadPool
 
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -170,17 +171,17 @@ def distgits_foreach(runtime, cmd, message, push):
     """
     runtime.initialize()
 
-    # TODO: implement
-    click.echo("Not yet implemented")
-
     # If not pushing, do not clean up our work
     runtime.remove_tmp_working_dir = push
 
+    cmd_str = " ".join(cmd)
     dgrs = [image.distgit_repo() for image in runtime.images()]
     for dgr in dgrs:
         with Dir(dgr.distgit_dir):
-            # TODO
-            click.echo("Should run %s in distgit directory: %s" % (cmd, os.getcwd()))
+            runtime.info("Executing in %s: [%s]" % (dgr.distgit_dir, cmd_str))
+            if subprocess.call(cmd_str, shell=True) != 0:
+                raise IOError("Command return non-zero status")
+            runtime.info("\n")
 
         if message is not None:
             dgr.commit(message)
