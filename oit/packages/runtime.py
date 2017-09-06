@@ -31,7 +31,7 @@ class Runtime(object):
     # Serialize access to the debug_log and console
     log_lock = Lock()
 
-    def __init__(self, metadata_dir, working_dir, group, branch, user, verbose):
+    def __init__(self, metadata_dir, working_dir, group, branch, user=None, verbose=False):
         self._verbose = verbose
         self.metadata_dir = metadata_dir
         self.working_dir = working_dir
