@@ -7,6 +7,7 @@ import os
 import yaml
 import subprocess
 from multiprocessing.dummy import Pool as ThreadPool
+from dockerfile_parse import DockerfileParser
 
 pass_runtime = click.make_pass_decorator(Runtime)
 
@@ -44,6 +45,15 @@ def distgits_clone(runtime):
     # Never delete after clone; defeats the purpose of cloning
     runtime.remove_tmp_working_dir = False
     [r.distgit_repo() for r in runtime.images()]
+
+
+@cli.command("distgits:list", help="List of distgits being selected.")
+@pass_runtime
+def distgits_list(runtime):
+    runtime.initialize()
+
+    for image in runtime.images():
+        click.echo(image.qualified_name)
 
 
 @cli.command("distgits:push", short_help="Push all distgist repos in working-dir.")
@@ -294,6 +304,58 @@ def distgits_push_images(runtime, to):
     for image in runtime.images():
         image.distgit_repo().push_image(to, True)
 
+
+@cli.command("distgits:print", short_help="Print data from each distgit.")
+@click.argument("pattern", nargs=1)
+@pass_runtime
+def distgits_print(runtime, pattern):
+    """
+    Prints data from each distgit. The pattern specified should be a string
+    with replacement fields:
+
+    \b
+    {type} - The type of the distgit (e.g. rpms)
+    {name} - The name of the distgit (e.g. openshift-enterprise-docker)
+    {image} - The image name in the Dockerfile
+    {version} - The version field in the Dockerfile
+    {release} - The release field in the Dockerfile
+    {build} - Shorthand for {name}-{version}-{release} (e.g. container-engine-docker-v3.6.173.0.25-1)
+    {repository} - Shorthand for {image}:{version}-{release}
+
+    If pattern contains no braces, it will be wrapped with them automatically. For example:
+    "build" will be treated as "{build}"
+    """
+
+    runtime.initialize()
+
+    # If user omitted braces, add them.
+    if "{" not in pattern:
+        pattern = "{%s}" % pattern.strip()
+
+    # Get preprocessing output out of the way before printing repo
+    for image in runtime.images():
+        image.distgit_repo()
+
+    click.echo("")
+    click.echo("------------------------------------------")
+    for image in runtime.images():
+        dgr = image.distgit_repo()
+        with Dir(dgr.distgit_dir):
+            dfp = DockerfileParser(path="Dockerfile")
+            s = pattern
+            s = s.replace("{build}", "{name}-{version}-{release}")
+            s = s.replace("{repository}", "{image}:{version}-{release}")
+            s = s.replace("{type}", image.type)
+            s = s.replace("{name}", image.name)
+            s = s.replace("{image}", dfp.labels["name"])
+            s = s.replace("{version}", dfp.labels["version"])
+            s = s.replace("{release}", dfp.labels["release"])
+
+            if "{" in s:
+                raise IOError("Unrecognized fields remaining in pattern: %s" % s)
+
+            click.echo(s)
+    click.echo("------------------------------------------")
 
 if __name__ == '__main__':
     cli(obj={})
