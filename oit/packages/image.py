@@ -74,7 +74,7 @@ class DistGitRepo(object):
 
             self.distgit_dir = os.path.abspath(os.path.join(os.getcwd(), self.metadata.name))
             if os.path.isdir(self.distgit_dir):
-                self.runtime.info("Distgit directory already exists in working directory; skipping clone")
+                self.info("Distgit directory already exists; skipping clone: %s" % self.distgit_dir)
             else:
                 cmd_list = ["rhpkg"]
 
@@ -483,6 +483,35 @@ class DistGitRepo(object):
         with Dir(self.distgit_dir):
             self.info("Pushing repository")
             assert_exec(self.runtime, ["rhpkg", "push"])
+
+    def bump_dockerfile(self):
+        with Dir(self.distgit_dir):
+            # Source or not, we should find a Dockerfile in the root at this point or something is wrong
+            assert_file("Dockerfile", "Unable to find Dockerfile in distgit root")
+
+            dfp = DockerfileParser(path="Dockerfile")
+            version = dfp.labels["version"]
+            release = dfp.labels["release"]
+
+            # If release has multiple fields (e.g. 0.173.0), increment final field
+            if "." in release:
+                components = release.rsplit(".", 1)  # ["0.173","0"]
+                bumped_field = int(components[1]) + 1
+                new_release = "%s.%d" % (components[0], bumped_field)
+            else:
+                # Otherwise, release is a single field; just increment it
+                new_release = "%d" % (int(release) + 1)
+
+            dfp.labels["release"] = new_release
+
+            # Found that content had to be created before opening Dockerfile for
+            # writing. Otherwise dfp loses content.
+            df_content = dfp.content
+
+            with open('Dockerfile', 'w') as df:
+                df.write(df_content)
+
+            self.commit("Bumping version to %s-%s" % (version, new_release))
 
     def update_dockerfile(self, version, release):
 

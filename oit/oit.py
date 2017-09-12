@@ -34,8 +34,8 @@ def cli(ctx, metadata_dir, working_dir, group, branch, user, verbose):
 
 
 option_commit_message = click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.", required=True)
-option_push = click.option('--push/--no-push', default=True, is_flag=True,
-                           help='Pushes to distgit after local changes by default.')
+option_push = click.option('--push/--no-push', default=False, is_flag=True,
+                           help='Pushes to distgit after local changes (--no-push by default).')
 
 
 @cli.command("distgits:clone", help="Clone a group's distgit repos locally.")
@@ -70,6 +70,7 @@ def distgits_push(runtime):
         dgr = image.distgit_repo()
         dgr.push()
 
+
 @cli.command("distgits:update-dockerfile", short_help="Update a group's distgit Dockerfile from metadata.")
 @click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
               help="Associate an image name with a given stream alias.  [multiple]")
@@ -78,7 +79,7 @@ def distgits_push(runtime):
 @option_commit_message
 @option_push
 @pass_runtime
-def distgits_update(runtime, stream, version, release, message, push):
+def distgits_update_dockerfile(runtime, stream, version, release, message, push):
     """
     Updates the Dockerfile in each distgit repository with the latest metadata and
     the version/release information specified. This does not update the Dockerfile
@@ -98,6 +99,30 @@ def distgits_update(runtime, stream, version, release, message, push):
         dgr = image.distgit_repo()
         dgr.update_dockerfile(version, release)
         dgr.commit(message)
+
+    if push:
+        for image in runtime.images():
+            dgr = image.distgit_repo()
+            dgr.push()
+
+
+@cli.command("distgits:bump-dockerfile", short_help="Increments Dockerfile release before image refresh.")
+@option_push
+@pass_runtime
+def distgits_bump_dockerfile(runtime, push):
+    """
+    Updates the Dockerfile (and makes commit) in each distgit repository with a new release
+    label so that images can be rebuild. This does not update the Dockerfile
+    from any external source. For that, use distgits:rebase.
+    """
+    runtime.initialize()
+
+    # If not pushing, do not clean up our work
+    runtime.remove_tmp_working_dir = push
+
+    for image in runtime.images():
+        dgr = image.distgit_repo()
+        dgr.bump_dockerfile()
 
     if push:
         for image in runtime.images():
