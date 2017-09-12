@@ -21,14 +21,18 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="Username for rhpkg.")
 @click.option("--group", default=None, metavar='NAME',
               help="The group of images on which to operate.")
+@click.option("-i", "--include", default=[], metavar='NAME', multiple=True,
+              help="Name of group members to include in operation (all by default).")
+@click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
+              help="Name of group members to exclude from operation (empty by default).")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
 @click.pass_context
-def cli(ctx, metadata_dir, working_dir, group, user, verbose):
+def cli(ctx, metadata_dir, working_dir, group, include, exclude, user, verbose):
     if metadata_dir is None:
         metadata_dir = os.getcwd()
 
     # @pass_runtime
-    ctx.obj = Runtime(metadata_dir, working_dir, group, user, verbose)
+    ctx.obj = Runtime(metadata_dir, working_dir, group, include, exclude, user, verbose)
 
 option_commit_message = click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.", required=True)
 option_push = click.option('--push/--no-push', default=False, is_flag=True,

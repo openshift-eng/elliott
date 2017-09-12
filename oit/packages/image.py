@@ -378,8 +378,13 @@ class DistGitRepo(object):
 
             # If this image is FROM another group member, we need to wait on that group member
             if self.config["from"].member is not Missing:
-                parent_dgr = self.runtime.resolve_image(self.config["from"].member).distgit_repo()
-                parent_dgr.wait_for_build(self.metadata.qualified_name)
+                parent_name = self.config["from"].member
+                parent_img = self.runtime.resolve_image(parent_name, False)
+                if parent_img is None:
+                    self.info("Skipping parent image build since it is not included: %s" % parent_name)
+                else:
+                    parent_dgr = parent_img.distgit_repo()
+                    parent_dgr.wait_for_build(self.metadata.qualified_name)
 
             self.info("Building image: %s" % target_image)
 
