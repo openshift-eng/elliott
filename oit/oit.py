@@ -21,17 +21,14 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="Username for rhpkg.")
 @click.option("--group", default=None, metavar='NAME',
               help="The group of images on which to operate.")
-@click.option("--branch", default=None, metavar='NAME',
-              help="The distgit branch each group member must switch to.")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
 @click.pass_context
-def cli(ctx, metadata_dir, working_dir, group, branch, user, verbose):
+def cli(ctx, metadata_dir, working_dir, group, user, verbose):
     if metadata_dir is None:
         metadata_dir = os.getcwd()
 
     # @pass_runtime
-    ctx.obj = Runtime(metadata_dir, working_dir, group, branch, user, verbose)
-
+    ctx.obj = Runtime(metadata_dir, working_dir, group, user, verbose)
 
 option_commit_message = click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.", required=True)
 option_push = click.option('--push/--no-push', default=False, is_flag=True,
@@ -258,11 +255,12 @@ def build_image(tuple):
 @cli.command("distgits:build-images", short_help="Build images for the group.")
 @click.option("--repo-conf", default=[], metavar="URL", multiple=True,
               help="Repo configuration file.  [multiple]")
+@click.option('--push-to-defaults', default=False, is_flag=True, help='Push to default registries when build completes.')
 @click.option("--push-to", default=[], metavar="REGISTRY", multiple=True,
-              help="Registry to push to when image build completes.  [multiple]")
+              help="Specific registries to push to when image build completes.  [multiple]")
 @click.option('--scratch', default=False, is_flag=True, help='Perform a scratch build.')
 @pass_runtime
-def distgits_build_images(runtime, repo_conf, push_to, scratch):
+def distgits_build_images(runtime, repo_conf, push_to_defaults, push_to, scratch):
     """
     Attempts to build container images for all of the distgit repositories
     in a group. If an image has already been built, it will be treated as
@@ -277,6 +275,10 @@ def distgits_build_images(runtime, repo_conf, push_to, scratch):
     runtime.initialize()
 
     items = []
+
+    push_to = list(push_to)  # In case we get a tuple
+    if push_to_defaults:
+        push_to.extend(runtime.default_registries)
 
     # Initialize all distgit directories before trying to build. This is
     # for clarity in the logs.
@@ -302,10 +304,11 @@ def distgits_build_images(runtime, repo_conf, push_to, scratch):
 
 
 @cli.command("distgits:push-images", short_help="Push the most recent images to mirrors.")
+@click.option('--to-defaults', default=False, is_flag=True, help='Push to default registries.')
 @click.option("--to", default=[], metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
 @pass_runtime
-def distgits_push_images(runtime, to):
+def distgits_push_images(runtime, to_defaults, to):
     """
     Each distgit repository will be cloned and the version and release information
     will be extracted. That information will be used to determine the most recently
@@ -316,6 +319,10 @@ def distgits_push_images(runtime, to):
     """
 
     runtime.initialize()
+
+    to = list(to)  # In case we get a tuple
+    if to_defaults:
+        to.extend(runtime.default_registries)
 
     if len(to) == 0:
         click.echo("You need specify at least one destination registry.")

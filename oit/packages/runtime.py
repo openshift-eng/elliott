@@ -7,8 +7,13 @@ import yaml
 
 from common import assert_dir, Dir
 from image import ImageMetadata
-from model import Model
+from model import Model, Missing
 from multiprocessing import Lock
+
+DEFAULT_REGISTRIES = [
+    "registry.reg-aws.openshift.com:443",
+    "registry-push.ops.openshift.com"
+]
 
 
 # Registered atexit to close out debug/record logs
@@ -24,22 +29,22 @@ def remove_tmp_working_dir(runtime):
 
 
 class Runtime(object):
-
     # Use any time it is necessary to synchronize feedback from multiple threads.
     mutex = Lock()
 
     # Serialize access to the debug_log and console
     log_lock = Lock()
 
-    def __init__(self, metadata_dir, working_dir, group, branch, user=None, verbose=False):
+    def __init__(self, metadata_dir, working_dir, group, user=None, verbose=False):
         self._verbose = verbose
         self.metadata_dir = metadata_dir
         self.working_dir = working_dir
 
         self.remove_tmp_working_dir = False
         self.group = group
+        self.group_config = None
         self.distgits_dir = None
-        self.distgit_branch = branch
+        self.distgit_branch = None
 
         self.record_log = None
         self.record_log_path = None
@@ -47,10 +52,10 @@ class Runtime(object):
         self.debug_log = None
         self.debug_log_path = None
 
-        # Any lines we want to be in all image metadata yaml files
-        self.global_yaml_lines = []
-
         self.user = user
+
+        # Registries to push to if not specified on the command line; populated by group.yml
+        self.default_registries = DEFAULT_REGISTRIES
 
         # Map of dist-git repo name -> ImageMetadata object. Populated when group is set.
         self.image_map = {}
@@ -75,10 +80,6 @@ class Runtime(object):
         # We could mark these as required and the click library would do this for us,
         # but this seems to prevent getting help from the various commands (unless you
         # specify the required parameters). This can probably be solved more cleanly, but TODO
-        if self.distgit_branch is None:
-            click.echo("Branch must be specified")
-            exit(1)
-
         if self.group is None:
             click.echo("Group must be specified")
             exit(1)
@@ -110,6 +111,20 @@ class Runtime(object):
 
         self.info("Searching group directory: %s" % group_dir)
         with Dir(group_dir):
+            with open("group.yml", "r") as f:
+                group_yml = f.read()
+
+            self.group_config = Model(yaml.load(group_yml))
+
+            if self.group_config.name != self.group:
+                raise IOError(
+                    "Name in group.yml does not match group name. Someone may have copied this group without updating group.yml (make sure to check branch)")
+
+            if self.group_config.branch is Missing:
+                raise IOError("group.yml does not define distgit branch")
+
+            self.distgit_branch = self.group_config.branch
+
             for distgit_repo_name in [x for x in os.listdir(".") if os.path.isdir(x)]:
                 self.image_map[distgit_repo_name] = ImageMetadata(
                     self, distgit_repo_name, distgit_repo_name)
@@ -171,7 +186,7 @@ class Runtime(object):
         with self.mutex:
             record = "%s|" % record_type
             for k, v in kwargs.iteritems():
-                assert("\n" not in str(k))
+                assert ("\n" not in str(k))
                 # Make sure the values have no linefeeds as this would interfere with simple parsing.
                 v = str(v).replace("\n", " ;;; ").replace("\r", "")
                 record += "%s=%s|" % (k, v)

@@ -23,13 +23,9 @@ class ImageMetadata(object):
 
         assert_file(self.config_path, "Unable to find image configuration file")
 
-        # Create an array of lines to eliminate the possibility of linefeed differences
-        config_yml_lines = list(runtime.global_yaml_lines)
         with open(self.config_path, "r") as f:
-            for line in f.readlines():
-                config_yml_lines.append(line.rstrip())
+            config_yml_content = f.read()
 
-        config_yml_content = "\n".join(config_yml_lines)
         runtime.verbose(config_yml_content)
         self.config = Model(yaml.load(config_yml_content))
 
