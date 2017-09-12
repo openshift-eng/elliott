@@ -35,7 +35,7 @@ class Runtime(object):
     # Serialize access to the debug_log and console
     log_lock = Lock()
 
-    def __init__(self, metadata_dir, working_dir, group, user=None, verbose=False):
+    def __init__(self, metadata_dir, working_dir, group, include=[], exclude=[], user=None, verbose=False):
         self._verbose = verbose
         self.metadata_dir = metadata_dir
         self.working_dir = working_dir
@@ -43,6 +43,10 @@ class Runtime(object):
         self.remove_tmp_working_dir = False
         self.group = group
         self.group_config = None
+
+        self.include = include
+        self.exclude = exclude
+
         self.distgits_dir = None
         self.distgit_branch = None
 
@@ -123,9 +127,30 @@ class Runtime(object):
             if self.group_config.branch is Missing:
                 raise IOError("group.yml does not define distgit branch")
 
+            if self.group_config.excludes is not Missing and self.exclude is None:
+                self.exclude = self.group_config.excludes
+
+            if self.group_config.includes is not Missing and self.include is None:
+                self.include = self.group_config.includes
+
             self.distgit_branch = self.group_config.branch
 
+            if len(self.include) > 0:
+                self.info("Include list set to: %s" % str(self.include))
+
+            if len(self.exclude) > 0:
+                self.info("Exclude list set to: %s" % str(self.exclude))
+
             for distgit_repo_name in [x for x in os.listdir(".") if os.path.isdir(x)]:
+
+                if len(self.include) > 0 and distgit_repo_name not in self.include:
+                    self.verbose("Skipping %s since it is not in the include list")
+                    continue
+
+                if len(self.exclude) > 0 and distgit_repo_name in self.exclude:
+                    self.verbose("Skipping %s since it is in the exclude list")
+                    continue
+
                 self.image_map[distgit_repo_name] = ImageMetadata(
                     self, distgit_repo_name, distgit_repo_name)
 
@@ -195,8 +220,10 @@ class Runtime(object):
             self.record_log.write("%s\n" % record)
             self.record_log.flush()
 
-    def resolve_image(self, distgit_name):
+    def resolve_image(self, distgit_name, required=True):
         if distgit_name not in self.image_map:
+            if not required:
+                return None
             raise IOError("Unable to find image metadata in group: %s" % distgit_name)
         return self.image_map[distgit_name]
 
