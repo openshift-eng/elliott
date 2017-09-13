@@ -410,7 +410,7 @@ class DistGitRepo(object):
 
             if rc != 0:
                 # Probably no point in continuing.. can't contact brew?
-                raise IOError("Unable to create brew task: out=%s  ; err=%s" % (out, err))
+                raise IOError("Unable to create brew task: out={}  ; err={}".format(out, err))
 
             # Otherwise, we should have a brew task we can monitor listed in the stdout.
             out_lines = out.splitlines()
@@ -425,6 +425,8 @@ class DistGitRepo(object):
             task_url = next((info_line.split(":", 1)[1]).strip() for info_line in out_lines if
                             info_line.startswith("Task info:"))
 
+            self.info("Build running: {}".format(task_url))
+
             record["task_url"] = task_url
 
             # Now that we have the basics about the task, wait for it to complete
@@ -433,14 +435,14 @@ class DistGitRepo(object):
             # Looking for somethine like the following to conclude the image has already been built:
             # "13949407 buildContainer (noarch): FAILED: BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961"
             if "already exists" in out:
-                self.info("Image already built for: %s" % target_image)
+                self.info("Image already built for: {}".format(target_image))
                 rc = 0
 
             if rc != 0:
                 # An error occurred during watch-task. We don't have a viable build.
-                raise IOError("Error building image: out=%s  ; err=%s" % (out, err))
+                raise IOError("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
 
-            self.info("Successfully built image: %s ; %s" % (target_image, task_url))
+            self.info("Successfully built image: {} ; {}".format(target_image, task_url))
             record["message"] = "Success"
             record["status"] = 0
             self.build_status = True
@@ -453,8 +455,8 @@ class DistGitRepo(object):
                 return True
 
         except Exception as err:
-            record["message"] = "Exception occurred: %s" % str(err)
-            self.info("Exception occurred during build: %s" % str(err))
+            record["message"] = "Exception occurred: {}".format(err)
+            self.info("Exception occurred during build: {}".format(err))
             # This is designed to fall through to finally. Since this method is designed to be
             # threaded, we should throw and exception; instead return False.
         finally:

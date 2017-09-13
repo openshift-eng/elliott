@@ -250,10 +250,12 @@ def build_image(tuple):
     scratch = tuple[3]
 
     dgr = image.distgit_repo()
-    if not dgr.build_container(repo_conf, push_to, scratch):
-        dgr.info("Async error in image build thread: %s" % image.qualified_name)
-        return False
-    return True
+    for retry in range(3):
+        if dgr.build_container(repo_conf, push_to, scratch):
+            return True
+        else:
+            dgr.info("Async error in image build thread [attempt #{}]: {}".format(retry + 1, image.qualified_name))
+    return False
 
 
 @cli.command("distgits:build-images", short_help="Build images for the group.")
