@@ -3,13 +3,30 @@ import shutil
 import os
 import filecmp
 import time
+import urllib
 from multiprocessing import Lock
 from dockerfile_parse import DockerfileParser
 
-from common import assert_rc0, assert_file, assert_exec, assert_dir, gather_exec, Dir, recursive_overwrite
+from common import BREW_IMAGE_HOST, CGIT_URL, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, gather_exec, retry, Dir, recursive_overwrite
 from model import Model, Missing
 
 OIT_COMMENT_PREFIX = '#oit##'
+
+
+def cgit_url(name, filename, rev=None):
+    ret = "{}/rpms/{}/plain/{}".format(CGIT_URL, name, filename)
+    if rev is not None:
+        ret = "{}?h={}".format(ret, rev)
+    return ret
+
+
+def pull_image(runtime, url):
+    def wait():
+        runtime.info("Error pulling image -- retrying in 60 seconds")
+        time.sleep(60)
+    retry(
+        n=3, wait_f=wait,
+        f=lambda: exec_cmd(runtime, ["docker", "pull", url]) == 0)
 
 
 class ImageMetadata(object):
@@ -47,6 +64,30 @@ class ImageMetadata(object):
         if self._distgit_repo is None:
             self._distgit_repo = DistGitRepo(self)
         return self._distgit_repo
+
+    def branch(self):
+        if self.config.repo.branch is not Missing:
+            return self.config.repo.branch
+        return self.runtime.distgit_branch
+
+    def cgit_url(self, filename):
+        return cgit_url(self.name, filename, self.branch())
+
+    def fetch_cgit_file(self, filename):
+        url = self.cgit_url(filename)
+        req = retry(
+            3, lambda: urllib.urlopen(url),
+            check_f=lambda req: req.code == 200)
+        return req.read()
+
+    def pull_url(self):
+        p = DockerfileParser()
+        p.content = self.fetch_cgit_file("Dockerfile")
+        return "{host}/{l[name]}:{l[version]}-{l[release]}".format(
+            host=BREW_IMAGE_HOST, l=p.labels)
+
+    def pull_image(self):
+        pull_image(self.runtime, self.pull_url())
 
 
 class DistGitRepo(object):
@@ -289,19 +330,8 @@ class DistGitRepo(object):
 
             try:
                 image_name_and_version = "%s:%s-%s" % (image_name, version, release)
-                brew_image_url = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/%s" % image_name_and_version
-
-                for retry in range(3):
-                    self.info("Pulling new image [retry=%d]: %s" % (retry, brew_image_url))
-                    rc, out, err = gather_exec(self.runtime, ["docker", "pull", brew_image_url])
-                    if rc == 0:
-                        break
-                    self.info("Error pulling image -- retrying in 60 seconds")
-                    time.sleep(60)
-
-                if rc != 0:
-                    # We could not pull the image
-                    raise IOError("Unable to pull source image from pulp")
+                brew_image_url = "/".join((BREW_IMAGE_HOST, image_name_and_version))
+                self.pull_image(self.runtime, brew_image_url)
 
                 for push_to in push_to_list:
                     for push_tag in push_tags:
@@ -343,7 +373,7 @@ class DistGitRepo(object):
 
             except Exception as err:
                 record["message"] = "Exception occurred: %s" % str(err)
-                self.info("Error pushing %s: %s" % str(err))
+                self.info("Error pushing %s: %s" % (self.metadata.name, err))
                 raise err
 
             finally:

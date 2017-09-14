@@ -2,6 +2,11 @@ import os
 import errno
 import subprocess
 import shutil
+import urllib
+from dockerfile_parse import DockerfileParser
+
+BREW_IMAGE_HOST = 'brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888'
+CGIT_URL = 'http://pkgs.devel.redhat.com/cgit'
 
 class Dir(object):
 
@@ -40,12 +45,20 @@ def assert_rc0(rc, msg):
 
 
 def assert_exec(runtime, cmd_list):
+    assert_rc0(exec_cmd(runtime, cmd_list), "Error running %s. See debug log: %s." % (cmd_list, runtime.debug_log_path))
+
+
+def exec_cmd(runtime, cmd_list):
+    """
+    Executes a command, redirecting its output to the log file.
+    :return: exit code
+    """
     runtime.verbose("\nExecuting: %s" % cmd_list)
     # https://stackoverflow.com/a/7389473
     runtime.debug_log.flush()
     process = subprocess.Popen(cmd_list, stdout=runtime.debug_log, stderr=runtime.debug_log)
     runtime.verbose("Process exited with: %d\n" % process.wait())
-    assert_rc0(process.wait(), "Error running %s. See debug log: %s." % (cmd_list, runtime.debug_log_path))
+    return process.wait()
 
 
 def gather_exec(runtime, cmd_list):
@@ -76,3 +89,13 @@ def recursive_overwrite(src, dest, ignore=None):
                                     ignore)
     else:
         shutil.copyfile(src, dest)
+
+
+def retry(n, f, check_f=bool, wait_f=None):
+    for c in xrange(n):
+        ret = f()
+        if check_f(ret):
+            return ret
+        if c < n - 1 and wait_f is not None:
+            wait_f()
+    raise Exception("Giving up after {} failed attempt(s)".format(n))
