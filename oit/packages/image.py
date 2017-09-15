@@ -189,8 +189,10 @@ class DistGitRepo(object):
         # Leave a record for external processes that owners will need to notified.
         if notify_owner and self.config.owners is not Missing:
             owners_list = ", ".join(self.config.owners)
+            print(self.config.content.source)
             self.runtime.add_record("dockerfile_notify", distgit=self.metadata.qualified_name, image=self.config.name,
-                                    dockerfile=os.path.abspath("Dockerfile"), owners=owners_list)
+                                    dockerfile=os.path.abspath("Dockerfile"), owners=owners_list,
+                                    source_alias=self.config.content.source.get('alias', None))
 
     def _run_modifications(self):
         """
