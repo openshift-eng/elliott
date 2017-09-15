@@ -59,6 +59,7 @@ def gather_exec(runtime, cmd_list):
     out, err = p.communicate()
     return p.returncode, out, err
 
+
 def recursive_overwrite(src, dest, ignore=None):
     if os.path.isdir(src):
         if not os.path.isdir(dest):

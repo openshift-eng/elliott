@@ -185,7 +185,9 @@ def distgits_rebase(runtime, source, sources, stream, version, release, message,
     for image in runtime.images():
         dgr = image.distgit_repo()
         dgr.rebase_dir(version, release)
-        dgr.commit(message)
+        sha = dgr.commit(message)
+        runtime.add_record("distgit_commit", distgit=dgr.metadata.qualified_name,
+                           image=dgr.config.name, sha=sha)
 
     if push:
         for image in runtime.images():

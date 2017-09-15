@@ -6,7 +6,7 @@ import time
 from multiprocessing import Lock
 from dockerfile_parse import DockerfileParser
 
-from common import assert_file, assert_exec, assert_dir, gather_exec, Dir, recursive_overwrite
+from common import assert_rc0, assert_file, assert_exec, assert_dir, gather_exec, Dir, recursive_overwrite
 from model import Model, Missing
 
 OIT_COMMENT_PREFIX = '#oit##'
@@ -98,7 +98,7 @@ class DistGitRepo(object):
                 dfp = DockerfileParser(path="Dockerfile")
                 self.org_image_name = dfp.labels["name"]
                 self.org_version = dfp.labels["version"]
-                self.org_release = dfp.labels["release"]
+                self.org_release = dfp.labels.get("release", "0")  # occasionally no release given
 
     def source_path(self):
         """
@@ -481,6 +481,9 @@ class DistGitRepo(object):
             self.info("Adding commit to local repo: %s" % commit_message)
             assert_exec(self.runtime, ["git", "add", "-A", "."])
             assert_exec(self.runtime, ["git", "commit", "-m", commit_message])
+            rc, sha, err = gather_exec(self.runtime, ["git", "rev-parse", "HEAD"])
+            assert_rc0(rc, "Failure fetching commit SHA for {}".format(self.distgit_dir))
+        return sha.strip()
 
     def push(self):
         with Dir(self.distgit_dir):
