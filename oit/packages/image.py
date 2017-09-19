@@ -2,15 +2,19 @@ import yaml
 import shutil
 import os
 import filecmp
+import tempfile
+import re
 import time
 import urllib
 from multiprocessing import Lock
 from dockerfile_parse import DockerfileParser
+import json
 
 from common import BREW_IMAGE_HOST, CGIT_URL, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, gather_exec, retry, Dir, recursive_overwrite
 from model import Model, Missing
 
 OIT_COMMENT_PREFIX = '#oit##'
+EMPTY_REPO = 'http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift_Empty/'
 
 
 def cgit_url(name, filename, rev=None):
@@ -36,14 +40,14 @@ class ImageMetadata(object):
         self.config_path = os.path.join(self.dir, "config.yml")
         self.name = name
 
-        runtime.verbose("Loading image metadata for %s from %s" % (name, self.config_path))
+        runtime.log_verbose("Loading image metadata for %s from %s" % (name, self.config_path))
 
         assert_file(self.config_path, "Unable to find image configuration file")
 
         with open(self.config_path, "r") as f:
             config_yml_content = f.read()
 
-        runtime.verbose(config_yml_content)
+        runtime.log_verbose(config_yml_content)
         self.config = Model(yaml.load(config_yml_content))
 
         # Basic config validation. All images currently required to have a name in the metadata.
@@ -100,7 +104,7 @@ class DistGitRepo(object):
         self.build_lock = Lock()
         self.build_lock.acquire()
 
-        self.branch = self.runtime.distgit_branch
+        self.branch = self.runtime.branch
 
         # Allow the config.yml to override branch
         # This is primarily useful for a sync only group.
@@ -148,6 +152,19 @@ class DistGitRepo(object):
                 self.org_image_name = dfp.labels["name"]
                 self.org_version = dfp.labels["version"]
                 self.org_release = dfp.labels.get("release", "0")  # occasionally no release given
+
+    def copy_branch(self, to_branch):
+        self.runtime.info('Copying {}: {} -> {}'.format(self.metadata.qualified_name, self.branch, to_branch))
+        from_branch_copy = tempfile.mkdtemp(".tmp", "oit-copy-")
+        self.runtime.info('Backing up to: {}'.format(from_branch_copy))
+        recursive_overwrite(self.distgit_dir, from_branch_copy, ['.git'])
+        self.runtime.info('Switching to branch: {}'.format(to_branch))
+        assert_exec(self.runtime, ["rhpkg", "switch-branch", to_branch])
+        self.runtime.info('Copying source branch contents over current branch')
+        recursive_overwrite(from_branch_copy, self.distgit_dir, ['.git'])
+
+        # os.removedirs(from_branch_copy)
+
 
     def source_path(self):
         """
@@ -211,7 +228,7 @@ class DistGitRepo(object):
                 os.remove("Dockerfile")
 
             # Rename our distgit source Dockerfile appropriately
-            os.rename(dockerfile_name, "Dockerilfe")
+            os.rename(dockerfile_name, "Dockerfile")
 
         # Clean up any extraneous Dockerfile.* that might be distractions (e.g. Dockerfile.centos)
         for ent in os.listdir("."):
@@ -238,7 +255,6 @@ class DistGitRepo(object):
         # Leave a record for external processes that owners will need to notified.
         if notify_owner and self.config.owners is not Missing:
             owners_list = ", ".join(self.config.owners)
-            print(self.config.content.source)
             self.runtime.add_record("dockerfile_notify", distgit=self.metadata.qualified_name, image=self.config.name,
                                     dockerfile=os.path.abspath("Dockerfile"), owners=owners_list,
                                     source_alias=self.config.content.source.get('alias', None))
@@ -251,8 +267,8 @@ class DistGitRepo(object):
         with open("Dockerfile", 'r') as df:
             dockerfile_data = df.read()
 
-        self.runtime.verbose("\nAbout to start modifying Dockerfile [%s]:\n%s\n" %
-                             (self.metadata.name, dockerfile_data))
+        self.runtime.log_verbose("\nAbout to start modifying Dockerfile [%s]:\n%s\n" %
+                                 (self.metadata.name, dockerfile_data))
 
         for modification in self.config.content.source.modifications:
             if modification.action == "replace":
@@ -265,13 +281,82 @@ class DistGitRepo(object):
                 if dockerfile_data == pre:
                     raise IOError("Replace (%s->%s) modification did not make a change to the Dockerfile content" % (
                         match, replacement))
-                self.runtime.verbose("\nPerformed string replace '%s' -> '%s':\n%s\n" %
-                                     (match, replacement, dockerfile_data))
+                self.runtime.log_verbose("\nPerformed string replace '%s' -> '%s':\n%s\n" %
+                                         (match, replacement, dockerfile_data))
             else:
                 raise IOError("Don't know how to perform modification action: %s" % modification.action)
 
         with open('Dockerfile', 'w') as df:
             df.write(dockerfile_data)
+
+    def _generate_repo_conf(self):
+        """
+        Generates a repo file in .oit/repo.conf
+        """
+
+        dfp = DockerfileParser(path="Dockerfile")
+
+        self.runtime.log_verbose("\nGenerating repo file for Dockerfile {}".format(self.metadata.name))
+
+        repo_patterns = [
+            r"(yum-config-manager)*[\s]*--enable[\s]*([^\s]+)",
+            r"(yum)*[\s]*--enablerepo[\s]*=[\s]*([^\s]+)",
+        ]
+        df_repos = []
+        for entry in json.loads(dfp.json):
+            if isinstance(entry, dict) and 'RUN' in entry:
+                run_val = entry['RUN']
+                for rp in repo_patterns:
+                    m = re.findall(rp, run_val)
+                    for sm in m:
+                        df_repos.append(sm[1])
+
+        gc_repos = self.runtime.group_config.repos
+        if gc_repos is Missing:
+            msg = 'group.yml must include a `repos` section to define RPM repos to load.'
+            runtime.error(msg)
+            raise ValueError(msg)
+
+        def resolve_repo(name, cfg):
+            cfg['name'] = cfg.get('name', name)
+            cfg['enabled'] = cfg.get('enabled', 0)
+            cfg['gpgcheck'] = cfg.get('gpgcheck', 0)
+            return cfg
+
+        repo_types = list(gc_repos.keys())
+        repo_types.remove('common')
+
+        # Make our metadata directory if it does not exist
+        if not os.path.isdir(".oit"):
+            os.mkdir(".oit")
+
+        for t in repo_types:
+            type_repos = {}
+            for name, cfg in gc_repos[t].items():
+                cfg = resolve_repo(name, cfg)
+                type_repos[name] = cfg
+
+            for name, cfg in gc_repos['common'].items():
+                cfg = resolve_repo(name, cfg)
+                type_repos[name] = cfg
+
+            if self.config:
+                for er in self.config.enabled_repos:
+                    if er in type_repos:
+                        type_repos['enabled'] = 1
+                    else:
+                        raise ValueError('{} must be added to group.yml:repos'.format(er))
+
+            for r in df_repos:
+                if r not in type_repos:
+                    type_repos[r] = resolve_repo(r, {'enabled': 1, 'baseurl': EMPTY_REPO})
+
+            with open('.oit/{}.conf'.format(t), 'w') as rc:
+                for name, cfg in type_repos.items():
+                    rc.write('[{}]\n'.format(name))
+                    for k, v in cfg.items():
+                        rc.write('{} = {}\n'.format(k, v))
+                    rc.write('\n')
 
     def push_image(self, push_to_list, push_late=False):
 
@@ -389,12 +474,12 @@ class DistGitRepo(object):
             else:
                 self.info("repo successfully waited for me to build: %s" % who_is_waiting)
 
-    def build_container(self, repo_urls, push_to_list, scratch=False):
+    def build_container(self, repo_type, push_to_list, scratch=False):
         """
         This method is designed to be thread-safe. Multiple builds should take place in brew
         at the same time. After a build, images are pushed serially to all mirrors.
         DONT try to change cwd during this time, all threads active will change cwd
-        :param repo_urls: Repo configuration files to pass to rkpkg container-build
+        :param repo: Repo type to choose from group.yml
         :param push_to_list: A list of registries resultant builds should be pushed to.
         :param scratch: Whether this is a scratch build. UNTESTED.
         :return: True if the build was successful
@@ -440,10 +525,10 @@ class DistGitRepo(object):
             if scratch:
                 cmd_list.append("--scratch")
 
-            if len(repo_urls) > 0:
-                cmd_list.append("--repo")
-                for repo_url in repo_urls:
-                    cmd_list.append(repo_url)
+            repo_url_base = "http://pkgs.devel.redhat.com/cgit/{}/plain/.oit/{}.conf?h={}"
+
+            cmd_list.append("--repo")
+            cmd_list.append(repo_url_base.format(self.metadata.qualified_name, repo_type, self.branch))
 
             # Run the build with --nowait so that we can immdiately get information about the brew task
             rc, out, err = gather_exec(self.runtime, cmd_list)
@@ -516,9 +601,13 @@ class DistGitRepo(object):
 
         return self.build_status
 
-    def commit(self, commit_message):
+    def commit(self, commit_message, log_diff=False):
         with Dir(self.distgit_dir):
             self.info("Adding commit to local repo: %s" % commit_message)
+            if log_diff:
+                rc, out, err = gather_exec(self.runtime, ["git", "diff", "Dockerfile"])
+                assert_rc0(rc, 'Failed fetching distgit diff')
+                self.runtime.add_distgits_diff(self.metadata.name, out)
             assert_exec(self.runtime, ["git", "add", "-A", "."])
             assert_exec(self.runtime, ["git", "commit", "-m", commit_message])
             rc, sha, err = gather_exec(self.runtime, ["git", "rev-parse", "HEAD"])
@@ -563,23 +652,29 @@ class DistGitRepo(object):
 
         # A collection of comment lines that will be included in the generated Dockerfile. They
         # will be prefix by the OIT_COMMENT_PREFIX and followed by newlines in the Dockerfile.
-        oit_comments = [
-            "This file is managed by the OpenShift Image Tool: github.com/openshift/enterprise-images",
-            "by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).",
-            ""
-        ]
+        oit_comments = []
 
-        if self.config.content.source is not Missing:
-            oit_comments.extend(["The content of this file is managed from external source.",
-                                 "Changes made directly in distgit will be lost during the next",
-                                 "reconciliation process.",
-                                 ""])
-        else:
+        if not self.runtime.no_oit_comment and not self.config.get('no_oit_comment', False):
             oit_comments.extend([
-                "Some aspects of this file may be managed programmatically. For example, the image name, labels (version,",
-                "release, and other), and the base FROM. Changes made directly in distgit may be lost during the next",
-                "reconciliation.",
-                ""])
+                "This file is managed by the OpenShift Image Tool: github.com/openshift/enterprise-images",
+                "by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).",
+                "",
+                "Any yum repos listed in this file will effectively be ignored.",
+                "Instead enabled repos are managed by the OpenShift Image Tool when the build",
+                "details are passed to the image build system."
+            ])
+
+            if self.config.content.source is not Missing:
+                oit_comments.extend(["The content of this file is managed from external source.",
+                                     "Changes made directly in distgit will be lost during the next",
+                                     "reconciliation process.",
+                                     ""])
+            else:
+                oit_comments.extend([
+                    "Some aspects of this file may be managed programmatically. For example, the image name, labels (version,",
+                    "release, and other), and the base FROM. Changes made directly in distgit may be lost during the next",
+                    "reconciliation.",
+                    ""])
 
         with Dir(self.distgit_dir):
             # Source or not, we should find a Dockerfile in the root at this point or something is wrong
@@ -587,9 +682,9 @@ class DistGitRepo(object):
 
             dfp = DockerfileParser(path="Dockerfile")
 
-            self.runtime.verbose("Dockerfile has parsed labels:")
+            self.runtime.log_verbose("Dockerfile has parsed labels:")
             for k, v in dfp.labels.iteritems():
-                self.runtime.verbose("  '%s'='%s'" % (k, v))
+                self.runtime.log_verbose("  '%s'='%s'" % (k, v))
 
             # Set all labels in from config into the Dockerfile content
             if self.config.labels is not Missing:
@@ -632,11 +727,11 @@ class DistGitRepo(object):
 
             df_content = "\n".join(df_lines)
 
-            with open('Dockerfile', 'w') as df:
-                if not self.config.get("no_oit_comments", False):
+            if len(oit_comments):
+                with open('Dockerfile', 'w') as df:
                     for comment in oit_comments:
                         df.write("%s %s\n" % (OIT_COMMENT_PREFIX, comment))
-                df.write(df_content)
+                    df.write(df_content)
 
     def rebase_dir(self, version, release):
 
@@ -655,5 +750,7 @@ class DistGitRepo(object):
 
             if self.config.content.source.modifications is not Missing:
                 self._run_modifications()
+
+            self._generate_repo_conf()
 
         self.update_dockerfile(version, release)
