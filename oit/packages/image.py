@@ -590,8 +590,9 @@ class DistGitRepo(object):
             df_content = "\n".join(df_lines)
 
             with open('Dockerfile', 'w') as df:
-                for comment in oit_comments:
-                    df.write("%s %s\n" % (OIT_COMMENT_PREFIX, comment))
+                if not self.config.get("no_oit_comments", False):
+                    for comment in oit_comments:
+                        df.write("%s %s\n" % (OIT_COMMENT_PREFIX, comment))
                 df.write(df_content)
 
     def rebase_dir(self, version, release):
