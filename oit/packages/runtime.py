@@ -35,7 +35,7 @@ class Runtime(object):
     # Serialize access to the debug_log and console
     log_lock = Lock()
 
-    def __init__(self, metadata_dir, working_dir, group, include=[], exclude=[], user=None, verbose=False):
+    def __init__(self, metadata_dir, working_dir, group, branch=None, include=[], exclude=[], user=None, verbose=False):
         self._verbose = verbose
         self.metadata_dir = metadata_dir
         self.working_dir = working_dir
@@ -48,7 +48,7 @@ class Runtime(object):
         self.exclude = exclude
 
         self.distgits_dir = None
-        self.distgit_branch = None
+        self.distgit_branch = branch
 
         self.record_log = None
         self.record_log_path = None
@@ -124,16 +124,21 @@ class Runtime(object):
                 raise IOError(
                     "Name in group.yml does not match group name. Someone may have copied this group without updating group.yml (make sure to check branch)")
 
-            if self.group_config.branch is Missing:
-                raise IOError("group.yml does not define distgit branch")
-
             if self.group_config.excludes is not Missing and self.exclude is None:
                 self.exclude = self.group_config.excludes
 
             if self.group_config.includes is not Missing and self.include is None:
                 self.include = self.group_config.includes
 
-            self.distgit_branch = self.group_config.branch
+            if self.distgit_branch is None:
+                if self.group_config.branch is not Missing:
+                    self.distgit_branch = self.group_config.branch
+                    self.info("Using branch from group.yml: %s" % self.distgit_branch)
+                else:
+                    raise IOError("No branch specified either in group.yml or on the command line")
+            else:
+                self.info("Using branch from command line: %s" % self.distgit_branch)
+
 
             if len(self.include) > 0:
                 self.info("Include list set to: %s" % str(self.include))
@@ -144,11 +149,11 @@ class Runtime(object):
             for distgit_repo_name in [x for x in os.listdir(".") if os.path.isdir(x)]:
 
                 if len(self.include) > 0 and distgit_repo_name not in self.include:
-                    self.verbose("Skipping %s since it is not in the include list")
+                    self.verbose("Skipping %s since it is not in the include list" % distgit_repo_name)
                     continue
 
                 if len(self.exclude) > 0 and distgit_repo_name in self.exclude:
-                    self.verbose("Skipping %s since it is in the exclude list")
+                    self.verbose("Skipping %s since it is in the exclude list" % distgit_repo_name)
                     continue
 
                 self.image_map[distgit_repo_name] = ImageMetadata(
