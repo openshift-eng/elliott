@@ -5,7 +5,9 @@ from packages import Dir
 import click
 import os
 import yaml
+import sys
 import subprocess
+import urllib
 from multiprocessing.dummy import Pool as ThreadPool
 from dockerfile_parse import DockerfileParser
 
@@ -21,18 +23,20 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="Username for rhpkg.")
 @click.option("--group", default=None, metavar='NAME',
               help="The group of images on which to operate.")
+@click.option("--branch", default=None, metavar='BRANCH',
+              help="Branch to override any default in group.yml.")
 @click.option("-i", "--include", default=[], metavar='NAME', multiple=True,
               help="Name of group members to include in operation (all by default).")
 @click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
               help="Name of group members to exclude from operation (empty by default).")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
 @click.pass_context
-def cli(ctx, metadata_dir, working_dir, group, include, exclude, user, verbose):
+def cli(ctx, metadata_dir, working_dir, group, branch, include, exclude, user, verbose):
     if metadata_dir is None:
         metadata_dir = os.getcwd()
 
     # @pass_runtime
-    ctx.obj = Runtime(metadata_dir, working_dir, group, include, exclude, user, verbose)
+    ctx.obj = Runtime(metadata_dir, working_dir, group, branch, include, exclude, user, verbose)
 
 option_commit_message = click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.", required=True)
 option_push = click.option('--push/--no-push', default=False, is_flag=True,
@@ -396,6 +400,61 @@ def distgits_print(runtime, pattern):
 
             click.echo(s)
     click.echo("------------------------------------------")
+
+
+@cli.command("print-config-template", short_help="Create template config.yml from distgit Dockerfile.")
+@click.argument("url", nargs=1)
+def distgit_config_template(url):
+    """
+    Pulls the specified URL (to a Dockerfile in distgit) and prints the boilerplate
+    for a config.yml for the image.
+    """
+
+    f = urllib.urlopen(url)
+    if f.code != 200:
+        click.echo("Error fetching {}: {}".format(url, f.code), err=True)
+        exit(1)
+
+    dfp = DockerfileParser()
+    dfp.content = f.read()
+
+    if "cgit/rpms/" in url:
+        type = "rpms"
+    elif "cgit/abps/" in url:
+        type = "abps"
+    else:
+        raise IOError("oit does not yet support that distgit repo type")
+
+    config = {
+        "repo": {
+            "type": type,
+        },
+        "name": dfp.labels['name'],
+        "from": {
+            "image": dfp.baseimage
+        },
+        "labels": {},
+        "owners": []
+    }
+
+    branch = url[url.index("?h=")+3:]
+
+    managed_labels = [
+        'vendor',
+        'License',
+        'architecture',
+        'io.k8s.display-name',
+        'io.k8s.description',
+        'io.openshift.tags'
+    ]
+
+    for ml in managed_labels:
+        if ml in dfp.labels:
+            config["labels"][ml] = dfp.labels[ml]
+
+    click.echo("---")
+    click.echo("# populated from branch: %s" % branch)
+    yaml.safe_dump(config, sys.stdout, indent=2, default_flow_style=False)
 
 if __name__ == '__main__':
     cli(obj={})
