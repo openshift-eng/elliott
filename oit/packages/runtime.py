@@ -135,7 +135,7 @@ class Runtime(object):
                     self.distgit_branch = self.group_config.branch
                     self.info("Using branch from group.yml: %s" % self.distgit_branch)
                 else:
-                    raise IOError("No branch specified either in group.yml or on the command line")
+                    self.info("No branch specified either in group.yml or on the command line; all included images will need to specify their own.")
             else:
                 self.info("Using branch from command line: %s" % self.distgit_branch)
 

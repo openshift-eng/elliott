@@ -58,8 +58,16 @@ class DistGitRepo(object):
         self.build_status = False
         self.build_lock = Lock()
         self.build_lock.acquire()
+
+        self.branch = self.runtime.distgit_branch
+
+        # Allow the config.yml to override branch
+        # This is primarily useful for a sync only group.
+        if self.config.repo.branch is not Missing:
+            self.branch = self.config.repo.branch
+
         # Initialize our distgit directory, if necessary
-        self.clone(self.runtime.distgits_dir, self.runtime.distgit_branch)
+        self.clone(self.runtime.distgits_dir, self.branch)
 
     def info(self, msg, debug=None):
         msg = "[%s] %s" % (self.metadata.qualified_name, msg)
