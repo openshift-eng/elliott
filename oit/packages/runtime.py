@@ -74,7 +74,7 @@ class Runtime(object):
         self.initialized = False
 
         # Will be loaded with the streams.yml Model
-        self.streams = None
+        self.streams = {}
 
     def initialize(self):
 
