@@ -2,6 +2,7 @@
 
 from packages import Runtime
 from packages import Dir
+from packages.image import pull_image
 import click
 import os
 import yaml
@@ -347,6 +348,31 @@ def distgits_push_images(runtime, to_defaults, to):
     # Push all late images
     for image in runtime.images():
         image.distgit_repo().push_image(to, True)
+
+
+@cli.command("distgits:pull-images", short_help="Pull latest images from pulp")
+@pass_runtime
+def distgits_pull_images(runtime):
+    """
+    Pulls latest images from pull, fetching the dockerfiles from cgit to
+    determine the version/release.
+    """
+    runtime.initialize()
+    for image in runtime.images():
+        image.pull_image()
+
+
+@cli.command("distgits:scan-for-cves", short_help="Scan images with openscap")
+@pass_runtime
+def distgits_scan_for_cves(runtime):
+    """
+    Pulls images and scans them for CVEs using `atomic scan` and `openscap`.
+    """
+    runtime.initialize()
+    images = [x.pull_url() for x in runtime.images()]
+    for image in images:
+        pull_image(runtime, image)
+    subprocess.check_call(["atomic", "scan"] + images)
 
 
 @cli.command("distgits:print", short_help="Print data from each distgit.")
