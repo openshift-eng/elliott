@@ -331,7 +331,7 @@ class DistGitRepo(object):
             try:
                 image_name_and_version = "%s:%s-%s" % (image_name, version, release)
                 brew_image_url = "/".join((BREW_IMAGE_HOST, image_name_and_version))
-                self.pull_image(self.runtime, brew_image_url)
+                pull_image(self.runtime, brew_image_url)
 
                 for push_to in push_to_list:
                     for push_tag in push_tags:
