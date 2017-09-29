@@ -22,7 +22,7 @@ def cgit_url(name, filename, rev=None):
 
 def pull_image(runtime, url):
     def wait():
-        runtime.info("Error pulling image -- retrying in 60 seconds")
+        runtime.info("Error pulling image %s -- retrying in 60 seconds" % url)
         time.sleep(60)
     retry(
         n=3, wait_f=wait,
