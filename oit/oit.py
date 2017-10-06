@@ -82,10 +82,11 @@ def distgits_push(runtime):
               help="Associate an image name with a given stream alias.  [multiple]")
 @click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.", required=True)
 @click.option("--release", metavar='RELEASE', default="1", help="Release string to populate in Dockerfiles.")
+@click.option('--ignore-missing-base', default=False, is_flag=True, help='If a base image is not included, proceed and do not update FROM.')
 @option_commit_message
 @option_push
 @pass_runtime
-def distgits_update_dockerfile(runtime, stream, version, release, message, push):
+def distgits_update_dockerfile(runtime, stream, version, release, ignore_missing_base, message, push):
     """
     Updates the Dockerfile in each distgit repository with the latest metadata and
     the version/release information specified. This does not update the Dockerfile
@@ -103,7 +104,7 @@ def distgits_update_dockerfile(runtime, stream, version, release, message, push)
 
     for image in runtime.images():
         dgr = image.distgit_repo()
-        dgr.update_dockerfile(version, release)
+        dgr.update_dockerfile(version, release, ignore_missing_base)
         dgr.commit(message)
 
     if push:
