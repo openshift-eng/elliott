@@ -559,7 +559,7 @@ class DistGitRepo(object):
 
             self.commit("Bumping version to %s-%s" % (version, new_release))
 
-    def update_dockerfile(self, version, release):
+    def update_dockerfile(self, version, release, ignore_missing_base=False):
 
         # A collection of comment lines that will be included in the generated Dockerfile. They
         # will be prefix by the OIT_COMMENT_PREFIX and followed by newlines in the Dockerfile.
@@ -604,11 +604,18 @@ class DistGitRepo(object):
 
             # Does this image inherit from an image defined in a different distgit?
             if self.config["from"].member is not Missing:
-                from_image_metadata = self.runtime.resolve_image(self.config["from"].member)
-                # Everything in the group is going to be built with the same version and release,
-                # so just assume it will exist with the version-release we are using for this
-                # repo.
-                dfp.baseimage = "%s:%s-%s" % (from_image_metadata.config.name, version, release)
+                base = self.config["from"].member
+                from_image_metadata = self.runtime.resolve_image(base, False)
+
+                if from_image_metadata is None:
+                    if not ignore_missing_base:
+                        raise IOError("Unable to find base image metadata [%s] in included images. Use --ignore-missing-base to ignore." % base)
+                    # Otherwise, the user is not expecting the FROM field to be updated in this Dockerfile.
+                else:
+                    # Everything in the group is going to be built with the same version and release,
+                    # so just assume it will exist with the version-release we are using for this
+                    # repo.
+                    dfp.baseimage = "%s:%s-%s" % (from_image_metadata.config.name, version, release)
 
             # Is this image FROM another literal image name:tag?
             if self.config["from"].image is not Missing:

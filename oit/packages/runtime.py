@@ -229,7 +229,7 @@ class Runtime(object):
         if distgit_name not in self.image_map:
             if not required:
                 return None
-            raise IOError("Unable to find image metadata in group: %s" % distgit_name)
+            raise IOError("Unable to find image metadata in group / included images: %s" % distgit_name)
         return self.image_map[distgit_name]
 
     def resolve_stream(self, stream_name):
