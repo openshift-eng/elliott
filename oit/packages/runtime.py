@@ -35,28 +35,20 @@ class Runtime(object):
     # Serialize access to the debug_log and console
     log_lock = Lock()
 
-    def __init__(self, metadata_dir, working_dir, group, branch=None, include=[], exclude=[], user=None, verbose=False):
-        self._verbose = verbose
-        self.metadata_dir = metadata_dir
-        self.working_dir = working_dir
+    def __init__(self, **kwargs):
+        for key, val in kwargs.items():
+            self.__dict__[key] = val
 
         self.remove_tmp_working_dir = False
-        self.group = group
         self.group_config = None
 
-        self.include = include
-        self.exclude = exclude
-
         self.distgits_dir = None
-        self.distgit_branch = branch
 
         self.record_log = None
         self.record_log_path = None
 
         self.debug_log = None
         self.debug_log_path = None
-
-        self.user = user
 
         # Registries to push to if not specified on the command line; populated by group.yml
         self.default_registries = DEFAULT_REGISTRIES
@@ -102,6 +94,10 @@ class Runtime(object):
         if not os.path.isdir(self.distgits_dir):
             os.mkdir(self.distgits_dir)
 
+        self.distgits_diff_dir = os.path.join(self.working_dir, "distgits_diffs")
+        if not os.path.isdir(self.distgits_diff_dir):
+            os.mkdir(self.distgits_diff_dir)
+
         self.debug_log_path = os.path.join(self.working_dir, "debug.log")
         self.debug_log = open(self.debug_log_path, 'a')
         atexit.register(close_file, self.debug_log)
@@ -130,15 +126,14 @@ class Runtime(object):
             if self.group_config.includes is not Missing and self.include is None:
                 self.include = self.group_config.includes
 
-            if self.distgit_branch is None:
+            if self.branch is None:
                 if self.group_config.branch is not Missing:
-                    self.distgit_branch = self.group_config.branch
-                    self.info("Using branch from group.yml: %s" % self.distgit_branch)
+                    self.branch = self.group_config.branch
+                    self.info("Using branch from group.yml: %s" % self.branch)
                 else:
                     self.info("No branch specified either in group.yml or on the command line; all included images will need to specify their own.")
             else:
-                self.info("Using branch from command line: %s" % self.distgit_branch)
-
+                self.info("Using branch from command line: %s" % self.branch)
 
             if len(self.include) > 0:
                 self.info("Include list set to: %s" % str(self.include))
@@ -149,11 +144,11 @@ class Runtime(object):
             for distgit_repo_name in [x for x in os.listdir(".") if os.path.isdir(x)]:
 
                 if len(self.include) > 0 and distgit_repo_name not in self.include:
-                    self.verbose("Skipping %s since it is not in the include list" % distgit_repo_name)
+                    self.log_verbose("Skipping %s since it is not in the include list" % distgit_repo_name)
                     continue
 
                 if len(self.exclude) > 0 and distgit_repo_name in self.exclude:
-                    self.verbose("Skipping %s since it is in the exclude list" % distgit_repo_name)
+                    self.log_verbose("Skipping %s since it is in the exclude list" % distgit_repo_name)
                     continue
 
                 self.image_map[distgit_repo_name] = ImageMetadata(
@@ -168,19 +163,19 @@ class Runtime(object):
             with open(streams_path, "r") as s:
                 self.streams = Model(yaml.load(s.read()))
 
-    def verbose(self, message):
+    def log_verbose(self, message):
         with self.log_lock:
-            if self._verbose:
+            if self.verbose:
                 click.echo(message)
             self.debug_log.write(message + "\n")
             self.debug_log.flush()
 
     def info(self, message, debug=None):
-        if self._verbose:
+        if self.verbose:
             if debug is not None:
-                self.verbose("%s [%s]" % (message, debug))
+                self.log_verbose("%s [%s]" % (message, debug))
             else:
-                self.verbose(message)
+                self.log_verbose(message)
         else:
             with self.log_lock:
                 click.echo(message)
@@ -224,6 +219,14 @@ class Runtime(object):
             # Add the record to the file
             self.record_log.write("%s\n" % record)
             self.record_log.flush()
+
+    def add_distgits_diff(self, distgit, diff):
+        """
+        Records the diff of changes applied to a distgit repo.
+        """
+
+        with open(os.path.join(self.distgits_diff_dir, distgit + '.patch'), 'w') as f:
+            f.write(diff)
 
     def resolve_image(self, distgit_name, required=True):
         if distgit_name not in self.image_map:

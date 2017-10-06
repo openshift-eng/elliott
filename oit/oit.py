@@ -16,7 +16,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 
 
 @click.group()
-@click.option("--metadata-dir", metavar='PATH', default=None,
+@click.option("--metadata-dir", metavar='PATH', default=os.getcwd(),
               help="Directory containing groups metadata directory if not current.")
 @click.option("--working-dir", metavar='PATH', default=None,
               help="Existing directory in which file operations should be performed.")
@@ -31,13 +31,13 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
               help="Name of group members to exclude from operation (empty by default).")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
+@click.option('--no_oit_comment', default=False, is_flag=True,
+              help='Do not place OIT comment in Dockerfile. Can also be set in each config.yml')
 @click.pass_context
-def cli(ctx, metadata_dir, working_dir, group, branch, include, exclude, user, verbose):
-    if metadata_dir is None:
-        metadata_dir = os.getcwd()
-
+def cli(ctx, **kwargs):
     # @pass_runtime
-    ctx.obj = Runtime(metadata_dir, working_dir, group, branch, include, exclude, user, verbose)
+    ctx.obj = Runtime(**kwargs)
+
 
 option_commit_message = click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.", required=True)
 option_push = click.option('--push/--no-push', default=False, is_flag=True,
@@ -190,7 +190,7 @@ def distgits_rebase(runtime, source, sources, stream, version, release, message,
     for image in runtime.images():
         dgr = image.distgit_repo()
         dgr.rebase_dir(version, release)
-        sha = dgr.commit(message)
+        sha = dgr.commit(message, log_diff=True)
         runtime.add_record("distgit_commit", distgit=dgr.metadata.qualified_name,
                            image=dgr.config.name, sha=sha)
 
@@ -238,27 +238,51 @@ def distgits_foreach(runtime, cmd, message, push):
 @cli.command("distgits:copy", help="Copy content of source branch to target.")
 @click.option("--to-branch", metavar="TARGET_BRANCH", help="Branch to populate from source branch.")
 @click.option('--overwrite', default=False, is_flag=True, help='Overwrite files found in target.')
-@click.option("--replace", metavar="MATCH REPLACEMENT", nargs=2, multiple=True,
+@click.option("--replace", metavar="MATCH REPLACEMENT", nargs=2, multiple=True, default=None,
               help="String replacement in target Dockerfile.  [multiple]")
 @option_commit_message
 @option_push
 @pass_runtime
-def distgits_copy(runtime, to_branch, overwrite, cmd, message, push):
+def distgits_copy(runtime, to_branch, overwrite, message, push, replace):
+    """
+    Clones all distgit repos found in the specified group and runs an arbitrary
+    command once for each local distgit directory. If the command runs without
+    error for all directories, a commit will be made. If not a dry_run,
+    the repo will be pushed.
+    """
     runtime.initialize()
 
-    # TODO: implement
-    click.echo("Not yet implemented")
+    if replace:
+        click.echo("'--replace' option not yet implemented")
+
+    # If not pushing, do not clean up our work
+    runtime.remove_tmp_working_dir = push
+
+    dgrs = [image.distgit_repo() for image in runtime.images()]
+    for dgr in dgrs:
+        with Dir(dgr.distgit_dir):
+            runtime.info("Copying from branch {} to {}".format(dgr.branch, to_branch))
+            dgr.copy_branch(to_branch)
+            runtime.info("\n")
+
+        if message is not None:
+            dgr.commit(message)
+
+    if push:
+        for image in runtime.images():
+            dgr = image.distgit_repo()
+            dgr.push()
 
 
 def build_image(tuple):
     image = tuple[0]
-    repo_conf = tuple[1]
+    repo_type = tuple[1]
     push_to = tuple[2]
     scratch = tuple[3]
 
     dgr = image.distgit_repo()
     for retry in range(3):
-        if dgr.build_container(repo_conf, push_to, scratch):
+        if dgr.build_container(repo_type, push_to, scratch):
             return True
         else:
             dgr.info("Async error in image build thread [attempt #{}]: {}".format(retry + 1, image.qualified_name))
@@ -266,14 +290,14 @@ def build_image(tuple):
 
 
 @cli.command("distgits:build-images", short_help="Build images for the group.")
-@click.option("--repo-conf", default=[], metavar="URL", multiple=True,
-              help="Repo configuration file.  [multiple]")
+@click.option("--repo_type", required=True, metavar="REPO_TYPE",
+              help="Repo type (i.e. signed, unsigned).")
 @click.option('--push-to-defaults', default=False, is_flag=True, help='Push to default registries when build completes.')
 @click.option("--push-to", default=[], metavar="REGISTRY", multiple=True,
               help="Specific registries to push to when image build completes.  [multiple]")
 @click.option('--scratch', default=False, is_flag=True, help='Perform a scratch build.')
 @pass_runtime
-def distgits_build_images(runtime, repo_conf, push_to_defaults, push_to, scratch):
+def distgits_build_images(runtime, repo_type, push_to_defaults, push_to, scratch):
     """
     Attempts to build container images for all of the distgit repositories
     in a group. If an image has already been built, it will be treated as
@@ -297,7 +321,7 @@ def distgits_build_images(runtime, repo_conf, push_to_defaults, push_to, scratch
     # for clarity in the logs.
     for image in runtime.images():
         image.distgit_repo()
-        items.append((image, repo_conf, push_to, scratch))
+        items.append((image, repo_type, push_to, scratch))
 
     pool = ThreadPool(len(items))
     results = pool.map(build_image, items)
@@ -463,7 +487,7 @@ def distgit_config_template(url):
         "owners": []
     }
 
-    branch = url[url.index("?h=")+3:]
+    branch = url[url.index("?h=") + 3:]
 
     managed_labels = [
         'vendor',
@@ -481,6 +505,7 @@ def distgit_config_template(url):
     click.echo("---")
     click.echo("# populated from branch: %s" % branch)
     yaml.safe_dump(config, sys.stdout, indent=2, default_flow_style=False)
+
 
 if __name__ == '__main__':
     cli(obj={})

@@ -53,11 +53,11 @@ def exec_cmd(runtime, cmd_list):
     Executes a command, redirecting its output to the log file.
     :return: exit code
     """
-    runtime.verbose("\nExecuting: %s" % cmd_list)
+    runtime.log_verbose("\nExecuting: %s" % cmd_list)
     # https://stackoverflow.com/a/7389473
     runtime.debug_log.flush()
     process = subprocess.Popen(cmd_list, stdout=runtime.debug_log, stderr=runtime.debug_log)
-    runtime.verbose("Process exited with: %d\n" % process.wait())
+    runtime.log_verbose("Process exited with: %d\n" % process.wait())
     return process.wait()
 
 
@@ -73,17 +73,15 @@ def gather_exec(runtime, cmd_list):
     return p.returncode, out, err
 
 
-def recursive_overwrite(src, dest, ignore=None):
+def recursive_overwrite(src, dest, ignore=set()):
+    if isinstance(ignore, list):
+        ignore = set(ignore)
     if os.path.isdir(src):
         if not os.path.isdir(dest):
             os.makedirs(dest)
         files = os.listdir(src)
-        if ignore is not None:
-            ignored = ignore(src, files)
-        else:
-            ignored = set()
         for f in files:
-            if f not in ignored:
+            if f not in ignore:
                 recursive_overwrite(os.path.join(src, f),
                                     os.path.join(dest, f),
                                     ignore)
