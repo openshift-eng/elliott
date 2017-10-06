@@ -252,8 +252,8 @@ def distgits_copy(runtime, to_branch, overwrite, message, push, replace):
     """
     runtime.initialize()
 
-    if replace:
-        click.echo("'--replace' option not yet implemented")
+    if replace is not None:
+        raise IOError("'--replace' option not yet implemented")
 
     # If not pushing, do not clean up our work
     runtime.remove_tmp_working_dir = push

@@ -298,23 +298,48 @@ class DistGitRepo(object):
 
         self.runtime.log_verbose("\nGenerating repo file for Dockerfile {}".format(self.metadata.name))
 
-        repo_patterns = [
-            r"(yum-config-manager)*[\s]*--enable[\s]*([^\s]+)",
-            r"(yum)*[\s]*--enablerepo[\s]*=[\s]*([^\s]+)",
-        ]
         df_repos = []
         for entry in json.loads(dfp.json):
             if isinstance(entry, dict) and 'RUN' in entry:
-                run_val = entry['RUN']
-                for rp in repo_patterns:
-                    m = re.findall(rp, run_val)
-                    for sm in m:
-                        df_repos.append(sm[1])
+                run_line = entry['RUN']
+
+                # "cmd1 --o=x && cmd2 --o=y"  ->  [ "cmd1 --o=x ", "cmd2 --o=y" ]
+                invokes = run_line.replace('&', ';').replace('|', ';').split(";")
+
+                for invoke_line in invokes:
+                    parsed_invoke = invoke_line.split("--")  # e.g. ["cmd1", "o=x"]
+
+                    if len(parsed_invoke) < 2:
+                        # This is too short for a yum repo management command
+                        continue
+
+                    cmd = parsed_invoke.pop(0).strip()
+
+                    if not cmd.startswith("yum"):  # allow yum and yum-config-manager
+                        # No repo action here either
+                        continue
+
+                    for comp in parsed_invoke:  # For the remaining elements; e.g. [ "o=x "]
+                        # turn arguments like "o=x" or "o x" into a consistent list ["o", "x"]
+                        kvs = comp.strip().replace('=', ' ').split()
+
+                        if len(kvs) < 2:
+                            # This can't be an enable, so skip it
+                            continue
+
+                        arg = kvs[0].strip()
+                        val = kvs[1].strip()
+
+                        if arg != "enable" and arg != "enablerepo":
+                            continue
+
+                        repo_name = val
+                        df_repos.append(repo_name)
 
         gc_repos = self.runtime.group_config.repos
         if gc_repos is Missing:
             msg = 'group.yml must include a `repos` section to define RPM repos to load.'
-            runtime.error(msg)
+            self.runtime.error(msg)
             raise ValueError(msg)
 
         def resolve_repo(name, cfg):
@@ -340,10 +365,10 @@ class DistGitRepo(object):
                 cfg = resolve_repo(name, cfg)
                 type_repos[name] = cfg
 
-            if self.config:
+            if self.config.enabled_repos is not Missing:
                 for er in self.config.enabled_repos:
                     if er in type_repos:
-                        type_repos['enabled'] = 1
+                        type_repos[er]['enabled'] = 1
                     else:
                         raise ValueError('{} must be added to group.yml:repos'.format(er))
 
@@ -680,6 +705,8 @@ class DistGitRepo(object):
             # Source or not, we should find a Dockerfile in the root at this point or something is wrong
             assert_file("Dockerfile", "Unable to find Dockerfile in distgit root")
 
+            self._generate_repo_conf()
+
             dfp = DockerfileParser(path="Dockerfile")
 
             self.runtime.log_verbose("Dockerfile has parsed labels:")
@@ -750,7 +777,5 @@ class DistGitRepo(object):
 
             if self.config.content.source.modifications is not Missing:
                 self._run_modifications()
-
-            self._generate_repo_conf()
 
         self.update_dockerfile(version, release)
