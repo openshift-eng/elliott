@@ -376,7 +376,7 @@ class DistGitRepo(object):
                 if r not in type_repos:
                     type_repos[r] = resolve_repo(r, {'enabled': 1, 'baseurl': EMPTY_REPO})
 
-            with open('.oit/{}.conf'.format(t), 'w') as rc:
+            with open('.oit/{}.repo'.format(t), 'w') as rc:
                 for name, cfg in type_repos.items():
                     rc.write('[{}]\n'.format(name))
                     for k, v in cfg.items():
@@ -550,7 +550,7 @@ class DistGitRepo(object):
             if scratch:
                 cmd_list.append("--scratch")
 
-            repo_url_base = "http://pkgs.devel.redhat.com/cgit/{}/plain/.oit/{}.conf?h={}"
+            repo_url_base = "http://pkgs.devel.redhat.com/cgit/{}/plain/.oit/{}.repo?h={}"
 
             cmd_list.append("--repo")
             cmd_list.append(repo_url_base.format(self.metadata.qualified_name, repo_type, self.branch))
