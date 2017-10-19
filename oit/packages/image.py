@@ -229,6 +229,8 @@ class DistGitRepo(object):
 
             # Rename our distgit source Dockerfile appropriately
             os.rename(dockerfile_name, "Dockerfile")
+        else:
+            dockerfile_name = "Dockerfile"
 
         # Clean up any extraneous Dockerfile.* that might be distractions (e.g. Dockerfile.centos)
         for ent in os.listdir("."):
@@ -253,11 +255,18 @@ class DistGitRepo(object):
             notify_owner = True
 
         # Leave a record for external processes that owners will need to notified.
+
         if notify_owner and self.config.owners is not Missing:
             owners_list = ", ".join(self.config.owners)
+            sub_path = self.config.content.source.path
+            if not sub_path:
+                source_dockerfile_subpath = dockerfile_name
+            else:
+                source_dockerfile_subpath = "{}/{}".format(sub_path, dockerfile_name)
             self.runtime.add_record("dockerfile_notify", distgit=self.metadata.qualified_name, image=self.config.name,
                                     dockerfile=os.path.abspath("Dockerfile"), owners=owners_list,
-                                    source_alias=self.config.content.source.get('alias', None))
+                                    source_alias=self.config.content.source.get('alias', None),
+                                    source_dockerfile_subpath=source_dockerfile_subpath)
 
     def _run_modifications(self):
         """
