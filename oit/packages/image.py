@@ -261,8 +261,11 @@ class DistGitRepo(object):
 
         # Leave a record for external processes that owners will need to notified.
 
-        if notify_owner and self.config.owners is not Missing:
-            owners_list = ", ".join(self.config.owners)
+        if notify_owner:
+            if self.config.owners is not Missing:
+                owners_list = ""
+            else:
+                owners_list = ", ".join(self.config.owners)
             sub_path = self.config.content.source.path
             if not sub_path:
                 source_dockerfile_subpath = dockerfile_name
