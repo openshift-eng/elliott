@@ -79,6 +79,7 @@ def recursive_overwrite(src, dest, ignore=set()):
     if os.path.isdir(src):
         if not os.path.isdir(dest):
             os.makedirs(dest)
+            shutil.copystat(src, dest)  # Preserve directory permissions
         files = os.listdir(src)
         for f in files:
             if f not in ignore:
@@ -87,7 +88,7 @@ def recursive_overwrite(src, dest, ignore=set()):
                                     ignore)
     else:
         shutil.copyfile(src, dest)
-
+        shutil.copystat(src, dest)  # Preserve file mode and dates
 
 def retry(n, f, check_f=bool, wait_f=None):
     for c in xrange(n):
