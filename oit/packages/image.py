@@ -237,22 +237,27 @@ class DistGitRepo(object):
             if ent.startswith("Dockerfile."):
                 os.remove(ent)
 
-        dockerfile_git_last_path = ".oit/Dockerfile.git.last"
+        dockerfile_git_last_path = ".oit/Dockerfile.source.last"
 
         notify_owner = False
+
+        # The path to the source Dockerfile we are reconciling against
+        source_dockerfile_path = os.path.join(self.source_path(), dockerfile_name)
 
         # Do we have a copy of the last time we reconciled?
         if os.path.isfile(dockerfile_git_last_path):
             # See if it equals the Dockerfile we just pulled from source control
-            if not filecmp.cmp(dockerfile_git_last_path, "Dockerfile", False):
+            if not filecmp.cmp(dockerfile_git_last_path, source_dockerfile_path, False):
                 # Something has changed about the file in source control
                 notify_owner = True
                 # Update our .oit copy so we can detect the next change of this reconciliation
                 os.remove(dockerfile_git_last_path)
-                shutil.copy("Dockerfile", dockerfile_git_last_path)
+                shutil.copy(source_dockerfile_path, dockerfile_git_last_path)
         else:
             # We've never reconciled, so let the owner know about the change
             notify_owner = True
+            # Copy the original into place
+            shutil.copy(source_dockerfile_path, dockerfile_git_last_path)
 
         # Leave a record for external processes that owners will need to notified.
 
