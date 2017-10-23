@@ -452,7 +452,7 @@ class DistGitRepo(object):
                 "tags": ",".join(push_tags),
                 "registries": ",".join(push_to_list),
                 "status": -1,
-                # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
+                # Status defaults to failure until explicitly set by success. This handles raised exceptions.
             }
 
             try:
@@ -463,7 +463,7 @@ class DistGitRepo(object):
                 for push_to in push_to_list:
                     for push_tag in push_tags:
 
-                        # If someone passed in a URL with a trailling slash, prevent it from triggering our
+                        # If someone passed in a URL with a trailing slash, prevent it from triggering our
                         # namespace override logic.
                         push_to = push_to.rstrip("/")
 
