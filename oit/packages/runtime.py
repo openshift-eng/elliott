@@ -32,7 +32,7 @@ class Runtime(object):
     # Use any time it is necessary to synchronize feedback from multiple threads.
     mutex = Lock()
 
-    # Serialize access to the debug_log and console
+    # Serialize access to the debug_log, console, and record log
     log_lock = Lock()
 
     def __init__(self, **kwargs):
@@ -208,7 +208,7 @@ class Runtime(object):
 
         # Multiple image build processes could be calling us with action simultaneously, so
         # synchronize output to the file.
-        with self.mutex:
+        with self.log_lock:
             record = "%s|" % record_type
             for k, v in kwargs.iteritems():
                 assert ("\n" not in str(k))
