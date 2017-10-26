@@ -356,7 +356,6 @@ class DistGitRepo(object):
         gc_repos = self.runtime.group_config.repos
         if gc_repos is Missing:
             msg = 'group.yml must include a `repos` section to define RPM repos to load.'
-            self.runtime.error(msg)
             raise ValueError(msg)
 
         def resolve_repo(name, cfg):
