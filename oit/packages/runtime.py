@@ -11,8 +11,7 @@ from model import Model, Missing
 from multiprocessing import Lock
 
 DEFAULT_REGISTRIES = [
-    "registry.reg-aws.openshift.com:443",
-    "registry-push.ops.openshift.com"
+    "registry.reg-aws.openshift.com:443"
 ]
 
 
