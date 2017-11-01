@@ -367,8 +367,11 @@ def distgits_push_images(runtime, to_defaults, to):
         click.echo("You need specify at least one destination registry.")
         exit(1)
 
-    # Allow all push operations to be attempted and track overall failure
-    # with this boolean.
+    # Allow all non-late push operations to be attempted and track overall failure
+    # with this boolean. Since "late" images are used as a marker for success, don't
+    # push them if there are any preceding errors. 
+    # This error tolerance is useful primarily in synching images that our team
+    # does not build but which should be kept up to date in the operations registry.
     errors = False
 
     # Push early images
@@ -379,16 +382,13 @@ def distgits_push_images(runtime, to_defaults, to):
             print(traceback.format_exc())
             errors = True
 
+    if errors:
+        raise IOError("At least one image push failed")         
+            
     # Push all late images
     for image in runtime.images():
-        try:
-            image.distgit_repo().push_image(to, True)
-        except Exception as err:
-            print(traceback.format_exc())
-            errors = True
+        image.distgit_repo().push_image(to, True)
 
-    if errors:
-        raise IOError("At least one image push failed")
 
 
 @cli.command("distgits:pull-images", short_help="Pull latest images from pulp")
