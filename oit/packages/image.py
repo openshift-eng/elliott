@@ -139,7 +139,8 @@ class DistGitRepo(object):
 
             with Dir(self.distgit_dir):
 
-                out, err, rc = gather_exec(self.runtime, ["git", "rev-parse", "--abbrev-ref", "HEAD"])
+                rc, out, err = gather_exec(self.runtime, ["git", "rev-parse", "--abbrev-ref", "HEAD"])
+                out = out.strip()
 
                 # Only switch if we are not already in the branch. This allows us to work in
                 # working directories with uncommit changes.
