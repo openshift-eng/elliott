@@ -9,6 +9,7 @@ import yaml
 import sys
 import subprocess
 import urllib
+import traceback
 from multiprocessing.dummy import Pool as ThreadPool
 from dockerfile_parse import DockerfileParser
 
@@ -366,13 +367,28 @@ def distgits_push_images(runtime, to_defaults, to):
         click.echo("You need specify at least one destination registry.")
         exit(1)
 
+    # Allow all push operations to be attempted and track overall failure
+    # with this boolean.
+    errors = False
+
     # Push early images
     for image in runtime.images():
-        image.distgit_repo().push_image(to)
+        try:
+            image.distgit_repo().push_image(to)
+        except Exception as err:
+            print(traceback.format_exc())
+            errors = True
 
     # Push all late images
     for image in runtime.images():
-        image.distgit_repo().push_image(to, True)
+        try:
+            image.distgit_repo().push_image(to, True)
+        except Exception as err:
+            print(traceback.format_exc())
+            errors = True
+
+    if errors:
+        raise IOError("At least one image push failed")
 
 
 @cli.command("distgits:pull-images", short_help="Pull latest images from pulp")
