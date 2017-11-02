@@ -18,7 +18,7 @@ EMPTY_REPO = 'http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicO
 
 
 def cgit_url(name, filename, rev=None):
-    ret = "{}/rpms/{}/plain/{}".format(CGIT_URL, name, filename)
+    ret = "/".join((CGIT_URL, name, "plain", filename))
     if rev is not None:
         ret = "{}?h={}".format(ret, rev)
     return ret
@@ -72,10 +72,10 @@ class ImageMetadata(object):
     def branch(self):
         if self.config.repo.branch is not Missing:
             return self.config.repo.branch
-        return self.runtime.distgit_branch
+        return self.runtime.branch
 
     def cgit_url(self, filename):
-        return cgit_url(self.name, filename, self.branch())
+        return cgit_url(self.qualified_name, filename, self.branch())
 
     def fetch_cgit_file(self, filename):
         url = self.cgit_url(filename)
@@ -559,17 +559,15 @@ class DistGitRepo(object):
             if self.runtime.user is not None:
                 cmd_list.append("--user=%s" % self.runtime.user)
 
-            cmd_list.append("container-build")
-
-            cmd_list.append("--nowait")
+            cmd_list += (
+                "container-build",
+                "--nowait",
+                "--repo",
+                self.metadata.cgit_url(".oit/" + repo_type + ".repo"),
+            )
 
             if scratch:
                 cmd_list.append("--scratch")
-
-            repo_url_base = "http://pkgs.devel.redhat.com/cgit/{}/plain/.oit/{}.repo?h={}"
-
-            cmd_list.append("--repo")
-            cmd_list.append(repo_url_base.format(self.metadata.qualified_name, repo_type, self.branch))
 
             # Run the build with --nowait so that we can immdiately get information about the brew task
             rc, out, err = gather_exec(self.runtime, cmd_list)
