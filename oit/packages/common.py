@@ -5,7 +5,7 @@ import shutil
 import urllib
 from dockerfile_parse import DockerfileParser
 
-BREW_IMAGE_HOST = 'brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888'
+BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
 
 class Dir(object):
