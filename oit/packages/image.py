@@ -160,7 +160,7 @@ class DistGitRepo(object):
                 dfp = DockerfileParser(path="Dockerfile")
                 self.org_image_name = dfp.labels["name"]
                 self.org_version = dfp.labels["version"]
-                self.org_release = dfp.labels.get("release", "0")  # occasionally no release given
+                self.org_release = dfp.labels.get("release")  # occasionally no release given
 
     def copy_branch(self, to_branch):
         self.runtime.info('Copying {}: {} -> {}'.format(self.metadata.qualified_name, self.branch, to_branch))
@@ -536,22 +536,24 @@ class DistGitRepo(object):
         """
 
         action = "build"
+        release = self.org_release if self.org_release is not None else '?'
         record = {
             "dir": self.distgit_dir,
             "dockerfile": "%s/Dockerfile" % self.distgit_dir,
             "image": self.org_image_name,
             "version": self.org_version,
-            "release": self.org_release,
+            "release": release,
             "message": "Unknown failure",
             "status": -1,
             # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
         }
 
-        target_tag = "-".join((self.org_version, self.org_release))
+        target_tag = "-".join((self.org_version, release))
         target_image = ":".join((self.org_image_name, target_tag))
 
         try:
-            if self.metadata.tag_exists(target_tag):
+            if not scratch and self.org_release is not None \
+                    and self.metadata.tag_exists(target_tag):
                 self.info("Image already built for: {}".format(target_image))
             else:
                 # If this image is FROM another group member, we need to wait on that group member
