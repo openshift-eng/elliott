@@ -140,18 +140,39 @@ class Runtime(object):
             if len(self.exclude) > 0:
                 self.info("Exclude list set to: %s" % str(self.exclude))
 
+            # These two are tuples and cannot be removed from
+            # Make copies to be able to remove and retain original
+            include = list(self.include)
+            check_include = len(include) > 0
+            optional_include = list(self.optional_include)
+            check_optional_include = len(optional_include) > 0
+            check_exclude = len(self.exclude)
+
             for distgit_repo_name in [x for x in os.listdir(".") if os.path.isdir(x)]:
+                if check_include or check_optional_include:
+                    if check_include and distgit_repo_name in include:
+                        self.info("include: " + distgit_repo_name)
+                        include.remove(distgit_repo_name)
+                    elif check_optional_include and distgit_repo_name in optional_include:
+                        self.info("optional_include: " + distgit_repo_name)
+                        optional_include.remove(distgit_repo_name)
+                    else:
+                        self.info("skip: " + distgit_repo_name)
+                        self.log_verbose("Skipping %s since it is not in the include list" % distgit_repo_name)
+                        continue
 
-                if len(self.include) > 0 and distgit_repo_name not in self.include:
-                    self.log_verbose("Skipping %s since it is not in the include list" % distgit_repo_name)
-                    continue
-
-                if len(self.exclude) > 0 and distgit_repo_name in self.exclude:
+                if check_exclude and distgit_repo_name in self.exclude:
+                    self.info("exclude: " + distgit_repo_name)
                     self.log_verbose("Skipping %s since it is in the exclude list" % distgit_repo_name)
                     continue
 
                 self.image_map[distgit_repo_name] = ImageMetadata(
                     self, distgit_repo_name, distgit_repo_name)
+
+            if len(include) > 0:
+                raise IOError('Unable to find the following configs: {}'.format(', '.join(include)))
+            if len(optional_include) > 0:
+                self.log_verbose('The following were not found, but optional: {}'.format(', '.join(optional_include)))
 
         if len(self.image_map) == 0:
             raise IOError("No image metadata directories found within: %s" % group_dir)

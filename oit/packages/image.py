@@ -645,7 +645,7 @@ class DistGitRepo(object):
 
     def commit(self, commit_message, log_diff=False):
         with Dir(self.distgit_dir):
-            self.info("Adding commit to local repo: %s" % commit_message)
+            self.info("Adding commit to local repo: {}".format(commit_message))
             if log_diff:
                 rc, out, err = gather_exec(self.runtime, ["git", "diff", "Dockerfile"])
                 assert_rc0(rc, 'Failed fetching distgit diff')
@@ -656,10 +656,18 @@ class DistGitRepo(object):
             assert_rc0(rc, "Failure fetching commit SHA for {}".format(self.distgit_dir))
         return sha.strip()
 
+    def tag(self, version, release):
+        tag = 'v{}-{}'.format(version, release)
+        with Dir(self.distgit_dir):
+            self.info("Adding tag to local repo: {}".format(tag))
+            assert_exec(self.runtime, ["git", "tag", tag, "-m", tag])
+
     def push(self):
         with Dir(self.distgit_dir):
             self.info("Pushing repository")
             assert_exec(self.runtime, ["rhpkg", "push"])
+            # rhpkg will create but not push tags :(
+            assert_exec(self.runtime, ['git', 'push', '--tags'])
 
     def bump_dockerfile(self):
         with Dir(self.distgit_dir):
@@ -688,7 +696,9 @@ class DistGitRepo(object):
             with open('Dockerfile', 'w') as df:
                 df.write(df_content)
 
-            self.commit("Bumping version to %s-%s" % (version, new_release))
+            ver = "{}-{}".format(version, new_release)
+            self.commit("Bumping version to " + ver, tag)
+            self.tag(version, new_release)
 
     def update_dockerfile(self, version, release, ignore_missing_base=False):
 
