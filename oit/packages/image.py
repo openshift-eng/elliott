@@ -18,7 +18,7 @@ EMPTY_REPO = 'http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicO
 
 
 def cgit_url(name, filename, rev=None):
-    ret = "{}/rpms/{}/plain/{}".format(CGIT_URL, name, filename)
+    ret = "/".join((CGIT_URL, name, "plain", filename))
     if rev is not None:
         ret = "{}?h={}".format(ret, rev)
     return ret
@@ -31,6 +31,12 @@ def pull_image(runtime, url):
     retry(
         n=3, wait_f=wait,
         f=lambda: exec_cmd(runtime, ["docker", "pull", url]) == 0)
+
+
+def tag_exists(registry, name, tag, fetch_f=None):
+    if fetch_f is None:
+        fetch_f = lambda url: urllib.urlopen(url).code == 200
+    return fetch_f("/".join((registry, "v1/repositories", name, "tags", tag)))
 
 
 class ImageMetadata(object):
@@ -72,10 +78,10 @@ class ImageMetadata(object):
     def branch(self):
         if self.config.repo.branch is not Missing:
             return self.config.repo.branch
-        return self.runtime.distgit_branch
+        return self.runtime.branch
 
     def cgit_url(self, filename):
-        return cgit_url(self.name, filename, self.branch())
+        return cgit_url(self.qualified_name, filename, self.branch())
 
     def fetch_cgit_file(self, filename):
         url = self.cgit_url(filename)
@@ -83,6 +89,9 @@ class ImageMetadata(object):
             3, lambda: urllib.urlopen(url),
             check_f=lambda req: req.code == 200)
         return req.read()
+
+    def tag_exists(self, tag):
+        return tag_exists("http://" + BREW_IMAGE_HOST, self.config.name, tag)
 
     def pull_url(self):
         p = DockerfileParser()
@@ -152,7 +161,7 @@ class DistGitRepo(object):
                 dfp = DockerfileParser(path="Dockerfile")
                 self.org_image_name = dfp.labels["name"]
                 self.org_version = dfp.labels["version"]
-                self.org_release = dfp.labels.get("release", "0")  # occasionally no release given
+                self.org_release = dfp.labels.get("release")  # occasionally no release given
 
     def copy_branch(self, to_branch):
         self.runtime.info('Copying {}: {} -> {}'.format(self.metadata.qualified_name, self.branch, to_branch))
@@ -528,88 +537,91 @@ class DistGitRepo(object):
         """
 
         action = "build"
+        release = self.org_release if self.org_release is not None else '?'
         record = {
             "dir": self.distgit_dir,
             "dockerfile": "%s/Dockerfile" % self.distgit_dir,
             "image": self.org_image_name,
             "version": self.org_version,
-            "release": self.org_release,
+            "release": release,
             "message": "Unknown failure",
             "status": -1,
             # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
         }
 
-        target_image = "%s:%s-%s" % (self.org_image_name, self.org_version, self.org_release)
+        target_tag = "-".join((self.org_version, release))
+        target_image = ":".join((self.org_image_name, target_tag))
 
         try:
-
-            # If this image is FROM another group member, we need to wait on that group member
-            if self.config["from"].member is not Missing:
-                parent_name = self.config["from"].member
-                parent_img = self.runtime.resolve_image(parent_name, False)
-                if parent_img is None:
-                    self.info("Skipping parent image build since it is not included: %s" % parent_name)
-                else:
-                    parent_dgr = parent_img.distgit_repo()
-                    parent_dgr.wait_for_build(self.metadata.qualified_name)
-
-            self.info("Building image: %s" % target_image)
-
-            cmd_list = ["rhpkg", "--path=%s" % self.distgit_dir]
-
-            if self.runtime.user is not None:
-                cmd_list.append("--user=%s" % self.runtime.user)
-
-            cmd_list.append("container-build")
-
-            cmd_list.append("--nowait")
-
-            if scratch:
-                cmd_list.append("--scratch")
-
-            repo_url_base = "http://pkgs.devel.redhat.com/cgit/{}/plain/.oit/{}.repo?h={}"
-
-            cmd_list.append("--repo")
-            cmd_list.append(repo_url_base.format(self.metadata.qualified_name, repo_type, self.branch))
-
-            # Run the build with --nowait so that we can immdiately get information about the brew task
-            rc, out, err = gather_exec(self.runtime, cmd_list)
-
-            if rc != 0:
-                # Probably no point in continuing.. can't contact brew?
-                raise IOError("Unable to create brew task: out={}  ; err={}".format(out, err))
-
-            # Otherwise, we should have a brew task we can monitor listed in the stdout.
-            out_lines = out.splitlines()
-
-            # Look for a line like: "Created task: 13949050" . Extract the identifier.
-            task_id = next((created_line.split(":")[1]).strip() for created_line in out_lines if
-                           created_line.startswith("Created task:"))
-
-            record["task_id"] = task_id
-
-            # Look for a line like: "Task info: https://brewweb.engineering.redhat.com/brew/taskinfo?taskID=13948942"
-            task_url = next((info_line.split(":", 1)[1]).strip() for info_line in out_lines if
-                            info_line.startswith("Task info:"))
-
-            self.info("Build running: {}".format(task_url))
-
-            record["task_url"] = task_url
-
-            # Now that we have the basics about the task, wait for it to complete
-            rc, out, err = gather_exec(self.runtime, ["brew", "watch-task", task_id])
-
-            # Looking for somethine like the following to conclude the image has already been built:
-            # "13949407 buildContainer (noarch): FAILED: BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961"
-            if "already exists" in out:
+            if not scratch and self.org_release is not None \
+                    and self.metadata.tag_exists(target_tag):
                 self.info("Image already built for: {}".format(target_image))
-                rc = 0
+            else:
+                # If this image is FROM another group member, we need to wait on that group member
+                if self.config["from"].member is not Missing:
+                    parent_name = self.config["from"].member
+                    parent_img = self.runtime.resolve_image(parent_name, False)
+                    if parent_img is None:
+                        self.info("Skipping parent image build since it is not included: %s" % parent_name)
+                    else:
+                        parent_dgr = parent_img.distgit_repo()
+                        parent_dgr.wait_for_build(self.metadata.qualified_name)
 
-            if rc != 0:
-                # An error occurred during watch-task. We don't have a viable build.
-                raise IOError("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
+                self.info("Building image: %s" % target_image)
 
-            self.info("Successfully built image: {} ; {}".format(target_image, task_url))
+                cmd_list = ["rhpkg", "--path=%s" % self.distgit_dir]
+
+                if self.runtime.user is not None:
+                    cmd_list.append("--user=%s" % self.runtime.user)
+
+                cmd_list += (
+                    "container-build",
+                    "--nowait",
+                    "--repo",
+                    self.metadata.cgit_url(".oit/" + repo_type + ".repo"),
+                )
+
+                if scratch:
+                    cmd_list.append("--scratch")
+
+                # Run the build with --nowait so that we can immdiately get information about the brew task
+                rc, out, err = gather_exec(self.runtime, cmd_list)
+
+                if rc != 0:
+                    # Probably no point in continuing.. can't contact brew?
+                    raise IOError("Unable to create brew task: out={}  ; err={}".format(out, err))
+
+                # Otherwise, we should have a brew task we can monitor listed in the stdout.
+                out_lines = out.splitlines()
+
+                # Look for a line like: "Created task: 13949050" . Extract the identifier.
+                task_id = next((created_line.split(":")[1]).strip() for created_line in out_lines if
+                               created_line.startswith("Created task:"))
+
+                record["task_id"] = task_id
+
+                # Look for a line like: "Task info: https://brewweb.engineering.redhat.com/brew/taskinfo?taskID=13948942"
+                task_url = next((info_line.split(":", 1)[1]).strip() for info_line in out_lines if
+                                info_line.startswith("Task info:"))
+
+                self.info("Build running: {}".format(task_url))
+
+                record["task_url"] = task_url
+
+                # Now that we have the basics about the task, wait for it to complete
+                rc, out, err = gather_exec(self.runtime, ["brew", "watch-task", task_id])
+
+                # Looking for something like the following to conclude the image has already been built:
+                # "13949407 buildContainer (noarch): FAILED: BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961"
+                if "already exists" in out:
+                    self.info("Image already built for: {}".format(target_image))
+                    rc = 0
+
+                if rc != 0:
+                    # An error occurred during watch-task. We don't have a viable build.
+                    raise IOError("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
+
+                self.info("Successfully built image: {} ; {}".format(target_image, task_url))
             record["message"] = "Success"
             record["status"] = 0
             self.build_status = True
@@ -632,7 +644,7 @@ class DistGitRepo(object):
             self.build_lock.release()
 
         if self.build_status:
-            if len(push_to_list) > 0:
+            if push_to_list:
                 # To ensure we don't overwhelm the system building, pull & push synchronously
                 with self.runtime.mutex:
                     try:
