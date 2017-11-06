@@ -29,6 +29,8 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="Branch to override any default in group.yml.")
 @click.option("-i", "--include", default=[], metavar='NAME', multiple=True,
               help="Name of group members to include in operation (all by default).")
+@click.option("-o", "--optional-include", default=[], metavar='NAME', multiple=True,
+              help="Name of group members to optionally include in operation. If not in current group, there will be no failure.")
 @click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
               help="Name of group members to exclude from operation (empty by default).")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
@@ -107,6 +109,7 @@ def distgits_update_dockerfile(runtime, stream, version, release, ignore_missing
         dgr = image.distgit_repo()
         dgr.update_dockerfile(version, release, ignore_missing_base)
         dgr.commit(message)
+        dgr.tag(version, release)
 
     if push:
         for image in runtime.images():
@@ -193,6 +196,7 @@ def distgits_rebase(runtime, source, sources, stream, version, release, message,
         dgr = image.distgit_repo()
         dgr.rebase_dir(version, release)
         sha = dgr.commit(message, log_diff=True)
+        dgr.tag(version, release)
         runtime.add_record("distgit_commit", distgit=dgr.metadata.qualified_name,
                            image=dgr.config.name, sha=sha)
 
@@ -369,7 +373,7 @@ def distgits_push_images(runtime, to_defaults, to):
 
     # Allow all non-late push operations to be attempted and track overall failure
     # with this boolean. Since "late" images are used as a marker for success, don't
-    # push them if there are any preceding errors. 
+    # push them if there are any preceding errors.
     # This error tolerance is useful primarily in synching images that our team
     # does not build but which should be kept up to date in the operations registry.
     errors = False
@@ -383,8 +387,8 @@ def distgits_push_images(runtime, to_defaults, to):
             errors = True
 
     if errors:
-        raise IOError("At least one image push failed")         
-            
+        raise IOError("At least one image push failed")
+
     # Push all late images
     for image in runtime.images():
         image.distgit_repo().push_image(to, True)
