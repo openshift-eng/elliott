@@ -491,8 +491,8 @@ def distgit_config_template(url):
 
     if "cgit/rpms/" in url:
         type = "rpms"
-    elif "cgit/abps/" in url:
-        type = "abps"
+    elif "cgit/apbs/" in url:
+        type = "apbs"
     else:
         raise IOError("oit does not yet support that distgit repo type")
 
