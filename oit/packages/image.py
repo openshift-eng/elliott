@@ -428,92 +428,97 @@ class DistGitRepo(object):
             return
 
         with Dir(self.distgit_dir):
+            names = [self.config.name]
+            # it's possible but rare that an image will have an alternate_name
+            # it must be pushed with that name as well
+            if self.config.alt_name is not Missing:
+                names.append(self.config.alt_name)
 
-            # Read in information about the image we are about to build
-            dfp = DockerfileParser(path="Dockerfile")
-            image_name = dfp.labels["name"]
-            version = dfp.labels["version"]
-            release = dfp.labels["release"]
+            for image_name in names:
+                # Read in information about the image we are about to build
+                dfp = DockerfileParser(path="Dockerfile")
+                version = dfp.labels["version"]
+                release = dfp.labels["release"]
 
-            push_tags = [
-                "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
-                "%s" % version,  # e.g. "v3.7.0"
-            ]
+                push_tags = [
+                    "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
+                    "%s" % version,  # e.g. "v3.7.0"
+                ]
 
-            # In v3.7, we use the last .0 in the release as a bump field to differentiate
-            # image refreshes. Strip this off since OCP will have no knowledge of it when reaching
-            # out for its node image.
-            if "." in release:
-                # Strip off the last field; "0.114.0.0" -> "0.114.0"
-                push_tags.append("%s-%s" % (version, release.rsplit(".", 1)[0]))
+                # In v3.7, we use the last .0 in the release as a bump field to differentiate
+                # image refreshes. Strip this off since OCP will have no knowledge of it when reaching
+                # out for its node image.
+                if "." in release:
+                    # Strip off the last field; "0.114.0.0" -> "0.114.0"
+                    push_tags.append("%s-%s" % (version, release.rsplit(".", 1)[0]))
 
-            # Push as v3.X; "v3.7.0" -> "v3.7"
-            push_tags.append("%s" % (version.rsplit(".", 1)[0]))
+                # Push as v3.X; "v3.7.0" -> "v3.7"
+                push_tags.append("%s" % (version.rsplit(".", 1)[0]))
 
-            action = "push"
-            record = {
-                "dir": self.distgit_dir,
-                "dockerfile": "%s/Dockerfile" % self.distgit_dir,
-                "image": image_name,
-                "version": version,
-                "release": release,
-                "message": "Unknown failure",
-                "tags": ",".join(push_tags),
-                "registries": ",".join(push_to_list),
-                "status": -1,
-                # Status defaults to failure until explicitly set by success. This handles raised exceptions.
-            }
+                action = "push"
+                record = {
+                    "dir": self.distgit_dir,
+                    "dockerfile": "%s/Dockerfile" % self.distgit_dir,
+                    "image": image_name,
+                    "version": version,
+                    "release": release,
+                    "message": "Unknown failure",
+                    "tags": ",".join(push_tags),
+                    "registries": ",".join(push_to_list),
+                    "status": -1,
+                    # Status defaults to failure until explicitly set by success. This handles raised exceptions.
+                }
 
-            try:
-                image_name_and_version = "%s:%s-%s" % (image_name, version, release)
-                brew_image_url = "/".join((BREW_IMAGE_HOST, image_name_and_version))
-                pull_image(self.runtime, brew_image_url)
+                try:
+                    image_name_and_version = "%s:%s-%s" % (image_name, version, release)
+                    brew_image_url = "/".join((BREW_IMAGE_HOST, image_name_and_version))
+                    pull_image(self.runtime, brew_image_url)
 
-                for push_to in push_to_list:
-                    for push_tag in push_tags:
+                    for push_to in push_to_list:
+                        for push_tag in push_tags:
 
-                        # If someone passed in a URL with a trailing slash, prevent it from triggering our
-                        # namespace override logic.
-                        push_to = push_to.rstrip("/")
+                            # If someone passed in a URL with a trailing slash, prevent it from triggering our
+                            # namespace override logic.
+                            push_to = push_to.rstrip("/")
 
-                        if "/" not in push_to:
-                            push_url = "%s/%s:%s" % (push_to, image_name, push_tag)
-                        else:
-                            # This is not typical at the moment, but we support it. If there is a slash in the push
-                            # url, we override the namespace/project into which we push the image.
-                            # For example, if the image is openshift3/node and the registry url is
-                            # "registry.reg-aws.openshift.com:443/online", we would push to
-                            # "registry.reg-aws.openshift.com:443/online/node".
-                            push_url = "%s/%s:%s" % (push_to, image_name.split("/", 1)[1], push_tag)
+                            if "/" not in push_to:
+                                push_url = "%s/%s:%s" % (push_to, image_name, push_tag)
+                            else:
+                                # This is not typical at the moment, but we support it. If there is a slash in the push
+                                # url, we override the namespace/project into which we push the image.
+                                # For example, if the image is openshift3/node and the registry url is
+                                # "registry.reg-aws.openshift.com:443/online", we would push to
+                                # "registry.reg-aws.openshift.com:443/online/node".
+                                push_url = "%s/%s:%s" % (push_to, image_name.split("/", 1)[1], push_tag)
 
-                        rc, out, err = gather_exec(self.runtime, ["docker", "tag", brew_image_url, push_url])
+                            rc, out, err = gather_exec(self.runtime, ["docker", "tag", brew_image_url, push_url])
 
-                        if rc != 0:
-                            # Unable to tag the image
-                            raise IOError("Error tagging image as: %s" % push_url)
+                            if rc != 0:
+                                # Unable to tag the image
+                                raise IOError("Error tagging image as: %s" % push_url)
 
-                        for retry in range(10):
-                            self.info("Pushing image to mirror [retry=%d]: %s" % (retry, push_url))
-                            rc, out, err = gather_exec(self.runtime, ["docker", "push", push_url])
-                            if rc == 0:
-                                break
-                            self.info("Error pushing image -- retrying in 60 seconds")
-                            time.sleep(60)
+                            for retry in range(10):
+                                self.info("Pushing image to mirror [retry=%d]: %s" % (retry, push_url))
+                                rc, out, err = gather_exec(self.runtime, ["docker", "push", push_url])
+                                if rc == 0:
+                                    break
+                                self.info("Error pushing image -- retrying in 60 seconds")
+                                time.sleep(60)
 
-                        if rc != 0:
-                            # Unable to push to registry
-                            raise IOError("Error pushing image: %s" % push_url)
+                            if rc != 0:
+                                # Unable to push to registry
+                                raise IOError("Error pushing image: %s" % push_url)
 
-                record["message"] = "Successfully pushed all tags"
-                record["status"] = 0
+                    record["message"] = "Successfully pushed all tags"
+                    record["status"] = 0
 
-            except Exception as err:
-                record["message"] = "Exception occurred: %s" % str(err)
-                self.info("Error pushing %s: %s" % (self.metadata.name, err))
-                raise err
+                except Exception as err:
+                    record["message"] = "Exception occurred: %s" % str(err)
+                    self.info("Error pushing %s: %s" % (self.metadata.name, err))
+                    raise err
 
-            finally:
-                self.runtime.add_record(action, **record)
+                finally:
+                    self.runtime.add_record(action, **record)
 
     def wait_for_build(self, who_is_waiting):
         # This lock is in an acquired state until this image definitively succeeds or fails.
