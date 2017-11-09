@@ -167,11 +167,11 @@ class DistGitRepo(object):
         self.runtime.info('Copying {}: {} -> {}'.format(self.metadata.qualified_name, self.branch, to_branch))
         from_branch_copy = tempfile.mkdtemp(".tmp", "oit-copy-")
         self.runtime.info('Backing up to: {}'.format(from_branch_copy))
-        recursive_overwrite(self.distgit_dir, from_branch_copy, ['.git'])
+        recursive_overwrite(self.runtime, self.distgit_dir, from_branch_copy, ['.git'])
         self.runtime.info('Switching to branch: {}'.format(to_branch))
         assert_exec(self.runtime, ["rhpkg", "switch-branch", to_branch])
         self.runtime.info('Copying source branch contents over current branch')
-        recursive_overwrite(from_branch_copy, self.distgit_dir, ['.git'])
+        recursive_overwrite(self.runtime, from_branch_copy, self.distgit_dir, ['.git'])
 
         # os.removedirs(from_branch_copy)
 
@@ -226,7 +226,7 @@ class DistGitRepo(object):
                 shutil.rmtree(ent)
 
         # Copy all files and overwrite where necessary
-        recursive_overwrite(self.source_path(), self.distgit_dir)
+        recursive_overwrite(self.runtime, self.source_path(), self.distgit_dir)
 
         # See if the config is telling us a file other than "Dockerfile" defines the
         # distgit image content.

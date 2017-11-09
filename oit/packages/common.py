@@ -73,22 +73,12 @@ def gather_exec(runtime, cmd_list):
     return p.returncode, out, err
 
 
-def recursive_overwrite(src, dest, ignore=set()):
-    if isinstance(ignore, list):
-        ignore = set(ignore)
-    if os.path.isdir(src):
-        if not os.path.isdir(dest):
-            os.makedirs(dest)
-            shutil.copystat(src, dest)  # Preserve directory permissions
-        files = os.listdir(src)
-        for f in files:
-            if f not in ignore:
-                recursive_overwrite(os.path.join(src, f),
-                                    os.path.join(dest, f),
-                                    ignore)
-    else:
-        shutil.copyfile(src, dest)
-        shutil.copystat(src, dest)  # Preserve file mode and dates
+def recursive_overwrite(runtime, src, dest, ignore=set()):
+    exclude = ''
+    for i in ignore:
+        exclude += ' --exclude="{}" '.format(i)
+    cmd = 'rsync -av {} {}/ {}/'.format(exclude, src, dest)
+    assert_exec(runtime, cmd.split(' '))
 
 def retry(n, f, check_f=bool, wait_f=None):
     for c in xrange(n):
