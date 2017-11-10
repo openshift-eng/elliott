@@ -280,21 +280,6 @@ def distgits_copy(runtime, to_branch, overwrite, message, push, replace):
             dgr.push()
 
 
-def build_image(tuple):
-    image = tuple[0]
-    repo_type = tuple[1]
-    push_to = tuple[2]
-    scratch = tuple[3]
-
-    dgr = image.distgit_repo()
-    for retry in range(3):
-        if dgr.build_container(repo_type, push_to, scratch):
-            return True
-        else:
-            dgr.info("Async error in image build thread [attempt #{}]: {}".format(retry + 1, image.qualified_name))
-    return False
-
-
 @cli.command("distgits:build-images", short_help="Build images for the group.")
 @click.option("--repo_type", required=True, metavar="REPO_TYPE",
               help="Repo type (i.e. signed, unsigned).")
@@ -323,14 +308,14 @@ def distgits_build_images(runtime, repo_type, push_to_defaults, push_to, scratch
     if push_to_defaults:
         push_to.extend(runtime.default_registries)
 
-    # Initialize all distgit directories before trying to build. This is
-    # for clarity in the logs.
+    # Initialize all distgit directories before trying to build. This is to
+    # ensure all build locks are acquired before the builds start and for
+    # clarity in the logs.
     for image in runtime.images():
-        image.distgit_repo()
-        items.append((image, repo_type, push_to, scratch))
+        items.append((image.distgit_repo(), (repo_type, push_to, scratch)))
 
     pool = ThreadPool(len(items))
-    results = pool.map(build_image, items)
+    results = pool.map(lambda ((dgr, args)): dgr.build_container(*args), items)
 
     # Wait for results
     pool.close()
