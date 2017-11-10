@@ -530,7 +530,7 @@ class DistGitRepo(object):
             else:
                 self.info("repo successfully waited for me to build: %s" % who_is_waiting)
 
-    def build_container(self, repo_type, push_to_list, scratch=False):
+    def build_container(self, repo_type, push_to_list, scratch=False, retries=3):
         """
         This method is designed to be thread-safe. Multiple builds should take place in brew
         at the same time. After a build, images are pushed serially to all mirrors.
@@ -538,6 +538,7 @@ class DistGitRepo(object):
         :param repo: Repo type to choose from group.yml
         :param push_to_list: A list of registries resultant builds should be pushed to.
         :param scratch: Whether this is a scratch build. UNTESTED.
+        :param retries: Number of times the build should be retried.
         :return: True if the build was successful
         """
 
@@ -571,7 +572,13 @@ class DistGitRepo(object):
                     else:
                         parent_dgr = parent_img.distgit_repo()
                         parent_dgr.wait_for_build(self.metadata.qualified_name)
-                self._build_container(target_image, repo_type, scratch, record)
+                for retry in xrange(retries):
+                    if self._build_container(target_image, repo_type, scratch, record):
+                        break
+                    else:
+                        self.info("Async error in image build thread [attempt #{}]: {}".format(retry + 1, self.metadata.qualified_name))
+                else:
+                    return False
             record["message"] = "Success"
             record["status"] = 0
             self.build_status = True
@@ -587,7 +594,7 @@ class DistGitRepo(object):
             record["message"] = "Exception occurred: {}".format(err)
             self.info("Exception occurred during build: {}".format(err))
             # This is designed to fall through to finally. Since this method is designed to be
-            # threaded, we should throw and exception; instead return False.
+            # threaded, we should not throw an exception; instead return False.
         finally:
             self.runtime.add_record(action, **record)
             # Regardless of success, allow other images depending on this one to progress or fail.
@@ -632,7 +639,8 @@ class DistGitRepo(object):
 
         if rc != 0:
             # Probably no point in continuing.. can't contact brew?
-            raise IOError("Unable to create brew task: out={}  ; err={}".format(out, err))
+            self.info("Unable to create brew task: out={}  ; err={}".format(out, err))
+            return False
 
         # Otherwise, we should have a brew task we can monitor listed in the stdout.
         out_lines = out.splitlines()
@@ -662,9 +670,11 @@ class DistGitRepo(object):
 
         if rc != 0:
             # An error occurred during watch-task. We don't have a viable build.
-            raise IOError("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
+            self.info("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
+            return False
 
         self.info("Successfully built image: {} ; {}".format(target_image, task_url))
+        return True
 
     def commit(self, commit_message, log_diff=False):
         with Dir(self.distgit_dir):
