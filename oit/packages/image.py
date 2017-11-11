@@ -1,9 +1,8 @@
 import yaml
 import shutil
 import os
-import filecmp
 import tempfile
-import re
+import hashlib
 import time
 import urllib
 from multiprocessing import Lock
@@ -207,6 +206,16 @@ class DistGitRepo(object):
         clone with content from that source.
         """
 
+        # See if the config is telling us a file other than "Dockerfile" defines the
+        # distgit image content.
+        if self.config.content.source.dockerfile is not Missing:
+            dockerfile_name = self.config.content.source.dockerfile
+        else:
+            dockerfile_name = "Dockerfile"
+
+        # The path to the source Dockerfile we are reconciling against
+        source_dockerfile_path = os.path.join(self.source_path(), dockerfile_name)
+
         # Clean up any files not special to the distgit repo
         for ent in os.listdir("."):
 
@@ -228,46 +237,45 @@ class DistGitRepo(object):
         # Copy all files and overwrite where necessary
         recursive_overwrite(self.runtime, self.source_path(), self.distgit_dir)
 
-        # See if the config is telling us a file other than "Dockerfile" defines the
-        # distgit image content.
-        dockerfile_name = self.config.content.source.dockerfile
-        if dockerfile_name is not Missing and dockerfile_name != "Dockerfile":
-
+        if dockerfile_name != "Dockerfile":
             # Does a non-distgit Dockerfile already exists from copying source; remove if so
             if os.path.isfile("Dockerfile"):
                 os.remove("Dockerfile")
 
             # Rename our distgit source Dockerfile appropriately
             os.rename(dockerfile_name, "Dockerfile")
-        else:
-            dockerfile_name = "Dockerfile"
 
         # Clean up any extraneous Dockerfile.* that might be distractions (e.g. Dockerfile.centos)
         for ent in os.listdir("."):
             if ent.startswith("Dockerfile."):
                 os.remove(ent)
 
-        dockerfile_git_last_path = ".oit/Dockerfile.source.last"
-
         notify_owner = False
 
-        # The path to the source Dockerfile we are reconciling against
-        source_dockerfile_path = os.path.join(self.source_path(), dockerfile_name)
+        # In a previous implementation, we tracked a single file in .oit/Dockerfile.source.last
+        # which provided a reference for the last time a Dockerfile was reconciled. If
+        # we reconciled a file that did not match the Dockerfile.source.last, we would send
+        # an email the Dockerfile owner that a fundamentally new reconciliation had taken place.
+        # There was a problem with this approach:
+        # During a sprint, we might have multiple build streams running side-by-side.
+        # e.g. builds from a master branch and builds from a stage branch. If the
+        # Dockerfile in these two branches happened to differ, we would notify the
+        # owner as we toggled back and forth between the two versions for the alternating
+        # builds. Instead, we now keep around an history of all past reconciled files.
 
-        # Do we have a copy of the last time we reconciled?
-        if os.path.isfile(dockerfile_git_last_path):
-            # See if it equals the Dockerfile we just pulled from source control
-            if not filecmp.cmp(dockerfile_git_last_path, source_dockerfile_path, False):
-                # Something has changed about the file in source control
-                notify_owner = True
-                # Update our .oit copy so we can detect the next change of this reconciliation
-                os.remove(dockerfile_git_last_path)
-                shutil.copy(source_dockerfile_path, dockerfile_git_last_path)
-        else:
-            # We've never reconciled, so let the owner know about the change
+        source_dockerfile_hash = hashlib.sha256(open(source_dockerfile_path, 'rb').read()).hexdigest()
+
+        if not os.path.isdir(".oit/reconciled"):
+            os.mkdir(".oit/reconciled")
+
+        dockerfile_already_reconciled_path = '.oit/reconciled/{}.Dockerfile'.format(source_dockerfile_hash)
+
+        # If the file does not exist, the source file has not been reconciled before.
+        if not os.path.isfile(dockerfile_already_reconciled_path):
+            # Something has changed about the file in source control
             notify_owner = True
-            # Copy the original into place
-            shutil.copy(source_dockerfile_path, dockerfile_git_last_path)
+            # Record that we've reconciled against this source file so that we do not notify the owner again.
+            shutil.copy(source_dockerfile_path, dockerfile_already_reconciled_path)
 
         # Leave a record for external processes that owners will need to notified.
 
@@ -684,16 +692,23 @@ class DistGitRepo(object):
                 assert_rc0(rc, 'Failed fetching distgit diff')
                 self.runtime.add_distgits_diff(self.metadata.name, out)
             assert_exec(self.runtime, ["git", "add", "-A", "."])
-            assert_exec(self.runtime, ["git", "commit", "-m", commit_message])
+            assert_exec(self.runtime, ["git", "commit", "--allow-empty", "-m", commit_message])
             rc, sha, err = gather_exec(self.runtime, ["git", "rev-parse", "HEAD"])
             assert_rc0(rc, "Failure fetching commit SHA for {}".format(self.distgit_dir))
         return sha.strip()
 
     def tag(self, version, release):
-        tag = 'v{}-{}'.format(version, release)
+        if version is None:
+            return
+
+        tag = 'v{}'.format(version)
+
+        if release is not None:
+            tag = '{}-{}'.format(tag, release)
+
         with Dir(self.distgit_dir):
             self.info("Adding tag to local repo: {}".format(tag))
-            assert_exec(self.runtime, ["git", "tag", tag, "-m", tag])
+            assert_exec(self.runtime, ["git", "tag", "-f", tag, "-m", tag])
 
     def push(self):
         with Dir(self.distgit_dir):
@@ -701,37 +716,6 @@ class DistGitRepo(object):
             assert_exec(self.runtime, ["rhpkg", "push"])
             # rhpkg will create but not push tags :(
             assert_exec(self.runtime, ['git', 'push', '--tags'])
-
-    def bump_dockerfile(self):
-        with Dir(self.distgit_dir):
-            # Source or not, we should find a Dockerfile in the root at this point or something is wrong
-            assert_file("Dockerfile", "Unable to find Dockerfile in distgit root")
-
-            dfp = DockerfileParser(path="Dockerfile")
-            version = dfp.labels["version"]
-            release = dfp.labels["release"]
-
-            # If release has multiple fields (e.g. 0.173.0), increment final field
-            if "." in release:
-                components = release.rsplit(".", 1)  # ["0.173","0"]
-                bumped_field = int(components[1]) + 1
-                new_release = "%s.%d" % (components[0], bumped_field)
-            else:
-                # Otherwise, release is a single field; just increment it
-                new_release = "%d" % (int(release) + 1)
-
-            dfp.labels["release"] = new_release
-
-            # Found that content had to be created before opening Dockerfile for
-            # writing. Otherwise dfp loses content.
-            df_content = dfp.content
-
-            with open('Dockerfile', 'w') as df:
-                df.write(df_content)
-
-            ver = "{}-{}".format(version, new_release)
-            self.commit("Bumping version to " + ver, tag)
-            self.tag(version, new_release)
 
     def update_dockerfile(self, version, release, ignore_missing_base=False):
 
@@ -741,16 +725,15 @@ class DistGitRepo(object):
 
         if not self.runtime.no_oit_comment and not self.config.get('no_oit_comment', False):
             oit_comments.extend([
-                "This file is managed by the OpenShift Image Tool: github.com/openshift/enterprise-images",
+                "This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images",
                 "by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).",
                 "",
-                "Any yum repos listed in this file will effectively be ignored.",
-                "Instead enabled repos are managed by the OpenShift Image Tool when the build",
-                "details are passed to the image build system."
+                "Any yum repos listed in this file will effectively be ignored during CD builds.",
+                "Yum repos must be enabled in the oit configuration files.",
             ])
 
             if self.config.content.source is not Missing:
-                oit_comments.extend(["The content of this file is managed from external source.",
+                oit_comments.extend(["The content of this file is managed from an external source.",
                                      "Changes made directly in distgit will be lost during the next",
                                      "reconciliation process.",
                                      ""])
@@ -769,7 +752,7 @@ class DistGitRepo(object):
 
             dfp = DockerfileParser(path="Dockerfile")
 
-            self.runtime.log_verbose("Dockerfile has parsed labels:")
+            self.runtime.log_verbose("Dockerfile contains the following labels:")
             for k, v in dfp.labels.iteritems():
                 self.runtime.log_verbose("  '%s'='%s'" % (k, v))
 
@@ -811,9 +794,36 @@ class DistGitRepo(object):
             # Set image name in case it has changed
             dfp.labels["name"] = self.config.name
 
-            # Set version and release fields
-            dfp.labels["version"] = version
-            dfp.labels["release"] = release
+            # Set version if it has been specified.
+            if version is not None:
+                dfp.labels["version"] = version
+
+            # If the release is specified as "+", this means the user wants to bump the release.
+            if release == "+":
+                self.info("Bumping release field in Dockerfile")
+
+                # If release label is not present, default to 0, which will bump to 1
+                release = dfp.labels.get("release", "0")
+
+                # If release has multiple fields (e.g. 0.173.0.0), increment final field
+                if "." in release:
+                    components = release.rsplit(".", 1)  # ["0.173","0"]
+                    bumped_field = int(components[1]) + 1
+                    release = "%s.%d" % (components[0], bumped_field)
+                else:
+                    # Otherwise, release is a single field; just increment it
+                    release = "%d" % (int(release) + 1)
+
+            # If a release is specified, set it. If it is not specified, remove the field.
+            # If osbs finds the field, unset, it will choose a value automatically. This is
+            # generally ideal for refresh-images where the only goal is to not collide with
+            # a pre-existing image version-release.
+            if release is not None:
+                dfp.labels["release"] = release
+            else:
+                if "release" in dfp.labels:
+                    self.info("Removing release field from Dockerfile")
+                    del dfp.labels['release']
 
             # Remove any programmatic oit comments from previous management
             df_lines = dfp.content.splitlines(False)
@@ -821,15 +831,50 @@ class DistGitRepo(object):
 
             df_content = "\n".join(df_lines)
 
-            if len(oit_comments):
-                with open('Dockerfile', 'w') as df:
-                    for comment in oit_comments:
-                        df.write("%s %s\n" % (OIT_COMMENT_PREFIX, comment))
-                    df.write(df_content)
+            with open('Dockerfile', 'w') as df:
+                for comment in oit_comments:
+                    df.write("%s %s\n" % (OIT_COMMENT_PREFIX, comment))
+                df.write(df_content)
 
-    def rebase_dir(self, version, release):
+            self._reflow_labels()
+
+    def _reflow_labels(self, filename="Dockerfile"):
+        """
+        The Dockerfile parser we are presently using writes all labels on a single line
+        and occasionally make multiple LABEL statements. Calling this method with a
+        Dockerfile in the current working directory will rewrite the file with
+        labels at the end in a single statement.
+        """
+
+        dfp = DockerfileParser(path=filename)
+        labels = dict(dfp.labels)  # Make a copy of the labels we need to add back
+
+        # Delete any labels from the modeled content
+        for key in dfp.labels:
+            del dfp.labels[key]
+
+        # Capture content without labels
+        df_content = dfp.content.strip()
+
+        # Write the file back out and append the labels to the end
+        with open(filename, 'w') as df:
+            df.write("%s\n\n" % df_content)
+            if labels:
+                df.write("LABEL")
+                for k, v in labels.iteritems():
+                    df.write(" \\\n")  # All but the last line should have line extension backslash "\"
+                    escaped_v = v.replace('"', '\\"')  # Escape any " with \"
+                    df.write("        %s=\"%s\"" % (k, escaped_v))
+                df.write("\n\n")
+
+    def rebase_dir(self, version, release, ignore_missing_base=False):
 
         with Dir(self.distgit_dir):
+
+            if version is None:
+                # Extract the current version in order to preserve it
+                dfp = DockerfileParser("Dockerfile")
+                version = dfp.labels["version"]
 
             # Make our metadata directory if it does not exist
             if not os.path.isdir(".oit"):
@@ -845,4 +890,4 @@ class DistGitRepo(object):
             if self.config.content.source.modifications is not Missing:
                 self._run_modifications()
 
-        self.update_dockerfile(version, release)
+        self.update_dockerfile(version, release, ignore_missing_base)

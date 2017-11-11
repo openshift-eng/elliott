@@ -83,8 +83,8 @@ def distgits_push(runtime):
 @cli.command("distgits:update-dockerfile", short_help="Update a group's distgit Dockerfile from metadata.")
 @click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
               help="Associate an image name with a given stream alias.  [multiple]")
-@click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.", required=True)
-@click.option("--release", metavar='RELEASE', default="1", help="Release string to populate in Dockerfiles.")
+@click.option("--version", metavar='VERSION', default=None, help="Version string to populate in Dockerfiles.")
+@click.option("--release", metavar='RELEASE', default=None, help="Release label to populate in Dockerfiles (or + to bump).")
 @click.option('--ignore-missing-base', default=False, is_flag=True, help='If a base image is not included, proceed and do not update FROM.')
 @option_commit_message
 @option_push
@@ -94,6 +94,14 @@ def distgits_update_dockerfile(runtime, stream, version, release, ignore_missing
     Updates the Dockerfile in each distgit repository with the latest metadata and
     the version/release information specified. This does not update the Dockerfile
     from any external source. For that, use distgits:rebase.
+
+    Version:
+    - If not specified, the current version is preserved.
+
+    Release:
+    - If not specified, the release label is removed.
+    - If '+', the current release will be bumped.
+    - Else, the literal value will be set in the Dockerfile.
     """
     runtime.initialize()
 
@@ -117,30 +125,6 @@ def distgits_update_dockerfile(runtime, stream, version, release, ignore_missing
             dgr.push()
 
 
-@cli.command("distgits:bump-dockerfile", short_help="Increments Dockerfile release before image refresh.")
-@option_push
-@pass_runtime
-def distgits_bump_dockerfile(runtime, push):
-    """
-    Updates the Dockerfile (and makes commit) in each distgit repository with a new release
-    label so that images can be rebuild. This does not update the Dockerfile
-    from any external source. For that, use distgits:rebase.
-    """
-    runtime.initialize()
-
-    # If not pushing, do not clean up our work
-    runtime.remove_tmp_working_dir = push
-
-    for image in runtime.images():
-        dgr = image.distgit_repo()
-        dgr.bump_dockerfile()
-
-    if push:
-        for image in runtime.images():
-            dgr = image.distgit_repo()
-            dgr.push()
-
-
 @cli.command("distgits:rebase", short_help="Refresh a group's distgit content from source content.")
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
               help="Associate a path with a given source alias.  [multiple]")
@@ -148,12 +132,13 @@ def distgits_bump_dockerfile(runtime, push):
               help="YAML dict associating sources with their alias. Same as using --source multiple times.")
 @click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
               help="Associate an image name with a given stream alias.  [multiple]")
-@click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.", required=True)
-@click.option("--release", metavar='RELEASE', default="1", help="Release string to populate in Dockerfiles.")
+@click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.")
+@click.option("--release", metavar='RELEASE', default=None, help="Release string to populate in Dockerfiles.")
+@click.option('--ignore-missing-base', default=False, is_flag=True, help='If a base image is not included, proceed and do not update FROM.')
 @option_commit_message
 @option_push
 @pass_runtime
-def distgits_rebase(runtime, source, sources, stream, version, release, message, push):
+def distgits_rebase(runtime, source, sources, stream, version, release, ignore_missing_base, message, push):
     """
     Many of the Dockerfiles stored in distgit are based off of content managed in GitHub.
     For example, openshift-enterprise-node-docker should always closely reflect the changes
@@ -194,7 +179,7 @@ def distgits_rebase(runtime, source, sources, stream, version, release, message,
 
     for image in runtime.images():
         dgr = image.distgit_repo()
-        dgr.rebase_dir(version, release)
+        dgr.rebase_dir(version, release, ignore_missing_base)
         sha = dgr.commit(message, log_diff=True)
         dgr.tag(version, release)
         runtime.add_record("distgit_commit", distgit=dgr.metadata.qualified_name,
@@ -243,18 +228,15 @@ def distgits_foreach(runtime, cmd, message, push):
 
 @cli.command("distgits:copy", help="Copy content of source branch to target.")
 @click.option("--to-branch", metavar="TARGET_BRANCH", help="Branch to populate from source branch.")
-@click.option('--overwrite', default=False, is_flag=True, help='Overwrite files found in target.')
 @click.option("--replace", metavar="MATCH REPLACEMENT", nargs=2, multiple=True, default=None,
               help="String replacement in target Dockerfile.  [multiple]")
 @option_commit_message
 @option_push
 @pass_runtime
-def distgits_copy(runtime, to_branch, overwrite, message, push, replace):
+def distgits_copy(runtime, to_branch, message, push, replace):
     """
-    Clones all distgit repos found in the specified group and runs an arbitrary
-    command once for each local distgit directory. If the command runs without
-    error for all directories, a commit will be made. If not a dry_run,
-    the repo will be pushed.
+    For each distgit repo, copies the content of the group's branch to a new
+    branch.
     """
     runtime.initialize()
 
@@ -275,8 +257,7 @@ def distgits_copy(runtime, to_branch, overwrite, message, push, replace):
             dgr.commit(message)
 
     if push:
-        for image in runtime.images():
-            dgr = image.distgit_repo()
+        for dgr in dgrs:
             dgr.push()
 
 
