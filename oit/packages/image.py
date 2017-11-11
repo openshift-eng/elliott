@@ -24,6 +24,8 @@ def cgit_url(name, filename, rev=None):
 
 
 def pull_image(runtime, url):
+    runtime.info("Pulling image: %s" % url)
+
     def wait():
         runtime.info("Error pulling image %s -- retrying in 60 seconds" % url)
         time.sleep(60)
@@ -92,11 +94,46 @@ class ImageMetadata(object):
     def tag_exists(self, tag):
         return tag_exists("http://" + BREW_IMAGE_HOST, self.config.name, tag)
 
+    def get_latest_build_release(self, dfp):
+
+        """
+        Queries brew to determine the most recently built release of the component
+        associated with this image. This method does not rely on the "release"
+        label needing to be present in the Dockerfile.
+
+        :param dfp: A populated DockerFileParser
+        :return: The most recently built release field string (e.g. "2")
+        """
+
+        distgit_name = self.name
+        version = dfp.labels["version"]
+
+        # Brew can return all builds executed for a distgit repo. Most recent is listed last.
+        # e.g. brew search build registry-console-docker-v3.6.173.0.74-*
+        #     -> registry-console-docker-v3.6.173.0.74-2
+        #     -> registry-console-docker-v3.6.173.0.74-3
+        rc, stdout, stderr = gather_exec(self.runtime,
+                                         ["brew", "search", "build", '{}-{}-*'.format(distgit_name, version)])
+
+        assert_rc0(rc, "Unable to search brew builds: %s" % stderr)
+
+        builds = stdout.strip().splitlines()
+        if not builds:
+            raise IOError("No builds detected for %s version: %s" % (self.qualified_name, version))
+
+        last_build_id = builds[-1]  # e.g. "registry-console-docker-v3.6.173.0.75-1"
+        release = last_build_id.rsplit("-", 1)[1]  # [ "registry-console-docker-v3.6.173.0.75", "1"]
+
+        return release
+
     def pull_url(self):
-        p = DockerfileParser()
-        p.content = self.fetch_cgit_file("Dockerfile")
+        dfp = DockerfileParser()
+        dfp.content = self.fetch_cgit_file("Dockerfile")
+        # Don't trust what is the Dockerfile for "release". This field may not even be present.
+        # Query brew to find the most recently built release for this component version.
+        dfp.labels["release"] = self.get_latest_build_release(dfp)
         return "{host}/{l[name]}:{l[version]}-{l[release]}".format(
-            host=BREW_IMAGE_HOST, l=p.labels)
+            host=BREW_IMAGE_HOST, l=dfp.labels)
 
     def pull_image(self):
         pull_image(self.runtime, self.pull_url())
@@ -419,6 +456,14 @@ class DistGitRepo(object):
 
     def push_image(self, push_to_list, push_late=False):
 
+        """
+        Pushes the most recent image built for this distgit repo. This is
+        accomplished by looking the 'version' field in the Dockerfile and querying
+        brew for the most recent images built for that version.
+        :param push_to_list: A list of registries to push the image to
+        :param push_late: Whether late pushes should be included
+        """
+
         # Late pushes allow certain images to be the last of a group to be
         # pushed to mirrors. CI/CD systems may initiate operations based on the
         # update a given image and all other images need to be in place
@@ -446,7 +491,16 @@ class DistGitRepo(object):
                 # Read in information about the image we are about to build
                 dfp = DockerfileParser(path="Dockerfile")
                 version = dfp.labels["version"]
-                release = dfp.labels["release"]
+
+                # We used to rely on the "release" label being set, but this is problematic for several reasons.
+                # (1) If 'release' is not set, OSBS will determine one automatically that does not conflict
+                #       with a pre-existing image build. This is extremely helpful since we don't have to
+                #       worry about bumping the release during refresh images. This means we generally DON'T
+                #       want the release label in the file and can't, therefore, rely on it being there.
+                # (2) People have logged into distgit before in order to bump the release field. This happening
+                #       at the wrong time breaks the build.
+
+                release = self.metadata.get_latest_build_release(dfp)
 
                 push_tags = [
                     "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
@@ -701,7 +755,7 @@ class DistGitRepo(object):
         if version is None:
             return
 
-        tag = 'v{}'.format(version)
+        tag = '{}'.format(version)
 
         if release is not None:
             tag = '{}-{}'.format(tag, release)

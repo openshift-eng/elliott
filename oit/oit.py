@@ -360,7 +360,6 @@ def distgits_push_images(runtime, to_defaults, to):
         image.distgit_repo().push_image(to, True)
 
 
-
 @cli.command("distgits:pull-images", short_help="Pull latest images from pulp")
 @pass_runtime
 def distgits_pull_images(runtime):
@@ -396,7 +395,7 @@ def distgits_print(runtime, pattern):
 
     \b
     {type} - The type of the distgit (e.g. rpms)
-    {name} - The name of the distgit (e.g. openshift-enterprise-docker)
+    {name} - The name of the distgit repository (e.g. openshift-enterprise-docker)
     {image} - The image name in the Dockerfile
     {version} - The version field in the Dockerfile
     {release} - The release field in the Dockerfile
@@ -413,29 +412,25 @@ def distgits_print(runtime, pattern):
     if "{" not in pattern:
         pattern = "{%s}" % pattern.strip()
 
-    # Get preprocessing output out of the way before printing repo
-    for image in runtime.images():
-        image.distgit_repo()
-
     click.echo("")
     click.echo("------------------------------------------")
     for image in runtime.images():
-        dgr = image.distgit_repo()
-        with Dir(dgr.distgit_dir):
-            dfp = DockerfileParser(path="Dockerfile")
-            s = pattern
-            s = s.replace("{build}", "{name}-{version}-{release}")
-            s = s.replace("{repository}", "{image}:{version}-{release}")
-            s = s.replace("{type}", image.type)
-            s = s.replace("{name}", image.name)
-            s = s.replace("{image}", dfp.labels["name"])
-            s = s.replace("{version}", dfp.labels["version"])
-            s = s.replace("{release}", dfp.labels["release"])
+        dfp = DockerfileParser()
+        dfp.content = image.fetch_cgit_file("Dockerfile")
+        s = pattern
+        s = s.replace("{build}", "{name}-{version}-{release}")
+        s = s.replace("{repository}", "{image}:{version}-{release}")
+        s = s.replace("{type}", image.type)
+        s = s.replace("{name}", image.name)
+        s = s.replace("{image}", dfp.labels["name"])
+        s = s.replace("{version}", dfp.labels["version"])
+        s = s.replace("{release}", image.get_latest_build_release(dfp))
 
-            if "{" in s:
-                raise IOError("Unrecognized fields remaining in pattern: %s" % s)
+        if "{" in s:
+            raise IOError("Unrecognized fields remaining in pattern: %s" % s)
 
-            click.echo(s)
+        click.echo(s)
+
     click.echo("------------------------------------------")
 
 
