@@ -1,6 +1,7 @@
 # Information about the dist-git repo
 repo:
   type: rpms   # default is "rpms", but can be set to "apbs" for new dist-git repo type
+  component: openshift-enterprise-node   # defaults to the name of the distgit repo, but can be overriden
 
 # The image name this repo builds. This is the value set into LABEL:name (used by OSBS when naming image).
 name: openshift3/node

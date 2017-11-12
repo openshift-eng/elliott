@@ -4,6 +4,7 @@ import tempfile
 import shutil
 import atexit
 import yaml
+import datetime
 
 from common import assert_dir, Dir
 from image import ImageMetadata
@@ -66,6 +67,9 @@ class Runtime(object):
 
         # Will be loaded with the streams.yml Model
         self.streams = {}
+
+        # Create a "uuid" which will be used in FROM fields during updates
+        self.uuid = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
     def initialize(self):
 

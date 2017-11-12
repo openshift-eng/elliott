@@ -94,6 +94,13 @@ class ImageMetadata(object):
     def tag_exists(self, tag):
         return tag_exists("http://" + BREW_IMAGE_HOST, self.config.name, tag)
 
+    def get_component_name(self):
+        component_name = self.name
+        if self.config.repo.component is not Missing:
+            component_name = self.config.repo.component
+
+        return component_name
+
     def get_latest_build_release(self, dfp):
 
         """
@@ -105,21 +112,26 @@ class ImageMetadata(object):
         :return: The most recently built release field string (e.g. "2")
         """
 
-        distgit_name = self.name
+        component_name = self.get_component_name()
         version = dfp.labels["version"]
 
         # Brew can return all builds executed for a distgit repo. Most recent is listed last.
         # e.g. brew search build registry-console-docker-v3.6.173.0.74-*
         #     -> registry-console-docker-v3.6.173.0.74-2
         #     -> registry-console-docker-v3.6.173.0.74-3
+        if self.type == "apbs":
+            pattern = '{}-apb-{}-*'.format(component_name, version)
+        else:
+            pattern = '{}-{}-*'.format(component_name, version)
+
         rc, stdout, stderr = gather_exec(self.runtime,
-                                         ["brew", "search", "build", '{}-{}-*'.format(distgit_name, version)])
+                                         ["brew", "search", "build", pattern])
 
         assert_rc0(rc, "Unable to search brew builds: %s" % stderr)
 
         builds = stdout.strip().splitlines()
         if not builds:
-            raise IOError("No builds detected for %s version: %s" % (self.qualified_name, version))
+            raise IOError("No builds detected for %s using pattern: %s" % (self.qualified_name, pattern))
 
         last_build_id = builds[-1]  # e.g. "registry-console-docker-v3.6.173.0.75-1"
         release = last_build_id.rsplit("-", 1)[1]  # [ "registry-console-docker-v3.6.173.0.75", "1"]
@@ -806,6 +818,17 @@ class DistGitRepo(object):
 
             dfp = DockerfileParser(path="Dockerfile")
 
+            # If no version has been specified, we will leave the version in the Dockerfile. Extract it.
+            if version is None:
+                version = dfp.labels["version"]
+
+            uuid_tag = "%s.%s" % (version, self.runtime.uuid)
+
+            with open('additional-tags', 'w') as at:
+                at.write("%s\n" % uuid_tag)  # The uuid which we ensure we get the right FROM tag
+                at.write("%s\n" % version)
+                at.write("%s\n" % (version.rsplit(".", 1)[0]))  # e.g. "v3.7.0" -> "v3.7"
+
             self.runtime.log_verbose("Dockerfile contains the following labels:")
             for k, v in dfp.labels.iteritems():
                 self.runtime.log_verbose("  '%s'='%s'" % (k, v))
@@ -819,7 +842,7 @@ class DistGitRepo(object):
             dfp.labels["name"] = self.config.name
 
             # Set the distgit repo name
-            dfp.labels["com.redhat.component"] = self.metadata.name
+            dfp.labels["com.redhat.component"] = self.metadata.get_component_name()
 
             # Does this image inherit from an image defined in a different distgit?
             if self.config["from"].member is not Missing:
@@ -831,10 +854,9 @@ class DistGitRepo(object):
                         raise IOError("Unable to find base image metadata [%s] in included images. Use --ignore-missing-base to ignore." % base)
                     # Otherwise, the user is not expecting the FROM field to be updated in this Dockerfile.
                 else:
-                    # Everything in the group is going to be built with the same version and release,
-                    # so just assume it will exist with the version-release we are using for this
-                    # repo.
-                    dfp.baseimage = "%s:%s-%s" % (from_image_metadata.config.name, version, release)
+                    # Everything in the group is going to be built with the uuid tag, so we must
+                    # assume that it will exist for our parent.
+                    dfp.baseimage = "%s:%s" % (from_image_metadata.config.name, uuid_tag)
 
             # Is this image FROM another literal image name:tag?
             if self.config["from"].image is not Missing:
