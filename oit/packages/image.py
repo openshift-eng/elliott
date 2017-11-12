@@ -708,7 +708,7 @@ class DistGitRepo(object):
         if scratch:
             cmd_list.append("--scratch")
 
-        # Run the build with --nowait so that we can immdiately get information about the brew task
+        # Run the build with --nowait so that we can immediately get information about the brew task
         rc, out, err = gather_exec(self.runtime, cmd_list)
 
         if rc != 0:
@@ -741,6 +741,13 @@ class DistGitRepo(object):
         if "already exists" in out:
             self.info("Image already built for: {}".format(target_image))
             rc = 0
+
+        # Gather brew-logs
+        logs_dir = "%s/%s" % (self.runtime.brew_logs_dir, self.metadata.name)
+        logs_rc, logs_out, logs_err = gather_exec(self.runtime, ["brew", "download-logs", "-n", logs_dir, task_id])
+
+        if logs_rc != 0:
+            self.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
 
         if rc != 0:
             # An error occurred during watch-task. We don't have a viable build.
@@ -820,7 +827,9 @@ class DistGitRepo(object):
 
             # If no version has been specified, we will leave the version in the Dockerfile. Extract it.
             if version is None:
-                version = dfp.labels["version"]
+                version = dfp.labels.get("version", dfp.labels.get("Version", None))
+                if version is None:
+                    raise IOError("No version found in Dockerfile for %s" % self.metadata.qualified_name)
 
             uuid_tag = "%s.%s" % (version, self.runtime.uuid)
 
@@ -881,7 +890,7 @@ class DistGitRepo(object):
                 self.info("Bumping release field in Dockerfile")
 
                 # If release label is not present, default to 0, which will bump to 1
-                release = dfp.labels.get("release", "0")
+                release = dfp.labels.get("release", dfp.labels.get("Release", "0"))
 
                 # If release has multiple fields (e.g. 0.173.0.0), increment final field
                 if "." in release:
@@ -902,6 +911,12 @@ class DistGitRepo(object):
                 if "release" in dfp.labels:
                     self.info("Removing release field from Dockerfile")
                     del dfp.labels['release']
+
+            # Delete differently cased release and version if they exist
+            if "Release" in dfp.labels:
+                del dfp.labels["Release"]
+            if "Version" in dfp.labels:
+                del dfp.labels["Version"]
 
             # Remove any programmatic oit comments from previous management
             df_lines = dfp.content.splitlines(False)

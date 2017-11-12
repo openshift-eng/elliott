@@ -50,6 +50,10 @@ class Runtime(object):
         self.debug_log = None
         self.debug_log_path = None
 
+        self.brew_logs_dir = None
+
+        self.flags_dir = None
+
         # Registries to push to if not specified on the command line; populated by group.yml
         self.default_registries = DEFAULT_REGISTRIES
 
@@ -97,7 +101,7 @@ class Runtime(object):
         if not os.path.isdir(self.distgits_dir):
             os.mkdir(self.distgits_dir)
 
-        self.distgits_diff_dir = os.path.join(self.working_dir, "distgits_diffs")
+        self.distgits_diff_dir = os.path.join(self.working_dir, "distgits-diffs")
         if not os.path.isdir(self.distgits_diff_dir):
             os.mkdir(self.distgits_diff_dir)
 
@@ -108,6 +112,14 @@ class Runtime(object):
         self.record_log_path = os.path.join(self.working_dir, "record.log")
         self.record_log = open(self.record_log_path, 'a')
         atexit.register(close_file, self.record_log)
+
+        # Directory where brew-logs will be downloaded after a build
+        self.brew_logs_dir = os.path.join(self.working_dir, "brew-logs")
+        os.mkdir(self.brew_logs_dir)
+
+        # Directory for flags between invocations in the same working-dir
+        self.flags_dir = os.path.join(self.working_dir, "flags")
+        os.mkdir(self.flags_dir)
 
         group_dir = os.path.join(self.metadata_dir, "groups", self.group)
         assert_dir(group_dir, "Cannot find group directory")
@@ -269,3 +281,17 @@ class Runtime(object):
             raise IOError("Unable to find definition for stream: %s" % stream_name)
 
         return self.streams[stream_name]
+
+    def _flag_file(self,flag_name):
+        return os.path.join(self.flags_dir, flag_name)
+
+    def flag_create(self, flag_name, msg=""):
+        with open(self._flag_file(flag_name), 'w') as f:
+            f.write(msg)
+
+    def flag_exists(self, flag_name):
+        return os.path.isfile(self._flag_file(flag_name))
+
+    def flag_remove(self, flag_name):
+        if self.flag_exists(flag_name):
+            os.remove(self._flag_file(flag_name))
