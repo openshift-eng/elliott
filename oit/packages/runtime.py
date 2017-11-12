@@ -115,11 +115,13 @@ class Runtime(object):
 
         # Directory where brew-logs will be downloaded after a build
         self.brew_logs_dir = os.path.join(self.working_dir, "brew-logs")
-        os.mkdir(self.brew_logs_dir)
+        if not os.path.isdir(self.brew_logs_dir):
+            os.mkdir(self.brew_logs_dir)
 
         # Directory for flags between invocations in the same working-dir
         self.flags_dir = os.path.join(self.working_dir, "flags")
-        os.mkdir(self.flags_dir)
+        if not os.path.isdir(self.flags_dir):
+            os.mkdir(self.flags_dir)
 
         group_dir = os.path.join(self.metadata_dir, "groups", self.group)
         assert_dir(group_dir, "Cannot find group directory")
