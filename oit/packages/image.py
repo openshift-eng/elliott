@@ -827,7 +827,9 @@ class DistGitRepo(object):
             with open('additional-tags', 'w') as at:
                 at.write("%s\n" % uuid_tag)  # The uuid which we ensure we get the right FROM tag
                 at.write("%s\n" % version)
-                at.write("%s\n" % (version.rsplit(".", 1)[0]))  # e.g. "v3.7.0" -> "v3.7"
+                vsplit = version.split(".")
+                if len(vsplit) > 1:
+                    at.write("%s.%s\n" % (vsplit[0], vsplit[1]))  # e.g. "v3.7.0" -> "v3.7"
 
             self.runtime.log_verbose("Dockerfile contains the following labels:")
             for k, v in dfp.labels.iteritems():
