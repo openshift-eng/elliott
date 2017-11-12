@@ -744,7 +744,7 @@ class DistGitRepo(object):
 
         # Gather brew-logs
         logs_dir = "%s/%s" % (self.runtime.brew_logs_dir, self.metadata.name)
-        logs_rc, logs_out, logs_err = gather_exec(self.runtime, ["brew", "download-logs", "-n", logs_dir, task_id])
+        logs_rc, logs_out, logs_err = gather_exec(self.runtime, ["brew", "download-logs", "-d", logs_dir, task_id])
 
         if logs_rc != 0:
             self.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
