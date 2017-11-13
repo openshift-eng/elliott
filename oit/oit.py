@@ -471,6 +471,14 @@ def distgit_config_template(url):
 
     branch = url[url.index("?h=") + 3:]
 
+    if "Architecture" in dfp.labels:
+        dfp.labels["architecture"] = dfp.labels["Architecture"]
+
+    component = dfp.labels.get("com.redhat.component", dfp.labels.get("BZComponent", None))
+
+    if component is not None:
+        config["repo"]["component"] = component
+
     managed_labels = [
         'vendor',
         'License',

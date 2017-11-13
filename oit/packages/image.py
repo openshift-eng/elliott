@@ -95,6 +95,8 @@ class ImageMetadata(object):
         return tag_exists("http://" + BREW_IMAGE_HOST, self.config.name, tag)
 
     def get_component_name(self):
+        # By default, the bugzilla compnent is the name of the distgit,
+        # but this can be overridden in the config.yml.
         component_name = self.name
         if self.config.repo.component is not Missing:
             component_name = self.config.repo.component
@@ -912,11 +914,10 @@ class DistGitRepo(object):
                     self.info("Removing release field from Dockerfile")
                     del dfp.labels['release']
 
-            # Delete differently cased release and version if they exist
-            if "Release" in dfp.labels:
-                del dfp.labels["Release"]
-            if "Version" in dfp.labels:
-                del dfp.labels["Version"]
+            # Delete differently cased labels that we override or use newer versions of
+            for deprecated in ["Release", "Architecture", "BZComponent"]:
+                if deprecated in dfp.labels:
+                    del dfp.labels[deprecated]
 
             # Remove any programmatic oit comments from previous management
             df_lines = dfp.content.splitlines(False)
