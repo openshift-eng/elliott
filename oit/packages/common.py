@@ -80,11 +80,14 @@ def recursive_overwrite(runtime, src, dest, ignore=set()):
     cmd = 'rsync -av {} {}/ {}/'.format(exclude, src, dest)
     assert_exec(runtime, cmd.split(' '))
 
+
+class RetryException(Exception): pass
+
 def retry(n, f, check_f=bool, wait_f=None):
     for c in xrange(n):
         ret = f()
         if check_f(ret):
             return ret
         if c < n - 1 and wait_f is not None:
-            wait_f()
-    raise Exception("Giving up after {} failed attempt(s)".format(n))
+            wait_f(c)
+    raise RetryException("Giving up after {} failed attempt(s)".format(n))

@@ -9,7 +9,7 @@ from multiprocessing import Lock
 from dockerfile_parse import DockerfileParser
 import json
 
-from common import BREW_IMAGE_HOST, CGIT_URL, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, gather_exec, retry, Dir, recursive_overwrite
+from common import BREW_IMAGE_HOST, CGIT_URL, RetryException, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, gather_exec, retry, Dir, recursive_overwrite
 from model import Model, Missing
 
 OIT_COMMENT_PREFIX = '#oit##'
@@ -26,7 +26,7 @@ def cgit_url(name, filename, rev=None):
 def pull_image(runtime, url):
     runtime.info("Pulling image: %s" % url)
 
-    def wait():
+    def wait(_):
         runtime.info("Error pulling image %s -- retrying in 60 seconds" % url)
         time.sleep(60)
     retry(
@@ -648,12 +648,16 @@ class DistGitRepo(object):
                     else:
                         parent_dgr = parent_img.distgit_repo()
                         parent_dgr.wait_for_build(self.metadata.qualified_name)
-                for retry in xrange(retries):
-                    if self._build_container(target_image, repo_type, scratch, record):
-                        break
-                    else:
-                        self.info("Async error in image build thread [attempt #{}]: {}".format(retry + 1, self.metadata.qualified_name))
-                else:
+                def wait(n):
+                    self.info("Async error in image build thread [attempt #{}]: {}".format(n + 1, self.metadata.qualified_name))
+                    # Brew does not handle an immediate retry correctly.
+                    time.sleep(5 * 60)
+                try:
+                    retry(
+                        n=3, wait_f=wait,
+                        f=lambda: self._build_container(target_image, repo_type, scratch, record))
+                except RetryException as err:
+                    self.info(str(err))
                     return False
             record["message"] = "Success"
             record["status"] = 0
@@ -736,7 +740,7 @@ class DistGitRepo(object):
         record["task_url"] = task_url
 
         # Now that we have the basics about the task, wait for it to complete
-        rc, out, err = gather_exec(self.runtime, ["brew", "watch-task", task_id])
+        rc, out, err = gather_exec(self.runtime, ["timeout", "4h", "brew", "watch-task", task_id])
 
         # Looking for something like the following to conclude the image has already been built:
         # "13949407 buildContainer (noarch): FAILED: BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961"
@@ -752,8 +756,11 @@ class DistGitRepo(object):
             self.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
 
         if rc != 0:
-            # An error occurred during watch-task. We don't have a viable build.
-            self.info("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
+            if rc == 124:
+                self.info("Timeout building image: {}\nout={}  ; err={}".format(task_url, out, err))
+            else:
+                # An error occurred during watch-task. We don't have a viable build.
+                self.info("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
             return False
 
         self.info("Successfully built image: {} ; {}".format(target_image, task_url))

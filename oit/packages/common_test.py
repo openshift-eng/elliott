@@ -8,7 +8,7 @@ class ExecCmdCommand(unittest.TestCase):
         def __init__(self, debug_log):
             self.debug_log = debug_log
 
-        def verbose(self, message):
+        def log_verbose(self, message):
             self.debug_log.write(message + "\n")
 
     def exec_cmd(self, cmd):
@@ -53,8 +53,8 @@ class RetryTestCase(unittest.TestCase):
         self.assertRaisesRegexp(
             Exception, self.ERROR_MSG.format(3),
             retry, 3, lambda: calls.append("f"),
-            wait_f=lambda: calls.append("w"))
-        self.assertEqual(calls, list("fwfwf"))
+            wait_f=lambda n: calls.extend(("w", str(n))))
+        self.assertEqual(calls, list("fw0fw1f"))
 
     def test_return(self):
         obj = {}
