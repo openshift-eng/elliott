@@ -9,7 +9,7 @@ from multiprocessing import Lock
 from dockerfile_parse import DockerfileParser
 import json
 
-from common import BREW_IMAGE_HOST, CGIT_URL, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, gather_exec, retry, Dir, recursive_overwrite
+from common import BREW_IMAGE_HOST, CGIT_URL, RetryException, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, gather_exec, retry, Dir, recursive_overwrite
 from model import Model, Missing
 
 OIT_COMMENT_PREFIX = '#oit##'
@@ -26,7 +26,7 @@ def cgit_url(name, filename, rev=None):
 def pull_image(runtime, url):
     runtime.info("Pulling image: %s" % url)
 
-    def wait():
+    def wait(_):
         runtime.info("Error pulling image %s -- retrying in 60 seconds" % url)
         time.sleep(60)
     retry(
@@ -648,12 +648,16 @@ class DistGitRepo(object):
                     else:
                         parent_dgr = parent_img.distgit_repo()
                         parent_dgr.wait_for_build(self.metadata.qualified_name)
-                for retry in xrange(retries):
-                    if self._build_container(target_image, repo_type, scratch, record):
-                        break
-                    else:
-                        self.info("Async error in image build thread [attempt #{}]: {}".format(retry + 1, self.metadata.qualified_name))
-                else:
+                def wait(n):
+                    self.info("Async error in image build thread [attempt #{}]: {}".format(n + 1, self.metadata.qualified_name))
+                    # Brew does not handle an immediate retry correctly.
+                    time.sleep(5 * 60)
+                try:
+                    retry(
+                        n=3, wait_f=wait,
+                        f=lambda: self._build_container(target_image, repo_type, scratch, record))
+                except RetryException as err:
+                    self.info(str(err))
                     return False
             record["message"] = "Success"
             record["status"] = 0
