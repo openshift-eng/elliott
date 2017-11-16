@@ -740,7 +740,7 @@ class DistGitRepo(object):
         record["task_url"] = task_url
 
         # Now that we have the basics about the task, wait for it to complete
-        rc, out, err = gather_exec(self.runtime, ["brew", "watch-task", task_id])
+        rc, out, err = gather_exec(self.runtime, ["timeout", "4h", "brew", "watch-task", task_id])
 
         # Looking for something like the following to conclude the image has already been built:
         # "13949407 buildContainer (noarch): FAILED: BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961"
@@ -756,8 +756,11 @@ class DistGitRepo(object):
             self.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
 
         if rc != 0:
-            # An error occurred during watch-task. We don't have a viable build.
-            self.info("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
+            if rc == 124:
+                self.info("Timeout building image: {}\nout={}  ; err={}".format(task_url, out, err))
+            else:
+                # An error occurred during watch-task. We don't have a viable build.
+                self.info("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
             return False
 
         self.info("Successfully built image: {} ; {}".format(target_image, task_url))
