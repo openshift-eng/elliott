@@ -226,6 +226,50 @@ def distgits_foreach(runtime, cmd, message, push):
             dgr.push()
 
 
+@cli.command("distgits:revert", help="Revert a fixed number of commits in each distgit.")
+@click.argument("count", nargs=1)
+@click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.", default=None, required=False)
+@option_push
+@pass_runtime
+def distgits_revert(runtime, count, message, push):
+    """
+    Revert a particular number of commits in each distgit repository. If
+    a message is specified, a new commit will be made.
+    """
+    runtime.initialize()
+
+    # If not pushing, do not clean up our work
+    runtime.remove_tmp_working_dir = push
+
+    count = int(count) - 1
+    if count < 0:
+        runtime.info("Revert count must be >= 1")
+
+    if count == 0:
+        commit_range = "HEAD"
+    else:
+        commit_range = "HEAD~%s..HEAD" % count
+
+    cmd = ["git", "revert", "--no-commit", commit_range]
+
+    cmd_str = " ".join(cmd)
+    dgrs = [image.distgit_repo() for image in runtime.images()]
+    for dgr in dgrs:
+        with Dir(dgr.distgit_dir):
+            runtime.info("Running revert in %s: [%s]" % (dgr.distgit_dir, cmd_str))
+            if subprocess.call(cmd_str, shell=True) != 0:
+                raise IOError("Command return non-zero status")
+            runtime.info("\n")
+
+        if message is not None:
+            dgr.commit(message)
+
+    if push:
+        for image in runtime.images():
+            dgr = image.distgit_repo()
+            dgr.push()
+
+
 @cli.command("distgits:copy", help="Copy content of source branch to target.")
 @click.option("--to-branch", metavar="TARGET_BRANCH", help="Branch to populate from source branch.")
 @click.option("--replace", metavar="MATCH REPLACEMENT", nargs=2, multiple=True, default=None,
