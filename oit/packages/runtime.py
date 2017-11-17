@@ -8,6 +8,7 @@ import datetime
 
 from common import assert_dir, Dir
 from image import ImageMetadata
+from rpm import RPMMetadata
 from model import Model, Missing
 from multiprocessing import Lock
 
@@ -59,6 +60,9 @@ class Runtime(object):
 
         # Map of dist-git repo name -> ImageMetadata object. Populated when group is set.
         self.image_map = {}
+
+        # Map of dist-git repo name -> RPMMetadata object. Populated when group is set.
+        self.rpm_map = {}
 
         # Map of source code repo aliases (e.g. "ose") to a path on the filesystem where it has been cloned.
         # See registry_repo.
@@ -126,6 +130,12 @@ class Runtime(object):
         group_dir = os.path.join(self.metadata_dir, "groups", self.group)
         assert_dir(group_dir, "Cannot find group directory")
 
+        images_dir = os.path.join(group_dir, 'images')
+        assert_dir(group_dir, "Cannot find images directory for {}".format(group_dir))
+
+        rpms_dir = os.path.join(group_dir, 'rpms')
+        assert_dir(group_dir, "Cannot find rpms directory for {}".format(group_dir))
+
         self.info("Searching group directory: %s" % group_dir)
         with Dir(group_dir):
             with open("group.yml", "r") as f:
@@ -158,42 +168,85 @@ class Runtime(object):
             if len(self.exclude) > 0:
                 self.info("Exclude list set to: %s" % str(self.exclude))
 
-            # These two are tuples and cannot be removed from
-            # Make copies to be able to remove and retain original
-            include = list(self.include)
-            check_include = len(include) > 0
-            optional_include = list(self.optional_include)
-            check_optional_include = len(optional_include) > 0
-            check_exclude = len(self.exclude)
+            with Dir(images_dir):
+                images_list = [x for x in os.listdir(".") if os.path.isdir(x)]
 
-            for distgit_repo_name in [x for x in os.listdir(".") if os.path.isdir(x)]:
-                if check_include or check_optional_include:
-                    if check_include and distgit_repo_name in include:
-                        self.info("include: " + distgit_repo_name)
-                        include.remove(distgit_repo_name)
-                    elif check_optional_include and distgit_repo_name in optional_include:
-                        self.info("optional_include: " + distgit_repo_name)
-                        optional_include.remove(distgit_repo_name)
-                    else:
-                        self.info("skip: " + distgit_repo_name)
-                        self.log_verbose("Skipping %s since it is not in the include list" % distgit_repo_name)
-                        continue
+            with Dir(rpms_dir):
+                rpms_list = [x for x in os.listdir(".") if os.path.isdir(x)]
 
-                if check_exclude and distgit_repo_name in self.exclude:
-                    self.info("exclude: " + distgit_repo_name)
-                    self.log_verbose("Skipping %s since it is in the exclude list" % distgit_repo_name)
-                    continue
+            # for later checking we need to remove from the lists, but they are tuples. Clone to list
+            image_include = []
+            image_optional_include = []
+            image_exclude = []
+            for name in images_list:
+                if name in self.include:
+                    image_include.append(name)
+                if name in self.optional_include:
+                    image_optional_include.append(name)
+                if name in self.exclude:
+                    image_exclude.append(name)
 
-                self.image_map[distgit_repo_name] = ImageMetadata(
-                    self, distgit_repo_name, distgit_repo_name)
+            rpm_include = []
+            rpm_optional_include = []
+            rpm_exclude = []
+            for name in rpms_list:
+                if name in self.include:
+                    rpm_include.append(name)
+                if name in self.optional_include:
+                    rpm_optional_include.append(name)
+                if name in self.exclude:
+                    rpm_exclude.append(name)
 
-            if len(include) > 0:
-                raise IOError('Unable to find the following configs: {}'.format(', '.join(include)))
-            if len(optional_include) > 0:
-                self.log_verbose('The following were not found, but optional: {}'.format(', '.join(optional_include)))
+            missed_include = set(self.include) - set(image_include + rpm_include)
+            if len(missed_include) > 0:
+                raise IOError('Unable to find the following images or rpms configs: {}'.format(', '.join(missed_include)))
 
-        if len(self.image_map) == 0:
-            raise IOError("No image metadata directories found within: %s" % group_dir)
+            missed_optional_include = set(self.optional_include) - set(image_optional_include + rpm_optional_include)
+            if len(missed_optional_include) > 0:
+                self.info('The following images or rpms were not found, but optional: {}'.format(', '.join(missed_optional_include)))
+
+            def gen_ImageMetadata(name):
+                self.image_map[name] = ImageMetadata(self, name, name)
+
+            def gen_RPMMetadata(name):
+                self.rpm_map[name] = RPMMetadata(self, name, name)
+
+            def collect_configs(search_type, search_dir, name_list, include, optional_include, exclude, gen):
+                check_include = len(include) > 0
+                check_optional_include = len(optional_include) > 0
+                check_exclude = len(exclude) > 0
+
+                with Dir(search_dir):
+                    for distgit_repo_name in name_list:
+                        if check_include or check_optional_include:
+                            if check_include and distgit_repo_name in include:
+                                self.info("include: " + distgit_repo_name)
+                                include.remove(distgit_repo_name)
+                            elif check_optional_include and distgit_repo_name in optional_include:
+                                self.info("optional_include: " + distgit_repo_name)
+                                optional_include.remove(distgit_repo_name)
+                            else:
+                                self.info("{} skip: {}".format(search_type, distgit_repo_name))
+                                self.log_verbose("Skipping {} {} since it is not in the include list".format(search_type, distgit_repo_name))
+                                continue
+
+                        if check_exclude and distgit_repo_name in self.exclude:
+                            self.info("{} exclude: {}".format(search_type, distgit_repo_name))
+                            self.log_verbose("Skipping {} {} since it is in the exclude list".format(search_type, distgit_repo_name))
+                            continue
+
+                        gen(distgit_repo_name)
+
+            collect_configs('image', images_dir, images_list,
+                            image_include, image_optional_include,
+                            image_exclude, gen_ImageMetadata)
+
+            collect_configs('rpm', rpms_dir, rpms_list,
+                            rpm_include, rpm_optional_include,
+                            rpm_exclude, gen_RPMMetadata)
+
+        if len(self.image_map) + len(self.rpm_map) == 0:
+            raise IOError("No image or rpm metadata directories found within: {}".format(group_dir))
 
         # Read in the streams definite for this group if one exists
         streams_path = os.path.join(group_dir, "streams.yml")
