@@ -168,11 +168,19 @@ class Runtime(object):
             if len(self.exclude) > 0:
                 self.info("Exclude list set to: %s" % str(self.exclude))
 
-            with Dir(images_dir):
-                images_list = [x for x in os.listdir(".") if os.path.isdir(x)]
+            images_list = []
+            if os.path.isdir(images_dir):
+                with Dir(images_dir):
+                    images_list = [x for x in os.listdir(".") if os.path.isdir(x)]
+            else:
+                self.info('{} does not exist. Skipping image processing for group.'.format(rpms_dir))
 
-            with Dir(rpms_dir):
-                rpms_list = [x for x in os.listdir(".") if os.path.isdir(x)]
+            rpms_list = []
+            if os.path.isdir(rpms_dir):
+                with Dir(rpms_dir):
+                    rpms_list = [x for x in os.listdir(".") if os.path.isdir(x)]
+            else:
+                self.info('{} does not exist. Skipping RPM processing for group.'.format(rpms_dir))
 
             # for later checking we need to remove from the lists, but they are tuples. Clone to list
             image_include = []
@@ -212,6 +220,8 @@ class Runtime(object):
                 self.rpm_map[name] = RPMMetadata(self, name, name)
 
             def collect_configs(search_type, search_dir, name_list, include, optional_include, exclude, gen):
+                if len(name_list) == 0:
+                    return # no configs of this type found, bail out
                 check_include = len(include) > 0
                 check_optional_include = len(optional_include) > 0
                 check_exclude = len(exclude) > 0
