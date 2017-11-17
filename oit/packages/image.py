@@ -790,14 +790,15 @@ class DistGitRepo(object):
 
         with Dir(self.distgit_dir):
             self.info("Adding tag to local repo: {}".format(tag))
-            assert_exec(self.runtime, ["git", "tag", "-f", tag, "-m", tag])
+            gather_exec(self.runtime, ["git", "tag", "-f", tag, "-m", tag])
 
     def push(self):
         with Dir(self.distgit_dir):
             self.info("Pushing repository")
             assert_exec(self.runtime, ["rhpkg", "push"])
             # rhpkg will create but not push tags :(
-            assert_exec(self.runtime, ['git', 'push', '--tags'])
+            # Not asserting this exec since this is non-fatal if the tag already exists
+            gather_exec(self.runtime, ['git', 'push', '--tags'])
 
     def update_dockerfile(self, version, release, ignore_missing_base=False):
 
