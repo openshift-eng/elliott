@@ -202,7 +202,7 @@ class DistGitRepo(object):
                 out = out.strip()
 
                 # Only switch if we are not already in the branch. This allows us to work in
-                # working directories with uncommit changes.
+                # working directories with uncommited changes.
                 if out != distgit_branch:
                     # Switch to the target branch
                     assert_exec(self.runtime, ["rhpkg", "switch-branch", distgit_branch])
@@ -237,11 +237,7 @@ class DistGitRepo(object):
         if alias is Missing:
             raise IOError("Can't find source alias in image config: %s" % self.metadata.dir)
 
-        if alias not in self.runtime.source_alias:
-            raise IOError(
-                "Required source alias has not been registered [%s] for image config: %s" % (alias, self.metadata.dir))
-
-        source_root = self.runtime.source_alias[alias]
+        source_root = self.runtime.resolve_source(alias)
         sub_path = self.config.content.source.path
 
         path = source_root

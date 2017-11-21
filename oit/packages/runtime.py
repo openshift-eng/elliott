@@ -6,7 +6,7 @@ import atexit
 import yaml
 import datetime
 
-from common import assert_dir, Dir
+from common import assert_dir, assert_exec, gather_exec, Dir
 from image import ImageMetadata
 from rpm import RPMMetadata
 from model import Model, Missing
@@ -43,6 +43,9 @@ class Runtime(object):
         self.remove_tmp_working_dir = False
         self.group_config = None
 
+        # If source needs to be cloned by oit directly, the directory in which it will be placed.
+        self.sources_dir = None
+
         self.distgits_dir = None
 
         self.record_log = None
@@ -66,7 +69,7 @@ class Runtime(object):
 
         # Map of source code repo aliases (e.g. "ose") to a path on the filesystem where it has been cloned.
         # See registry_repo.
-        self.source_alias = {}
+        self.source_paths = {}
 
         # Map of stream alias to image name.
         self.stream_alias_overrides = {}
@@ -108,6 +111,10 @@ class Runtime(object):
         self.distgits_diff_dir = os.path.join(self.working_dir, "distgits-diffs")
         if not os.path.isdir(self.distgits_diff_dir):
             os.mkdir(self.distgits_diff_dir)
+
+        self.sources_dir = os.path.join(self.working_dir, "sources")
+        if not os.path.isdir(self.sources_dir):
+            os.mkdir(self.sources_dir)
 
         self.debug_log_path = os.path.join(self.working_dir, "debug.log")
         self.debug_log = open(self.debug_log_path, 'a')
@@ -288,7 +295,7 @@ class Runtime(object):
         self.info("Registering source alias %s: %s" % (alias, path))
         path = os.path.abspath(path)
         assert_dir(path, "Error registering source alias %s" % alias)
-        self.source_alias[alias] = path
+        self.source_paths[alias] = path
 
     def register_stream_alias(self, alias, image):
         self.info("Registering image stream alias override %s: %s" % (alias, image))
@@ -347,7 +354,75 @@ class Runtime(object):
 
         return self.streams[stream_name]
 
-    def _flag_file(self,flag_name):
+    # Looks up a source alias and returns a path to the directory containing that source.
+    # sources can be specified on the command line, or, failing that, in group.yml.
+    # If a source specified in group.yaml has not be resolved before, this method will
+    # clone that source to checkout the group's desired branch before returning a path
+    # to the cloned repo.
+    def resolve_source(self, alias, required=True):
+        if alias in self.source_paths:
+            return self.source_paths[alias]
+
+        if self.group_config.sources is Missing or alias not in self.group_config.sources:
+            if required:
+                raise IOError("Source alias not found in specified sources or in the current group: %s" % alias)
+            else:
+                return None
+
+        # Where the source will land
+        source_dir = os.path.join(self.sources_dir, alias)
+
+        # If this source has already been extracted for this working directory
+        if os.path.isdir(source_dir):
+            # Store so that the next attempt to resolve the source hits the map
+            self.source_paths[alias] = source_dir
+            self.info("Source '%s' already exists in (skipping clone): %s" % (alias, source_dir))
+            return source_dir
+
+        source_config = self.group_config.sources[alias]
+        url = source_config["url"]
+        self.info("Cloning source '%s' from %s as specified by group into: %s" % (alias, url, source_dir))
+        assert_exec(self, ["git", "clone", url, source_dir])
+        branch = source_config["branch"]
+        fallback_branch = source_config.get("fallback-branch", None)
+        found = False
+        with Dir(source_dir):
+            self.info("Attempting to checkout source '%s' branch %s in: %s" % (alias, branch, source_dir))
+
+            if branch != "master":
+                rc, out, err = gather_exec(self, ["git", "checkout", "-b", branch, "origin/%s" % branch])
+            else:
+                rc = 0
+
+            if rc == 0:
+                found = True
+            else:
+                if fallback_branch is not None:
+                    self.info("  Unable to checkout branch %s ; trying fallback %s" % (branch, fallback_branch))
+                    self.info("Attempting to checkout source '%s' fallback-branch %s in: %s" % (alias, fallback_branch, source_dir))
+                    if fallback_branch != "master":
+                        rc2, out, err = gather_exec(self, ["git", "checkout", "-b", fallback_branch, "origin/%s" % fallback_branch])
+                    else:
+                        rc2 = 0
+
+                    if rc2 == 0:
+                        found = True
+                    else:
+                        self.info("  Error checking out fallback-branch %s: %s" % (branch, err))
+                else:
+                    self.info("  Error checking out branch %s: %s" % (branch, err))
+
+            if found:
+                # Store so that the next attempt to resolve the source hits the map
+                self.source_paths[alias] = source_dir
+                return source_dir
+            else:
+                if required:
+                    raise IOError("Error checking out target branch of source '%s' in: %s" % (alias, source_dir))
+                else:
+                    return None
+
+    def _flag_file(self, flag_name):
         return os.path.join(self.flags_dir, flag_name)
 
     def flag_create(self, flag_name, msg=""):
