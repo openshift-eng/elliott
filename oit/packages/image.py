@@ -98,6 +98,12 @@ class ImageMetadata(object):
         # By default, the bugzilla compnent is the name of the distgit,
         # but this can be overridden in the config.yml.
         component_name = self.name
+
+        # For apbs, component name seems to have -apb appended.
+        # ex. http://dist-git.host.prod.eng.bos.redhat.com/cgit/apbs/openshift-enterprise-mediawiki/tree/Dockerfile?h=rhaos-3.7-rhel-7
+        if self.type == "apbs":
+            component_name = "%s-apb"
+
         if self.config.repo.component is not Missing:
             component_name = self.config.repo.component
 
