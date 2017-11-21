@@ -440,10 +440,11 @@ def distgits_print(runtime, pattern):
     \b
     {type} - The type of the distgit (e.g. rpms)
     {name} - The name of the distgit repository (e.g. openshift-enterprise-docker)
+    {component} - The component identified in the Dockerfile
     {image} - The image name in the Dockerfile
     {version} - The version field in the Dockerfile
     {release} - The release field in the Dockerfile
-    {build} - Shorthand for {name}-{version}-{release} (e.g. container-engine-docker-v3.6.173.0.25-1)
+    {build} - Shorthand for {component}-{version}-{release} (e.g. container-engine-docker-v3.6.173.0.25-1)
     {repository} - Shorthand for {image}:{version}-{release}
 
     If pattern contains no braces, it will be wrapped with them automatically. For example:
@@ -461,11 +462,13 @@ def distgits_print(runtime, pattern):
     for image in runtime.images():
         dfp = DockerfileParser()
         dfp.content = image.fetch_cgit_file("Dockerfile")
+
         s = pattern
-        s = s.replace("{build}", "{name}-{version}-{release}")
+        s = s.replace("{build}", "{component}-{version}-{release}")
         s = s.replace("{repository}", "{image}:{version}-{release}")
         s = s.replace("{type}", image.type)
         s = s.replace("{name}", image.name)
+        s = s.replace("{component}", image.get_component_name())
         s = s.replace("{image}", dfp.labels["name"])
         s = s.replace("{version}", dfp.labels["version"])
         s = s.replace("{release}", image.get_latest_build_release(dfp))
