@@ -127,10 +127,7 @@ class ImageMetadata(object):
         # e.g. brew search build registry-console-docker-v3.6.173.0.74-*
         #     -> registry-console-docker-v3.6.173.0.74-2
         #     -> registry-console-docker-v3.6.173.0.74-3
-        if self.type == "apbs":
-            pattern = '{}-apb-{}-*'.format(component_name, version)
-        else:
-            pattern = '{}-{}-*'.format(component_name, version)
+        pattern = '{}-{}-*'.format(component_name, version)
 
         rc, stdout, stderr = gather_exec(self.runtime,
                                          ["brew", "search", "build", pattern])
