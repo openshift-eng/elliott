@@ -412,14 +412,14 @@ class DistGitRepo(object):
                             # This can't be an enable, so skip it
                             continue
 
-                        arg = kvs[0].strip()
-                        val = kvs[1].strip()
+                        arg = kvs.pop(0).strip()
 
                         if arg != "enable" and arg != "enablerepo" and arg != "disable" and arg != "disablerepo":
                             continue
 
-                        repo_name = val
-                        df_repos.append(repo_name)
+                        # Must be a loop because:  yum-config-manager --enable repo1 repo2 repo3
+                        for repo_name in kvs:
+                            df_repos.append(repo_name)
 
         gc_repos = self.runtime.group_config.repos
         if gc_repos is Missing:
@@ -805,7 +805,7 @@ class DistGitRepo(object):
         # will be prefix by the OIT_COMMENT_PREFIX and followed by newlines in the Dockerfile.
         oit_comments = []
 
-        if not self.runtime.no_oit_comment and not self.config.get('no_oit_comment', False):
+        if not self.runtime.no_oit_comment and not self.config.get('no_oit_comments', False):
             oit_comments.extend([
                 "This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images",
                 "by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).",
