@@ -306,7 +306,7 @@ def distgits_copy(runtime, to_branch, message, push, replace):
 
 
 @cli.command("distgits:build-images", short_help="Build images for the group.")
-@click.option("--repo_type", required=True, metavar="REPO_TYPE",
+@click.option("--repo-type", required=True, metavar="REPO_TYPE",
               help="Repo type (i.e. signed, unsigned).")
 @click.option('--push-to-defaults', default=False, is_flag=True, help='Push to default registries when build completes.')
 @click.option("--push-to", default=[], metavar="REGISTRY", multiple=True,
