@@ -415,7 +415,7 @@ class DistGitRepo(object):
                         arg = kvs[0].strip()
                         val = kvs[1].strip()
 
-                        if arg != "enable" and arg != "enablerepo":
+                        if arg != "enable" and arg != "enablerepo" and arg != "disable" and arg != "disablerepo":
                             continue
 
                         repo_name = val
