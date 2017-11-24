@@ -284,7 +284,7 @@ def distgits_copy(runtime, to_branch, message, push, replace):
     """
     runtime.initialize()
 
-    if replace is not None:
+    if replace:
         raise IOError("'--replace' option not yet implemented")
 
     # If not pushing, do not clean up our work
