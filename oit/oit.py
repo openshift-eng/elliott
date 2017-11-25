@@ -28,11 +28,11 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("--branch", default=None, metavar='BRANCH',
               help="Branch to override any default in group.yml.")
 @click.option("-i", "--include", default=[], metavar='NAME', multiple=True,
-              help="Name of group members to include in operation (all by default).")
+              help="Name of group member to include in operation (all by default). Can be comma delimited list.")
 @click.option("-o", "--optional-include", default=[], metavar='NAME', multiple=True,
-              help="Name of group members to optionally include in operation. If not in current group, there will be no failure.")
+              help="Name of group member to optionally include in operation. Can be comma delimited list. If not in current group, there will be no failure.")
 @click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
-              help="Name of group members to exclude from operation (empty by default).")
+              help="Name of group member to exclude from operation (empty by default). Can be comma delimited list.")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
               help='Do not place OIT comment in Dockerfile. Can also be set in each config.yml')
