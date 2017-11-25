@@ -22,6 +22,17 @@ def close_file(f):
     f.close()
 
 
+# Iterates through a list of strings, detecting if any entries have a
+# comma delimited entry. If an entry contains a comma, it is split into
+# multiple entries.
+# The extended list is returned.
+def flatten_comma_delimited_entries(l):
+    nl = []
+    for e in l:
+        nl.extend(e.split(","))
+    return nl
+
+
 def remove_tmp_working_dir(runtime):
     if runtime.remove_tmp_working_dir:
         shutil.rmtree(runtime.working_dir)
@@ -37,6 +48,11 @@ class Runtime(object):
     log_lock = Lock()
 
     def __init__(self, **kwargs):
+
+        self.include = []
+        self.optional_include = []
+        self.exclude = []
+
         for key, val in kwargs.items():
             self.__dict__[key] = val
 
@@ -170,10 +186,16 @@ class Runtime(object):
                 self.info("Using branch from command line: %s" % self.branch)
 
             if len(self.include) > 0:
+                self.include = flatten_comma_delimited_entries(self.include)
                 self.info("Include list set to: %s" % str(self.include))
 
             if len(self.exclude) > 0:
+                self.exclude = flatten_comma_delimited_entries(self.exclude)
                 self.info("Exclude list set to: %s" % str(self.exclude))
+
+            if len(self.optional_include) > 0:
+                self.optional_include = flatten_comma_delimited_entries(self.optional_include)
+                self.info("Optional include list set to: %s" % str(self.optional_include))
 
             images_list = []
             if os.path.isdir(images_dir):
@@ -187,7 +209,7 @@ class Runtime(object):
                 with Dir(rpms_dir):
                     rpms_list = [x for x in os.listdir(".") if os.path.isdir(x)]
             else:
-                self.info('{} does not exist. Skipping RPM processing for group.'.format(rpms_dir))
+                self.log_verbose('{} does not exist. Skipping RPM processing for group.'.format(rpms_dir))
 
             # for later checking we need to remove from the lists, but they are tuples. Clone to list
             image_include = []
@@ -237,13 +259,12 @@ class Runtime(object):
                     for distgit_repo_name in name_list:
                         if check_include or check_optional_include:
                             if check_include and distgit_repo_name in include:
-                                self.info("include: " + distgit_repo_name)
+                                self.log_verbose("include: " + distgit_repo_name)
                                 include.remove(distgit_repo_name)
                             elif check_optional_include and distgit_repo_name in optional_include:
-                                self.info("optional_include: " + distgit_repo_name)
+                                self.log_verbose("optional_include: " + distgit_repo_name)
                                 optional_include.remove(distgit_repo_name)
                             else:
-                                self.info("{} skip: {}".format(search_type, distgit_repo_name))
                                 self.log_verbose("Skipping {} {} since it is not in the include list".format(search_type, distgit_repo_name))
                                 continue
 
