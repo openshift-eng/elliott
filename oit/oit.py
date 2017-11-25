@@ -305,7 +305,7 @@ def distgits_copy(runtime, to_branch, message, push, replace):
             dgr.push()
 
 
-@cli.command("distgits:build-images", short_help="Build images for the group.")
+@cli.command("distgits:build-image", short_help="Build images for the group.")
 @click.option("--repo-type", required=True, metavar="REPO_TYPE",
               help="Repo type (i.e. signed, unsigned).")
 @click.option('--push-to-defaults', default=False, is_flag=True, help='Push to default registries when build completes.')
@@ -313,7 +313,7 @@ def distgits_copy(runtime, to_branch, message, push, replace):
               help="Specific registries to push to when image build completes.  [multiple]")
 @click.option('--scratch', default=False, is_flag=True, help='Perform a scratch build.')
 @pass_runtime
-def distgits_build_images(runtime, repo_type, push_to_defaults, push_to, scratch):
+def distgits_build_image(runtime, repo_type, push_to_defaults, push_to, scratch):
     """
     Attempts to build container images for all of the distgit repositories
     in a group. If an image has already been built, it will be treated as
@@ -321,7 +321,7 @@ def distgits_build_images(runtime, repo_type, push_to_defaults, push_to, scratch
 
     If docker registries as specified, this action will push resultant
     images to those mirrors as they become available. Note that this should
-    be more performant than running distgits:push-images since pushes can
+    be more performant than running distgits:push-image since pushes can
     be performed in parallel with other images building.
     """
 
@@ -356,12 +356,12 @@ def distgits_build_images(runtime, repo_type, push_to_defaults, push_to, scratch
         image.distgit_repo().push_image(push_to, True)
 
 
-@cli.command("distgits:push-images", short_help="Push the most recent images to mirrors.")
+@cli.command("distgits:push-image", short_help="Push the most recent images to mirrors.")
 @click.option('--to-defaults', default=False, is_flag=True, help='Push to default registries.')
 @click.option("--to", default=[], metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
 @pass_runtime
-def distgits_push_images(runtime, to_defaults, to):
+def distgits_push_image(runtime, to_defaults, to):
     """
     Each distgit repository will be cloned and the version and release information
     will be extracted. That information will be used to determine the most recently
@@ -404,9 +404,9 @@ def distgits_push_images(runtime, to_defaults, to):
         image.distgit_repo().push_image(to, True)
 
 
-@cli.command("distgits:pull-images", short_help="Pull latest images from pulp")
+@cli.command("distgits:pull-image", short_help="Pull latest images from pulp")
 @pass_runtime
-def distgits_pull_images(runtime):
+def distgits_pull_image(runtime):
     """
     Pulls latest images from pull, fetching the dockerfiles from cgit to
     determine the version/release.
