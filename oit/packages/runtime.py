@@ -50,8 +50,6 @@ class Runtime(object):
     def __init__(self, **kwargs):
 
         self.include = []
-        self.optional_include = []
-        self.exclude = []
 
         for key, val in kwargs.items():
             self.__dict__[key] = val
@@ -98,7 +96,21 @@ class Runtime(object):
         # Create a "uuid" which will be used in FROM fields during updates
         self.uuid = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
-    def initialize(self):
+        # register the sources
+        # For each "--source alias path" on the command line, register its existence with
+        # the runtime.
+        for r in self.source:
+            self.register_source_alias(r[0], r[1])
+
+        if self.sources:
+            with open(self.sources, 'r') as sf:
+                source_dict = yaml.load(sf)
+                if not isinstance(source_dict, dict):
+                    raise ValueError('--sources param must be a yaml file containing a single dict.')
+                for key, val in source_dict.items():
+                    self.register_source_alias(key, val)
+
+    def initialize(self, mode='images'):
 
         if self.initialized:
             return
@@ -170,9 +182,6 @@ class Runtime(object):
                 raise IOError(
                     "Name in group.yml does not match group name. Someone may have copied this group without updating group.yml (make sure to check branch)")
 
-            if self.group_config.excludes is not Missing and self.exclude is None:
-                self.exclude = self.group_config.excludes
-
             if self.group_config.includes is not Missing and self.include is None:
                 self.include = self.group_config.includes
 
@@ -188,14 +197,6 @@ class Runtime(object):
             if len(self.include) > 0:
                 self.include = flatten_comma_delimited_entries(self.include)
                 self.info("Include list set to: %s" % str(self.include))
-
-            if len(self.exclude) > 0:
-                self.exclude = flatten_comma_delimited_entries(self.exclude)
-                self.info("Exclude list set to: %s" % str(self.exclude))
-
-            if len(self.optional_include) > 0:
-                self.optional_include = flatten_comma_delimited_entries(self.optional_include)
-                self.info("Optional include list set to: %s" % str(self.optional_include))
 
             images_list = []
             if os.path.isdir(images_dir):
@@ -213,34 +214,20 @@ class Runtime(object):
 
             # for later checking we need to remove from the lists, but they are tuples. Clone to list
             image_include = []
-            image_optional_include = []
-            image_exclude = []
-            for name in images_list:
-                if name in self.include:
-                    image_include.append(name)
-                if name in self.optional_include:
-                    image_optional_include.append(name)
-                if name in self.exclude:
-                    image_exclude.append(name)
+            if self.images:
+                for image in images_list:
+                    if image in self.images:
+                        image_include.append(image)
 
             rpm_include = []
-            rpm_optional_include = []
-            rpm_exclude = []
-            for name in rpms_list:
-                if name in self.include:
-                    rpm_include.append(name)
-                if name in self.optional_include:
-                    rpm_optional_include.append(name)
-                if name in self.exclude:
-                    rpm_exclude.append(name)
+            if self.rpms:
+                for rpm in rpms_list:
+                    if rpm in self.rpms:
+                        rpm_include.append(rpm)
 
-            missed_include = set(self.include) - set(image_include + rpm_include)
+            missed_include = set(self.images + self.rpms) - set(image_include + rpm_include)
             if len(missed_include) > 0:
                 raise IOError('Unable to find the following images or rpms configs: {}'.format(', '.join(missed_include)))
-
-            missed_optional_include = set(self.optional_include) - set(image_optional_include + rpm_optional_include)
-            if len(missed_optional_include) > 0:
-                self.info('The following images or rpms were not found, but optional: {}'.format(', '.join(missed_optional_include)))
 
             def gen_ImageMetadata(name):
                 self.image_map[name] = ImageMetadata(self, name, name)
@@ -248,40 +235,30 @@ class Runtime(object):
             def gen_RPMMetadata(name):
                 self.rpm_map[name] = RPMMetadata(self, name, name)
 
-            def collect_configs(search_type, search_dir, name_list, include, optional_include, exclude, gen):
+            def collect_configs(search_type, search_dir, name_list, include, gen):
                 if len(name_list) == 0:
-                    return # no configs of this type found, bail out
-                check_include = len(include) > 0
-                check_optional_include = len(optional_include) > 0
-                check_exclude = len(exclude) > 0
+                    return  # no configs of this type found, bail out
 
+                check_include = len(include) > 0
                 with Dir(search_dir):
                     for distgit_repo_name in name_list:
-                        if check_include or check_optional_include:
+                        if check_include:
                             if check_include and distgit_repo_name in include:
                                 self.log_verbose("include: " + distgit_repo_name)
                                 include.remove(distgit_repo_name)
-                            elif check_optional_include and distgit_repo_name in optional_include:
-                                self.log_verbose("optional_include: " + distgit_repo_name)
-                                optional_include.remove(distgit_repo_name)
                             else:
                                 self.log_verbose("Skipping {} {} since it is not in the include list".format(search_type, distgit_repo_name))
                                 continue
 
-                        if check_exclude and distgit_repo_name in self.exclude:
-                            self.info("{} exclude: {}".format(search_type, distgit_repo_name))
-                            self.log_verbose("Skipping {} {} since it is in the exclude list".format(search_type, distgit_repo_name))
-                            continue
-
                         gen(distgit_repo_name)
 
-            collect_configs('image', images_dir, images_list,
-                            image_include, image_optional_include,
-                            image_exclude, gen_ImageMetadata)
+            if mode in ['images', 'both']:
+                collect_configs('image', images_dir, images_list,
+                                image_include, gen_ImageMetadata)
 
-            collect_configs('rpm', rpms_dir, rpms_list,
-                            rpm_include, rpm_optional_include,
-                            rpm_exclude, gen_RPMMetadata)
+            if mode in ['rpms', 'both']:
+                collect_configs('rpm', rpms_dir, rpms_list,
+                                rpm_include, gen_RPMMetadata)
 
         if len(self.image_map) + len(self.rpm_map) == 0:
             raise IOError("No image or rpm metadata directories found within: {}".format(group_dir))
@@ -309,8 +286,14 @@ class Runtime(object):
             with self.log_lock:
                 click.echo(message)
 
-    def images(self):
+    def image_metas(self):
         return self.image_map.values()
+
+    def rpm_metas(self):
+        return self.rpm_map.values()
+
+    def all_metas(self):
+        return self.image_metas() + self.rpm_metas()
 
     def register_source_alias(self, alias, path):
         self.info("Registering source alias %s: %s" % (alias, path))
@@ -442,6 +425,11 @@ class Runtime(object):
                     raise IOError("Error checking out target branch of source '%s' in: %s" % (alias, source_dir))
                 else:
                     return None
+
+    def export_sources(self, output):
+        self.info('Writing sources to {}'.format(output))
+        with open(output, 'w') as sources_file:
+            yaml.dump(self.source_paths, sources_file, default_flow_style=False)
 
     def _flag_file(self, flag_name):
         return os.path.join(self.flags_dir, flag_name)
