@@ -427,6 +427,7 @@ class DistGitRepo(object):
             raise ValueError(msg)
 
         def resolve_repo(name, cfg):
+            cfg = dict(cfg)  # Make a copy so as to not modify the group definition
             cfg['name'] = cfg.get('name', name)
             cfg['enabled'] = cfg.get('enabled', 0)
             cfg['gpgcheck'] = cfg.get('gpgcheck', 0)
