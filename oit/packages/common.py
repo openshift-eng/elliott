@@ -8,6 +8,7 @@ from dockerfile_parse import DockerfileParser
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
 
+
 class Dir(object):
 
     def __init__(self, dir):
@@ -44,15 +45,20 @@ def assert_rc0(rc, msg):
         raise IOError("Command returned non-zero exit status: %s" % msg)
 
 
-def assert_exec(runtime, cmd_list):
-    assert_rc0(exec_cmd(runtime, cmd_list), "Error running %s. See debug log: %s." % (cmd_list, runtime.debug_log_path))
+def assert_exec(runtime, cmd):
+    assert_rc0(exec_cmd(runtime, cmd), "Error running %s. See debug log: %s." % (cmd, runtime.debug_log_path))
 
 
-def exec_cmd(runtime, cmd_list):
+def exec_cmd(runtime, cmd):
     """
     Executes a command, redirecting its output to the log file.
     :return: exit code
     """
+    if not isinstance(cmd, list):
+        cmd_list = cmd.split(' ')
+    else:
+        cmd_list = cmd
+
     runtime.log_verbose("\nExecuting: %s" % cmd_list)
     # https://stackoverflow.com/a/7389473
     runtime.debug_log.flush()
@@ -81,7 +87,9 @@ def recursive_overwrite(runtime, src, dest, ignore=set()):
     assert_exec(runtime, cmd.split(' '))
 
 
-class RetryException(Exception): pass
+class RetryException(Exception):
+    pass
+
 
 def retry(n, f, check_f=bool, wait_f=None):
     for c in xrange(n):
