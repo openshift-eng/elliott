@@ -46,7 +46,7 @@ def assert_rc0(rc, msg):
 def assert_exec(runtime, cmd, retries=1):
     rc = 0
 
-    for t in range(1, retries):
+    for t in range(0, retries):
         if t > 1:
             runtime.log_verbose("Retrying previous invocation in 60 seconds: %s" % cmd)
             time.sleep(60)
