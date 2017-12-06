@@ -51,11 +51,11 @@ def assert_exec(runtime, cmd, retries=1):
             runtime.log_verbose("Retrying previous invocation in 60 seconds: %s" % cmd)
             time.sleep(60)
 
-        rc = exec_cmd(runtime, cmd), "Error running %s. See debug log: %s." % (cmd, runtime.debug_log_path)
+        rc = exec_cmd(runtime, cmd)
         if rc == 0:
             break
 
-    assert_rc0(rc)
+    assert_rc0(rc, "Error running %s. See debug log: %s." % (cmd, runtime.debug_log_path))
 
 
 def exec_cmd(runtime, cmd):
