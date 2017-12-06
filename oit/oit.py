@@ -108,6 +108,10 @@ def rpms_build(runtime, version, release, scratch):
             'scratch': scratch
         }))
 
+    if not len(items):
+        runtime.info("No RPMs found. Check the arguments.")
+        exit(0)
+
     pool = ThreadPool(len(items))
     results = pool.map(lambda ((rpm, args)): rpm.build_rpm(**args), items)
 
@@ -386,6 +390,10 @@ def images_build_image(runtime, repo_type, push_to_defaults, push_to, scratch):
     # clarity in the logs.
     for image in runtime.image_metas():
         items.append((image.distgit_repo(), (repo_type, push_to, scratch)))
+
+    if not len(items):
+        runtime.info("No images found. Check the arguments.")
+        exit(0)
 
     pool = ThreadPool(len(items))
     results = pool.map(lambda ((dgr, args)): dgr.build_container(*args), items)
