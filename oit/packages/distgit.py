@@ -70,8 +70,8 @@ class DistGitRepo(object):
 
                 self.info("Cloning distgit repository [branch:%s] into: %s" % (distgit_branch, self.distgit_dir))
 
-                # Clone the distgit repository
-                assert_exec(self.runtime, cmd_list)
+                # Clone the distgit repository. Occasional flakes in clone, so use retry.
+                assert_exec(self.runtime, cmd_list, retries=3)
 
             with Dir(self.distgit_dir):
 
@@ -554,7 +554,7 @@ class ImageDistGitRepo(DistGitRepo):
     def push(self):
         with Dir(self.distgit_dir):
             self.info("Pushing repository")
-            assert_exec(self.runtime, ["rhpkg", "push"])
+            assert_exec(self.runtime, ["rhpkg", "push"], retries=3)
             # rhpkg will create but not push tags :(
             # Not asserting this exec since this is non-fatal if the tag already exists
             gather_exec(self.runtime, ['git', 'push', '--tags'])

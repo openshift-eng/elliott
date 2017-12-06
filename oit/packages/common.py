@@ -1,9 +1,7 @@
 import os
 import errno
 import subprocess
-import shutil
-import urllib
-from dockerfile_parse import DockerfileParser
+import time
 
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
@@ -45,8 +43,19 @@ def assert_rc0(rc, msg):
         raise IOError("Command returned non-zero exit status: %s" % msg)
 
 
-def assert_exec(runtime, cmd):
-    assert_rc0(exec_cmd(runtime, cmd), "Error running %s. See debug log: %s." % (cmd, runtime.debug_log_path))
+def assert_exec(runtime, cmd, retries=1):
+    rc = 0
+
+    for t in range(1, retries):
+        if t > 1:
+            runtime.log_verbose("Retrying previous invocation in 60 seconds: %s" % cmd)
+            time.sleep(60)
+
+        rc = exec_cmd(runtime, cmd), "Error running %s. See debug log: %s." % (cmd, runtime.debug_log_path)
+        if rc == 0:
+            break
+
+    assert_rc0(rc)
 
 
 def exec_cmd(runtime, cmd):
