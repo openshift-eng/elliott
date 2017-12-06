@@ -260,8 +260,11 @@ class Runtime(object):
                 collect_configs('rpm', rpms_dir, rpms_list,
                                 rpm_include, gen_RPMMetadata)
 
-        if len(self.image_map) + len(self.rpm_map) == 0:
-            raise IOError("No image or rpm metadata directories found within: {}".format(group_dir))
+        if len(self.image_map) == 0:
+            self.info("WARNING: No image metadata directories found within: {}".format(group_dir))
+
+        if len(self.image_map) == 0:
+            self.info("WARNING: No rpm metadata directories found within: {}".format(group_dir))
 
         # Read in the streams definite for this group if one exists
         streams_path = os.path.join(group_dir, "streams.yml")
