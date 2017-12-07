@@ -285,58 +285,77 @@ class ImageDistGitRepo(DistGitRepo):
             if self.config.alt_name is not Missing:
                 names.append(self.config.alt_name)
 
-            for image_name in names:
-                # Read in information about the image we are about to build
-                dfp = DockerfileParser(path="Dockerfile")
-                version = dfp.labels["version"]
+            # Read in information about the image we are about to build
+            dfp = DockerfileParser(path="Dockerfile")
+            version = dfp.labels["version"]
 
-                # We used to rely on the "release" label being set, but this is problematic for several reasons.
-                # (1) If 'release' is not set, OSBS will determine one automatically that does not conflict
-                #       with a pre-existing image build. This is extremely helpful since we don't have to
-                #       worry about bumping the release during refresh images. This means we generally DON'T
-                #       want the release label in the file and can't, therefore, rely on it being there.
-                # (2) People have logged into distgit before in order to bump the release field. This happening
-                #       at the wrong time breaks the build.
+            # We used to rely on the "release" label being set, but this is problematic for several reasons.
+            # (1) If 'release' is not set, OSBS will determine one automatically that does not conflict
+            #       with a pre-existing image build. This is extremely helpful since we don't have to
+            #       worry about bumping the release during refresh images. This means we generally DON'T
+            #       want the release label in the file and can't, therefore, rely on it being there.
+            # (2) People have logged into distgit before in order to bump the release field. This happening
+            #       at the wrong time breaks the build.
 
-                release = self.metadata.get_latest_build_release(dfp)
+            release = self.metadata.get_latest_build_release(dfp)
 
-                push_tags = [
-                    "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
-                    "%s" % version,  # e.g. "v3.7.0"
-                ]
-
-                # In v3.7, we use the last .0 in the release as a bump field to differentiate
-                # image refreshes. Strip this off since OCP will have no knowledge of it when reaching
-                # out for its node image.
-                if "." in release:
-                    # Strip off the last field; "0.114.0.0" -> "0.114.0"
-                    push_tags.append("%s-%s" % (version, release.rsplit(".", 1)[0]))
-
-                # Push as v3.X; "v3.7.0" -> "v3.7"
-                push_tags.append("%s" % (version.rsplit(".", 1)[0]))
-
-                action = "push"
+            try:
                 record = {
                     "dir": self.distgit_dir,
                     "dockerfile": "%s/Dockerfile" % self.distgit_dir,
-                    "image": image_name,
+                    "image": self.config.name,
                     "version": version,
                     "release": release,
                     "message": "Unknown failure",
-                    "tags": ",".join(push_tags),
-                    "registries": ",".join(push_to_list),
                     "status": -1,
                     # Status defaults to failure until explicitly set by success. This handles raised exceptions.
                 }
+                # pull just the main image name first
+                image_name_and_version = "%s:%s-%s" % (self.config.name, version, release)
+                brew_image_url = "/".join((BREW_IMAGE_HOST, image_name_and_version))
+                pull_image(self.runtime, brew_image_url)
+                record['message'] = "Successfully pulled image"
+                record['status'] = 0
+            except Exception as err:
+                record["message"] = "Exception occurred: %s" % str(err)
+                self.info("Error pulling %s: %s" % (self.metadata.name, err))
+                raise err
+            finally:
+                self.runtime.add_record('pull', **record)
 
+            for image_name in names:
                 try:
-                    image_name_and_version = "%s:%s-%s" % (image_name, version, release)
-                    brew_image_url = "/".join((BREW_IMAGE_HOST, image_name_and_version))
-                    pull_image(self.runtime, brew_image_url)
+                    push_tags = [
+                        "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
+                        "%s" % version,  # e.g. "v3.7.0"
+                    ]
+
+                    # In v3.7, we use the last .0 in the release as a bump field to differentiate
+                    # image refreshes. Strip this off since OCP will have no knowledge of it when reaching
+                    # out for its node image.
+                    if "." in release:
+                        # Strip off the last field; "0.114.0.0" -> "0.114.0"
+                        push_tags.append("%s-%s" % (version, release.rsplit(".", 1)[0]))
+
+                    # Push as v3.X; "v3.7.0" -> "v3.7"
+                    push_tags.append("%s" % (version.rsplit(".", 1)[0]))
+
+                    action = "push"
+                    record = {
+                        "dir": self.distgit_dir,
+                        "dockerfile": "%s/Dockerfile" % self.distgit_dir,
+                        "image": image_name,
+                        "version": version,
+                        "release": release,
+                        "message": "Unknown failure",
+                        "tags": ",".join(push_tags),
+                        "registries": ",".join(push_to_list),
+                        "status": -1,
+                        # Status defaults to failure until explicitly set by success. This handles raised exceptions.
+                    }
 
                     for push_to in push_to_list:
                         for push_tag in push_tags:
-
                             # If someone passed in a URL with a trailing slash, prevent it from triggering our
                             # namespace override logic.
                             push_to = push_to.rstrip("/")
