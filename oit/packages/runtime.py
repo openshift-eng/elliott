@@ -253,18 +253,14 @@ class Runtime(object):
                         gen(distgit_repo_name)
 
             if mode in ['images', 'both']:
-                collect_configs('image', images_dir, images_list,
-                                image_include, gen_ImageMetadata)
+                collect_configs('image', images_dir, images_list, image_include, gen_ImageMetadata)
+                if not self.image_map:
+                    self.info("WARNING: No image metadata directories found within: {}".format(group_dir))
 
             if mode in ['rpms', 'both']:
-                collect_configs('rpm', rpms_dir, rpms_list,
-                                rpm_include, gen_RPMMetadata)
-
-        if len(self.image_map) == 0:
-            self.info("WARNING: No image metadata directories found within: {}".format(group_dir))
-
-        if len(self.image_map) == 0:
-            self.info("WARNING: No rpm metadata directories found within: {}".format(group_dir))
+                collect_configs('rpm', rpms_dir, rpms_list, rpm_include, gen_RPMMetadata)
+                if not self.rpm_map:
+                    self.info("WARNING: No rpm metadata directories found within: {}".format(group_dir))
 
         # Read in the streams definite for this group if one exists
         streams_path = os.path.join(group_dir, "streams.yml")
