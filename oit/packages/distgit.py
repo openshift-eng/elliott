@@ -246,11 +246,15 @@ class ImageDistGitRepo(DistGitRepo):
 
     def _read_master_data(self):
         with Dir(self.distgit_dir):
+            self.org_image_name = None
+            self.org_version = None
+            self.org_release = None
             # Read in information about the image we are about to build
-            dfp = DockerfileParser(path="Dockerfile")
-            self.org_image_name = dfp.labels["name"]
-            self.org_version = dfp.labels["version"]
-            self.org_release = dfp.labels.get("release")  # occasionally no release given
+            if os.path.isfile('Dockerfile'):
+                dfp = DockerfileParser(path="Dockerfile")
+                self.org_image_name = dfp.labels["name"]
+                self.org_version = dfp.labels["version"]
+                self.org_release = dfp.labels.get("release")  # occasionally no release given
 
     def push_image(self, push_to_list, push_late=False):
 
@@ -420,6 +424,12 @@ class ImageDistGitRepo(DistGitRepo):
         :param retries: Number of times the build should be retried.
         :return: True if the build was successful
         """
+        if self.org_image_name is None or self.org_version is None:
+            if not os.path.isfile(os.path.join(self.distgit_dir, 'Dockerfile')):
+                self.info('No Dockerfile found in {}'.format(self.distgit_dir))
+            else:
+                self.info('Unknown error loading Dockerfile information')
+            return False
 
         action = "build"
         release = self.org_release if self.org_release is not None else '?'
