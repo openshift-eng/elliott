@@ -453,7 +453,7 @@ class ImageDistGitRepo(DistGitRepo):
                 self.info("Image already built for: {}".format(target_image))
             else:
                 # If this image is FROM another group member, we need to wait on that group member
-                if self.config["from"].member is not Missing:
+                if self.config.get('from', Missing).member is not Missing:
                     parent_name = self.config["from"].member
                     parent_img = self.runtime.resolve_image(parent_name, False)
                     if parent_img is None:
@@ -653,28 +653,29 @@ class ImageDistGitRepo(DistGitRepo):
             # Set the distgit repo name
             dfp.labels["com.redhat.component"] = self.metadata.get_component_name()
 
-            # Does this image inherit from an image defined in a different distgit?
-            if self.config["from"].member is not Missing:
-                base = self.config["from"].member
-                from_image_metadata = self.runtime.resolve_image(base, False)
+            if 'from' in self.config:
+                # Does this image inherit from an image defined in a different distgit?
+                if self.config["from"].member is not Missing:
+                    base = self.config["from"].member
+                    from_image_metadata = self.runtime.resolve_image(base, False)
 
-                if from_image_metadata is None:
-                    if not ignore_missing_base:
-                        raise IOError("Unable to find base image metadata [%s] in included images. Use --ignore-missing-base to ignore." % base)
-                    # Otherwise, the user is not expecting the FROM field to be updated in this Dockerfile.
-                else:
-                    # Everything in the group is going to be built with the uuid tag, so we must
-                    # assume that it will exist for our parent.
-                    dfp.baseimage = "%s:%s" % (from_image_metadata.config.name, uuid_tag)
+                    if from_image_metadata is None:
+                        if not ignore_missing_base:
+                            raise IOError("Unable to find base image metadata [%s] in included images. Use --ignore-missing-base to ignore." % base)
+                        # Otherwise, the user is not expecting the FROM field to be updated in this Dockerfile.
+                    else:
+                        # Everything in the group is going to be built with the uuid tag, so we must
+                        # assume that it will exist for our parent.
+                        dfp.baseimage = "%s:%s" % (from_image_metadata.config.name, uuid_tag)
 
-            # Is this image FROM another literal image name:tag?
-            if self.config["from"].image is not Missing:
-                dfp.baseimage = self.config["from"].image
+                # Is this image FROM another literal image name:tag?
+                if self.config["from"].image is not Missing:
+                    dfp.baseimage = self.config["from"].image
 
-            if self.config["from"].stream is not Missing:
-                stream = self.runtime.resolve_stream(self.config["from"].stream)
-                # TODO: implement expriring images?
-                dfp.baseimage = stream.image
+                if self.config["from"].stream is not Missing:
+                    stream = self.runtime.resolve_stream(self.config["from"].stream)
+                    # TODO: implement expriring images?
+                    dfp.baseimage = stream.image
 
             # Set image name in case it has changed
             dfp.labels["name"] = self.config.name
