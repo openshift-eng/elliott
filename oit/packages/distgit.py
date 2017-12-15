@@ -453,8 +453,9 @@ class ImageDistGitRepo(DistGitRepo):
                 self.info("Image already built for: {}".format(target_image))
             else:
                 # If this image is FROM another group member, we need to wait on that group member
-                if self.config.get('from', Missing).member is not Missing:
-                    parent_name = self.config["from"].member
+                image_from = Model(self.config.get('from', None))
+                if image_from.member is not Missing:
+                    parent_name = image_from.member
                     parent_img = self.runtime.resolve_image(parent_name, False)
                     if parent_img is None:
                         self.info("Skipping parent image build since it is not included: %s" % parent_name)
@@ -654,9 +655,10 @@ class ImageDistGitRepo(DistGitRepo):
             dfp.labels["com.redhat.component"] = self.metadata.get_component_name()
 
             if 'from' in self.config:
+                image_from = Model(self.config.get('from', None))
                 # Does this image inherit from an image defined in a different distgit?
-                if self.config["from"].member is not Missing:
-                    base = self.config["from"].member
+                if image_from.member is not Missing:
+                    base = image_from.member
                     from_image_metadata = self.runtime.resolve_image(base, False)
 
                     if from_image_metadata is None:
@@ -669,11 +671,11 @@ class ImageDistGitRepo(DistGitRepo):
                         dfp.baseimage = "%s:%s" % (from_image_metadata.config.name, uuid_tag)
 
                 # Is this image FROM another literal image name:tag?
-                if self.config["from"].image is not Missing:
-                    dfp.baseimage = self.config["from"].image
+                if image_from.image is not Missing:
+                    dfp.baseimage = image_from.image
 
-                if self.config["from"].stream is not Missing:
-                    stream = self.runtime.resolve_stream(self.config["from"].stream)
+                if image_from.stream is not Missing:
+                    stream = self.runtime.resolve_stream(image_from.stream)
                     # TODO: implement expriring images?
                     dfp.baseimage = stream.image
 
