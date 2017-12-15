@@ -130,6 +130,7 @@ class Runtime(object):
             self.remove_tmp_working_dir = True
             atexit.register(remove_tmp_working_dir, self)
         else:
+            self.working_dir = os.path.abspath(self.working_dir)
             assert_dir(self.working_dir, "Invalid working directory")
 
         self.distgits_dir = os.path.join(self.working_dir, "distgits")
