@@ -538,7 +538,10 @@ def images_print(runtime, pattern):
         s = s.replace("{component}", image.get_component_name())
         s = s.replace("{image}", dfp.labels["name"])
         s = s.replace("{version}", dfp.labels["version"])
-        s = s.replace("{release}", image.get_latest_build_release(dfp))
+
+        # Since querying release takes time, check before executing replace
+        if "{release}" in s:
+            s = s.replace("{release}", image.get_latest_build_release(dfp))
 
         if "{" in s:
             raise IOError("Unrecognized fields remaining in pattern: %s" % s)
