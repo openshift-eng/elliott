@@ -138,8 +138,11 @@ def rpms_build(runtime, version, release, scratch):
 def images_list(runtime):
     runtime.initialize()
 
+    click.echo("------------------------------------------")
     for image in runtime.image_metas():
         click.echo(image.qualified_name)
+    click.echo("------------------------------------------")
+    click.echo("%s images" % len(runtime.image_metas()))
 
 
 @cli.command("images:push-distgit", short_help="Push all distgist repos in working-dir.")
@@ -543,6 +546,7 @@ def images_print(runtime, pattern):
         click.echo(s)
 
     click.echo("------------------------------------------")
+    click.echo("%s images" % len(runtime.image_metas()))
 
 
 @cli.command("images:print-config-template", short_help="Create template config.yml from distgit Dockerfile.")
