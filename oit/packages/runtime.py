@@ -300,6 +300,29 @@ class Runtime(object):
         path = os.path.abspath(path)
         assert_dir(path, "Error registering source alias %s" % alias)
         self.source_paths[alias] = path
+        with Dir(path):
+            origin_url = "?"
+            rc1, out_origin, err_origin = gather_exec(self, ["git", "config", "--get", "remote.origin.url"])
+            if rc1 == 0:
+                origin_url = out_origin.strip()
+                # Usually something like "git@github.com:openshift/origin.git"
+                # But we want an https hyperlink like http://github.com/openshift/origin
+                if origin_url.startswith("git@"):
+                    origin_url = origin_url[4:]  # remove git@
+                    origin_url = origin_url[:-4]  # remove .git
+                    origin_url = origin_url.replace(":", "/", 1)  # replace first colon with /
+                    origin_url = "https://%s" % origin_url
+            else:
+                self.info("Error acquiring origin url for source alias %s: %s" % (alias, err_origin))
+
+            branch = "?"
+            rc2, out_branch, err_branch = gather_exec(self, ["git", "rev-parse", "--abbrev-ref", "HEAD"])
+            if rc2 == 0:
+                branch = out_branch.strip()
+            else:
+                self.info("Error acquiring origin branch for source alias %s: %s" % (alias, err_branch))
+
+            self.add_record("source_alias", alias=alias, origin_url=origin_url, branch=branch, path=path)
 
     def register_stream_alias(self, alias, image):
         self.info("Registering image stream alias override %s: %s" % (alias, image))
@@ -418,7 +441,7 @@ class Runtime(object):
 
             if found:
                 # Store so that the next attempt to resolve the source hits the map
-                self.source_paths[alias] = source_dir
+                self.register_source_alias(alias, source_dir)
                 return source_dir
             else:
                 if required:
