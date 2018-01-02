@@ -96,20 +96,6 @@ class Runtime(object):
         # Create a "uuid" which will be used in FROM fields during updates
         self.uuid = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
-        # register the sources
-        # For each "--source alias path" on the command line, register its existence with
-        # the runtime.
-        for r in self.source:
-            self.register_source_alias(r[0], r[1])
-
-        if self.sources:
-            with open(self.sources, 'r') as sf:
-                source_dict = yaml.load(sf)
-                if not isinstance(source_dict, dict):
-                    raise ValueError('--sources param must be a yaml file containing a single dict.')
-                for key, val in source_dict.items():
-                    self.register_source_alias(key, val)
-
     def initialize(self, mode='images'):
 
         if self.initialized:
@@ -171,6 +157,20 @@ class Runtime(object):
 
         rpms_dir = os.path.join(group_dir, 'rpms')
         assert_dir(group_dir, "Cannot find rpms directory for {}".format(group_dir))
+
+        # register the sources
+        # For each "--source alias path" on the command line, register its existence with
+        # the runtime.
+        for r in self.source:
+            self.register_source_alias(r[0], r[1])
+
+        if self.sources:
+            with open(self.sources, 'r') as sf:
+                source_dict = yaml.load(sf)
+                if not isinstance(source_dict, dict):
+                    raise ValueError('--sources param must be a yaml file containing a single dict.')
+                for key, val in source_dict.items():
+                    self.register_source_alias(key, val)
 
         self.info("Searching group directory: %s" % group_dir)
         with Dir(group_dir):
