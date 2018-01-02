@@ -214,14 +214,46 @@ class Runtime(object):
                 self.log_verbose('{} does not exist. Skipping RPM processing for group.'.format(rpms_dir))
 
             # for later checking we need to remove from the lists, but they are tuples. Clone to list
+            def flatten_names(names):
+                if not names:
+                    return []
+                # split csv values
+                result = []
+                for n in names:
+                    result.append([x for x in n.replace(' ', ',').split(',') if x != ''])
+                # flatten result and remove dupes
+                return list(set([y for x in result for y in x]))
+
+            # process excludes before images and rpms
+            # to ensure they never get added, -x is global
+            self.exclude = flatten_names(self.exclude)
+            if self.exclude:
+                for x in self.exclude:
+                    if x in images_list:
+                        images_list.remove(x)
+                    if x in rpms_list:
+                        rpms_list.remove(x)
+
             image_include = []
+            self.images = flatten_names(self.images)
             if self.images:
+                also_exclude = set(self.images).intersection(set(self.exclude))
+                if len(also_exclude):
+                    self.info(
+                        "Warning: The following images were included and excluded but exclusion takes precendence: {}".format(', '.join(also_exclude))
+                    )
                 for image in images_list:
                     if image in self.images:
                         image_include.append(image)
 
             rpm_include = []
+            self.rpms = flatten_names(self.rpms)
             if self.rpms:
+                also_exclude = set(self.rpms).intersection(set(self.exclude))
+                if len(also_exclude):
+                    self.info(
+                        "Warning: The following rpms were included and excluded but exclusion takes precendence: {}".format(', '.join(also_exclude))
+                    )
                 for rpm in rpms_list:
                     if rpm in self.rpms:
                         rpm_include.append(rpm)
