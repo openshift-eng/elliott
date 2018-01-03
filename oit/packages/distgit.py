@@ -590,8 +590,8 @@ class ImageDistGitRepo(DistGitRepo):
             # Not asserting this exec since this is non-fatal if the tag already exists
             gather_exec(self.runtime, ['git', 'push', '--tags'])
 
-    def update_dockerfile(self, version, release, ignore_missing_base=False):
-
+    def update_dockerfile(self, version, release):
+        ignore_missing_base = self.runtime.ignore_missing_base
         # A collection of comment lines that will be included in the generated Dockerfile. They
         # will be prefix by the OIT_COMMENT_PREFIX and followed by newlines in the Dockerfile.
         oit_comments = []
@@ -885,7 +885,7 @@ class ImageDistGitRepo(DistGitRepo):
         with open('Dockerfile', 'w') as df:
             df.write(dockerfile_data)
 
-    def rebase_dir(self, version, release, ignore_missing_base=False):
+    def rebase_dir(self, version, release):
 
         with Dir(self.distgit_dir):
 
@@ -908,7 +908,7 @@ class ImageDistGitRepo(DistGitRepo):
             if self.config.content.source.modifications is not Missing:
                 self._run_modifications()
 
-        self.update_dockerfile(version, release, ignore_missing_base)
+        self.update_dockerfile(version, release)
 
 
 class RPMDistGitRepo(DistGitRepo):

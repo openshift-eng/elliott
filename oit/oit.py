@@ -31,6 +31,9 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="Name of group image member to include in operation (all by default). Can be comma delimited list.")
 @click.option("-r", "--rpms", default=[], metavar='NAME', multiple=True,
               help="Name of group rpm member to include in operation (all by default). Can be comma delimited list.")
+@click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
+              help="Name of group image or rpm member to exclude in operation (none by default). Can be comma delimited list.")
+@click.option('--ignore-missing-base', default=False, is_flag=True, help='If a base image is not included, proceed and do not update FROM.')
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
               help='Do not place OIT comment in Dockerfile. Can also be set in each config.yml')
@@ -165,11 +168,10 @@ def images_push_distgit(runtime):
               help="Associate an image name with a given stream alias.  [multiple]")
 @click.option("--version", metavar='VERSION', default=None, help="Version string to populate in Dockerfiles.")
 @click.option("--release", metavar='RELEASE', default=None, help="Release label to populate in Dockerfiles (or + to bump).")
-@click.option('--ignore-missing-base', default=False, is_flag=True, help='If a base image is not included, proceed and do not update FROM.')
 @option_commit_message
 @option_push
 @pass_runtime
-def images_update_dockerfile(runtime, stream, version, release, ignore_missing_base, message, push):
+def images_update_dockerfile(runtime, stream, version, release, message, push):
     """
     Updates the Dockerfile in each distgit repository with the latest metadata and
     the version/release information specified. This does not update the Dockerfile
@@ -195,7 +197,7 @@ def images_update_dockerfile(runtime, stream, version, release, ignore_missing_b
 
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
-        dgr.update_dockerfile(version, release, ignore_missing_base)
+        dgr.update_dockerfile(version, release)
         dgr.commit(message)
         dgr.tag(version, release)
 
@@ -210,11 +212,10 @@ def images_update_dockerfile(runtime, stream, version, release, ignore_missing_b
               help="Associate an image name with a given stream alias.  [multiple]")
 @click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.")
 @click.option("--release", metavar='RELEASE', default=None, help="Release string to populate in Dockerfiles.")
-@click.option('--ignore-missing-base', default=False, is_flag=True, help='If a base image is not included, proceed and do not update FROM.')
 @option_commit_message
 @option_push
 @pass_runtime
-def images_rebase(runtime, stream, version, release, ignore_missing_base, message, push):
+def images_rebase(runtime, stream, version, release, message, push):
     """
     Many of the Dockerfiles stored in distgit are based off of content managed in GitHub.
     For example, openshift-enterprise-node-docker should always closely reflect the changes
@@ -242,7 +243,7 @@ def images_rebase(runtime, stream, version, release, ignore_missing_base, messag
 
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
-        dgr.rebase_dir(version, release, ignore_missing_base)
+        dgr.rebase_dir(version, release)
         sha = dgr.commit(message, log_diff=True)
         dgr.tag(version, release)
         runtime.add_record("distgit_commit", distgit=dgr.metadata.qualified_name,
