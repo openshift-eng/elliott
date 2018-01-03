@@ -436,6 +436,7 @@ class ImageDistGitRepo(DistGitRepo):
         record = {
             "dir": self.distgit_dir,
             "dockerfile": "%s/Dockerfile" % self.distgit_dir,
+            "distgit": self.metadata.name,
             "image": self.org_image_name,
             "version": self.org_version,
             "release": release,
@@ -473,6 +474,7 @@ class ImageDistGitRepo(DistGitRepo):
                         f=lambda: self._build_container(target_image, repo_type, scratch, record))
                 except RetryException as err:
                     self.info(str(err))
+                    record["message"] = str(err)
                     return False
             record["message"] = "Success"
             record["status"] = 0
@@ -513,7 +515,6 @@ class ImageDistGitRepo(DistGitRepo):
         separated for clarity.
         """
         self.info("Building image: %s" % target_image)
-
         cmd_list = ["rhpkg", "--path=%s" % self.distgit_dir]
 
         if self.runtime.user is not None:
