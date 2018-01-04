@@ -536,6 +536,8 @@ class ImageDistGitRepo(DistGitRepo):
         if rc != 0:
             # Probably no point in continuing.. can't contact brew?
             self.info("Unable to create brew task: out={}  ; err={}".format(out, err))
+            record["task_id"] = "n/a"
+            record["task_url"] = "n/a"
             return False
 
         # Otherwise, we should have a brew task we can monitor listed in the stdout.
