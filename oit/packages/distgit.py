@@ -441,6 +441,8 @@ class ImageDistGitRepo(DistGitRepo):
             "version": self.org_version,
             "release": release,
             "message": "Unknown failure",
+            "task_id": "n/a",
+            "task_url": "n/a",
             "status": -1,
             # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
         }
