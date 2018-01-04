@@ -624,5 +624,57 @@ def distgit_config_template(url):
     yaml.safe_dump(config, sys.stdout, indent=2, default_flow_style=False)
 
 
+@cli.command(
+    "completion", short_help="Output bash completion function",
+    help="""\
+Generate a bash function for auto-completion on the command line. The output
+is formatted so that it can be fed to the shell's `source` command directly:
+
+    $ source <(/path/to/oit completion)
+""")
+def completion():
+    click.echo("""\
+_oit_completion() {
+    local cmd word prev mdir group types
+    cmd=$1; word=$2; prev=$3
+    set -- "${COMP_WORDS[@]}"
+    mdir=groups; group=
+    while [[ "${#}" -gt 0 ]]; do
+        case "${1}" in
+            --metadata-dir) mdir=${2}; shift; shift; ;;
+            --group) group=${2}; shift; shift; ;;
+            *) shift;
+        esac
+    done
+    case "${prev}" in
+        -i|--images) types=images ;;
+        -r|--rpms) types=rpms ;;
+        -x|--exclude) types='images rpms' ;;
+        --group)
+            if [ -d "${mdir}" ]; then
+                COMPREPLY=( $(compgen -W "$(ls "${mdir}")" -- "${word}") )
+            fi
+            return ;;
+        *) COMPREPLY=( $(env \
+                COMP_WORDS="${COMP_WORDS[*]}" \
+                COMP_CWORD=$COMP_CWORD \
+                _%s_COMPLETE=complete "${cmd}") )
+            return ;;
+    esac
+    group=$(echo "${group}" | tr , '\n')
+    group=$( \
+        cd "${mdir}" \
+        && for g in ${group:-*}; do \
+            for t in ${types}; do \
+                [ -d "${g}/${t}" ] && ls "${g}/${t}" || :; \
+            done \
+        done \
+        | sort -u)
+    COMPREPLY=( $(compgen -W "${group}" -- "${word}") )
+}
+complete -F _oit_completion -o default %s
+""" % (os.path.basename(sys.argv[0].replace("-", "_")).upper(), sys.argv[0]))
+
+
 if __name__ == '__main__':
     cli(obj={})
