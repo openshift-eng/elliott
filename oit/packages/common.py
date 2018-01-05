@@ -83,7 +83,7 @@ def gather_exec(runtime, cmd_list):
     :param cmd_list: The command and arguments to execute
     :return: (rc,stdout,stderr)
     """
-    runtime.log_verbose("\nExecuting:gather_exec: %s" % cmd_list)
+    runtime.log_verbose("\nExecuting:gather_exec: %s" % str(cmd_list))
     p = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
     runtime.log_verbose("Process exited with: %d\nstdout>>>%s<<<\nstderr>>>%s<<<\n" % (p.returncode, out, err))
