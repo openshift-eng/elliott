@@ -426,10 +426,11 @@ def images_build_image(runtime, repo_type, push_to_defaults, push_to, scratch):
 
 @cli.command("images:push", short_help="Push the most recent images to mirrors.")
 @click.option('--to-defaults', default=False, is_flag=True, help='Push to default registries.')
+@click.option('--late-only', default=False, is_flag=True, help='Push only "late" images.')
 @click.option("--to", default=[], metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
 @pass_runtime
-def images_push(runtime, to_defaults, to):
+def images_push(runtime, to_defaults, late_only, to):
     """
     Each distgit repository will be cloned and the version and release information
     will be extracted. That information will be used to determine the most recently
@@ -456,16 +457,21 @@ def images_push(runtime, to_defaults, to):
     # does not build but which should be kept up to date in the operations registry.
     errors = False
 
-    # Push early images
-    for image in runtime.image_metas():
-        try:
-            image.distgit_repo().push_image(to)
-        except Exception:
-            print(traceback.format_exc())
-            errors = True
+    # late-only is useful if we are resuming a partial build in which not all images
+    # can be built/pushed. Calling images:push can end up hitting the same
+    # push error, so, without late-only, there is no way to push "late" images and
+    # deliver the partial build's last images.
+    if not late_only:
+        # Push early images
+        for image in runtime.image_metas():
+            try:
+                image.distgit_repo().push_image(to)
+            except Exception:
+                print(traceback.format_exc())
+                errors = True
 
-    if errors:
-        raise IOError("At least one image push failed")
+        if errors:
+            raise IOError("At least one image push failed")
 
     # Push all late images
     for image in runtime.image_metas():
