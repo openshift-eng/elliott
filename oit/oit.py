@@ -475,7 +475,9 @@ def images_push(runtime, to_defaults, late_only, to):
 
     # Push all late images
     for image in runtime.image_metas():
-        image.distgit_repo().push_image(to, True)
+        # Check if actually a late image to prevent cloning all distgit on --late-only
+        if image.config.push.late is True:      
+            image.distgit_repo().push_image(to, True)
 
 
 @cli.command("images:pull", short_help="Pull latest images from pulp")
