@@ -130,5 +130,6 @@ def watch_task(log_f, task_id):
             time.sleep(2 * 60)
         else:
             log_f("Timeout building image")
+            subprocess.check_call(("brew", "cancel", str(task_id)))
             p.kill()
     return p.returncode, p.stdout.read(), p.stderr.read()
