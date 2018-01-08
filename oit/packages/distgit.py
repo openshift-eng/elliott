@@ -40,6 +40,7 @@ class DistGitRepo(object):
         self.runtime = metadata.runtime
         self.distgit_dir = None
         self.build_status = False
+        self.push_status = False
 
         self.branch = self.runtime.branch
 
@@ -447,6 +448,7 @@ class ImageDistGitRepo(DistGitRepo):
             "task_id": "n/a",
             "task_url": "n/a",
             "status": -1,
+            "push_status": -1,
             # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
         }
 
@@ -470,27 +472,17 @@ class ImageDistGitRepo(DistGitRepo):
                         parent_dgr.wait_for_build(self.metadata.qualified_name)
 
                 def wait(n):
-                    self.info("Async error in image build thread [attempt #{}]: {}".format(n + 1, self.metadata.qualified_name))
+                    self.info("Async error in image build thread [attempt #{}]".format(n + 1))
                     # Brew does not handle an immediate retry correctly.
                     time.sleep(5 * 60)
-                try:
-                    retry(
-                        n=3, wait_f=wait,
-                        f=lambda: self._build_container(target_image, repo_type, scratch, record))
-                except RetryException as err:
-                    self.info(str(err))
-                    record["message"] = str(err)
-                    return False
+
+                retry(
+                    n=3, wait_f=wait,
+                    f=lambda: self._build_container(target_image, repo_type, scratch, record))
+
             record["message"] = "Success"
             record["status"] = 0
             self.build_status = True
-
-            if scratch:
-                # If this is a scratch build, we aren't going to be pushing. We might be able to determine the
-                # image name by parsing the build log, but not worth the effort until we need scratch builds.
-                # The image name for a scratch build looks something like:
-                # brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-base:rhaos-3.7-rhel-7-docker-candidate-16066-20170829214444
-                return True
 
         except Exception:
             tb = traceback.format_exc()
@@ -499,21 +491,30 @@ class ImageDistGitRepo(DistGitRepo):
             # This is designed to fall through to finally. Since this method is designed to be
             # threaded, we should not throw an exception; instead return False.
         finally:
-            self.runtime.add_record(action, **record)
             # Regardless of success, allow other images depending on this one to progress or fail.
             self.build_lock.release()
 
-        if self.build_status:
-            if push_to_list:
-                # To ensure we don't overwhelm the system building, pull & push synchronously
-                with self.runtime.mutex:
-                    try:
-                        self.push_image(push_to_list)
-                    except Exception as push_e:
-                        self.info("Error during push after successful build: %s" % str(push_e))
-                        return False
+        self.push_status = True  # if if never pushes, the status is True
+        if not scratch and self.build_status and push_to_list:
+            # If this is a scratch build, we aren't going to be pushing. We might be able to determine the
+            # image name by parsing the build log, but not worth the effort until we need scratch builds.
+            # The image name for a scratch build looks something like:
+            # brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-base:rhaos-3.7-rhel-7-docker-candidate-16066-20170829214444
 
-        return self.build_status
+            # To ensure we don't overwhelm the system building, pull & push synchronously
+            with self.runtime.mutex:
+                self.push_status = False
+                try:
+                    self.push_image(push_to_list)
+                    self.push_status = True
+                except Exception as push_e:
+                    self.info("Error during push after successful build: %s" % str(push_e))
+                    self.push_status = False
+
+        record['push_status'] = '0' if self.push_status else '-1'
+
+        self.runtime.add_record(action, **record)
+        return self.build_status and self.push_status
 
     def _build_container(self, target_image, repo_type, scratch, record):
         """
