@@ -31,25 +31,23 @@ class ImageMetadata(Metadata):
         """
 
         component_name = self.get_component_name()
-        version = dfp.labels["version"]
 
-        # Brew can return all builds executed for a distgit repo. Most recent is listed last.
-        # e.g. brew search build registry-console-docker-v3.6.173.0.74-*
-        #     -> registry-console-docker-v3.6.173.0.74-2
-        #     -> registry-console-docker-v3.6.173.0.74-3
-        pattern = '{}-{}-*'.format(component_name, version)
+        tag = "{}-candidate".format(self.branch())
 
         rc, stdout, stderr = gather_exec(self.runtime,
-                                         ["brew", "search", "build", pattern])
+                                         ["brew", "latest-build", tag, component_name])
 
         assert_rc0(rc, "Unable to search brew builds: %s" % stderr)
 
-        builds = stdout.strip().splitlines()
-        if not builds:
-            raise IOError("No builds detected for %s using pattern: %s" % (self.qualified_name, pattern))
+        latest = stdout.strip().splitlines()[-1].split(' ')[0]
 
-        last_build_id = builds[-1]  # e.g. "registry-console-docker-v3.6.173.0.75-1"
-        release = last_build_id.rsplit("-", 1)[1]  # [ "registry-console-docker-v3.6.173.0.75", "1"]
+        if not latest.startswith(component_name):
+            # If no builds found, `brew latest-build` output will appear as:
+            # Build                                     Tag                   Built by
+            # ----------------------------------------  --------------------  ----------------
+            raise IOError("No builds detected for %s using tag: %s" % (self.qualified_name, tag))
+
+        release = latest.rsplit("-", 1)[1]  # [ "registry-console-docker-v3.6.173.0.75", "1"]
 
         return release
 

@@ -301,19 +301,21 @@ class ImageDistGitRepo(DistGitRepo):
             # (2) People have logged into distgit before in order to bump the release field. This happening
             #       at the wrong time breaks the build.
 
-            release = self.metadata.get_latest_build_release(dfp)
-
             try:
                 record = {
                     "dir": self.distgit_dir,
                     "dockerfile": "%s/Dockerfile" % self.distgit_dir,
                     "image": self.config.name,
                     "version": version,
-                    "release": release,
+                    "release": '?',
                     "message": "Unknown failure",
                     "status": -1,
                     # Status defaults to failure until explicitly set by success. This handles raised exceptions.
                 }
+
+                release = self.metadata.get_latest_build_release(dfp)
+                record['release'] = release
+
                 # pull just the main image name first
                 image_name_and_version = "%s:%s-%s" % (self.config.name, version, release)
                 brew_image_url = "/".join((BREW_IMAGE_HOST, image_name_and_version))
