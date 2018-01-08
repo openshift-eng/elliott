@@ -1,10 +1,11 @@
 import os
 import glob
+import traceback
 import yaml
 from common import (
     BREW_IMAGE_HOST, CGIT_URL, RetryException,
     assert_rc0, assert_file, assert_exec, assert_dir,
-    exec_cmd, gather_exec, retry, Dir, recursive_overwrite
+    exec_cmd, gather_exec, retry, Dir, recursive_overwrite, watch_task,
 )
 from model import Model, Missing
 from distgit import DistGitRepo
@@ -204,7 +205,7 @@ class RPMMetadata(Metadata):
             record["task_url"] = task_url
 
             # Now that we have the basics about the task, wait for it to complete
-            rc, out, err = gather_exec(self.runtime, ["timeout", "4h", "brew", "watch-task", task_id])
+            rc, out, err = watch_task(self.info, task_id)
 
             # Gather brew-logs
             logs_dir = "%s/%s" % (self.runtime.brew_logs_dir, self.name)
@@ -214,11 +215,8 @@ class RPMMetadata(Metadata):
                 self.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
 
             if rc != 0:
-                if rc == 124:
-                    self.info("Timeout building rpm: {}\nout={}  ; err={}".format(task_url, out, err))
-                else:
-                    # An error occurred during watch-task. We don't have a viable build.
-                    self.info("Error building rpm: {}\nout={}  ; err={}".format(task_url, out, err))
+                # An error occurred during watch-task. We don't have a viable build.
+                self.info("Error building rpm: {}\nout={}  ; err={}".format(task_url, out, err))
                 return False
 
             self.info("Successfully built rpm: {} ; {}".format(self.rpm_name, task_url))
@@ -258,9 +256,10 @@ class RPMMetadata(Metadata):
             record["status"] = 0
             self.build_status = True
 
-        except Exception as err:
-            record["message"] = "Exception occurred: {}".format(err)
-            self.info("Exception occurred during build: {}".format(err))
+        except Exception:
+            tb = traceback.format_exc()
+            record["message"] = "Exception occurred:\n{}".format(tb)
+            self.info("Exception occurred during build:\n{}".format(tb))
             # This is designed to fall through to finally. Since this method is designed to be
             # threaded, we should not throw an exception; instead return False.
         finally:
