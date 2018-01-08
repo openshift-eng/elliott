@@ -1,5 +1,6 @@
 import os
 import glob
+import traceback
 import yaml
 from common import (
     BREW_IMAGE_HOST, CGIT_URL, RetryException,
@@ -258,9 +259,10 @@ class RPMMetadata(Metadata):
             record["status"] = 0
             self.build_status = True
 
-        except Exception as err:
-            record["message"] = "Exception occurred: {}".format(err)
-            self.info("Exception occurred during build: {}".format(err))
+        except Exception:
+            tb = traceback.format_exc()
+            record["message"] = "Exception occurred:\n{}".format(tb)
+            self.info("Exception occurred during build:\n{}".format(tb))
             # This is designed to fall through to finally. Since this method is designed to be
             # threaded, we should not throw an exception; instead return False.
         finally:

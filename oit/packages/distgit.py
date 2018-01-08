@@ -7,6 +7,7 @@ from common import (
 )
 import shutil
 import tempfile
+import traceback
 import hashlib
 import json
 import time
@@ -489,9 +490,10 @@ class ImageDistGitRepo(DistGitRepo):
                 # brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/openshift3/ose-base:rhaos-3.7-rhel-7-docker-candidate-16066-20170829214444
                 return True
 
-        except Exception as err:
-            record["message"] = "Exception occurred: {}".format(err)
-            self.info("Exception occurred during build: {}".format(err))
+        except Exception:
+            tb = traceback.format_exc()
+            record["message"] = "Exception occurred:\n{}".format(tb)
+            self.info("Exception occurred during build:\n{}".format(tb))
             # This is designed to fall through to finally. Since this method is designed to be
             # threaded, we should not throw an exception; instead return False.
         finally:
