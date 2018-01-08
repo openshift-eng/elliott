@@ -110,3 +110,25 @@ def retry(n, f, check_f=bool, wait_f=None):
         if c < n - 1 and wait_f is not None:
             wait_f(c)
     raise RetryException("Giving up after {} failed attempt(s)".format(n))
+
+
+def parse_taskinfo(out):
+    return next(
+        (l[7:] for l in out.splitlines() if l.startswith("State: ")),
+        "unknown")
+
+
+def watch_task(log_f, task_id):
+    start = time.time()
+    p = subprocess.Popen(
+        ("brew", "watch-task", str(task_id)),
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    while p.poll() is None:
+        info = subprocess.check_output(("brew", "taskinfo", str(task_id)))
+        log_f("Task state: {}".format(parse_taskinfo(info)))
+        if time.time() - start < 4 * 60 * 60:
+            time.sleep(2 * 60)
+        else:
+            log_f("Timeout building image")
+            p.kill()
+    return p.returncode, p.stdout.read(), p.stderr.read()
