@@ -68,7 +68,7 @@ def exec_cmd(runtime, cmd):
     else:
         cmd_list = cmd
 
-    runtime.log_verbose("\nExecuting:exec_cmd: %s" % cmd_list)
+    runtime.log_verbose("Executing:exec_cmd: %s" % cmd_list)
     # https://stackoverflow.com/a/7389473
     runtime.debug_log.flush()
     process = subprocess.Popen(cmd_list, stdout=runtime.debug_log, stderr=runtime.debug_log)
@@ -83,7 +83,7 @@ def gather_exec(runtime, cmd_list):
     :param cmd_list: The command and arguments to execute
     :return: (rc,stdout,stderr)
     """
-    runtime.log_verbose("\nExecuting:gather_exec: %s" % str(cmd_list))
+    runtime.log_verbose("Executing:gather_exec: %s" % str(cmd_list))
     p = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
     runtime.log_verbose("Process exited with: %d\nstdout>>>%s<<<\nstderr>>>%s<<<\n" % (p.returncode, out, err))

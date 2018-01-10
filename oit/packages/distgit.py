@@ -158,7 +158,7 @@ class ImageDistGitRepo(DistGitRepo):
 
         dfp = DockerfileParser(path="Dockerfile")
 
-        self.runtime.log_verbose("\nGenerating repo file for Dockerfile {}".format(self.metadata.name))
+        self.runtime.log_verbose("Generating repo file for Dockerfile {}".format(self.metadata.name))
 
         df_repos = []
         for entry in json.loads(dfp.json):
@@ -866,7 +866,7 @@ class ImageDistGitRepo(DistGitRepo):
         with open("Dockerfile", 'r') as df:
             dockerfile_data = df.read()
 
-        self.runtime.log_verbose("\nAbout to start modifying Dockerfile [%s]:\n%s\n" %
+        self.runtime.log_verbose("About to start modifying Dockerfile [%s]:\n%s\n" %
                                  (self.metadata.name, dockerfile_data))
 
         for modification in self.config.content.source.modifications:
@@ -880,7 +880,7 @@ class ImageDistGitRepo(DistGitRepo):
                 if dockerfile_data == pre:
                     raise IOError("Replace (%s->%s) modification did not make a change to the Dockerfile content" % (
                         match, replacement))
-                self.runtime.log_verbose("\nPerformed string replace '%s' -> '%s':\n%s\n" %
+                self.runtime.log_verbose("Performed string replace '%s' -> '%s':\n%s\n" %
                                          (match, replacement, dockerfile_data))
             else:
                 raise IOError("Don't know how to perform modification action: %s" % modification.action)
