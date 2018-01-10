@@ -301,7 +301,12 @@ class Runtime(object):
             with open(streams_path, "r") as s:
                 self.streams = Model(yaml.load(s.read()))
 
+    @staticmethod
+    def timestamp():
+        return datetime.datetime.utcnow().isoformat()
+
     def log_verbose(self, message):
+        message = " ".join((self.timestamp(), message))
         with self.log_lock:
             if self.verbose:
                 click.echo(message)
@@ -316,7 +321,7 @@ class Runtime(object):
                 self.log_verbose(message)
         else:
             with self.log_lock:
-                click.echo(message)
+                click.echo(" ".join((self.timestamp(), message)))
 
     def image_metas(self):
         return self.image_map.values()
