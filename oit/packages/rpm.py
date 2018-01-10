@@ -111,7 +111,7 @@ class RPMMetadata(Metadata):
         with open(self.specfile, 'r') as df:
             specfile_data = df.read()
 
-        self.runtime.log_verbose("\nAbout to start modifying spec file [%s]:\n%s\n" %
+        self.runtime.log_verbose("About to start modifying spec file [%s]:\n%s\n" %
                                  (self.name, specfile_data))
 
         for modification in self.config.content.source.modifications:
@@ -125,7 +125,7 @@ class RPMMetadata(Metadata):
                 if specfile_data == pre:
                     raise IOError("Replace (%s->%s) modification did not make a change to the Dockerfile content" % (
                         match, replacement))
-                self.runtime.log_verbose("\nPerformed string replace '%s' -> '%s':\n%s\n" %
+                self.runtime.log_verbose("Performed string replace '%s' -> '%s':\n%s\n" %
                                          (match, replacement, specfile_data))
             else:
                 raise IOError("Don't know how to perform modification action: %s" % modification.action)
