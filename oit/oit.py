@@ -414,10 +414,10 @@ def images_build_image(runtime, repo_type, push_to_defaults, push_to, scratch):
     pool.close()
     pool.join()
 
-    for result in results:
-        if not result:
-            runtime.info("At least one image build/push failed")
-            exit(1)
+    failed = [m.name for m, r in zip(runtime.image_metas(), results) if not r]
+    if failed:
+        runtime.info("\n".join(["Build/push failures:"] + sorted(failed)))
+        exit(1)
 
     # Push all late images
     for image in runtime.image_metas():
@@ -450,33 +450,34 @@ def images_push(runtime, to_defaults, late_only, to):
         click.echo("You need specify at least one destination registry.")
         exit(1)
 
-    # Allow all non-late push operations to be attempted and track overall failure
-    # with this boolean. Since "late" images are used as a marker for success, don't
-    # push them if there are any preceding errors.
-    # This error tolerance is useful primarily in synching images that our team
-    # does not build but which should be kept up to date in the operations registry.
-    errors = False
-
     # late-only is useful if we are resuming a partial build in which not all images
     # can be built/pushed. Calling images:push can end up hitting the same
     # push error, so, without late-only, there is no way to push "late" images and
     # deliver the partial build's last images.
     if not late_only:
+        # Allow all non-late push operations to be attempted and track failures
+        # with this list. Since "late" images are used as a marker for success,
+        # don't push them if there are any preceding errors.
+        # This error tolerance is useful primarily in synching images that our
+        # team does not build but which should be kept up to date in the
+        # operations registry.
+        failed = []
         # Push early images
         for image in runtime.image_metas():
             try:
                 image.distgit_repo().push_image(to)
             except Exception:
-                print(traceback.format_exc())
-                errors = True
+                traceback.print_exc()
+                failed.append(image.name)
 
-        if errors:
-            raise IOError("At least one image push failed")
+        if failed:
+            runtime.info("\n".join(["Push failures:"] + sorted(failed)))
+            exit(1)
 
     # Push all late images
     for image in runtime.image_metas():
         # Check if actually a late image to prevent cloning all distgit on --late-only
-        if image.config.push.late is True:      
+        if image.config.push.late is True:
             image.distgit_repo().push_image(to, True)
 
 
