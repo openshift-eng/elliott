@@ -166,12 +166,14 @@ def images_push_distgit(runtime):
 @cli.command("images:update-dockerfile", short_help="Update a group's distgit Dockerfile from metadata.")
 @click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
               help="Associate an image name with a given stream alias.  [multiple]")
-@click.option("--version", metavar='VERSION', default=None, help="Version string to populate in Dockerfiles.")
+@click.option("--version", metavar='VERSION', default=None, help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
 @click.option("--release", metavar='RELEASE', default=None, help="Release label to populate in Dockerfiles (or + to bump).")
+@click.option("--repo-type", default=None, metavar="REPO_TYPE",
+              help="Repo type (i.e. signed, unsigned).")
 @option_commit_message
 @option_push
 @pass_runtime
-def images_update_dockerfile(runtime, stream, version, release, message, push):
+def images_update_dockerfile(runtime, stream, version, release, repo_type, message, push):
     """
     Updates the Dockerfile in each distgit repository with the latest metadata and
     the version/release information specified. This does not update the Dockerfile
@@ -195,6 +197,15 @@ def images_update_dockerfile(runtime, stream, version, release, message, push):
     for s in stream:
         runtime.register_stream_alias(s[0], s[1])
 
+    # Get the version from the atomic-openshift package in the RPM repo
+    if version == "auto":
+        version = runtime.auto_version(repo_type)
+
+    if not runtime.valid_version(version):
+        raise ValueError(
+            "invalid version string: {}, expecting like v3.4 or v1.2.3".format(version)
+        )
+
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
         dgr.update_dockerfile(version, release)
@@ -210,12 +221,14 @@ def images_update_dockerfile(runtime, stream, version, release, message, push):
 @cli.command("images:rebase", short_help="Refresh a group's distgit content from source content.")
 @click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
               help="Associate an image name with a given stream alias.  [multiple]")
-@click.option("--version", metavar='VERSION', help="Version string to populate in Dockerfiles.")
+@click.option("--version", metavar='VERSION', default=None, help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
 @click.option("--release", metavar='RELEASE', default=None, help="Release string to populate in Dockerfiles.")
+@click.option("--repo-type", default=None, metavar="REPO_TYPE",
+              help="Repo type (i.e. signed, unsigned).")
 @option_commit_message
 @option_push
 @pass_runtime
-def images_rebase(runtime, stream, version, release, message, push):
+def images_rebase(runtime, stream, version, release, repo_type, message, push):
     """
     Many of the Dockerfiles stored in distgit are based off of content managed in GitHub.
     For example, openshift-enterprise-node-docker should always closely reflect the changes
@@ -240,6 +253,15 @@ def images_rebase(runtime, stream, version, release, message, push):
     # the runtime.
     for s in stream:
         runtime.register_stream_alias(s[0], s[1])
+
+    # Get the version from the atomic-openshift package in the RPM repo
+    if version == "auto":
+        version = runtime.auto_version(repo_type)
+
+    if not runtime.valid_version(version):
+        raise ValueError(
+            "invalid version string: {}, expecting like v3.4 or v1.2.3".format(version)
+        )
 
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
@@ -370,7 +392,7 @@ def images_copy(runtime, to_branch, message, push, replace):
 
 
 @cli.command("images:build", short_help="Build images for the group.")
-@click.option("--repo-type", required=True, metavar="REPO_TYPE",
+@click.option("--repo-type", default=None, metavar="REPO_TYPE",
               help="Repo type (i.e. signed, unsigned).")
 @click.option('--push-to-defaults', default=False, is_flag=True, help='Push to default registries when build completes.')
 @click.option("--push-to", default=[], metavar="REGISTRY", multiple=True,
@@ -621,7 +643,7 @@ def distgit_config_template(url):
             config["labels"][ml] = dfp.labels[ml]
 
     click.echo("---")
-    click.echo("# populated from branch: %s" % branch)
+    click.echo("# populated from branch: {}".format(branch))
     yaml.safe_dump(config, sys.stdout, indent=2, default_flow_style=False)
 
 
@@ -675,6 +697,22 @@ _oit_completion() {
 }
 complete -F _oit_completion -o default %s
 """ % (os.path.basename(sys.argv[0].replace("-", "_")).upper(), sys.argv[0]))
+
+
+@cli.command("images:query-rpm-version", short_help="Find the OCP version from the atomic-openshift RPM")
+@click.option("--repo-type", required=True, metavar="REPO_TYPE",
+              help="Repo type (i.e. signed, unsigned).")
+@pass_runtime
+def query_rpm_version(runtime, repo_type):
+    """
+    Retrieve the version number of the atomic-openshift RPM in the indicated
+    repository. This is the version number that will be applied to new images
+    created from this build.
+    """
+    runtime.initialize()
+
+    version = runtime.auto_version(repo_type)
+    click.echo("version: {}".format(version))
 
 
 if __name__ == '__main__':
