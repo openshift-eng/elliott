@@ -1,19 +1,86 @@
+from multiprocessing.dummy import Pool
+import os
 import tempfile
 import unittest
-from common import exec_cmd, parse_taskinfo, retry
+from common import (
+    Dir, assert_exec, exec_cmd, gather_exec, parse_taskinfo, retry)
+
+
+class RuntimeMock(object):
+    def __init__(self, debug_log=None, debug_log_path=None):
+        if debug_log_path is None:
+            self.debug_log_path = os.devnull
+        else:
+            self.debug_log_path = debug_log_path
+        if debug_log is None:
+            self.debug_log = open(os.devnull, 'w')
+        else:
+            self.debug_log = debug_log
+
+    def log_verbose(self, message):
+        self.debug_log.write(message + "\n")
+
+
+
+class DirTestCase(unittest.TestCase):
+    def test_chdir(self):
+        cwd = os.getcwd()
+        with Dir("/"):
+            self.assertEqual(os.getcwd(), "/")
+            with Dir("/dev"):
+                self.assertEqual(os.getcwd(), "/dev")
+            self.assertEqual(os.getcwd(), "/")
+        self.assertEqual(os.getcwd(), cwd)
+
+    def test_getcwd(self, concurrent=False):
+        cwd = os.getcwd()
+        if not concurrent:
+            self.assertEqual(Dir.getcwd(), cwd)
+        else:
+            # the initial value is not reliable when using multiple threads
+            cwd = Dir.getcwd()
+        with Dir("/"):
+            self.assertEqual(Dir.getcwd(), "/")
+            with Dir("/dev"):
+                self.assertEqual(Dir.getcwd(), "/dev")
+            self.assertEqual(Dir.getcwd(), "/")
+        self.assertEqual(Dir.getcwd(), cwd)
+
+    def test_getcwd_threads(self):
+        N = 10
+        pool = Pool(N)
+        res = [
+            pool.apply_async(lambda: self.test_getcwd(concurrent=True))
+            for _ in xrange(N)
+        ]
+        for r in res:
+            r.get()
+
+    def test_assert_exec(self):
+        runtime = RuntimeMock()
+        with Dir("/"):
+            self.assertIsNone(
+                assert_exec(runtime, ["sh", "-c", "[ \"${PWD}\" == / ]"]))
+        with Dir('/'):
+            self.assertRaisesRegexp(
+                IOError, "Command returned non-zero exit status",
+                assert_exec,
+                runtime, ["sh", "-c", "[ \"${PWD}\" == /dev ]"])
+
+    def test_gather_exec(self):
+        runtime = RuntimeMock()
+        with Dir("/"):
+            _, out, _ = gather_exec(runtime, ["pwd"])
+        self.assertEqual(out.strip(), "/")
+        with Dir("/dev"):
+            _, out, _ = gather_exec(runtime, ["pwd"])
+        self.assertEqual(out.strip(), "/dev")
 
 
 class ExecCmdCommand(unittest.TestCase):
-    class RuntimeMock(object):
-        def __init__(self, debug_log):
-            self.debug_log = debug_log
-
-        def log_verbose(self, message):
-            self.debug_log.write(message + "\n")
-
     def exec_cmd(self, cmd):
         with tempfile.TemporaryFile() as f:
-            runtime = self.RuntimeMock(f)
+            runtime = RuntimeMock(f)
             rc = exec_cmd(runtime, cmd)
             f.seek(0)
             return rc, f.read()
