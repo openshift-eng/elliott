@@ -76,13 +76,19 @@ def exec_cmd(runtime, cmd):
     return process.wait()
 
 
-def gather_exec(runtime, cmd_list):
+def gather_exec(runtime, cmd):
     """
     Runs a command and returns rc,stdout,stderr as a tuple
     :param runtime: The runtime object
     :param cmd_list: The command and arguments to execute
     :return: (rc,stdout,stderr)
     """
+
+    if not isinstance(cmd, list):
+        cmd_list = cmd.split(' ')
+    else:
+        cmd_list = cmd
+
     runtime.log_verbose("Executing:gather_exec: %s" % str(cmd_list))
     p = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
