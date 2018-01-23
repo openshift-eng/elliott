@@ -507,9 +507,11 @@ def images_scan_for_cves(runtime):
 
 
 @cli.command("images:print", short_help="Print data from each distgit.")
+@click.option('--show-non-release', default=False, is_flag=True,
+              help='Include images which have been marked as non-release.')
 @click.argument("pattern", nargs=1)
 @pass_runtime
-def images_print(runtime, pattern):
+def images_print(runtime, show_non_release, pattern):
     """
     Prints data from each distgit. The pattern specified should be a string
     with replacement fields:
@@ -534,9 +536,16 @@ def images_print(runtime, pattern):
     if "{" not in pattern:
         pattern = "{%s}" % pattern.strip()
 
+    count = 0
+    non_release = 0
     click.echo("")
     click.echo("------------------------------------------")
     for image in runtime.image_metas():
+
+        if image.config.non_release and not show_non_release:
+            non_release += 1
+            continue
+
         dfp = DockerfileParser()
         dfp.content = image.fetch_cgit_file("Dockerfile")
 
@@ -557,9 +566,16 @@ def images_print(runtime, pattern):
             raise IOError("Unrecognized fields remaining in pattern: %s" % s)
 
         click.echo(s)
+        count += 1
 
     click.echo("------------------------------------------")
-    click.echo("%s images" % len(runtime.image_metas()))
+    click.echo("{} images".format(count))
+
+    if non_release > 0:
+        click.echo("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(non_release))
+        for image in runtime.image_metas():
+            if image.config.non_release:
+                click.echo("    {}".format(image.name))
 
 
 @cli.command("images:print-config-template", short_help="Create template config.yml from distgit Dockerfile.")
