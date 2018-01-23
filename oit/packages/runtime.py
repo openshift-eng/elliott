@@ -5,6 +5,7 @@ import shutil
 import atexit
 import yaml
 import datetime
+import re
 
 from common import assert_dir, assert_exec, gather_exec, Dir
 from image import ImageMetadata
@@ -504,3 +505,59 @@ class Runtime(object):
     def flag_remove(self, flag_name):
         if self.flag_exists(flag_name):
             os.remove(self._flag_file(flag_name))
+
+    def auto_version(self, repo_type):
+        """
+        Find and return the version of the atomic-openshift package in the OCP
+        RPM repository.
+
+        This repository is the primary input for OCP images.  The group_config
+        for a group specifies the location for both signed and unsigned
+        rpms.  The caller must indicate which to use.
+        """
+
+        if not repo_type in (self.group_config.repos):
+            raise ValueError(
+                "unknown repo-type {}, known types: {}".format(
+                    repo_type,
+                    ", ".join(self.group_config.repos.keys()))
+            )
+
+        # Are the repo keys in order? markllama 20180119 rhel-server-ose-rpms
+        # repo_name = 'rhel-server-ose-rpms'
+        repo_name = self.group_config.repos[repo_type].keys()[0]
+        repo_url = self.group_config.repos[repo_type][repo_name].baseurl
+        self.info(
+            "Getting version from atomic-openshift package in {}".format(
+                repo_url)
+        )
+
+        # create a randomish repo name to avoid erronious cache hits
+        repoid = "oit" + datetime.datetime.now().strftime("%s")
+        version_query = ["/usr/bin/repoquery", "--quiet", "--tempcache",
+                         "--repoid", repoid,
+                         "--repofrompath", repoid + "," + repo_url,
+                         "--queryformat", "%{VERSION}",
+                         "atomic-openshift"]
+        rc, auto_version, err = gather_exec(self, version_query)
+        if rc != 0:
+            raise RuntimeError(
+                "Unable to get OCP version from RPM repository: {}".format(err)
+            )
+
+        version = "v" + auto_version.strip()
+
+        return version
+
+    def valid_version(self, version):
+        """
+        Check if a version string matches an accepted pattern.
+        A single lower-case 'v' followed by one or more decimal numbers,
+        separated by a dot.  Examples below are not exhaustive
+        Valid:
+          v1, v12, v3.4, v2.12.0
+
+        Not Valid:
+          1, v1..2, av3.4, .v12  .99.12, v13-55
+        """
+        return re.match("^v\d+((\.\d+)+)?$", version) != None
