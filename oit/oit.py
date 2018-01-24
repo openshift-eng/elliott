@@ -55,19 +55,17 @@ option_push = click.option('--push/--no-push', default=False, is_flag=True,
 @cli.command("images:clone", help="Clone a group's image distgit repos locally.")
 @pass_runtime
 def images_clone(runtime):
-    runtime.initialize()
+    runtime.initialize(clone_distgits=True)
     # Never delete after clone; defeats the purpose of cloning
     runtime.remove_tmp_working_dir = False
-    [r.distgit_repo() for r in runtime.image_metas()]
 
 
 @cli.command("rpms:clone", help="Clone a group's rpm distgit repos locally.")
 @pass_runtime
 def rpms_clone(runtime):
-    runtime.initialize(mode='rpms')
+    runtime.initialize(mode='rpms', clone_distgits=True)
     # Never delete after clone; defeats the purpose of cloning
     runtime.remove_tmp_working_dir = False
-    [r.distgit_repo() for r in runtime.rpm_metas()]
 
 
 @cli.command("rpms:clone-sources", help="Clone a group's rpm source repos locally and add to sources yaml.")
@@ -102,21 +100,15 @@ def rpms_build(runtime, version, release, scratch):
 
     runtime.initialize(mode='rpms')
 
-    items = []
-
-    for rpm in runtime.rpm_metas():
-        items.append((rpm, {
-            'version': version,
-            'release': release,
-            'scratch': scratch
-        }))
-
-    if not len(items):
+    items = runtime.rpm_metas()
+    if not items:
         runtime.info("No RPMs found. Check the arguments.")
         exit(0)
 
     pool = ThreadPool(len(items))
-    results = pool.map(lambda ((rpm, args)): rpm.build_rpm(**args), items)
+    results = pool.map(
+        lambda rpm: rpm.build_rpm(version, release, scratch),
+        items)
 
     # Wait for results
     pool.close()
@@ -148,10 +140,8 @@ def images_push_distgit(runtime):
     repositories. This is useful following a series of modifications
     in the local clones.
     """
-    runtime.initialize()
-
-    for image in runtime.image_metas():
-        image.distgit_repo().push()
+    runtime.initialize(clone_distgits=True)
+    runtime.push_distgits()
 
 
 @cli.command("images:update-dockerfile", short_help="Update a group's distgit Dockerfile from metadata.")
@@ -197,6 +187,7 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
             "invalid version string: {}, expecting like v3.4 or v1.2.3".format(version)
         )
 
+    runtime.clone_distgits()
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
         dgr.update_dockerfile(version, release)
@@ -204,8 +195,7 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
         dgr.tag(version, release)
 
     if push:
-        for image in runtime.image_metas():
-            image.distgit_repo().push()
+        runtime.push_distgits()
 
 
 @cli.command("images:rebase", short_help="Refresh a group's distgit content from source content.")
@@ -253,6 +243,7 @@ def images_rebase(runtime, stream, version, release, repo_type, message, push):
             "invalid version string: {}, expecting like v3.4 or v1.2.3".format(version)
         )
 
+    runtime.clone_distgits()
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
         dgr.rebase_dir(version, release)
@@ -262,8 +253,7 @@ def images_rebase(runtime, stream, version, release, repo_type, message, push):
                            image=dgr.config.name, sha=sha)
 
     if push:
-        for image in runtime.image_metas():
-            image.distgit_repo().push()
+        runtime.push_distgits()
 
 
 @cli.command("images:foreach", help="Run a command relative to each distgit dir.")
@@ -278,7 +268,7 @@ def images_foreach(runtime, cmd, message, push):
     error for all directories, a commit will be made. If not a dry_run,
     the repo will be pushed.
     """
-    runtime.initialize()
+    runtime.initialize(clone_distgits=True)
 
     # If not pushing, do not clean up our work
     runtime.remove_tmp_working_dir = push
@@ -296,8 +286,7 @@ def images_foreach(runtime, cmd, message, push):
             dgr.commit(message)
 
     if push:
-        for image in runtime.image_metas():
-            image.distgit_repo().push()
+        runtime.push_distgits()
 
 
 @cli.command("images:revert", help="Revert a fixed number of commits in each distgit.")
@@ -327,6 +316,7 @@ def images_revert(runtime, count, message, push):
     cmd = ["git", "revert", "--no-commit", commit_range]
 
     cmd_str = " ".join(cmd)
+    runtime.clone_distgits()
     dgrs = [image.distgit_repo() for image in runtime.image_metas()]
     for dgr in dgrs:
         with Dir(dgr.distgit_dir):
@@ -339,8 +329,7 @@ def images_revert(runtime, count, message, push):
             dgr.commit(message)
 
     if push:
-        for image in runtime.image_metas():
-            image.distgit_repo().push()
+        runtime.push_distgits()
 
 
 @cli.command("images:copy", help="Copy content of source branch to target.")
@@ -363,6 +352,7 @@ def images_copy(runtime, to_branch, message, push, replace):
     # If not pushing, do not clean up our work
     runtime.remove_tmp_working_dir = push
 
+    runtime.clone_distgits()
     dgrs = [image.distgit_repo() for image in runtime.image_metas()]
     for dgr in dgrs:
         with Dir(dgr.distgit_dir):
@@ -374,8 +364,7 @@ def images_copy(runtime, to_branch, message, push, replace):
             dgr.commit(message)
 
     if push:
-        for dgr in dgrs:
-            dgr.push()
+        runtime.push_distgits()
 
 
 @cli.command("images:build", short_help="Build images for the group.")
@@ -397,27 +386,24 @@ def images_build_image(runtime, repo_type, push_to_defaults, push_to, scratch):
     be more performant than running images:push since pushes can
     be performed in parallel with other images building.
     """
-
-    runtime.initialize()
-
-    items = []
+    # Initialize all distgit directories before trying to build. This is to
+    # ensure all build locks are acquired before the builds start and for
+    # clarity in the logs.
+    runtime.initialize(clone_distgits=True)
 
     push_to = list(push_to)  # In case we get a tuple
     if push_to_defaults:
         push_to.extend(runtime.default_registries)
 
-    # Initialize all distgit directories before trying to build. This is to
-    # ensure all build locks are acquired before the builds start and for
-    # clarity in the logs.
-    for image in runtime.image_metas():
-        items.append((image.distgit_repo(), (repo_type, push_to, scratch)))
-
-    if not len(items):
+    items = [m.distgit_repo() for m in runtime.image_metas()]
+    if not items:
         runtime.info("No images found. Check the arguments.")
         exit(0)
 
     pool = ThreadPool(len(items))
-    results = pool.map(lambda ((dgr, args)): dgr.build_container(*args), items)
+    results = pool.map(
+        lambda dgr: dgr.build_container(repo_type, push_to, scratch),
+        items)
 
     # Wait for results
     pool.close()
@@ -458,6 +444,7 @@ def images_push(runtime, to_defaults, late_only, to):
     if len(to) == 0:
         click.echo("You need specify at least one destination registry.")
         exit(1)
+    runtime.clone_distgits()
 
     # late-only is useful if we are resuming a partial build in which not all images
     # can be built/pushed. Calling images:push can end up hitting the same
@@ -497,7 +484,7 @@ def images_pull_image(runtime):
     Pulls latest images from pull, fetching the dockerfiles from cgit to
     determine the version/release.
     """
-    runtime.initialize()
+    runtime.initialize(clone_distgits=True)
     for image in runtime.image_metas():
         image.pull_image()
 
@@ -508,7 +495,7 @@ def images_scan_for_cves(runtime):
     """
     Pulls images and scans them for CVEs using `atomic scan` and `openscap`.
     """
-    runtime.initialize()
+    runtime.initialize(clone_distgits=True)
     images = [x.pull_url() for x in runtime.image_metas()]
     for image in images:
         pull_image(runtime, image)
@@ -539,7 +526,7 @@ def images_print(runtime, show_non_release, pattern):
     "build" will be treated as "{build}"
     """
 
-    runtime.initialize()
+    runtime.initialize(clone_distgits=True)
 
     # If user omitted braces, add them.
     if "{" not in pattern:
