@@ -151,8 +151,7 @@ def images_push_distgit(runtime):
     runtime.initialize()
 
     for image in runtime.image_metas():
-        dgr = image.distgit_repo()
-        dgr.push()
+        image.distgit_repo().push()
 
 
 @cli.command("images:update-dockerfile", short_help="Update a group's distgit Dockerfile from metadata.")
@@ -206,8 +205,7 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
 
     if push:
         for image in runtime.image_metas():
-            dgr = image.distgit_repo()
-            dgr.push()
+            image.distgit_repo().push()
 
 
 @cli.command("images:rebase", short_help="Refresh a group's distgit content from source content.")
@@ -265,8 +263,7 @@ def images_rebase(runtime, stream, version, release, repo_type, message, push):
 
     if push:
         for image in runtime.image_metas():
-            dgr = image.distgit_repo()
-            dgr.push()
+            image.distgit_repo().push()
 
 
 @cli.command("images:foreach", help="Run a command relative to each distgit dir.")
@@ -300,8 +297,7 @@ def images_foreach(runtime, cmd, message, push):
 
     if push:
         for image in runtime.image_metas():
-            dgr = image.distgit_repo()
-            dgr.push()
+            image.distgit_repo().push()
 
 
 @cli.command("images:revert", help="Revert a fixed number of commits in each distgit.")
@@ -344,8 +340,7 @@ def images_revert(runtime, count, message, push):
 
     if push:
         for image in runtime.image_metas():
-            dgr = image.distgit_repo()
-            dgr.push()
+            image.distgit_repo().push()
 
 
 @cli.command("images:copy", help="Copy content of source branch to target.")
