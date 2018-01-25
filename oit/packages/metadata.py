@@ -8,7 +8,7 @@ import urllib
 import json
 from distgit import ImageDistGitRepo, RPMDistGitRepo, pull_image
 
-from common import BREW_IMAGE_HOST, CGIT_URL, RetryException, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, gather_exec, retry, Dir, recursive_overwrite
+from common import BREW_IMAGE_HOST, CGIT_URL, RetryException, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, retry, recursive_overwrite
 from model import Model, Missing
 
 

@@ -115,25 +115,17 @@ def rpms_build(runtime, version, release, scratch):
         runtime.info("No RPMs found. Check the arguments.")
         exit(0)
 
-    results = []
-    for rpm in items:
-        res = rpm[0].build_rpm(**rpm[1])
-        results.append(res)
+    pool = ThreadPool(len(items))
+    results = pool.map(lambda ((rpm, args)): rpm.build_rpm(**args), items)
 
-    # TODO: AMH - Re-enable threading
-    # Currently the "with Dir()" method is incompatible with multi-threading for rpm builds
-    # pool = ThreadPool(len(items))
-    # results = pool.map(lambda ((rpm, args)): rpm.build_rpm(**args), items)
+    # Wait for results
+    pool.close()
+    pool.join()
 
-    # # Wait for results
-    # pool.close()
-    # pool.join()
-    # END TODO
-
-    for result in results:
-        if not result:
-            runtime.info("At least one rpm build failed")
-            exit(1)
+    failed = [m.name for m, r in zip(runtime.rpm_metas(), results) if not r]
+    if failed:
+        runtime.info("\n".join(["Build/push failures:"] + sorted(failed)))
+        exit(1)
 
 
 @cli.command("images:list", help="List of distgits being selected.")

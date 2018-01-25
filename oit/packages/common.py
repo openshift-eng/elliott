@@ -1,6 +1,7 @@
 import os
 import errno
 import subprocess
+import threading
 import time
 
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
@@ -8,17 +9,40 @@ CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
 
 
 class Dir(object):
+    """
+    Context manager to handle directory changes safely.
+
+    On `__enter__`, `chdir`s to the given directory and on `__exit__`, `chdir`s
+    back to restore the previous `cwd`.
+
+    The current directory is also kept on thread-local storage and can be
+    accessed (e.g. by multi-threaded programs that cannot rely on `chdir`) via
+    the `getcwd` static method.
+
+    The `assert_exec` and `gather_exec` member functions use the directory in
+    effect automatically.
+    """
+    _tl = threading.local()
 
     def __init__(self, dir):
         self.dir = dir
+        self.previousDir = None
 
     def __enter__(self):
-        self.previousDir = os.getcwd()
+        self.previousDir = self.getcwd()
         os.chdir(self.dir)
+        self._tl.cwd = self.dir
         return self.dir
 
     def __exit__(self, *args):
         os.chdir(self.previousDir)
+        self._tl.cwd = self.previousDir
+
+    @classmethod
+    def getcwd(cls):
+        if not hasattr(cls._tl, "cwd"):
+            cls._tl.cwd = os.getcwd()
+        return cls._tl.cwd
 
 
 # Create FileNotFound for Python2
@@ -61,6 +85,13 @@ def assert_exec(runtime, cmd, retries=1):
 def exec_cmd(runtime, cmd):
     """
     Executes a command, redirecting its output to the log file.
+
+    If called while the `Dir` context manager is in effect, guarantees that the
+    process is executed in that directory, even if it is no longer the current
+    directory of the process (i.e. it is thread-safe).
+
+    :param runtime: The runtime object
+    :param cmd_list: The command and arguments to execute
     :return: exit code
     """
     if not isinstance(cmd, list):
@@ -71,20 +102,29 @@ def exec_cmd(runtime, cmd):
     runtime.log_verbose("Executing:exec_cmd: %s" % cmd_list)
     # https://stackoverflow.com/a/7389473
     runtime.debug_log.flush()
-    process = subprocess.Popen(cmd_list, stdout=runtime.debug_log, stderr=runtime.debug_log)
+    process = subprocess.Popen(
+        cmd_list, cwd=Dir.getcwd(),
+        stdout=runtime.debug_log, stderr=runtime.debug_log)
     runtime.log_verbose("Process exited with: %d\n" % process.wait())
     return process.wait()
 
 
 def gather_exec(runtime, cmd_list):
     """
-    Runs a command and returns rc,stdout,stderr as a tuple
+    Runs a command and returns rc,stdout,stderr as a tuple.
+
+    If called while the `Dir` context manager is in effect, guarantees that the
+    process is executed in that directory, even if it is no longer the current
+    directory of the process (i.e. it is thread-safe).
+
     :param runtime: The runtime object
     :param cmd_list: The command and arguments to execute
     :return: (rc,stdout,stderr)
     """
     runtime.log_verbose("Executing:gather_exec: %s" % str(cmd_list))
-    p = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(
+        cmd_list, cwd=Dir.getcwd(),
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
     runtime.log_verbose("Process exited with: %d\nstdout>>>%s<<<\nstderr>>>%s<<<\n" % (p.returncode, out, err))
     return p.returncode, out, err
