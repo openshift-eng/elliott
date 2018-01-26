@@ -803,7 +803,7 @@ class ImageDistGitRepo(DistGitRepo):
         recursive_overwrite(self.runtime, self.source_path(), self.distgit_dir)
 
         if dockerfile_name != "Dockerfile":
-            # Does a non-distgit Dockerfile already exists from copying source; remove if so
+            # Does a non-distgit Dockerfile already exist from copying source; remove if so
             if os.path.isfile("Dockerfile"):
                 os.remove("Dockerfile")
 
@@ -845,17 +845,33 @@ class ImageDistGitRepo(DistGitRepo):
         # Leave a record for external processes that owners will need to notified.
 
         if notify_owner:
+            with Dir(self.source_path()):
+                author_email = None
+                err = None
+                rc, sha, err = gather_exec(self.runtime, 'git log -n 1 --pretty=format:%H {}'.format(dockerfile_name))
+                if rc == 0:
+                    rc, ae, err = gather_exec(self.runtime, 'git show -s --pretty=format:%ae {}'.format(sha))
+                    if rc == 0:
+                        if ae.lower().endswith('@redhat.com'):
+                            self.info('Last Dockerfile commiter: {}'.format(ae))
+                            author_email = ae
+                        else:
+                            err = 'Last commiter email found, but is not @redhat.com address: {}'.format(ae)
+                if err:
+                    self.info('Unable to get author email for last {} commit: {}'.format(dockerfile_name, err))
+
+            owners = []
             if self.config.owners is not Missing and isinstance(self.config.owners, list):
-                owners_list = ", ".join(self.config.owners)
-            else:
-                owners_list = ""
+                owners = list(self.config.owners)
+            if author_email:
+                owners.append(author_email)
             sub_path = self.config.content.source.path
             if not sub_path:
                 source_dockerfile_subpath = dockerfile_name
             else:
                 source_dockerfile_subpath = "{}/{}".format(sub_path, dockerfile_name)
             self.runtime.add_record("dockerfile_notify", distgit=self.metadata.qualified_name, image=self.config.name,
-                                    dockerfile=os.path.abspath("Dockerfile"), owners=owners_list,
+                                    dockerfile=os.path.abspath("Dockerfile"), owners=','.join(owners),
                                     source_alias=self.config.content.source.get('alias', None),
                                     source_dockerfile_subpath=source_dockerfile_subpath)
 
