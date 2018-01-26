@@ -77,7 +77,8 @@ class RPMMetadata(Metadata):
         with Dir(self.source_path):
             if not scratch:
                 assert_exec(self.runtime, 'git tag {}'.format(self.tag))
-            rc, self.commit_sha, err = gather_exec(self.runtime, 'git rev-parse HEAD')
+            rc, sha, err = gather_exec(self.runtime, 'git rev-parse HEAD')
+            self.commit_sha = sha.strip()
 
     def push_tag(self):
         if not self.tag:
