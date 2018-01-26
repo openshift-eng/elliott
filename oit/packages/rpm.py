@@ -62,6 +62,7 @@ class RPMMetadata(Metadata):
         self.version = None
         self.release = None
         self.tag = None
+        self.commit_sha = None
         self.build_status = False
 
     def set_nvr(self, version, release):
@@ -69,12 +70,14 @@ class RPMMetadata(Metadata):
         self.release = release
         self.tag = '{}-{}-{}'.format(self.config.name, self.version, self.release)
 
-    def create_tag(self):
+    def create_tag(self, scratch):
         if not self.tag:
             raise ValueError('Must run set_nvr() before calling!')
 
         with Dir(self.source_path):
-            assert_exec(self.runtime, 'git tag {}'.format(self.tag))
+            if not scratch:
+                assert_exec(self.runtime, 'git tag {}'.format(self.tag))
+            rc, self.commit_sha, err = gather_exec(self.runtime, 'git rev-parse HEAD')
 
     def push_tag(self):
         if not self.tag:
@@ -140,6 +143,18 @@ class RPMMetadata(Metadata):
             'Release:': 'Release:        {}%{{?dist}}\n'.format(self.release),
         }
 
+        # self.version example: 3.9.0
+        # Extract the major, minor, patch
+        major, minor, patch = self.version.split('.')
+        full = "v{}".format(self.version)
+
+        # If this is a pre-release RPM, the include the release field in
+        # the full version.
+        # pre-release full version: v3.9.0-0.20.1
+        # release full version: v3.9.0
+        if self.release.startswith("0."):
+            full += "-{}".format(self.release)
+
         replace_keys = replace.keys()
 
         with Dir(self.source_path):
@@ -148,18 +163,23 @@ class RPMMetadata(Metadata):
                 self._run_modifications()
 
             # second, update with NVR
-            lines = []
             with open(self.specfile, 'r+') as sf:
                 lines = sf.readlines()
                 for i in range(len(lines)):
-                    if len(replace_keys):
+
+                    if "%global os_git_vars " in lines[i]:
+                        lines[i] = "%global os_git_vars OS_GIT_VERSION={version} OS_GIT_MAJOR={major} OS_GIT_MINOR={minor} OS_GIT_PATCH={patch} OS_GIT_COMMIT={commit} OS_GIT_TREE_STATE=clean".format(
+                            version=full, major=major, minor=minor, patch=patch, commit=self.commit_sha
+                        )
+
+                    if replace_keys:  # If there are keys left to replace
                         for k in replace_keys:
                             v = replace[k]
                             if lines[i].startswith(k):
                                 lines[i] = v
                                 replace_keys.remove(k)
-                    else:
-                        break  # no more replacements, drop out
+                                break
+
                 # truncate the original file
                 sf.seek(0)
                 sf.truncate()
@@ -224,7 +244,7 @@ class RPMMetadata(Metadata):
 
     def build_rpm(self, version, release, scratch=False, retries=3):
         self.set_nvr(version, release)
-        self.create_tag()
+        self.create_tag(scratch)
         self.tito_setup()
         self.update_spec()
         self.commit_changes()
