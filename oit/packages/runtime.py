@@ -449,12 +449,18 @@ class Runtime(object):
 
         source_config = self.group_config.sources[alias]
         url = source_config["url"]
+        branches = source_config['branch']
         self.info("Cloning source '%s' from %s as specified by group into: %s" % (alias, url, source_dir))
         assert_exec(self, ["git", "clone", url, source_dir])
-        branch = source_config["branch"]
-        fallback_branch = source_config.get("fallback-branch", None)
+        stage_branch = branches.get('stage', None)
+        fallback_branch = branches.get("fallback", None)
         found = False
         with Dir(source_dir):
+            if self.stage and stage_branch:
+                self.info('Normal branch overriden by --stage option, using "{}"'.format(stage_branch))
+                branch = stage_branch
+            else:
+                branch = branches["target"]
             self.info("Attempting to checkout source '%s' branch %s in: %s" % (alias, branch, source_dir))
 
             if branch != "master":
@@ -465,7 +471,9 @@ class Runtime(object):
             if rc == 0:
                 found = True
             else:
-                if fallback_branch is not None:
+                if self.stage and stage_branch:
+                    raise IOError('--stage option specified and no stage branch named "{}" exists for {}|{}'.format(stage_branch, alias, url))
+                elif fallback_branch is not None:
                     self.info("  Unable to checkout branch %s ; trying fallback %s" % (branch, fallback_branch))
                     self.info("Attempting to checkout source '%s' fallback-branch %s in: %s" % (alias, fallback_branch, source_dir))
                     if fallback_branch != "master":
@@ -519,7 +527,7 @@ class Runtime(object):
         rpms.  The caller must indicate which to use.
         """
 
-        if not repo_type in (self.group_config.repos):
+        if repo_type not in (self.group_config.repos):
             raise ValueError(
                 "unknown repo-type {}, known types: {}".format(
                     repo_type,
@@ -564,7 +572,7 @@ class Runtime(object):
         Not Valid:
           1, v1..2, av3.4, .v12  .99.12, v13-55
         """
-        return re.match("^v\d+((\.\d+)+)?$", version) != None
+        return re.match("^v\d+((\.\d+)+)?$", version) is not None
 
     @classmethod
     def _parallel_exec(self, f, args, n_threads):
