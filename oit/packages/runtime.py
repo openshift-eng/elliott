@@ -547,6 +547,7 @@ class Runtime(object):
 
         version = "v" + auto_version.strip()
 
+        self.info("Auto-detected OCP version: {}".format(version))
         return version
 
     def valid_version(self, version):
