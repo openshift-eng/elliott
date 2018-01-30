@@ -14,9 +14,10 @@ from multiprocessing.dummy import Pool as ThreadPool
 from dockerfile_parse import DockerfileParser
 
 pass_runtime = click.make_pass_decorator(Runtime)
+context_settings = dict(help_option_names=['-h', '--help'])
 
 
-@click.group()
+@click.group(context_settings=context_settings)
 @click.option("--metadata-dir", metavar='PATH', default=os.getcwd(),
               help="Directory containing groups metadata directory if not current.")
 @click.option("--working-dir", metavar='PATH', default=None,
