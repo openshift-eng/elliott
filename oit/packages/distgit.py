@@ -59,7 +59,7 @@ class DistGitRepo(object):
     def clone(self, distgits_root_dir, distgit_branch):
         with Dir(distgits_root_dir):
 
-            self.distgit_dir = os.path.abspath(os.path.join(os.getcwd(), self.metadata.name))
+            self.distgit_dir = os.path.join(distgits_root_dir, self.metadata.name)
             if os.path.isdir(self.distgit_dir):
                 self.info("Distgit directory already exists; skipping clone: %s" % self.distgit_dir)
             else:
