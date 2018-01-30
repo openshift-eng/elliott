@@ -1,3 +1,4 @@
+from multiprocessing.dummy import Pool as ThreadPool
 import os
 import click
 import tempfile
@@ -97,7 +98,7 @@ class Runtime(object):
         # Create a "uuid" which will be used in FROM fields during updates
         self.uuid = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
-    def initialize(self, mode='images'):
+    def initialize(self, mode='images', clone_distgits=True):
 
         if self.initialized:
             return
@@ -301,6 +302,8 @@ class Runtime(object):
         if os.path.isfile(streams_path):
             with open(streams_path, "r") as s:
                 self.streams = Model(yaml.load(s.read()))
+        if clone_distgits:
+            self.clone_distgits()
 
     @staticmethod
     def timestamp():
@@ -562,3 +565,23 @@ class Runtime(object):
           1, v1..2, av3.4, .v12  .99.12, v13-55
         """
         return re.match("^v\d+((\.\d+)+)?$", version) != None
+
+    @classmethod
+    def _parallel_exec(self, f, args, n_threads):
+        pool = ThreadPool(n_threads)
+        ret = pool.map_async(f, args)
+        pool.close()
+        pool.join()
+        return ret
+
+    def clone_distgits(self, n_threads=20):
+        return self._parallel_exec(
+            lambda m: m.distgit_repo(),
+            self.all_metas(),
+            n_threads=n_threads)
+
+    def push_distgits(self, n_threads=20):
+        return self._parallel_exec(
+            lambda m: m.distgit_repo().push(),
+            self.all_metas(),
+            n_threads=n_threads)

@@ -8,7 +8,6 @@ from common import (
     exec_cmd, gather_exec, retry, Dir, recursive_overwrite, watch_task,
 )
 from model import Model, Missing
-from distgit import DistGitRepo
 from metadata import Metadata
 import time
 

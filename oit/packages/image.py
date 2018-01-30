@@ -8,7 +8,7 @@ import urllib
 from multiprocessing import Lock
 from dockerfile_parse import DockerfileParser
 import json
-from distgit import DistGitRepo, pull_image, OIT_COMMENT_PREFIX, EMPTY_REPO
+from distgit import pull_image, OIT_COMMENT_PREFIX, EMPTY_REPO
 from metadata import Metadata
 
 from common import BREW_IMAGE_HOST, CGIT_URL, RetryException, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, gather_exec, retry, recursive_overwrite
