@@ -504,11 +504,14 @@ def images_scan_for_cves(runtime):
 
 
 @cli.command("images:print", short_help="Print data from each distgit.")
+@click.option(
+    "--short", default=False, is_flag=True,
+    help="Suppress all output other than the data itself")
 @click.option('--show-non-release', default=False, is_flag=True,
               help='Include images which have been marked as non-release.')
 @click.argument("pattern", nargs=1)
 @pass_runtime
-def images_print(runtime, show_non_release, pattern):
+def images_print(runtime, short, show_non_release, pattern):
     """
     Prints data from each distgit. The pattern specified should be a string
     with replacement fields:
@@ -535,8 +538,12 @@ def images_print(runtime, show_non_release, pattern):
 
     count = 0
     non_release = 0
-    click.echo("")
-    click.echo("------------------------------------------")
+    if short:
+        echo_verbose = lambda _: pass
+    else:
+        echo_verbose = click.echo
+    echo_verbose("")
+    echo_verbose("------------------------------------------")
     for image in runtime.image_metas():
 
         if image.config.non_release and not show_non_release:
@@ -565,14 +572,14 @@ def images_print(runtime, show_non_release, pattern):
         click.echo(s)
         count += 1
 
-    click.echo("------------------------------------------")
-    click.echo("{} images".format(count))
+    echo_verbose("------------------------------------------")
+    echo_verbose("{} images".format(count))
 
     if non_release > 0:
-        click.echo("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(non_release))
+        echo_verbose("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(non_release))
         for image in runtime.image_metas():
             if image.config.non_release:
-                click.echo("    {}".format(image.name))
+                echo_verbose("    {}".format(image.name))
 
 
 @cli.command("images:print-config-template", short_help="Create template config.yml from distgit Dockerfile.")
