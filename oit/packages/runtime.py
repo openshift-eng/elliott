@@ -103,6 +103,10 @@ class Runtime(object):
         if self.initialized:
             return
 
+        if self.quiet and self.verbose:
+            click.echo("Flags --quiet and --verbose are mutually exclusive")
+            exit(1)
+
         # We could mark these as required and the click library would do this for us,
         # but this seems to prevent getting help from the various commands (unless you
         # specify the required parameters). This can probably be solved more cleanly, but TODO
@@ -318,6 +322,8 @@ class Runtime(object):
             self.debug_log.flush()
 
     def info(self, message, debug=None):
+        if self.quiet:
+            return
         if self.verbose:
             if debug is not None:
                 self.log_verbose("%s [%s]" % (message, debug))
