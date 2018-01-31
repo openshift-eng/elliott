@@ -540,7 +540,7 @@ def images_print(runtime, short, show_non_release, pattern):
     count = 0
     non_release = 0
     if short:
-        echo_verbose = lambda _: pass
+        echo_verbose = lambda _: None
     else:
         echo_verbose = click.echo
     echo_verbose("")
