@@ -252,8 +252,9 @@ class ImageDistGitRepo(DistGitRepo):
             self.org_version = None
             self.org_release = None
             # Read in information about the image we are about to build
-            if os.path.isfile('Dockerfile'):
-                dfp = DockerfileParser(path="Dockerfile")
+            dockerfile = os.path.join(Dir.getcwd(), 'Dockerfile')
+            if os.path.isfile(dockerfile):
+                dfp = DockerfileParser(path=dockerfile)
                 self.org_image_name = dfp.labels["name"]
                 self.org_version = dfp.labels["version"]
                 self.org_release = dfp.labels.get("release")  # occasionally no release given
