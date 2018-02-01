@@ -525,7 +525,7 @@ class Runtime(object):
         rpms.  The caller must indicate which to use.
         """
 
-        if not repo_type in (self.group_config.repos):
+        if repo_type not in (self.group_config.repos):
             raise ValueError(
                 "unknown repo-type {}, known types: {}".format(
                     repo_type,
@@ -570,7 +570,7 @@ class Runtime(object):
         Not Valid:
           1, v1..2, av3.4, .v12  .99.12, v13-55
         """
-        return re.match("^v\d+((\.\d+)+)?$", version) != None
+        return re.match("^v\d+((\.\d+)+)?$", version) is not None
 
     @classmethod
     def _parallel_exec(self, f, args, n_threads):

@@ -21,7 +21,6 @@ class RuntimeMock(object):
         self.debug_log.write(message + "\n")
 
 
-
 class DirTestCase(unittest.TestCase):
     def test_chdir(self):
         cwd = os.getcwd()
