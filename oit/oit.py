@@ -372,12 +372,14 @@ def images_copy(runtime, to_branch, message, push, replace):
 @cli.command("images:build", short_help="Build images for the group.")
 @click.option("--repo-type", default=None, metavar="REPO_TYPE",
               help="Repo type (i.e. signed, unsigned).")
+@click.option("--repo", default=[], metavar="REPO_URL",
+              multiple=True, help="Custom repo URL to supply to brew build.")
 @click.option('--push-to-defaults', default=False, is_flag=True, help='Push to default registries when build completes.')
 @click.option("--push-to", default=[], metavar="REGISTRY", multiple=True,
               help="Specific registries to push to when image build completes.  [multiple]")
 @click.option('--scratch', default=False, is_flag=True, help='Perform a scratch build.')
 @pass_runtime
-def images_build_image(runtime, repo_type, push_to_defaults, push_to, scratch):
+def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scratch):
     """
     Attempts to build container images for all of the distgit repositories
     in a group. If an image has already been built, it will be treated as
@@ -387,6 +389,13 @@ def images_build_image(runtime, repo_type, push_to_defaults, push_to, scratch):
     images to those mirrors as they become available. Note that this should
     be more performant than running images:push since pushes can
     be performed in parallel with other images building.
+
+    Tips on using custom --repo.
+    1. Upload a .repo file into a public repository on github.com (it must end in .repo)
+       with your desired yum repos enabled.
+    2. Specify the raw URL for the build.
+    3. You will probably want to use --scratch since it is unlikely you want your
+        custom build tagged.
     """
     # Initialize all distgit directories before trying to build. This is to
     # ensure all build locks are acquired before the builds start and for
@@ -404,7 +413,7 @@ def images_build_image(runtime, repo_type, push_to_defaults, push_to, scratch):
 
     pool = ThreadPool(len(items))
     results = pool.map(
-        lambda dgr: dgr.build_container(repo_type, push_to, scratch),
+        lambda dgr: dgr.build_container(repo_type, repo, push_to, scratch),
         items)
 
     # Wait for results
@@ -422,12 +431,13 @@ def images_build_image(runtime, repo_type, push_to_defaults, push_to, scratch):
 
 
 @cli.command("images:push", short_help="Push the most recent images to mirrors.")
+@click.option('--tag', default=[], metavar="PUSH_TAG", multiple=True, help='Push to registry using these tags instead of default set.')
 @click.option('--to-defaults', default=False, is_flag=True, help='Push to default registries.')
 @click.option('--late-only', default=False, is_flag=True, help='Push only "late" images.')
 @click.option("--to", default=[], metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
 @pass_runtime
-def images_push(runtime, to_defaults, late_only, to):
+def images_push(runtime, tag, to_defaults, late_only, to):
     """
     Each distgit repository will be cloned and the version and release information
     will be extracted. That information will be used to determine the most recently
@@ -463,7 +473,7 @@ def images_push(runtime, to_defaults, late_only, to):
         # Push early images
         for image in runtime.image_metas():
             try:
-                image.distgit_repo().push_image(to)
+                image.distgit_repo().push_image(tag, to)
             except Exception:
                 traceback.print_exc()
                 failed.append(image.name)
@@ -476,7 +486,7 @@ def images_push(runtime, to_defaults, late_only, to):
     for image in runtime.image_metas():
         # Check if actually a late image to prevent cloning all distgit on --late-only
         if image.config.push.late is True:
-            image.distgit_repo().push_image(to, True)
+            image.distgit_repo().push_image(tag, to, True)
 
 
 @cli.command("images:pull", short_help="Pull latest images from pulp")
