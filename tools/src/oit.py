@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 from ocp_cd_tools import Runtime, Dir
-from ocp_cd_tools.image import pull_image
+from ocp_cd_tools.image import pull_image, create_image_verify_repo_file, Image
+import datetime
 import click
 import os
 import yaml
@@ -10,6 +11,7 @@ import subprocess
 import urllib
 import traceback
 from multiprocessing.dummy import Pool as ThreadPool
+from multiprocessing import cpu_count
 from dockerfile_parse import DockerfileParser
 
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -198,6 +200,106 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
 
     if push:
         runtime.push_distgits()
+
+
+@cli.command("images:verify", short_help="Run some smoke tests to verify produced images")
+@click.option("--image", "-i", metavar="REPO/NAME:TAG", multiple=True,
+              help="Run a manual scan of one or more specific images [multiple]")
+@click.option("--no-pull", is_flag=True,
+              help="Assume image has already been pulled (Just-in-time pulling)")
+@click.option("--repo-type", default='signed',
+              help="Repo type (i.e. signed, unsigned). Use 'unsigned' for newer releases like 3.9 until they're GA")
+@click.option('--check-orphans', default=None, is_flag=True,
+              help="Verify no packages are orphaned (installed without a source repo) [SLOW]")
+@click.option('--check-sigs', default=None, is_flag=True,
+              help="Verify that all installed packages are signed with a valid key")
+@click.option('--check-versions', default=None, is_flag=True,
+              help="Verify that installed package versions match the target release")
+@pass_runtime
+def images_verify(runtime, image, no_pull, repo_type, **kwargs):
+    """Catches mistakes in images (see the --check-FOO options) before we
+    ship them on to QE for further verification. This command roughly
+    approximates the image check job ran on the QE Jenkins.
+
+    Ensure you provide a `--working-dir` if you want to retain the
+    test reports. Some useful artifacts are produced in the
+    `working-dir`: debug.log: The full verbose log of all
+    operations. verify_fail_log.yml: Failed images check
+    details. verify_full_log.yml: Full image check details.
+
+    EXAMPLES
+
+    * Run all checks on all the lastest openshift-3.9 group images:
+
+      $ oit.py --group openshift-3.9 images:verify
+
+    * ONLY the package signature check:
+
+      $ oit.py --group openshift-3.9 images:verify --check-sigs
+
+    * All tests on a SPECIFIC image:
+
+      \b
+      $ oit.py --group openshift-3.4 images:verify --image reg.rh.com:8888/openshift3/ose:v3.4.1.44.38-12
+
+    Exit code is the number of images that failed the image check
+
+    """
+    # * Job: https://openshift-qe-jenkins.rhev-ci-vms.eng.rdu2.redhat.com/job/v3-errata-image-test/
+    # * Source: git://git.app.eng.bos.redhat.com/openshift-misc.git/openshift-misc/v3-errata-image-test/v3-errata-image-test.sh
+    runtime.initialize(clone_distgits=False)
+    # Parse those check options. All None indicates we run everything,
+    # True then we only run the True checks.
+    if not any(kwargs.values()):
+        enabled_checks = kwargs.keys()
+    else:
+        enabled_checks = list(k for k, v in kwargs.items() if v)
+
+    repo_file = create_image_verify_repo_file(runtime, repo_type=repo_type)
+
+    # Doing this manually, or automatic on a group?
+    if len(image) == 0:
+        images = [Image(runtime, x.pull_url(), repo_file, enabled_checks) for x in runtime.image_metas()]
+    else:
+        images = [Image(runtime, img, repo_file, enabled_checks) for img in image]
+
+    # Don't pre-pull images, useful during development iteration. If
+    # --no-pull isn't given, then we will pre-pull all images.
+    if not no_pull:
+        for image in images:
+            pull_image(runtime, image.pull_url)
+
+    count_images = len(images)
+    runtime.info("[Verify] Running verification checks on {count} images: {chks}".format(count=count_images, chks=", ".join(enabled_checks)))
+
+    pool = ThreadPool(cpu_count())
+    results = pool.map(
+        lambda img: img.verify_image(),
+        images)
+    # Wait for results
+    pool.close()
+    pool.join()
+
+    ######################################################################
+    # Done! Let's begin accounting and recording
+    failed_images = [img for img in results if img['status'] == 'failed']
+    failed_images_count = len(failed_images)
+
+    fail_log = os.path.join(runtime.working_dir, 'verify_fail_log.yml')
+
+    runtime.info("[Verify] Checks finished. {fail_count} failed".format(fail_count=failed_images_count))
+
+    if failed_images_count > 0:
+        fail_log_data = {
+            'test_date': str(datetime.datetime.now()),
+            'data': failed_images
+        }
+
+        with open(fail_log, 'w') as fp:
+            fp.write(yaml.safe_dump(fail_log_data, indent=4, default_flow_style=False))
+            runtime.info("[Verify] Failed images check details: {fail_log}".format(fail_log=fail_log))
+
+    exit(failed_images_count)
 
 
 @cli.command("images:rebase", short_help="Refresh a group's distgit content from source content.")
