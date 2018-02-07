@@ -8,7 +8,7 @@ import yaml
 import datetime
 import re
 
-from common import assert_dir, assert_exec, gather_exec, Dir
+from common import assert_dir, assert_exec, gather_exec, wrap_exception, Dir
 from image import ImageMetadata
 from rpm import RPMMetadata
 from model import Model, Missing
@@ -582,12 +582,12 @@ class Runtime(object):
 
     def clone_distgits(self, n_threads=20):
         return self._parallel_exec(
-            lambda m: m.distgit_repo(),
+            lambda m: wrap_exception(m.distgit_repo)(),
             self.all_metas(),
             n_threads=n_threads).get()
 
     def push_distgits(self, n_threads=20):
         return self._parallel_exec(
-            lambda m: m.distgit_repo().push(),
+            lambda m: wrap_exception(m.distgit_repo().push)(),
             self.all_metas(),
             n_threads=n_threads).get()

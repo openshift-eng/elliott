@@ -3,7 +3,8 @@ import os
 import tempfile
 import unittest
 from common import (
-    Dir, assert_exec, exec_cmd, gather_exec, parse_taskinfo, retry)
+    Dir, WrapException, assert_exec, exec_cmd, gather_exec, parse_taskinfo,
+    retry, wrap_exception)
 
 
 class RuntimeMock(object):
@@ -158,6 +159,25 @@ Started: Mon Jan  8 12:49:07 2018
 Host: x86-034.build.eng.bos.redhat.com
 """),
             "open")
+
+
+class WrapExceptionTestCase(unittest.TestCase):
+    def test_decorator(self):
+        def test_f():
+            raise Exception('test')
+        pool = Pool(1)
+        result = pool.apply_async(wrap_exception(test_f))
+        pool.close()
+        pool.join()
+        self.assertFalse(result.successful())
+        try:
+            result.get()
+        except WrapException as ex:
+            pass
+        self.assertIsNotNone(ex)
+        self.assertIn("Original traceback:", str(ex))
+        self.assertIn("Exception: test", str(ex))
+
 
 if __name__ == "__main__":
     unittest.main()
