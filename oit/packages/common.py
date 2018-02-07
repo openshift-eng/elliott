@@ -1,8 +1,11 @@
 import os
 import errno
+import functools
 import subprocess
 import threading
 import time
+import traceback
+import sys
 
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
@@ -179,3 +182,28 @@ def watch_task(log_f, task_id):
             subprocess.check_call(("brew", "cancel", str(task_id)))
             p.kill()
     return p.returncode, p.stdout.read(), p.stderr.read()
+
+
+class WrapException(Exception):
+    """ https://bugs.python.org/issue13831 """
+    def __init__(self):
+        super(WrapException, self).__init__()
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        self.exception = exc_value
+        self.formatted = "".join(
+            traceback.format_exception(exc_type, exc_value, exc_tb))
+
+    def __str__(self):
+        return "{}\nOriginal traceback:\n{}".format(
+            Exception.__str__(self), self.formatted)
+
+
+def wrap_exception(func):
+    """ Decorate a function, wrap exception if it occurs. """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except Exception:
+            raise WrapException()
+    return wrapper
