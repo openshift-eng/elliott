@@ -259,12 +259,13 @@ class ImageDistGitRepo(DistGitRepo):
                 self.org_version = dfp.labels["version"]
                 self.org_release = dfp.labels.get("release")  # occasionally no release given
 
-    def push_image(self, push_to_list, push_late=False):
+    def push_image(self, tag_list, push_to_list, push_late=False):
 
         """
         Pushes the most recent image built for this distgit repo. This is
         accomplished by looking the 'version' field in the Dockerfile and querying
         brew for the most recent images built for that version.
+        :param tag_list: The list of tags to apply to the image (overrides default tagging pattern)
         :param push_to_list: A list of registries to push the image to
         :param push_late: Whether late pushes should be included
         """
@@ -283,6 +284,10 @@ class ImageDistGitRepo(DistGitRepo):
             is_late_push = self.config.push.late
 
         if push_late != is_late_push:
+            return
+
+        # Nothing to push to? We are done.
+        if not push_to_list:
             return
 
         with Dir(self.distgit_dir):
@@ -334,20 +339,24 @@ class ImageDistGitRepo(DistGitRepo):
 
             for image_name in names:
                 try:
-                    push_tags = [
-                        "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
-                        "%s" % version,  # e.g. "v3.7.0"
-                    ]
+                    push_tags = tag_list
 
-                    # In v3.7, we use the last .0 in the release as a bump field to differentiate
-                    # image refreshes. Strip this off since OCP will have no knowledge of it when reaching
-                    # out for its node image.
-                    if "." in release:
-                        # Strip off the last field; "0.114.0.0" -> "0.114.0"
-                        push_tags.append("%s-%s" % (version, release.rsplit(".", 1)[0]))
+                    # If no tags were specified, build defaults
+                    if not push_tags:
+                        push_tags = [
+                            "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
+                            "%s" % version,  # e.g. "v3.7.0"
+                        ]
 
-                    # Push as v3.X; "v3.7.0" -> "v3.7"
-                    push_tags.append("%s" % (version.rsplit(".", 1)[0]))
+                        # In v3.7, we use the last .0 in the release as a bump field to differentiate
+                        # image refreshes. Strip this off since OCP will have no knowledge of it when reaching
+                        # out for its node image.
+                        if "." in release:
+                            # Strip off the last field; "0.114.0.0" -> "0.114.0"
+                            push_tags.append("%s-%s" % (version, release.rsplit(".", 1)[0]))
+
+                        # Push as v3.X; "v3.7.0" -> "v3.7"
+                        push_tags.append("%s" % (version.rsplit(".", 1)[0]))
 
                     action = "push"
                     record = {
@@ -418,12 +427,13 @@ class ImageDistGitRepo(DistGitRepo):
             else:
                 self.info("repo successfully waited for me to build: %s" % who_is_waiting)
 
-    def build_container(self, repo_type, push_to_list, scratch=False, retries=3):
+    def build_container(self, repo_type, repo, push_to_list, scratch=False, retries=3):
         """
         This method is designed to be thread-safe. Multiple builds should take place in brew
         at the same time. After a build, images are pushed serially to all mirrors.
         DONT try to change cwd during this time, all threads active will change cwd
-        :param repo: Repo type to choose from group.yml
+        :param repo_type: Repo type to choose from group.yml
+        :param repo: A list/tuple of custom repo URLs to include for build
         :param push_to_list: A list of registries resultant builds should be pushed to.
         :param scratch: Whether this is a scratch build. UNTESTED.
         :param retries: Number of times the build should be retried.
@@ -479,7 +489,7 @@ class ImageDistGitRepo(DistGitRepo):
 
                 retry(
                     n=3, wait_f=wait,
-                    f=lambda: self._build_container(target_image, repo_type, scratch, record))
+                    f=lambda: self._build_container(target_image, repo_type, repo, scratch, record))
 
             record["message"] = "Success"
             record["status"] = 0
@@ -506,7 +516,7 @@ class ImageDistGitRepo(DistGitRepo):
             with self.runtime.mutex:
                 self.push_status = False
                 try:
-                    self.push_image(push_to_list)
+                    self.push_image([], push_to_list)
                     self.push_status = True
                 except Exception as push_e:
                     self.info("Error during push after successful build: %s" % str(push_e))
@@ -517,7 +527,7 @@ class ImageDistGitRepo(DistGitRepo):
         self.runtime.add_record(action, **record)
         return self.build_status and self.push_status
 
-    def _build_container(self, target_image, repo_type, scratch, record):
+    def _build_container(self, target_image, repo_type, repo_list, scratch, record):
         """
         The part of `build_container` which actually starts the build,
         separated for clarity.
@@ -531,9 +541,16 @@ class ImageDistGitRepo(DistGitRepo):
         cmd_list += (
             "container-build",
             "--nowait",
-            "--repo",
-            self.metadata.cgit_url(".oit/" + repo_type + ".repo"),
         )
+
+        if repo_type:
+            repo_list = list(repo_list)  # In case we get a tuple
+            repo_list.append(self.metadata.cgit_url(".oit/" + repo_type + ".repo"))
+
+        if repo_list:
+            # rhpkg supports --repo-url [URL [URL ...]]
+            cmd_list.append("--repo-url")
+            cmd_list.extend(repo_list)
 
         if scratch:
             cmd_list.append("--scratch")
