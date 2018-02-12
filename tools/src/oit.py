@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 
-from packages import Runtime
-from packages import Dir
-from packages.image import pull_image
+from ocp_cd_tools import Runtime, Dir
+from ocp_cd_tools.image import pull_image
 import click
 import os
 import yaml
