@@ -57,11 +57,11 @@ class Metadata(object):
         # not implementing this until we actually need it.
         assert (self.config.name is not Missing)
 
-        self.type = "rpms"  # default type is rpms
-        if self.config.repo.type is not Missing:
-            self.type = self.config.repo.type
+        self.namespace = "rpms"  # default type is rpms
+        if self.config.distgit.namespace is not Missing:
+            self.namespace = self.config.distgit.namespace
 
-        self.qualified_name = "%s/%s" % (self.type, name)
+        self.qualified_name = "%s/%s" % (self.namespace, name)
 
         self._distgit_repo = None
 
@@ -71,8 +71,8 @@ class Metadata(object):
         return self._distgit_repo
 
     def branch(self):
-        if self.config.repo.branch is not Missing:
-            return self.config.repo.branch
+        if self.config.distgit.branch is not Missing:
+            return self.config.distgit.branch
         return self.runtime.branch
 
     def cgit_url(self, filename):
@@ -95,10 +95,10 @@ class Metadata(object):
 
         # For apbs, component name seems to have -apb appended.
         # ex. http://dist-git.host.prod.eng.bos.redhat.com/cgit/apbs/openshift-enterprise-mediawiki/tree/Dockerfile?h=rhaos-3.7-rhel-7
-        if self.type == "apbs":
+        if self.namespace == "apbs":
             component_name = "%s-apb" % component_name
 
-        if self.config.repo.component is not Missing:
-            component_name = self.config.repo.component
+        if self.config.distgit.component is not Missing:
+            component_name = self.config.distgit.component
 
         return component_name
