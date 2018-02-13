@@ -718,7 +718,7 @@ def query_rpm_version(runtime, repo_type):
     repository. This is the version number that will be applied to new images
     created from this build.
     """
-    runtime.initialize()
+    runtime.initialize(clone_distgits=False)
 
     version = runtime.auto_version(repo_type)
     click.echo("version: {}".format(version))
