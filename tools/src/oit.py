@@ -290,6 +290,7 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
     runtime.info("[Verify] Checks finished. {fail_count} failed".format(fail_count=failed_images_count))
 
     if failed_images_count > 0:
+        runtime.remove_tmp_working_dir = False
         fail_log_data = {
             'test_date': str(datetime.datetime.now()),
             'data': failed_images
