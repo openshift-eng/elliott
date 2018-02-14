@@ -567,7 +567,7 @@ def images_print(runtime, short, show_non_release, pattern):
         s = pattern
         s = s.replace("{build}", "{component}-{version}-{release}")
         s = s.replace("{repository}", "{image}:{version}-{release}")
-        s = s.replace("{type}", image.type)
+        s = s.replace("{namespace}", image.namespace)
         s = s.replace("{name}", image.name)
         s = s.replace("{component}", image.get_component_name())
         s = s.replace("{image}", dfp.labels["name"])

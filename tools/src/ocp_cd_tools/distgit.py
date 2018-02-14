@@ -46,8 +46,8 @@ class DistGitRepo(object):
 
         # Allow the config.yml to override branch
         # This is primarily useful for a sync only group.
-        if self.config.repo.branch is not Missing:
-            self.branch = self.config.repo.branch
+        if self.config.distgit.branch is not Missing:
+            self.branch = self.config.distgit.branch
 
         # Initialize our distgit directory, if necessary
         self.clone(self.runtime.distgits_dir, self.branch)
