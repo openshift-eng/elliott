@@ -333,7 +333,7 @@ class ImageDistGitRepo(DistGitRepo):
             except Exception as err:
                 record["message"] = "Exception occurred: %s" % str(err)
                 self.info("Error pulling %s: %s" % (self.metadata.name, err))
-                raise err
+                raise
             finally:
                 self.runtime.add_record('pull', **record)
 
@@ -412,7 +412,7 @@ class ImageDistGitRepo(DistGitRepo):
                 except Exception as err:
                     record["message"] = "Exception occurred: %s" % str(err)
                     self.info("Error pushing %s: %s" % (self.metadata.name, err))
-                    raise err
+                    raise
 
                 finally:
                     self.runtime.add_record(action, **record)
