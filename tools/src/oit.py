@@ -530,7 +530,7 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
 
     # Push all late images
     for image in runtime.image_metas():
-        image.distgit_repo().push_image(push_to, True)
+        image.distgit_repo().push_image([], push_to, True)
 
 
 @cli.command("images:push", short_help="Push the most recent images to mirrors.")
