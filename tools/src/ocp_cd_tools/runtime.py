@@ -210,7 +210,7 @@ class Runtime(object):
                 with Dir(images_dir):
                     images_list = [x for x in os.listdir(".") if os.path.isdir(x)]
             else:
-                self.info('{} does not exist. Skipping image processing for group.'.format(rpms_dir))
+                self.info('{} does not exist. Skipping image processing for group.'.format(images_dir))
 
             rpms_list = []
             if os.path.isdir(rpms_dir):
