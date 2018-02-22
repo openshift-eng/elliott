@@ -768,6 +768,7 @@ is formatted so that it can be fed to the shell's `source` command directly:
     $ source <(/path/to/oit completion)
 """)
 def completion():
+    basename = os.path.basename(sys.argv[0])
     click.echo("""\
 _oit_completion() {
     local cmd word prev mdir group types
@@ -808,7 +809,7 @@ _oit_completion() {
     COMPREPLY=( $(compgen -W "${group}" -- "${word}") )
 }
 complete -F _oit_completion -o default %s
-""" % (os.path.basename(sys.argv[0].replace("-", "_")).upper(), sys.argv[0]))
+""" % (basename.replace("-", "_").upper(), basename))
 
 
 @cli.command("images:query-rpm-version", short_help="Find the OCP version from the atomic-openshift RPM")
