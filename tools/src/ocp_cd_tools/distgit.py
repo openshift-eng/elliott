@@ -910,6 +910,8 @@ class ImageDistGitRepo(DistGitRepo):
                 assert (match is not Missing)
                 replacement = modification.replacement
                 assert (replacement is not Missing)
+                if replacement is None:  # Nothing follows colon in config.yml; user attempting to remove string
+                    replacement = ""
                 pre = dockerfile_data
                 dockerfile_data = pre.replace(match, replacement)
                 if dockerfile_data == pre:
