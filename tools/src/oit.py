@@ -186,7 +186,7 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
     if version == "auto":
         version = runtime.auto_version(repo_type)
 
-    if not runtime.valid_version(version):
+    if version and not runtime.valid_version(version):
         raise ValueError(
             "invalid version string: {}, expecting like v3.4 or v1.2.3".format(version)
         )
