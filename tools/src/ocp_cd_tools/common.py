@@ -6,7 +6,10 @@ import threading
 import time
 import traceback
 import sys
+import koji
+import koji_cli.lib
 
+BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
 
@@ -161,27 +164,23 @@ def retry(n, f, check_f=bool, wait_f=None):
     raise RetryException("Giving up after {} failed attempt(s)".format(n))
 
 
-def parse_taskinfo(out):
-    return next(
-        (l[7:] for l in out.splitlines() if l.startswith("State: ")),
-        "unknown")
-
-
-def watch_task(log_f, task_id):
-    start = time.time()
-    p = subprocess.Popen(
-        ("brew", "watch-task", str(task_id)),
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    while p.poll() is None:
-        info = subprocess.check_output(("brew", "taskinfo", str(task_id)))
-        log_f("Task state: {}".format(parse_taskinfo(info)))
-        if time.time() - start < 4 * 60 * 60:
-            time.sleep(2 * 60)
-        else:
-            log_f("Timeout building image")
-            subprocess.check_call(("brew", "cancel", str(task_id)))
-            p.kill()
-    return p.returncode, p.stdout.read(), p.stderr.read()
+def watch_task(log_f, task_id, terminate_event):
+    end = time.time() + 4 * 60 * 60
+    watcher = koji_cli.lib.TaskWatcher(
+        task_id, koji.ClientSession(BREW_HUB), quiet=True)
+    error = None
+    while error is None:
+        watcher.update()
+        if watcher.is_done():
+            return None if watcher.is_success() else watcher.get_failure()
+        log_f("Task state: " + koji.TASK_STATES[watcher.info['state']])
+        if terminate_event.wait(timeout=2 * 60):
+            error = 'Interrupted'
+        elif time.time() > end:
+            error = 'Timeout building image'
+    log_f(error + ", canceling build")
+    subprocess.check_call(("brew", "cancel", str(task_id)))
+    return error
 
 
 class WrapException(Exception):
