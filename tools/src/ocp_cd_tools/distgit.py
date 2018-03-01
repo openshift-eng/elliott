@@ -38,6 +38,7 @@ class DistGitRepo(object):
         self.metadata = metadata
         self.config = metadata.config
         self.runtime = metadata.runtime
+        self.name = self.metadata.name
         self.distgit_dir = None
         self.build_status = False
         self.push_status = False
@@ -88,17 +89,15 @@ class DistGitRepo(object):
 
             self._read_master_data()
 
-    def copy_branch(self, to_branch):
-        self.runtime.info('Copying {}: {} -> {}'.format(self.metadata.qualified_name, self.branch, to_branch))
-        from_branch_copy = tempfile.mkdtemp(".tmp", "oit-copy-")
-        self.runtime.info('Backing up to: {}'.format(from_branch_copy))
-        recursive_overwrite(self.runtime, self.distgit_dir, from_branch_copy, ['.git'])
-        self.runtime.info('Switching to branch: {}'.format(to_branch))
-        assert_exec(self.runtime, ["rhpkg", "switch-branch", to_branch])
-        self.runtime.info('Copying source branch contents over current branch')
-        recursive_overwrite(self.runtime, from_branch_copy, self.distgit_dir, ['.git'])
-
-        # os.removedirs(from_branch_copy)
+    def merge_branch(self, target, allow_overwrite=False):
+        self.info('Switching to branch: {}'.format(target))
+        assert_exec(self.runtime, ["rhpkg", "switch-branch", target])
+        if not allow_overwrite:
+            if os.path.isfile('Dockerfile') or os.path.isdir('.oit'):
+                raise IOError('Unable to continue merge. Dockerfile found in target branch. Use --allow-overwrite to force.')
+        self.info('Merging source branch history over current branch')
+        msg = 'Merge branch {} into {}'.format(self.branch, target)
+        assert_exec(self.runtime, ['git', 'merge', '--allow-unrelated-histories', '-m', msg, self.branch])
 
     def source_path(self):
         """

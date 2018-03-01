@@ -437,22 +437,18 @@ def images_revert(runtime, count, message, push):
         runtime.push_distgits()
 
 
-@cli.command("images:copy", help="Copy content of source branch to target.")
-@click.option("--to-branch", metavar="TARGET_BRANCH", help="Branch to populate from source branch.")
-@click.option("--replace", metavar="MATCH REPLACEMENT", nargs=2, multiple=True, default=None,
-              help="String replacement in target Dockerfile.  [multiple]")
-@option_commit_message
+@cli.command("images:merge-branch", help="Copy content of source branch to target.")
+@click.option("--target", metavar="TARGET_BRANCH", help="Branch to populate from source branch.")
+@click.option('--allow-overwrite', default=False, is_flag=True,
+              help='Merge in source branch even if Dockerfile already exists in distgit')
 @option_push
 @pass_runtime
-def images_copy(runtime, to_branch, message, push, replace):
+def images_merge(runtime, target, push, allow_overwrite):
     """
     For each distgit repo, copies the content of the group's branch to a new
     branch.
     """
     runtime.initialize()
-
-    if replace:
-        raise IOError("'--replace' option not yet implemented")
 
     # If not pushing, do not clean up our work
     runtime.remove_tmp_working_dir = push
@@ -461,12 +457,9 @@ def images_copy(runtime, to_branch, message, push, replace):
     dgrs = [image.distgit_repo() for image in runtime.image_metas()]
     for dgr in dgrs:
         with Dir(dgr.distgit_dir):
-            runtime.info("Copying from branch {} to {}".format(dgr.branch, to_branch))
-            dgr.copy_branch(to_branch)
+            dgr.info("Merging from branch {} to {}".format(dgr.branch, target))
+            dgr.merge_branch(target, allow_overwrite)
             runtime.info("\n")
-
-        if message is not None:
-            dgr.commit(message)
 
     if push:
         runtime.push_distgits()
