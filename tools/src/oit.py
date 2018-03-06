@@ -102,7 +102,7 @@ def rpms_build(runtime, version, release, scratch):
     if version.startswith('v'):
         version = version[1:]
 
-    runtime.initialize(mode='rpms')
+    runtime.initialize(mode='rpms', clone_distgits=False)
 
     items = runtime.rpm_metas()
     if not items:
