@@ -1,16 +1,14 @@
-import os
 import glob
-import traceback
-import yaml
-from common import (
-    BREW_IMAGE_HOST, CGIT_URL, RetryException,
-    assert_rc0, assert_file, assert_exec, assert_dir,
-    exec_cmd, gather_exec, retry, Dir, recursive_overwrite, watch_task,
-)
-from model import Model, Missing
-from metadata import Metadata
+import os
 import time
+import traceback
 
+from common import (
+    RetryException,
+    assert_exec, gather_exec, retry, Dir, watch_task,
+)
+from metadata import Metadata
+from model import Missing
 
 RELEASERS_CONF = """
 [aos]
