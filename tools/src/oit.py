@@ -128,7 +128,7 @@ def rpms_build(runtime, version, release, scratch):
 @cli.command("images:list", help="List of distgits being selected.")
 @pass_runtime
 def images_list(runtime):
-    runtime.initialize()
+    runtime.initialize(clone_distgits=False)
 
     click.echo("------------------------------------------")
     for image in runtime.image_metas():
@@ -155,7 +155,7 @@ def images_push_distgit(runtime):
 @click.option("--version", metavar='VERSION', default=None, help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
 @click.option("--release", metavar='RELEASE', default=None, help="Release label to populate in Dockerfiles (or + to bump).")
 @click.option("--repo-type", default=None, metavar="REPO_TYPE",
-              help="Repo type (i.e. signed, unsigned).")
+              help="Repo group type to use for version autodetection scan (e.g. signed, unsigned).")
 @option_commit_message
 @option_push
 @pass_runtime
@@ -209,7 +209,7 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
 @click.option("--no-pull", is_flag=True,
               help="Assume image has already been pulled (Just-in-time pulling)")
 @click.option("--repo-type", default='signed',
-              help="Repo type (i.e. signed, unsigned). Use 'unsigned' for newer releases like 3.9 until they're GA")
+              help="Repo type (e.g. signed, unsigned). Use 'unsigned' for newer releases like 3.9 until they're GA")
 @click.option('--check-orphans', default=None, is_flag=True,
               help="Verify no packages are orphaned (installed without a source repo) [SLOW]")
 @click.option('--check-sigs', default=None, is_flag=True,
@@ -310,7 +310,7 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
 @click.option("--version", metavar='VERSION', default=None, help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
 @click.option("--release", metavar='RELEASE', default=None, help="Release string to populate in Dockerfiles.")
 @click.option("--repo-type", default=None, metavar="REPO_TYPE",
-              help="Repo type (i.e. signed, unsigned).")
+              help="Repo group type to use for version autodetection scan (e.g. signed, unsigned).")
 @option_commit_message
 @option_push
 @pass_runtime
@@ -468,7 +468,7 @@ def images_merge(runtime, target, push, allow_overwrite):
 
 @cli.command("images:build", short_help="Build images for the group.")
 @click.option("--repo-type", default=None, metavar="REPO_TYPE",
-              help="Repo type (i.e. signed, unsigned).")
+              help="Repo type (e.g. signed, unsigned).")
 @click.option("--repo", default=[], metavar="REPO_URL",
               multiple=True, help="Custom repo URL to supply to brew build.")
 @click.option('--push-to-defaults', default=False, is_flag=True, help='Push to default registries when build completes.')
@@ -506,9 +506,15 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
     items = [m.distgit_repo() for m in runtime.image_metas()]
     if not items:
         runtime.info("No images found. Check the arguments.")
-        exit(0)
+        exit(1)
 
     terminate_event = threading.Event()
+
+    # Without one of these two arguments, brew would not enable any repos.
+    if not repo_type and not repo:
+        runtime.info("No repos specified. --repo-type or --repo is required.")
+        exit(1)
+
     pool = ThreadPool(len(items))
     results = pool.map_async(
         lambda dgr: dgr.build_container(
@@ -534,7 +540,7 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
 
     # Push all late images
     for image in runtime.image_metas():
-        image.distgit_repo().push_image([], push_to, True)
+        image.distgit_repo().push_image([], push_to, push_late=True)
 
 
 @cli.command("images:push", short_help="Push the most recent images to mirrors.")
@@ -593,7 +599,7 @@ def images_push(runtime, tag, to_defaults, late_only, to):
     for image in runtime.image_metas():
         # Check if actually a late image to prevent cloning all distgit on --late-only
         if image.config.push.late is True:
-            image.distgit_repo().push_image(tag, to, True)
+            image.distgit_repo().push_image(tag, to, push_late=True)
 
 
 @cli.command("images:pull", short_help="Pull latest images from pulp")
@@ -682,7 +688,8 @@ def images_print(runtime, short, show_non_release, pattern):
 
         # Since querying release takes time, check before executing replace
         if "{release}" in s:
-            s = s.replace("{release}", image.get_latest_build_release(dfp))
+            _, _, release = image.get_latest_build_info()
+            s = s.replace("{release}", release)
 
         if "{" in s:
             raise IOError("Unrecognized fields remaining in pattern: %s" % s)
@@ -818,7 +825,7 @@ complete -F _oit_completion -o default %s
 
 @cli.command("images:query-rpm-version", short_help="Find the OCP version from the atomic-openshift RPM")
 @click.option("--repo-type", required=True, metavar="REPO_TYPE",
-              help="Repo type (i.e. signed, unsigned).")
+              help="Repo group to scan for the RPM (e.g. signed, unsigned).")
 @pass_runtime
 def query_rpm_version(runtime, repo_type):
     """

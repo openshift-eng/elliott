@@ -1,22 +1,19 @@
+import hashlib
+import json
 import os
+import shutil
+import time
+import traceback
+from multiprocessing import Lock
+
+from dockerfile_parse import DockerfileParser
+
 from common import (
-    BREW_IMAGE_HOST, CGIT_URL, RetryException,
-    assert_rc0, assert_file, assert_exec,
+    BREW_IMAGE_HOST, assert_rc0, assert_file, assert_exec,
     assert_dir, exec_cmd, gather_exec,
     retry, Dir, recursive_overwrite, watch_task,
 )
-import shutil
-import tempfile
-import traceback
-import hashlib
-import json
-import time
 from model import Model, Missing
-from multiprocessing import Lock
-
-# for images
-from dockerfile_parse import DockerfileParser
-
 
 OIT_COMMENT_PREFIX = '#oit##'
 EMPTY_REPO = 'http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift_Empty/'
@@ -258,7 +255,7 @@ class ImageDistGitRepo(DistGitRepo):
                 self.org_version = dfp.labels["version"]
                 self.org_release = dfp.labels.get("release")  # occasionally no release given
 
-    def push_image(self, tag_list, push_to_list, push_late=False):
+    def push_image(self, tag_list, push_to_list, version_release_tuple=None, push_late=False):
 
         """
         Pushes the most recent image built for this distgit repo. This is
@@ -266,6 +263,7 @@ class ImageDistGitRepo(DistGitRepo):
         brew for the most recent images built for that version.
         :param tag_list: The list of tags to apply to the image (overrides default tagging pattern)
         :param push_to_list: A list of registries to push the image to
+        :param version_release_tuple: Specify a version/release to pull as the source (if None, the latest build will be pulled)
         :param push_late: Whether late pushes should be included
         """
 
@@ -296,17 +294,25 @@ class ImageDistGitRepo(DistGitRepo):
             if self.config.alt_name is not Missing:
                 names.append(self.config.alt_name)
 
-            # Read in information about the image we are about to build
-            dfp = DockerfileParser(path="Dockerfile")
-            version = dfp.labels["version"]
+            if version_release_tuple:
+                version = version_release_tuple[0]
+                release = version_release_tuple[1]
+            else:
 
-            # We used to rely on the "release" label being set, but this is problematic for several reasons.
-            # (1) If 'release' is not set, OSBS will determine one automatically that does not conflict
-            #       with a pre-existing image build. This is extremely helpful since we don't have to
-            #       worry about bumping the release during refresh images. This means we generally DON'T
-            #       want the release label in the file and can't, therefore, rely on it being there.
-            # (2) People have logged into distgit before in order to bump the release field. This happening
-            #       at the wrong time breaks the build.
+                ## History
+                # We used to rely on the "release" label being set in the Dockerfile, but this is problematic for several reasons.
+                # (1) If 'release' is not set, OSBS will determine one automatically that does not conflict
+                #       with a pre-existing image build. This is extremely helpful since we don't have to
+                #       worry about bumping the release during refresh images. This means we generally DON'T
+                #       want the release label in the file and can't, therefore, rely on it being there.
+                # (2) People have logged into distgit before in order to bump the release field. This happening
+                #       at the wrong time breaks the build.
+
+
+                # If the version & release information was not specified,
+                # try to detect latest build from brew.
+                # Read in version information from the Distgit dockerfile
+                _, version, release = self.metadata.get_latest_build_info()
 
             try:
                 record = {
@@ -314,14 +320,11 @@ class ImageDistGitRepo(DistGitRepo):
                     "dockerfile": "%s/Dockerfile" % self.distgit_dir,
                     "image": self.config.name,
                     "version": version,
-                    "release": '?',
+                    "release": release,
                     "message": "Unknown failure",
                     "status": -1,
                     # Status defaults to failure until explicitly set by success. This handles raised exceptions.
                 }
-
-                release = self.metadata.get_latest_build_release(dfp)
-                record['release'] = release
 
                 # pull just the main image name first
                 image_name_and_version = "%s:%s-%s" % (self.config.name, version, release)
@@ -499,6 +502,10 @@ class ImageDistGitRepo(DistGitRepo):
                         target_image, repo_type, repo, terminate_event,
                         scratch, record))
 
+            # Just in case someone else is building an image, go ahead and find what was just
+            # built so that push_image will have a fixed point of reference and not detect any
+            # subsequent builds.
+            _, push_version, push_release = self.metadata.get_latest_build_info()
             record["message"] = "Success"
             record["status"] = 0
             self.build_status = True
@@ -524,7 +531,7 @@ class ImageDistGitRepo(DistGitRepo):
             with self.runtime.mutex:
                 self.push_status = False
                 try:
-                    self.push_image([], push_to_list)
+                    self.push_image([], push_to_list, version_release_tuple=(push_version, push_release))
                     self.push_status = True
                 except Exception as push_e:
                     self.info("Error during push after successful build: %s" % str(push_e))
@@ -596,7 +603,7 @@ class ImageDistGitRepo(DistGitRepo):
         # Looking for something like the following to conclude the image has already been built:
         # BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961
         if error is not None and "already exists" in error:
-            self.info("Image already built for: {}".format(target_image))
+            self.info("Image already built against this dist-git commit (or version-release tag): {}".format(target_image))
             error = None
 
         # Gather brew-logs
