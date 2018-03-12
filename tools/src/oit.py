@@ -9,6 +9,7 @@ import yaml
 import sys
 import subprocess
 import urllib
+import threading
 import traceback
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
@@ -505,21 +506,32 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
     items = [m.distgit_repo() for m in runtime.image_metas()]
     if not items:
         runtime.info("No images found. Check the arguments.")
-        exit(0)
+        exit(1)
+
+    terminate_event = threading.Event()
 
     # Without one of these two arguments, brew would not enable any repos.
     if not repo_type and not repo:
         runtime.info("No repos specified. --repo-type or --repo is required.")
-        exit(0)
+        exit(1)
 
     pool = ThreadPool(len(items))
-    results = pool.map(
-        lambda dgr: dgr.build_container(repo_type, repo, push_to, scratch),
+    results = pool.map_async(
+        lambda dgr: dgr.build_container(
+            repo_type, repo, push_to, terminate_event, scratch),
         items)
 
     # Wait for results
     pool.close()
+    try:
+        # `wait` without a timeout disables signal handling
+        while not results.ready():
+            results.wait(60)
+    except KeyboardInterrupt:
+        runtime.info('SIGINT received, signaling threads to terminate...')
+        terminate_event.set()
     pool.join()
+    results = results.get()
 
     failed = [m.name for m, r in zip(runtime.image_metas(), results) if not r]
     if failed:

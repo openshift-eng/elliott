@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from common import (
-    Dir, WrapException, assert_exec, exec_cmd, gather_exec, parse_taskinfo,
+    Dir, WrapException, assert_exec, exec_cmd, gather_exec,
     retry, wrap_exception)
 
 
@@ -127,38 +127,6 @@ class RetryTestCase(unittest.TestCase):
         obj = {}
         f = lambda: obj
         self.assertIs(retry(1, f, check_f=lambda _: True), obj)
-
-
-class ParseTaskinfoTestCase(unittest.TestCase):
-    def test_unknown(self):
-        self.assertEqual(parse_taskinfo(""), "unknown")
-
-    def test_closed(self):
-        self.assertEqual(
-            parse_taskinfo("""\
-Task: 14892652
-Type: newRepo
-Owner: kojira
-State: closed
-Created: Mon Jan  8 12:47:05 2018
-Started: Mon Jan  8 12:47:23 2018
-Finished: Mon Jan  8 12:49:56 2018
-Host: x86-019.build.eng.bos.redhat.com
-"""),
-            "closed")
-
-    def test_open(self):
-        self.assertEqual(
-            parse_taskinfo("""\
-Task: 14892672
-Type: newRepo
-Owner: kojira
-State: open
-Created: Mon Jan  8 12:48:43 2018
-Started: Mon Jan  8 12:49:07 2018
-Host: x86-034.build.eng.bos.redhat.com
-"""),
-            "open")
 
 
 class WrapExceptionTestCase(unittest.TestCase):

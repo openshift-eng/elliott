@@ -429,7 +429,9 @@ class ImageDistGitRepo(DistGitRepo):
             else:
                 self.info("repo successfully waited for me to build: %s" % who_is_waiting)
 
-    def build_container(self, repo_type, repo, push_to_list, scratch=False, retries=3):
+    def build_container(
+            self, repo_type, repo, push_to_list, terminate_event,
+            scratch=False, retries=3):
         """
         This method is designed to be thread-safe. Multiple builds should take place in brew
         at the same time. After a build, images are pushed serially to all mirrors.
@@ -437,6 +439,7 @@ class ImageDistGitRepo(DistGitRepo):
         :param repo_type: Repo type to choose from group.yml
         :param repo: A list/tuple of custom repo URLs to include for build
         :param push_to_list: A list of registries resultant builds should be pushed to.
+        :param terminate_event: Allows the main thread to interrupt the build.
         :param scratch: Whether this is a scratch build. UNTESTED.
         :param retries: Number of times the build should be retried.
         :return: True if the build was successful
@@ -483,15 +486,21 @@ class ImageDistGitRepo(DistGitRepo):
                     else:
                         parent_dgr = parent_img.distgit_repo()
                         parent_dgr.wait_for_build(self.metadata.qualified_name)
+                        if terminate_event.is_set():
+                            raise KeyboardInterrupt()
 
                 def wait(n):
                     self.info("Async error in image build thread [attempt #{}]".format(n + 1))
-                    # Brew does not handle an immediate retry correctly.
-                    time.sleep(5 * 60)
+                    # Brew does not handle an immediate retry correctly, wait
+                    # before trying another build, terminating if interrupted.
+                    if terminate_event.wait(timeout=5 * 60):
+                        raise KeyboardInterrupt()
 
                 retry(
                     n=3, wait_f=wait,
-                    f=lambda: self._build_container(target_image, repo_type, repo, scratch, record))
+                    f=lambda: self._build_container(
+                        target_image, repo_type, repo, terminate_event,
+                        scratch, record))
 
             # Just in case someone else is building an image, go ahead and find what was just
             # built so that push_image will have a fixed point of reference and not detect any
@@ -501,7 +510,7 @@ class ImageDistGitRepo(DistGitRepo):
             record["status"] = 0
             self.build_status = True
 
-        except Exception:
+        except (Exception, KeyboardInterrupt):
             tb = traceback.format_exc()
             record["message"] = "Exception occurred:\n{}".format(tb)
             self.info("Exception occurred during build:\n{}".format(tb))
@@ -533,7 +542,9 @@ class ImageDistGitRepo(DistGitRepo):
         self.runtime.add_record(action, **record)
         return self.build_status and self.push_status
 
-    def _build_container(self, target_image, repo_type, repo_list, scratch, record):
+    def _build_container(
+            self, target_image, repo_type, repo_list, terminate_event,
+            scratch, record):
         """
         The part of `build_container` which actually starts the build,
         separated for clarity.
@@ -587,24 +598,24 @@ class ImageDistGitRepo(DistGitRepo):
         record["task_url"] = task_url
 
         # Now that we have the basics about the task, wait for it to complete
-        rc, out, err = watch_task(self.info, task_id)
+        error = watch_task(self.info, task_id, terminate_event)
 
         # Looking for something like the following to conclude the image has already been built:
-        # "13949407 buildContainer (noarch): FAILED: BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961"
-        if "already exists" in out:
+        # BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961
+        if error is not None and "already exists" in error:
             self.info("Image already built against this dist-git commit (or version-release tag): {}".format(target_image))
-            rc = 0
+            error = None
 
         # Gather brew-logs
         logs_dir = "%s/%s" % (self.runtime.brew_logs_dir, self.metadata.name)
-        logs_rc, logs_out, logs_err = gather_exec(self.runtime, ["brew", "download-logs", "-d", logs_dir, task_id])
+        logs_rc, _, logs_err = gather_exec(self.runtime, ["brew", "download-logs", "-d", logs_dir, task_id])
 
         if logs_rc != 0:
             self.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
 
-        if rc != 0:
-            # An error occurred during watch-task. We don't have a viable build.
-            self.info("Error building image: {}\nout={}  ; err={}".format(task_url, out, err))
+        if error is not None:
+            # An error occurred. We don't have a viable build.
+            self.info("Error building image: {}, {}".format(task_url, error))
             return False
 
         self.info("Successfully built image: {} ; {}".format(target_image, task_url))
