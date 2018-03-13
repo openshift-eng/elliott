@@ -2,6 +2,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 import os
 import click
 import tempfile
+import threading
 import shutil
 import atexit
 import yaml
@@ -583,19 +584,37 @@ class Runtime(object):
     @classmethod
     def _parallel_exec(self, f, args, n_threads):
         pool = ThreadPool(n_threads)
-        ret = pool.map_async(f, args)
+        ret = pool.map_async(wrap_exception(f), args)
         pool.close()
         pool.join()
         return ret
 
     def clone_distgits(self, n_threads=20):
         return self._parallel_exec(
-            lambda m: wrap_exception(m.distgit_repo)(),
+            lambda m: m.distgit_repo(),
             self.all_metas(),
             n_threads=n_threads).get()
 
     def push_distgits(self, n_threads=20):
         return self._parallel_exec(
-            lambda m: wrap_exception(m.distgit_repo().push)(),
+            lambda m: m.distgit_repo().push(),
             self.all_metas(),
             n_threads=n_threads).get()
+
+    def parallel_exec(self, f, args, n_threads=None):
+        n_threads = n_threads if n_threads is not None else len(args)
+        terminate_event = threading.Event()
+        pool = ThreadPool(n_threads)
+        ret = pool.map_async(
+            wrap_exception(f),
+            [(a, terminate_event) for a in args])
+        pool.close()
+        try:
+            # `wait` without a timeout disables signal handling
+            while not ret.ready():
+                ret.wait(60)
+        except KeyboardInterrupt:
+            self.info('SIGINT received, signaling threads to terminate...')
+            terminate_event.set()
+        pool.join()
+        return ret
