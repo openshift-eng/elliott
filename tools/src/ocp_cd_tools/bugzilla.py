@@ -61,7 +61,7 @@ class Bug(object):
     def __repr__(self):
         return str(self)
 
-    def add_flags(self, flags=[]):
+    def add_flags(self, flags=[]):  # pragma: no cover
         """Add flags to a bug"""
         for flag in flags:
             self.add_flag(flag)

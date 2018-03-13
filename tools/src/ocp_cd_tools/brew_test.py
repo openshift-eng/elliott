@@ -4,6 +4,10 @@ Test the brew related functions/classes
 
 """
 
+import mock
+import json
+from contextlib import nested
+
 import platform
 (major, minor, patch) = platform.python_version_tuple()
 if int(major) == 2 and int(minor) < 7:
@@ -11,7 +15,11 @@ if int(major) == 2 and int(minor) < 7:
 else:
     import unittest
 
+import ocp_cd_tools.constants
 import brew
+
+from requests_kerberos import HTTPKerberosAuth
+
 
 image_build_attached_json = {
     "id": 660050,
@@ -146,6 +154,7 @@ rpm_build_unattached_json = {
 
 bogus_build_json = {}
 
+
 class TestBrew(unittest.TestCase):
 
     def test_good_attached_brew_image_build(self):
@@ -202,6 +211,140 @@ class TestBrew(unittest.TestCase):
         self.assertGreater(b2, b1)
         self.assertLess(b1, b2)
         self.assertEqual(b2, b3)
+
+    def test_build_display(self):
+        """Verify brew Builds display correctly"""
+        nvr = 'megafrobber-1.3.3-7'
+        b = brew.Build(nvr=nvr)
+        self.assertEqual(nvr, str(b))
+        self.assertEqual("Build({nvr})".format(nvr=nvr), repr(b))
+
+    def test_build_equality(self):
+        """Ensure brew Builds are unique and can be tested for equality"""
+        b1 = brew.Build(nvr='megafrobber-1.3.3-7')
+        b2 = brew.Build(nvr='tuxracer-42')
+
+        builds = set([])
+        builds.add(b1)
+        builds.add(b1)
+
+        self.assertEqual(1, len(builds))
+        self.assertTrue(b1 != b2)
+
+    def test_rpm_build_json_formatting(self):
+        """Ensure a brew Build returns proper JSON for API posting"""
+        nvr = 'coreutils-8.22-21.el7'
+        pv = 'rhaos-test-7'
+
+        b = brew.Build(nvr=nvr,
+                       body=rpm_build_attached_json,
+                       product_version=pv)
+
+        expected_json = {
+            'product_version': pv,
+            'build': nvr,
+            'file_types': ['rpm']
+        }
+
+        self.assertEqual(expected_json, b.to_json())
+
+    def test_image_build_json_formatting(self):
+        """Ensure a brew Build returns proper JSON for API posting"""
+        nvr = 'template-service-broker-docker-v3.7.36-2'
+        pv = 'rhaos-test-7'
+
+        b = brew.Build(nvr=nvr,
+                       body=image_build_attached_json,
+                       product_version=pv)
+
+        expected_json = {
+            'product_version': pv,
+            'build': nvr,
+            'file_types': ['tar']
+        }
+
+        self.assertEqual(expected_json, b.to_json())
+
+    def test_get_brew_build_success(self):
+        """Ensure a 'proper' brew build returns a Build object"""
+        with nested(
+                mock.patch('ocp_cd_tools.brew.requests.get'),
+                # Mock the HTTPKerberosAuth object in the module
+                mock.patch('ocp_cd_tools.brew.HTTPKerberosAuth')) as (get, kerb):
+            nvr = 'coreutils-8.22-21.el7'
+            pv = 'rhaos-test-7'
+            response = mock.MagicMock(status_code=200)
+            response.json.return_value = rpm_build_attached_json
+            get.return_value = response
+
+            b = brew.get_brew_build(nvr, product_version=pv)
+
+            # Basic object validation to ensure that the example build
+            # object we return from our get() mock matches the
+            # returned Build object
+            self.assertEqual(nvr, b.nvr)
+
+            get.assert_called_once_with(
+                ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
+                auth=kerb()
+            )
+
+    def test_get_brew_build_success_session(self):
+        """Ensure a provided requests session is used when getting brew builds"""
+        with mock.patch('ocp_cd_tools.brew.HTTPKerberosAuth') as kerb:
+            nvr = 'coreutils-8.22-21.el7'
+            pv = 'rhaos-test-7'
+            # This is the return result from the session.get() call
+            response = mock.MagicMock(status_code=200)
+            # We'll call the json method on the result to retrieve the
+            # response body from ET
+            response.json.return_value = rpm_build_attached_json
+            # We create a session mock HERE to pass in when we call
+            # the get_brew_build function
+            session = mock.MagicMock()
+            # In get_brew_build the get is method is called on the
+            # session mock. We want to return our response as if we
+            # actually queried the API
+            session.get.return_value = response
+
+            # Ensure we pass in the session mock we created here
+            b = brew.get_brew_build(nvr, product_version=pv, session=session)
+
+            # Basic object validation to ensure that the example build
+            # object we return from our get() mock matches the
+            # returned Build object
+            self.assertEqual(nvr, b.nvr)
+
+            # Our session object+get method were used, not the
+            # requests.get (default) method
+            session.get.assert_called_once_with(
+                ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
+                auth=kerb()
+            )
+
+    def test_get_brew_build_failure(self):
+        """Ensure we notice invalid get-build responses from the API"""
+        with nested(
+                mock.patch('ocp_cd_tools.brew.requests.get'),
+                # Mock the HTTPKerberosAuth object in the module
+                mock.patch('ocp_cd_tools.brew.HTTPKerberosAuth')) as (get, kerb):
+            nvr = 'coreutils-8.22-21.el7'
+            pv = 'rhaos-test-7'
+            # Engage the failure logic branch, will raise
+            response = mock.MagicMock(status_code=404)
+            response.json.return_value = rpm_build_attached_json
+            get.return_value = response
+
+            # The 404 status code will send us down the exception
+            # branch of code
+            with self.assertRaises(ocp_cd_tools.brew.BrewBuildException):
+                brew.get_brew_build(nvr, product_version=pv)
+
+            get.assert_called_once_with(
+                ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
+                auth=kerb()
+            )
+
 
 if __name__ == '__main__':
     unittest.main()

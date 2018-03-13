@@ -206,21 +206,3 @@ def wrap_exception(func):
         except Exception:
             raise WrapException()
     return wrapper
-
-
-def minor_from_branch(ver):
-    """Parse the minor version from the provided version (or 'branch').
-
-For example, if --group=openshift-3.9 then runtime.group_config.branch
-will have the value rhaos-3.9-rhel-7. When passed to this function the
-return value would be the number 9, where in considering '3.9' then
-'9' is the MINOR version.
-
-I.e., this gives you the Y component if 3.9 => X.Y.
-
-This behavior is HIGHLY dependant on the format of the input
-argument. Hence, why this function indicates the results are based on
-the 'branch' variable. Arbitrary input will fail. Use of this implies
-you read the docs.
-    """
-    return ver.split('-')[1].split('.')[1]

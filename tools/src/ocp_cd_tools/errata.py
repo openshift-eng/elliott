@@ -13,8 +13,6 @@ import json
 import shlex
 
 from ocp_cd_tools import constants
-import ocp_cd_tools
-import ocp_cd_tools.common
 import ocp_cd_tools.brew
 
 import requests
@@ -86,7 +84,6 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
         # THIS IS NOT A DRILL
         res = requests.post(constants.errata_post_erratum_url,
                             auth=HTTPKerberosAuth(),
-                            verify=False,
                             json=body)
 
         if res.status_code == 201:
@@ -114,8 +111,7 @@ filter_id
     filter_endpoint = constants.errata_filter_list_url.format(
         id=filter_id)
     res = requests.get(filter_endpoint,
-                       auth=HTTPKerberosAuth(),
-                       verify=False)
+                       auth=HTTPKerberosAuth())
 
     if res.status_code == 200:
         return [Erratum(body=advs) for advs in res.json()][:limit]
@@ -168,9 +164,6 @@ class Erratum(object):
             synopsis=self.synopsis,
             url=self.url)
 
-    def __repr__(self):
-        return str(self)
-
     def _parse_body(self):
         """The `body` content is different based on where it came from."""
         # Erratum from the direct erratum GET method
@@ -214,7 +207,7 @@ class Erratum(object):
     ######################################################################
     # The following methods are related to REST API interactions
 
-    def add_bugs(self, bugs=[]):
+    def add_bugs(self, bugs=[]):  # pragma: no cover
         """Shortcut for several calls to self.add_bug()
 
         :param Bug bugs: A list of :module:`ocp_cd_tools.bugzilla` Bug objects
@@ -236,10 +229,9 @@ class Erratum(object):
         """
         return requests.post(ocp_cd_tools.constants.errata_add_bug_url.format(id=self.advisory_id),
                              auth=HTTPKerberosAuth(),
-                             json={'bug': bug.id},
-                             verify=False)
+                             json={'bug': bug.id})
 
-    def add_builds(self, product_version, builds=[]):
+    def add_builds(self, builds=[]):
         """5.2.2.7. POST /api/v1/erratum/{id}/add_builds
 
         Add one or more brew builds to an advisory.
@@ -254,8 +246,6 @@ class Erratum(object):
 
         https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidadd_builds
 
-        :param str product_version: The product version tag as given
-        to ET when attaching a build
         :param list[Build] builds: List of Build objects to attach to
         an advisory
 
@@ -276,6 +266,7 @@ class Erratum(object):
             print(res.status_code)
             print(res.text)
             raise ocp_cd_tools.brew.BrewBuildException(str(res.json()))
+        # TODO: Find the success return code
         else:
             return True
 
@@ -294,15 +285,13 @@ class Erratum(object):
         :param string comment: The ID of one of the pre-defined
         comment strings in ocp_cd_tools.constants.errata_comments
         """
-        # TODO: Consider if accepting free input has any value
         if comment not in constants.errata_comments:
             raise Exception("Invalid comment selected. See ocp_cd_tools.constants.errata_comments for legal values")
         else:
             data = {"comment": constants.errata_comments[comment]}
             return requests.post(ocp_cd_tools.constants.errata_add_comment_url.format(id=self.advisory_id),
                                  auth=HTTPKerberosAuth(),
-                                 data=data,
-                                 verify=False)
+                                 data=data)
 
     def change_state(self, state):
         """5.2.1.14. POST /api/v1/erratum/{id}/change_state
@@ -320,8 +309,7 @@ class Erratum(object):
         """
         res = requests.post(ocp_cd_tools.constants.errata_change_state_url.format(id=self.advisory_id),
                             auth=HTTPKerberosAuth(),
-                            data={"new_state": state},
-                            verify=False)
+                            data={"new_state": state})
 
         # Erratum isn't ready to move to QE, No builds in advisory,
         # Errata Advisory has no Bugzilla bugs or JIRA issues

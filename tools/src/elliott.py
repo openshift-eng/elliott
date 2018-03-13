@@ -17,7 +17,6 @@ import os
 # ours
 from ocp_cd_tools import Runtime
 import ocp_cd_tools.constants
-import ocp_cd_tools.common
 import ocp_cd_tools.bugzilla
 import ocp_cd_tools.brew
 
@@ -77,6 +76,22 @@ def validate_release_date(ctx, param, value):
     except ValueError:
         raise click.BadParameter('Release date (--date) must be in YYYY-MM-DD format')
 
+def minor_from_branch(ver):
+    """Parse the minor version from the provided version (or 'branch').
+
+For example, if --group=openshift-3.9 then runtime.group_config.branch
+will have the value rhaos-3.9-rhel-7. When passed to this function the
+return value would be the number 9, where in considering '3.9' then
+'9' is the MINOR version.
+
+I.e., this gives you the Y component if 3.9 => X.Y.
+
+This behavior is HIGHLY dependant on the format of the input
+argument. Hence, why this function indicates the results are based on
+the 'branch' variable. Arbitrary input will fail. Use of this implies
+you read the docs.
+    """
+    return ver.split('-')[1].split('.')[1]
 
 # -----------------------------------------------------------------------------
 # CLI Commands - Please keep these in alphabetical order
@@ -165,7 +180,7 @@ advisory.
     $ elliott --group openshift-3.5 advisory:create --yes -k image --date 2018-03-05
     """
     runtime.initialize(clone_distgits=False)
-    minor = ocp_cd_tools.common.minor_from_branch(runtime.group_config.branch)
+    minor = minor_from_branch(runtime.group_config.branch)
     erratum = ocp_cd_tools.errata.new_erratum(kind=kind, release_date=date, create=yes, minor=minor)
     click.echo(erratum)
 
@@ -231,7 +246,7 @@ manually. Provide one or more --id's for manual bug addition.
         # Initialization ensures a valid group was provided
         runtime.initialize(clone_distgits=False)
         # Parse the Y component from the group version
-        minor = ocp_cd_tools.common.minor_from_branch(runtime.group_config.branch)
+        minor = minor_from_branch(runtime.group_config.branch)
         target_releases = ["3.{y}.Z".format(y=minor), "3.{y}.0".format(y=minor)]
         click.echo("Adding bugs to {advs} for target releases: {tr}".format(advs=advisory, tr=", ".join(target_releases)))
     elif len(id) == 0:
@@ -276,7 +291,7 @@ manually. Provide one or more --id's for manual bug addition.
               help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
 @click.option('--kind', '-k', metavar='KIND',
               required=True, type=click.Choice(['rpm', 'image']),
-              help='Find builds of the given KIND')
+              help='Find builds of the given KIND [rpm, image]')
 @click.argument('advisory', type=int)
 @pass_runtime
 def find_builds(runtime, attach, build, kind, advisory):
@@ -307,6 +322,7 @@ PRESENT advisory. Here are some examples:
 
     ATTACH the latest OSE 3.6 rpm builds to advisory 123456:
 
+\b
     $ elliott --group openshift-3.6 advisory:find-builds -k rpm --attach 123456
 
     VERIFY (no --attach) that the manually provided NVR and build ID
@@ -315,7 +331,7 @@ PRESENT advisory. Here are some examples:
 \b
     $ elliott --group openshift-3.6 advisory:find-builds 123456 -k rpm -b megafrobber-1.0.1-2.el7 -b 93170"""
     runtime.initialize(clone_distgits=False)
-    minor = ocp_cd_tools.common.minor_from_branch(runtime.group_config.branch)
+    minor = minor_from_branch(runtime.group_config.branch)
     product_version = 'RHEL-7-OSE-3.{Y}'.format(Y=minor)
     base_tag = "rhaos-3.{minor}-rhel-7".format(minor=minor)
 
@@ -336,178 +352,11 @@ PRESENT advisory. Here are some examples:
     if attach:
         erratum = ocp_cd_tools.errata.get_erratum(advisory)
         try:
-            erratum.add_builds(product_version, unshipped_builds)
+            erratum.add_builds(unshipped_builds)
             click.secho("Attached build(s) successfully", fg='green', bold=True)
         except ocp_cd_tools.brew.BrewBuildException as e:
             click.secho("Error attaching builds:", fg='red', bold=True)
-            click.echo(res.json())
-    else:
-        click.echo("The following {n} builds ".format(n=build_count), nl=False)
-        click.secho("may be attached ", bold=True, nl=False)
-        click.echo("to an advisory:")
-        for b in sorted(unshipped_builds):
-            click.echo(" " + str(b.to_json()))
-
-
-#
-# Attach Images
-# advisory:find-images
-#
-@cli.command("advisory:find-images",
-             short_help="Find or attach Image builds to ADVISORY")
-@click.option('--attach', '-a', is_flag=True,
-              default=False, type=bool,
-              help="Attach the images (by default only a list of images are displayed)")
-@click.option('--build', '-b', metavar="NVR_OR_ID",
-              multiple=True,
-              help="Add build NVR_OR_ID to ADVISORY [MULTIPLE]")
-@click.argument('advisory', type=int)
-@pass_runtime
-def find_images(runtime, attach, build, advisory):
-    """Automatically or manually find or attach viable image builds to
-ADVISORY. Default behavior searches Brew for viable image builds in
-the given group. Provide builds manually by giving one or more --build
-(-b) options. Manually provided builds are verified against the Errata
-Tool API.
-
-  * Attach the builds to ADVISORY by giving --attach
-
-Example: Assuming --group=openshift-3.7, then a build is a VIABLE
-BUILD IFF it meets ALL of the following criteria:
-
-\b
-  * HAS the tag in brew: rhaos-3.7-rhel7-candidate
-  * DOES NOT have the tag in brew: rhaos-3.7-rhel7
-  * IS NOT attached to ANY existing RHBA, RHSA, or RHEA
-
-That is to say, a viable build is tagged as a "candidate", has NOT
-received the "shipped" tag yet, and is NOT attached to any PAST or
-PRESENT advisory. Here are some examples:
-
-    SHOW the latest OSE 3.6 image builds that would be attached to
-    advisory 123456:
-
-    $ elliott --group openshift-3.6 advisory:find-images 123456
-
-    ATTACH the latest OSE 3.6 image builds to advisory 123456:
-
-    $ elliott --group openshift-3.6 advisory:find-images --attach 123456
-
-    VERIFY (no --attach) that the manually provided NVR and build ID
-    are viable builds:
-
-\b
-    $ elliott --group openshift-3.6 advisory:find-images 123456 -b megafrobber-1.0.1-2.el7 -b 93170"""
-    runtime.initialize(clone_distgits=False)
-    minor = ocp_cd_tools.common.minor_from_branch(runtime.group_config.branch)
-    product_version = 'RHEL-7-OSE-3.{Y}'.format(Y=minor)
-    base_tag = "rhaos-3.{minor}-rhel-7".format(minor=minor)
-
-    if len(build) > 0:
-        click.echo("Using provided build NVR list, verifying builds exist")
-        try:
-            unshipped_builds = [ocp_cd_tools.brew.get_brew_build(b, product_version) for b in build]
-        except ocp_cd_tools.brew.BrewBuildException as e:
-            click.secho("Error locating all builds", fg='red', bold=True)
-            click.echo(e)
-            exit(1)
-    else:
-        click.echo("Hold on a moment, searching Brew for build candidates")
-        unshipped_builds = ocp_cd_tools.brew.find_unshipped_builds(runtime, base_tag, product_version, kind='image')
-
-    build_count = len(unshipped_builds)
-
-    if attach:
-        erratum = ocp_cd_tools.errata.get_erratum(advisory)
-        try:
-            erratum.add_builds(product_version, unshipped_builds)
-            click.secho("Attached build(s) successfully", fg='green', bold=True)
-        except ocp_cd_tools.brew.BrewBuildException as e:
-            click.secho("Error attaching builds:", fg='red', bold=True)
-            click.echo(res.json())
-    else:
-        click.echo("The following {n} builds ".format(n=build_count), nl=False)
-        click.secho("may be attached ", bold=True, nl=False)
-        click.echo("to an advisory:")
-        for b in sorted(unshipped_builds):
-            click.echo(" " + str(b.to_json()))
-
-
-#
-# Attach RPMs
-# advisory:find-rpms
-#
-@cli.command("advisory:find-rpms", short_help="Find or attach RPM builds to ADVISORY")
-@click.option('--attach', '-a', is_flag=True,
-              default=False, type=bool,
-              help="Attach the builds (by default only a list of builds are displayed)")
-@click.option('--build', '-b', metavar="NVR_OR_ID",
-              multiple=True,
-              help="Add build NVR_OR_ID to ADVISORY [MULTIPLE]")
-@click.argument('advisory', type=int)
-@pass_runtime
-def find_rpms(runtime, attach, build, advisory):
-    """Automatically or manually find or attach viable rpm builds to
-ADVISORY. Default behavior searches Brew for viable rpm builds in
-the given group. Provide builds manually by giving one or more --build
-(-b) options. Manually provided builds are verified against the Errata
-Tool API.
-
-  * Attach the builds to ADVISORY by giving --attach
-
-Example: Assuming --group=openshift-3.7, then a build is a VIABLE
-BUILD IFF it meets ALL of the following criteria:
-
-\b
-  * HAS the tag in brew: rhaos-3.7-rhel7-candidate
-  * DOES NOT have the tag in brew: rhaos-3.7-rhel7
-  * IS NOT attached to ANY existing RHBA, RHSA, or RHEA
-
-That is to say, a viable build is tagged as a "candidate", has NOT
-received the "shipped" tag yet, and is NOT attached to any PAST or
-PRESENT advisory. Here are some examples:
-
-    SHOW the latest OSE 3.6 rpm builds that would be attached to
-    advisory 123456:
-
-    $ elliott --group openshift-3.6 advisory:find-rpms 123456
-
-    ATTACH the latest OSE 3.6 rpm builds to advisory 123456:
-
-    $ elliott --group openshift-3.6 advisory:find-rpms --attach 123456
-
-    VERIFY (no --attach) that the manually provided NVR and build ID
-    are viable builds:
-
-\b
-    $ elliott --group openshift-3.6 advisory:find-rpms 123456 -b megafrobber-1.0.1-2.el7 -b 93170"""
-    runtime.initialize(clone_distgits=False)
-    minor = ocp_cd_tools.common.minor_from_branch(runtime.group_config.branch)
-    product_version = 'RHEL-7-OSE-3.{Y}'.format(Y=minor)
-    base_tag = "rhaos-3.{minor}-rhel-7".format(minor=minor)
-
-    if len(build) > 0:
-        click.echo("Using provided build NVR list, verifying builds exist")
-        try:
-            unshipped_builds = [ocp_cd_tools.brew.get_brew_build(b, product_version) for b in build]
-        except ocp_cd_tools.brew.BrewBuildException as e:
-            click.secho("Error locating all builds", fg='red', bold=True)
-            click.echo(e)
-            exit(1)
-    else:
-        click.echo("Hold on a moment, searching Brew for build candidates")
-        unshipped_builds = ocp_cd_tools.brew.find_unshipped_builds(runtime, base_tag, product_version, kind='rpm')
-
-    build_count = len(unshipped_builds)
-
-    if attach:
-        erratum = ocp_cd_tools.errata.get_erratum(advisory)
-        try:
-            res = erratum.add_builds(product_version, unshipped_builds)
-            click.secho("Attached build(s) successfully", fg='green', bold=True)
-        except ocp_cd_tools.brew.BrewBuildException as e:
-            click.secho("Error attaching builds:", fg='red', bold=True)
-            click.echo(res.json())
+            click.echo(str(e))
     else:
         click.echo("The following {n} builds ".format(n=build_count), nl=False)
         click.secho("may be attached ", bold=True, nl=False)

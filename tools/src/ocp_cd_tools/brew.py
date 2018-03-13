@@ -1,5 +1,5 @@
 """
-Utility functions for general interactions with Red Hat Bugzilla
+Utility functions for general interactions with Brew and Builds
 """
 
 # stdlib
