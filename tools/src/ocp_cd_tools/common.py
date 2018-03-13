@@ -202,7 +202,7 @@ def wrap_exception(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
-            func(*args, **kwargs)
+            return func(*args, **kwargs)
         except Exception:
             raise WrapException()
     return wrapper
