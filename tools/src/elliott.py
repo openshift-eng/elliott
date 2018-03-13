@@ -349,9 +349,6 @@ PRESENT advisory. Here are some examples:
             click.echo(" " + str(b.to_json()))
 
 
-
-
-
 #
 # Attach Images
 # advisory:find-images
