@@ -46,6 +46,157 @@ class TestBrew(unittest.TestCase):
             e = errata.get_erratum(123456)
             self.assertFalse(e)
 
+    def test_parse_date(self):
+        """Verify we can parse the date string returned from Errata Tool"""
+        d_in = "2018-03-02T15:19:08Z"
+        d_expected = '2018-03-02 15:19:08'
+        d_out = errata.parse_date(example_erratum['errata']['rhba']['created_at'])
+        self.assertEqual(str(d_out), d_expected)
+
+    def test_get_filtered_list(self):
+        """Ensure we can generate an Erratum List"""
+        with mock.patch('ocp_cd_tools.errata.requests.get') as get:
+            response = mock.MagicMock(status_code=200)
+            response.json.return_value = example_erratum_filtered_list
+            get.return_value = response
+            res = errata.get_filtered_list()
+            self.assertEqual(2, len(res))
+
+    def test_get_filtered_list_limit(self):
+        """Ensure we can generate a trimmed Erratum List"""
+        with mock.patch('ocp_cd_tools.errata.requests.get') as get:
+            response = mock.MagicMock(status_code=200)
+            response.json.return_value = example_erratum_filtered_list
+            get.return_value = response
+            res = errata.get_filtered_list(limit=1)
+            self.assertEqual(1, len(res))
+
+
+example_erratum_filtered_list = [
+    {
+        "id": 32964,
+        "type": "RHBA",
+        "text_only": False,
+        "advisory_name": "RHBA-2018:0476",
+        "synopsis": "Red Hat OpenShift Enterprise 3.7, 3.6, 3.5, 3.4, and 3.3 images update",
+        "revision": 6,
+        "status": "IN_PUSH",
+        "security_impact": "None",
+        "respin_count": 1,
+        "pushcount": 0,
+        "content_types": [
+            "docker"
+        ],
+        "timestamps": {
+            "issue_date": "2018-03-08T14:07:14Z",
+            "update_date": "2018-03-08T14:07:14Z",
+            "release_date": "2018-03-12T00:00:00Z",
+            "status_time": "2018-03-13T14:17:34Z",
+            "security_sla": None,
+            "created_at": "2018-03-08T14:07:14Z",
+            "updated_at": "2018-03-13T14:17:34Z"
+        },
+        "flags": {
+            "text_ready": False,
+            "mailed": False,
+            "pushed": False,
+            "published": False,
+            "deleted": False,
+            "qa_complete": True,
+            "rhn_complete": False,
+            "doc_complete": True,
+            "rhnqa": True,
+            "closed": False,
+            "sign_requested": False,
+            "embargo_undated": False
+        },
+        "product": {
+            "id": 79,
+            "name": "Red Hat OpenShift Enterprise",
+            "short_name": "RHOSE"
+        },
+        "release": {
+            "id": 436,
+            "name": "RHOSE ASYNC"
+        },
+        "people": {
+            "assigned_to": "dma@redhat.com",
+            "reporter": "smunilla@redhat.com",
+            "qe_group": "OpenShift QE",
+            "docs_group": "Default",
+            "doc_reviewer": "adellape@redhat.com",
+            "devel_group": "Default",
+            "package_owner": "smunilla@redhat.com"
+        },
+        "content": {
+            "topic": "An update is now available for Red Hat OpenShift Container Platform 3.7, 3.6, 3.5, 3.4, and 3.3.",
+            "description": "OpenShift Container Platform by Red Hat is the company's cloud computing Platform-as-a-Service (PaaS) solution designed for on-premise or private cloud deployments.\n\nThis advisory contains the container images for this release. See the following advisory for the RPM packages and full list of security fixes for this release:\n\nhttps://access.redhat.com/errata/RHSA-2018:0475\n\nThis update contains the following images:\n\nopenshift3/ose:v3.3.1.46.11-20\nopenshift3/node:v3.3.1.46.11-21\n\nopenshift3/ose:v3.4.1.44.38-20\nopenshift3/node:v3.4.1.44.38-21\n\nopenshift3/node:v3.5.5.31.48-20\n\nopenshift3/node:v3.6.173.0.96-20\n\nopenshift3/node:v3.7.23-21\n\nAll OpenShift Container Platform 3.7, 3.6, 3.5, 3.4, and 3.3 users are advised to upgrade to these updated images.",
+            "solution": "For details on how to apply this update, which includes the changes described in this advisory, refer to:\n\nhttps://access.redhat.com/articles/11258",
+            "keywords": ""
+        }
+    },
+    {
+        "id": 32916,
+        "type": "RHBA",
+        "text_only": False,
+        "advisory_name": "RHBA-2018:32916",
+        "synopsis": "TEST OpenShift Container Platform 3.5 bug fix and enhancement update",
+        "revision": 1,
+        "status": "NEW_FILES",
+        "security_impact": "None",
+        "respin_count": 0,
+        "pushcount": 0,
+        "content_types": [],
+        "timestamps": {
+            "issue_date": "2018-03-02T15:19:08Z",
+            "update_date": "2018-03-02T15:19:08Z",
+            "release_date": None,
+            "status_time": "2018-03-02T15:19:08Z",
+            "security_sla": None,
+            "created_at": "2018-03-02T15:19:08Z",
+            "updated_at": "2018-03-07T20:47:23Z"
+        },
+        "flags": {
+            "text_ready": False,
+            "mailed": False,
+            "pushed": False,
+            "published": False,
+            "deleted": False,
+            "qa_complete": False,
+            "rhn_complete": False,
+            "doc_complete": False,
+            "rhnqa": False,
+            "closed": False,
+            "sign_requested": False,
+            "embargo_undated": False
+        },
+        "product": {
+            "id": 79,
+            "name": "Red Hat OpenShift Enterprise",
+            "short_name": "RHOSE"
+        },
+        "release": {
+            "id": 436,
+            "name": "RHOSE ASYNC"
+        },
+        "people": {
+            "assigned_to": "wsun@redhat.com",
+            "reporter": "tbielawa@redhat.com",
+            "qe_group": "OpenShift QE",
+            "docs_group": "Default",
+            "doc_reviewer": "docs-errata-list@redhat.com",
+            "devel_group": "Default",
+            "package_owner": "smunilla@redhat.com"
+        },
+        "content": {
+            "topic": "Red Hat OpenShift Container Platform releases 3.5.z are now available with updates to packages and images that fix several bugs and add enhancements.",
+            "description": "Red Hat OpenShift Container Platform is the company's cloud computing Platform-as-a-Service (PaaS) solution designed for on-premise or private cloud deployments.\n\nThis advisory contains the RPM packages for Red Hat OpenShift Container Platform 3.5.z. See the following advisory for the container images for this release:\n\nhttps://access.redhat.com/errata/RHBA-2018:0114\n\nSpace precludes documenting all of the bug fixes and enhancements in this advisory. See the following Release Notes documentation, which will be updated shortly for this release, for details about these changes:\n\nhttps://docs.openshift.com/container-platform/3.5/release_notes/ocp_3_5_release_notes.html\n\nAll OpenShift Container Platform 3.5 users are advised to upgrade to these updated packages and images.",
+            "solution": "Before applying this update, make sure all previously released errata relevant to your system have been applied.\n\nFor OpenShift Container Platform 3.5 see the following documentation, which will be updated shortly for release 3.5.z, for important instructions on how to upgrade your cluster and fully apply this asynchronous errata update:\n\nhttps://docs.openshift.com/container-platform/3.5/release_notes/ocp_3_5_release_notes.html\n\nThis update is available via the Red Hat Network. Details on how to use the Red Hat Network to apply this update are available at https://access.redhat.com/articles/11258.",
+            "keywords": ""
+        }
+    }
+]
+
 
 example_erratum = {
   "diffs": {},
@@ -313,9 +464,6 @@ example_erratum = {
     }
   }
 }
-
-
-
 
 
 if __name__ == '__main__':
