@@ -184,7 +184,7 @@ class RPMMetadata(Metadata):
                 # write back new lines
                 sf.writelines(lines)
 
-    def _build_rpm(self, scratch, record):
+    def _build_rpm(self, scratch, record, terminate_event):
         """
         The part of `build_container` which actually starts the build,
         separated for clarity.
@@ -223,24 +223,25 @@ class RPMMetadata(Metadata):
             record["task_url"] = task_url
 
             # Now that we have the basics about the task, wait for it to complete
-            rc, out, err = watch_task(self.info, task_id)
+            error = watch_task(self.info, task_id, terminate_event)
 
             # Gather brew-logs
             logs_dir = "%s/%s" % (self.runtime.brew_logs_dir, self.name)
-            logs_rc, logs_out, logs_err = gather_exec(self.runtime, ["brew", "download-logs", "-d", logs_dir, task_id])
+            logs_rc, _, logs_err = gather_exec(self.runtime, ["brew", "download-logs", "-d", logs_dir, task_id])
 
             if logs_rc != 0:
                 self.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
 
-            if rc != 0:
-                # An error occurred during watch-task. We don't have a viable build.
-                self.info("Error building rpm: {}\nout={}  ; err={}".format(task_url, out, err))
+            if error is not None:
+                # An error occurred. We don't have a viable build.
+                self.info("Error building rpm: {}, {}".format(task_url, error))
                 return False
 
             self.info("Successfully built rpm: {} ; {}".format(self.rpm_name, task_url))
         return True
 
-    def build_rpm(self, version, release, scratch=False, retries=3):
+    def build_rpm(
+            self, version, release, terminate_event, scratch=False, retries=3):
         self.set_nvr(version, release)
         self.create_tag(scratch)
         self.tito_setup()
@@ -260,12 +261,15 @@ class RPMMetadata(Metadata):
         try:
             def wait(n):
                 self.info("Async error in rpm build thread [attempt #{}]: {}".format(n + 1, self.qualified_name))
-                # Brew does not handle an immediate retry correctly.
-                time.sleep(5 * 60)  # wait 5 minutes
+                # Brew does not handle an immediate retry correctly, wait
+                # before trying another build, terminating if interrupted.
+                if terminate_event.wait(timeout=5 * 60):
+                    raise KeyboardInterrupt()
             try:
                 retry(
                     n=3, wait_f=wait,
-                    f=lambda: self._build_rpm(scratch, record))
+                    f=lambda: self._build_rpm(
+                        scratch, record, terminate_event))
             except RetryException as err:
                 self.info(str(err))
                 return False
@@ -274,7 +278,7 @@ class RPMMetadata(Metadata):
             record["status"] = 0
             self.build_status = True
 
-        except Exception:
+        except (Exception, KeyboardInterrupt):
             tb = traceback.format_exc()
             record["message"] = "Exception occurred:\n{}".format(tb)
             self.info("Exception occurred during build:\n{}".format(tb))
