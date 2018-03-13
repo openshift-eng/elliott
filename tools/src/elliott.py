@@ -184,12 +184,10 @@ advisory.
               default=False, is_flag=True,
               help="AUTO mode, adds bugs based on --group")
 @click.option("--id", type=int, metavar='BUGID',
-              multiple=True,
-              required=False,
+              multiple=True, required=False,
               help="Bugzilla IDs to add, conflicts with --auto [MULTIPLE]")
 @click.option("--flag", metavar='FLAG',
-              required=False,
-              multiple=True,
+              required=False, multiple=True,
               help="Optional flag to apply to found bugs [MULTIPLE]")
 @pass_runtime
 def find_bugs(runtime, add, auto, id, flag, advisory):
