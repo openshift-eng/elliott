@@ -69,7 +69,19 @@ class TestBrew(unittest.TestCase):
             response.json.return_value = example_erratum_filtered_list
             get.return_value = response
             res = errata.get_filtered_list(limit=1)
+            self.assertIs(res, list)
             self.assertEqual(1, len(res))
+
+    def test_get_filtered_list_fail(self):
+        """Ensure we notice invalid erratum lists"""
+        with mock.patch('ocp_cd_tools.errata.requests.get') as get:
+            response = mock.MagicMock(status_code=404)
+            response.json.return_value = example_erratum_filtered_list
+            get.return_value = response
+            res = errata.get_filtered_list()
+            self.assertEqual(False, res)
+
+
 
 
 example_erratum_filtered_list = [

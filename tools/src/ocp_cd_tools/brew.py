@@ -34,10 +34,8 @@ def get_brew_build(nvr, product_version='', session=None):
 
     http://docs.python-requests.org/en/master/user/advanced/#session-objects
 
-    :return: If the build is discovered, a Build object with the build
-    details is returned. False if no build is discovered for the given
-    nvr.
-
+    :return: An initialized Build object with the build details
+    :raises BrewBuildException: When build not found
     """
     if session is not None:
         res = session.get(ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),

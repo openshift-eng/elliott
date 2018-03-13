@@ -119,6 +119,8 @@ filter_id
 
     if res.status_code == 200:
         return [Erratum(body=advs) for advs in res.json()][:limit]
+    else:
+        return False
 
 
 class Erratum(object):
