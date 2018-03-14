@@ -11,7 +11,7 @@ import re
 
 from common import assert_dir, assert_exec, gather_exec, wrap_exception, Dir
 from image import ImageMetadata
-from rpm import RPMMetadata
+from rpmcfg import RPMMetadata
 from model import Model, Missing
 from multiprocessing import Lock
 
