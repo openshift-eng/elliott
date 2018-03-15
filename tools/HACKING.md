@@ -3,7 +3,7 @@
 Wrote some code and want to test it now? Source the hacking
 environment file and a virtualenv will be setup for you.
 
-    $ . ./hack/env_setup.sh
+    <enterprise-images/tools> $ . ./hack/env_setup.sh
     New python executable in /home/you/.../enterprise-images/tools/venv/bin/python2
     Also creating executable in /home/you/.../enterprise-images/tools/venv/bin/python
     Installing setuptools, pip, wheel...done.
@@ -20,21 +20,42 @@ environment file and a virtualenv will be setup for you.
 Now that the virtualenv is setup, your prompt should have an
 indicator, something like `(venv)` will be added.
 
-Run the scripts like normal
+# HAVING PROBLEMS WITH CERTIFICATE VERIFICATION?
 
-    $ . ./hack/env_setup.sh
+Then you do not have the CA chain for Red Hat internal certs installed
+in your system PKI. You would see something like this:
+
+    requests.exceptions.SSLError:
+    HTTPSConnectionPool(host='errata.devel.redhat.com', port=443): Max
+    retries exceeded with url: /filter/1965.json (Caused by
+    SSLError(SSLError("bad handshake:
+    Error([('SSL routines', 'tls_process_server_certificate', 'certificate verify failed')],)",),))
+
+
+You need to either install the CA chain yourself, or use this other
+little hack to tell python-requests where the CA chain is (a copy of
+the chain is in the `hack/` directory)
+
+Run the env setup script like normal
+
+    <enterprise-images/tools> $ . ./hack/env_setup.sh
     ... output as above ...
 
-	(venv) $ which oit elliott
-	~/.../enterprise-images/tools/venv/bin/oit
-	~/.../enterprise-images/tools/venv/bin/elliott
+Then export `REQUESTS_CA_BUNDLE` while in the `tools/` directory:
 
-    (venv) $ elliott --help
-    Usage: elliott [OPTIONS] COMMAND [ARGS]...
+	<enterprise-images/tools> (venv) $ export REQUESTS_CA_BUNDLE=`pwd`/hack/cert-chain.crt
 
-    Options:
-    -h, --help  Show this message and exit.
+Switch back to the root directory of the repo and then you should be ready to go!
 
-    Commands:
-    advisory:add-bugs       Add new MODIFED bugs to the advisory
-    ...
+    <enterprise-images/tools> (venv) $ cd ..
+
+	<enterprise-images> (venv) $ elliott advisory:list
+	2018-03-02T15:19:08 NEW_FILES TEST OpenShift Container Platform 3.5 bug fix and enhancement update https://errata.devel.redhat.com/advisory/32916
+	2018-01-25T19:19:15 NEW_FILES OpenShift Container Platform 3.3 and 3.4 images update https://errata.devel.redhat.com/advisory/32352
+	2018-01-25T19:15:25 NEW_FILES OpenShift Container Platform 3.3 and 3.4 bug fix and enhancement update https://errata.devel.redhat.com/advisory/32351
+	2018-01-24T15:01:59 NEW_FILES OpenShift Container Platform 3.7, 3.6, 3.5 images update https://errata.devel.redhat.com/advisory/32337
+	2018-01-24T14:56:43 NEW_FILES OpenShift Container Platform 3.7, 3.6, and 3.5 bug fix and enhancement update https://errata.devel.redhat.com/advisory/32336
+
+Ensure you `unset REQUESTS_CA_BUNDLE` afterwards or other cli tools
+using python-requests will fail to verify *other* sites because it'll
+try to use the manually provided CA chain.
