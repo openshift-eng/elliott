@@ -341,7 +341,13 @@ class ImageDistGitRepo(DistGitRepo):
 
             for image_name in names:
                 try:
-                    push_tags = tag_list
+                    push_tags = list(tag_list)
+
+                    # it's possible but rare that an image will have an alternate
+                    # tags along with the regular ones
+                    # append those to the tag list.
+                    if self.config.alt_tags is not Missing:
+                        push_tags.extend(self.config.alt_tags)
 
                     # If no tags were specified, build defaults
                     if not push_tags:
