@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 with open('./requirements.txt') as f:
     INSTALL_REQUIRES = f.read().splitlines()
@@ -15,10 +15,18 @@ setup(
 
     package_dir={'': 'src'},
     packages=["ocp_cd_tools"],
-    scripts=['bin/oit'],
-    
+    # scripts=['bin/oit'],
+    #packages=find_packages(),
     include_package_data=True,
+
+    entry_points = {
+        'console_scripts': [
+            'elliott = elliott:cli',
+            'oit = oit:cli'
+        ],
+    },
+
     install_requires=INSTALL_REQUIRES,
-    
+
     dependency_links=[]
 )
