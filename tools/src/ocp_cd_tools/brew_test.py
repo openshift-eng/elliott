@@ -16,151 +16,37 @@ else:
     import unittest
 
 import ocp_cd_tools.constants
+import ocp_cd_tools.exceptions
+import ocp_cd_tools.runtime
 import brew
+from . import test_structures
 
 from requests_kerberos import HTTPKerberosAuth
 
 
-image_build_attached_json = {
-    "id": 660050,
-    "nvr": "template-service-broker-docker-v3.7.36-2",
-    "package": {
-        "id": 40328,
-        "name": "template-service-broker-docker"
-    },
-    "released_errata": None,
-    "all_errata": [
-        {
-            "id": 32337,
-            "name": "RHBA-2018:32337",
-            "status": "NEW_FILES"
-        }
-    ],
-    "rpms_signed": False,
-    "files": [
-        {
-            "id": 2354632,
-            "path": "/mnt/redhat/brewroot/packages/template-service-broker-docker/v3.7.36/2/images/docker-image-sha256:c0ccc42e77a2d279cadb285d1bde0e0286f30ac4d7904db4071b59b5fdeac317.x86_64.tar.gz",
-            "type": "tar",
-            "arch": {
-                "id": 13,
-                "name": "x86_64"
-            }
-        }
-    ]
-}
-
-image_build_unattached_json = {
-    "id": 660540,
-    "nvr": "cri-o-docker-v3.7.37-1",
-    "package": {
-        "id": 39891,
-        "name": "cri-o-docker"
-    },
-    "released_errata": None,
-    "all_errata": [],
-    "rpms_signed": False,
-    "files": [
-        {
-            "id": 2355539,
-            "path": "/mnt/redhat/brewroot/packages/cri-o-docker/v3.7.37/1/images/docker-image-sha256:cd8ff09475c390d7cf99d44457e3dac4c70b3f0b59638df97f3d3d5317680954.x86_64.tar.gz",
-            "type": "tar",
-            "arch": {
-                "id": 13,
-                "name": "x86_64"
-            }
-        }
-    ]
-}
-
-rpm_build_attached_json = {
-    "id": 629986,
-    "nvr": "coreutils-8.22-21.el7",
-    "package": {
-        "id": 87,
-        "name": "coreutils"
-    },
-    "released_errata": None,
-    "all_errata": [
-        {
-            "id": 30540,
-            "name": "RHBA-2017:30540",
-            "status": "REL_PREP"
-        }
-    ],
-    "rpms_signed": True,
-    "files": [
-        {
-            "id": 5256225,
-            "path": "/mnt/redhat/brewroot/packages/coreutils/8.22/21.el7/data/signed/fd431d51/src/coreutils-8.22-21.el7.src.rpm",
-            "type": "rpm",
-            "arch": {
-                "id": 24,
-                "name": "SRPMS"
-            }
-        },
-        {
-            "id": 5256226,
-            "path": "/mnt/redhat/brewroot/packages/coreutils/8.22/21.el7/data/signed/fd431d51/ppc/coreutils-8.22-21.el7.ppc.rpm",
-            "type": "rpm",
-            "arch": {
-                "id": 17,
-                "name": "ppc"
-            }
-        },
-        {
-            "id": 5256227,
-            "path": "/mnt/redhat/brewroot/packages/coreutils/8.22/21.el7/data/signed/fd431d51/ppc/coreutils-debuginfo-8.22-21.el7.ppc.rpm",
-            "type": "rpm",
-            "arch": {
-                "id": 17,
-                "name": "ppc"
-            }
-        }
-    ]
-}
-
-rpm_build_unattached_json = {
-    "id": 653686,
-    "nvr": "ansible-service-broker-1.0.21-1.el7",
-    "package": {
-        "id": 38747,
-        "name": "ansible-service-broker"
-    },
-    "released_errata": None,
-    "all_errata": [],
-    "rpms_signed": False,
-    "files": [
-        {
-            "id": 5446315,
-            "path": "/mnt/redhat/brewroot/packages/ansible-service-broker/1.0.21/1.el7/src/ansible-service-broker-1.0.21-1.el7.src.rpm",
-            "type": "rpm",
-            "arch": {
-                "id": 24,
-                "name": "SRPMS"
-            }
-        },
-        {
-            "id": 5446316,
-            "path": "/mnt/redhat/brewroot/packages/ansible-service-broker/1.0.21/1.el7/noarch/ansible-service-broker-selinux-1.0.21-1.el7.noarch.rpm",
-            "type": "rpm",
-            "arch": {
-                "id": 8,
-                "name": "noarch"
-            }
-        }
-    ]
-}
-
-bogus_build_json = {}
-
-
 class TestBrew(unittest.TestCase):
+
+    def test_build_attached_to_open_erratum(self):
+        """We can tell if a build is attached to any open erratum"""
+        # Create Erratum(), create Build() using dict with all_errata
+        # containing an object with 'id' matching Erratum.advisory_id
+        b = brew.Build(nvr='template-service-broker-docker-v3.7.36-2',
+                       body=test_structures.image_build_attached_open_json,
+                       product_version='rhaos-test-7')
+        self.assertTrue(b.attached_to_open_erratum)
+
+    def test_build_attached_to_closed_erratum(self):
+        """We can tell if a build is attached to any closed erratum"""
+        # Use filter #1991: (Active; Product: RHOSE; sorted by newest)
+        b = brew.Build(nvr='template-service-broker-docker-v3.7.36-2',
+                       body=test_structures.image_build_attached_closed_json,
+                       product_version='rhaos-test-7')
+        self.assertTrue(b.attached_to_closed_erratum)
 
     def test_good_attached_brew_image_build(self):
         """We can create and process an attached image Build object"""
         b = brew.Build(nvr='template-service-broker-docker-v3.7.36-2',
-                       body=image_build_attached_json,
+                       body=test_structures.image_build_attached_json,
                        product_version='rhaos-test-7')
 
         self.assertEqual('template-service-broker-docker-v3.7.36-2', b.nvr)
@@ -171,7 +57,7 @@ class TestBrew(unittest.TestCase):
     def test_good_unattached_brew_image_build(self):
         """We can create and process an unattached image Build object"""
         b = brew.Build(nvr='cri-o-docker-v3.7.37-1',
-                       body=image_build_unattached_json,
+                       body=test_structures.image_build_unattached_json,
                        product_version='rhaos-test-7')
 
         self.assertEqual('cri-o-docker-v3.7.37-1', b.nvr)
@@ -182,7 +68,7 @@ class TestBrew(unittest.TestCase):
     def test_good_attached_brew_rpm_build(self):
         """We can create and process an attached rpm Build object"""
         b = brew.Build(nvr='coreutils-8.22-21.el7',
-                       body=rpm_build_attached_json,
+                       body=test_structures.rpm_build_attached_json,
                        product_version='rhaos-test-7')
 
         self.assertEqual('coreutils-8.22-21.el7', b.nvr)
@@ -193,7 +79,7 @@ class TestBrew(unittest.TestCase):
     def test_good_unattached_brew_rpm_build(self):
         """We can create and process an unattached rpm Build object"""
         b = brew.Build(nvr='ansible-service-broker-1.0.21-1.el7',
-                       body=rpm_build_unattached_json,
+                       body=test_structures.rpm_build_unattached_json,
                        product_version='rhaos-test-7')
 
         self.assertEqual('ansible-service-broker-1.0.21-1.el7', b.nvr)
@@ -237,7 +123,7 @@ class TestBrew(unittest.TestCase):
         pv = 'rhaos-test-7'
 
         b = brew.Build(nvr=nvr,
-                       body=rpm_build_attached_json,
+                       body=test_structures.rpm_build_attached_json,
                        product_version=pv)
 
         expected_json = {
@@ -254,7 +140,7 @@ class TestBrew(unittest.TestCase):
         pv = 'rhaos-test-7'
 
         b = brew.Build(nvr=nvr,
-                       body=image_build_attached_json,
+                       body=test_structures.image_build_attached_json,
                        product_version=pv)
 
         expected_json = {
@@ -274,7 +160,7 @@ class TestBrew(unittest.TestCase):
             nvr = 'coreutils-8.22-21.el7'
             pv = 'rhaos-test-7'
             response = mock.MagicMock(status_code=200)
-            response.json.return_value = rpm_build_attached_json
+            response.json.return_value = test_structures.rpm_build_attached_json
             get.return_value = response
 
             b = brew.get_brew_build(nvr, product_version=pv)
@@ -298,7 +184,7 @@ class TestBrew(unittest.TestCase):
             response = mock.MagicMock(status_code=200)
             # We'll call the json method on the result to retrieve the
             # response body from ET
-            response.json.return_value = rpm_build_attached_json
+            response.json.return_value = test_structures.rpm_build_attached_json
             # We create a session mock HERE to pass in when we call
             # the get_brew_build function
             session = mock.MagicMock()
@@ -332,17 +218,147 @@ class TestBrew(unittest.TestCase):
             pv = 'rhaos-test-7'
             # Engage the failure logic branch, will raise
             response = mock.MagicMock(status_code=404)
-            response.json.return_value = rpm_build_attached_json
+            response.json.return_value = test_structures.rpm_build_attached_json
             get.return_value = response
 
             # The 404 status code will send us down the exception
             # branch of code
-            with self.assertRaises(ocp_cd_tools.brew.BrewBuildException):
+            with self.assertRaises(ocp_cd_tools.exceptions.BrewBuildException):
                 brew.get_brew_build(nvr, product_version=pv)
 
             get.assert_called_once_with(
                 ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
                 auth=kerb()
+            )
+
+    def test_get_tagged_image_builds_success(self):
+        """Ensure the brew list-tagged command is correct for images"""
+        # Any value will work for this. Let's use a real one though to
+        # maintain our sanity. This matches with the example data in
+        # ocp_cd_tools.test_structures
+        tag = 'rhaos-3.9-rhel-7-candidate'
+        # runtime required for gather_exec
+        runtime_mock = mock.MagicMock(ocp_cd_tools.runtime.Runtime)
+        # Big multi-line string with brew image build ouput.
+        image_builds_mock_return = ocp_cd_tools.test_structures.brew_list_tagged_3_9_image_builds
+        image_builds_mock_length = len(image_builds_mock_return.splitlines())
+
+        with mock.patch('ocp_cd_tools.common.gather_exec') as gexec:
+            # gather_exec => (rc, stdout, stderr)
+            gexec.return_value = tuple([0, image_builds_mock_return, ""])
+
+            # Now we can test the BrewTaggedImageBuilds
+            # collecter/parser class as well as the
+            # get_tagged_image_builds function
+            tagged_image_builds = ocp_cd_tools.brew.BrewTaggedImageBuilds(tag)
+            # This invokes get_tagged_image_builds, which in turn
+            # invokes our mocked gather_exec
+            images_refreshed = tagged_image_builds.refresh(runtime_mock)
+
+            # Refreshing returns True after parsing the results from
+            # the brew CLI command, errors will raise an exception
+            self.assertTrue(images_refreshed)
+
+            # Our example data has 59 valid parseable images listed
+            self.assertEqual(image_builds_mock_length, len(tagged_image_builds.builds))
+
+            gexec.assert_called_once_with(
+                runtime_mock,
+                # shlex must split our command string into a list
+                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--type=image', '--quiet']
+            )
+
+    def test_get_tagged_image_builds_failed(self):
+        """Ensure the brew list-tagged explodes if the brew subprocess fails"""
+        # Any value will work for this. Let's use a real one though to
+        # maintain our sanity. This matches with the example data in
+        # ocp_cd_tools.test_structures
+        tag = 'rhaos-3.9-rhel-7-candidate'
+        # runtime required for gather_exec
+        runtime_mock = mock.MagicMock(ocp_cd_tools.runtime.Runtime)
+        # Big multi-line string with brew image build ouput.
+        image_builds_mock_return = ocp_cd_tools.test_structures.brew_list_tagged_3_9_image_builds
+
+        with mock.patch('ocp_cd_tools.common.gather_exec') as gexec:
+            # gather_exec => (rc, stdout, stderr)
+            #
+            # The '1' in position 0 is the brew subprocess return
+            # code, this invokes the error raising branch of code
+            gexec.return_value = tuple([1, image_builds_mock_return, ""])
+            tagged_image_builds = ocp_cd_tools.brew.BrewTaggedImageBuilds(tag)
+
+            with self.assertRaises(ocp_cd_tools.exceptions.BrewBuildException):
+                tagged_image_builds.refresh(runtime_mock)
+
+            gexec.assert_called_once_with(
+                runtime_mock,
+                # shlex must split our command string into a list
+                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--type=image', '--quiet']
+            )
+
+    def test_get_tagged_rpm_builds_success(self):
+        """Ensure the brew list-tagged command is correct for rpms"""
+        # Any value will work for this. Let's use a real one though to
+        # maintain our sanity. This matches with the example data in
+        # ocp_cd_tools.test_structures
+        tag = 'rhaos-3.9-rhel-7-candidate'
+        # runtime required for gather_exec
+        runtime_mock = mock.MagicMock(ocp_cd_tools.runtime.Runtime)
+        # Big multi-line string with brew rpm build ouput.
+        rpm_builds_mock_return = ocp_cd_tools.test_structures.brew_list_tagged_3_9_rpm_builds
+        rpm_builds_mock_length = len(rpm_builds_mock_return.splitlines())
+
+        with mock.patch('ocp_cd_tools.common.gather_exec') as gexec:
+            # gather_exec => (rc, stdout, stderr)
+            gexec.return_value = tuple([0, rpm_builds_mock_return, ""])
+
+            # Now we can test the BrewTaggedRPMBuilds
+            # collecter/parser class as well as the
+            # get_tagged_rpm_builds function
+            tagged_rpm_builds = ocp_cd_tools.brew.BrewTaggedRPMBuilds(tag)
+            # This invokes get_tagged_rpm_builds, which in turn
+            # invokes our mocked gather_exec
+            rpms_refreshed = tagged_rpm_builds.refresh(runtime_mock)
+
+            # Refreshing returns True after parsing the results from
+            # the brew CLI command, errors will raise an exception
+            self.assertTrue(rpms_refreshed)
+
+            # Our example data has 59 valid parseable rpms listed
+            self.assertEqual(rpm_builds_mock_length, len(tagged_rpm_builds.builds))
+
+            gexec.assert_called_once_with(
+                runtime_mock,
+                # shlex must split our command string into a list
+                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--rpm', '--quiet', '--arch', 'src']
+            )
+
+    def test_get_tagged_rpm_builds_failed(self):
+        """Ensure the brew list-tagged explodes if the brew subprocess fails"""
+        # Any value will work for this. Let's use a real one though to
+        # maintain our sanity. This matches with the example data in
+        # ocp_cd_tools.test_structures
+        tag = 'rhaos-3.9-rhel-7-candidate'
+        # runtime required for gather_exec
+        runtime_mock = mock.MagicMock(ocp_cd_tools.runtime.Runtime)
+        # Big multi-line string with brew rpm build ouput.
+        rpm_builds_mock_return = ocp_cd_tools.test_structures.brew_list_tagged_3_9_rpm_builds
+
+        with mock.patch('ocp_cd_tools.common.gather_exec') as gexec:
+            # gather_exec => (rc, stdout, stderr)
+            #
+            # The '1' in position 0 is the brew subprocess return
+            # code, this invokes the error raising branch of code
+            gexec.return_value = tuple([1, rpm_builds_mock_return, ""])
+            tagged_rpm_builds = ocp_cd_tools.brew.BrewTaggedRPMBuilds(tag)
+
+            with self.assertRaises(ocp_cd_tools.exceptions.BrewBuildException):
+                tagged_rpm_builds.refresh(runtime_mock)
+
+            gexec.assert_called_once_with(
+                runtime_mock,
+                # shlex must split our command string into a list
+                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--rpm', '--quiet', '--arch', 'src']
             )
 
 

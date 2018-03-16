@@ -10,6 +10,7 @@ import shlex
 # ours
 import ocp_cd_tools.common
 import ocp_cd_tools.constants
+import ocp_cd_tools.exceptions
 
 # 3rd party
 import click
@@ -35,7 +36,7 @@ def get_brew_build(nvr, product_version='', session=None):
     http://docs.python-requests.org/en/master/user/advanced/#session-objects
 
     :return: An initialized Build object with the build details
-    :raises BrewBuildException: When build not found
+    :raises ocp_cd_tools.exceptions.BrewBuildException: When build not found
     """
     if session is not None:
         res = session.get(ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
@@ -46,12 +47,15 @@ def get_brew_build(nvr, product_version='', session=None):
     if res.status_code == 200:
         return Build(nvr=nvr, body=res.json(), product_version=product_version)
     else:
-        raise BrewBuildException("Invalid brew build given: {build}".format(build=nvr))
+        raise ocp_cd_tools.exceptions.BrewBuildException("{build}: {msg}".format(
+            build=nvr,
+            msg=res.text))
 
 
 def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     """Find builds for a product and return a list of the builds only
-    labeled with the -candidate tag.
+    labeled with the -candidate tag that aren't attached to any open
+    advisory.
 
     :param Runtime runtime: The runtime context object
     :param str base_tag: The tag to search for shipped/candidate
@@ -68,11 +72,9 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     (1) 'rhaos-3.7-rhel7'
     (2) 'rhaos-3.7-rhel7-candidate'
 
-    The items returned are those ONLY present in #2. The results are
-    a tuple splitting the results into two lists:
-
     :return: A list of Build objects of builds that are not attached
-    to any past or current advisory
+    to any open advisory
+
     """
     if kind == 'rpm':
         candidate_builds = BrewTaggedRPMBuilds(base_tag + "-candidate")
@@ -107,8 +109,8 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     pool.close()
     pool.join()
 
-    # We only want builds not attached to an existing advisory
-    return [b for b in results if not b.attached]
+    # We only want builds not attached to an existing open advisory
+    return [b for b in results if not b.attached_to_open_erratum]
 
 
 def get_tagged_image_builds(runtime, tag):
@@ -161,8 +163,10 @@ class BrewTaggedImageBuilds(object):
         """
         rc, stdout, stderr = get_tagged_image_builds(runtime, self.tag)
 
+        print("Refreshing for tag: {tag}".format(tag=self.tag))
+
         if rc != 0:
-            raise Exception("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
+            raise ocp_cd_tools.exceptions.BrewBuildException("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
         else:
             builds = set(stdout.splitlines())
             for b in builds:
@@ -193,7 +197,7 @@ class BrewTaggedRPMBuilds(object):
         print("Refreshing for tag: {tag}".format(tag=self.tag))
 
         if rc != 0:
-            raise Exception("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
+            raise ocp_cd_tools.exceptions.BrewBuildException("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
         else:
             builds = set(stdout.splitlines())
             for b in builds:
@@ -240,9 +244,10 @@ initialized Build object (provided the build exists).
         self.nvr = nvr
         self.body = body
         self.all_errata = []
-        self.attached = False
         self.kind = ''
         self.path = ''
+        self.attached_erratum_ids = set([])
+        self.attached_closed_erratum_ids = set([])
         self.product_version = product_version
         self.process()
 
@@ -268,14 +273,26 @@ initialized Build object (provided the build exists).
     def __lt__(self, other):
         return self.nvr < other.nvr
 
+    @property
+    def attached_to_open_erratum(self):
+        """Attached to any open erratum"""
+        return len([e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_active_advisory_labels]) > 0
+
+    @property
+    def attached_to_closed_erratum(self):
+        """Attached to any closed erratum"""
+        return len([e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_inactive_advisory_labels]) > 0
+
+    @property
+    def attached(self):
+        """Attached to ANY erratum (open or closed)"""
+        return len(self.all_errata) > 0
+
     def process(self):
         """Generate some easy to access attributes about this build so we
 don't have to do extra manipulation later back in the view"""
         # Has this build been attached to any erratum?
-        if 'all_errata' in self.body:
-            for erratum in self.body['all_errata']:
-                self.all_errata.append(erratum['name'])
-            self.attached = len(self.all_errata) > 0
+        self.all_errata = self.body.get('all_errata', [])
 
         # What kind of build is this?
         if 'files' in self.body:
@@ -311,7 +328,3 @@ API. This is the body content of the erratum add_builds endpoint."""
             'build': self.nvr,
             'file_types': [self.file_type],
         }
-
-
-class BrewBuildException(Exception):
-    pass

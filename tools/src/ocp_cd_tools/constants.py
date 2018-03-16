@@ -60,6 +60,20 @@ errata_topic = 'Red Hat OpenShift Container Platform releases 3.{Y}.z are now av
 #          Enterprise; sorted by newest)
 # https://errata.devel.redhat.com/filter/1965
 errata_default_filter = '1965'
+# 1991 => (Active; Product: RHOSE; Devel Group: ENG OpenShift
+#          Enterprise; sorted by newest)
+errata_live_advisory_filter = '1991'
+errata_active_advisory_labels = [
+    "NEW_FILES",
+    "QE",
+    "REL_PREP",
+    "PUSH_READY",
+    "IN_PUSH"
+]
+errata_inactive_advisory_labels = [
+    "SHIPPED_LIVE",
+    "DROPPED_NO_SHIP"
+]
 ######################################################################
 # API endpoints with string formatting placeholders as
 # necessary. Index of all available endpoints is available in the
