@@ -117,6 +117,6 @@ def cmd_gather(cmd):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = proc.communicate()
     logger.info(
-        "Process exited with: {}\nstdout>>>{}<<<\nstderr>>>{}<<<\n".
+        "Process exited with: {}\nstdout>>{}<<\nstderr>>{}<<\n".
         format(proc.returncode, out, err))
     return proc.returncode, out, err
