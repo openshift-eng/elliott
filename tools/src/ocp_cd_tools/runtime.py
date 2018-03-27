@@ -99,6 +99,24 @@ class Runtime(object):
         # Create a "uuid" which will be used in FROM fields during updates
         self.uuid = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
+    def get_group_config(self, group_dir):
+        with Dir(group_dir):
+            with open("group.yml", "r") as f:
+                group_yml = f.read()
+
+            # group.yml can contain a `vars` section which should be a
+            # single level dict containing keys to str.format(**dict) replace
+            # into the YAML content. If `vars` found, the format will be
+            # preformed and the YAML model will reloaded from that result
+            tmp_config = Model(yaml.load(group_yml))
+            replace_vars = tmp_config.vars
+            if replace_vars is not Missing:
+                try:
+                    return Model(yaml.load(group_yml.format(**replace_vars)))
+                except KeyError as e:
+                    raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
+            return tmp_config
+
     def initialize(self, mode='images', clone_distgits=True):
 
         if self.initialized:
@@ -180,11 +198,9 @@ class Runtime(object):
                     self.register_source_alias(key, val)
 
         self.info("Searching group directory: %s" % group_dir)
-        with Dir(group_dir):
-            with open("group.yml", "r") as f:
-                group_yml = f.read()
 
-            self.group_config = Model(yaml.load(group_yml))
+        with Dir(group_dir):
+            self.group_config = self.get_group_config(group_dir)
 
             if self.group_config.name != self.group:
                 raise IOError(

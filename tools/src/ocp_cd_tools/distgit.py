@@ -18,6 +18,26 @@ from model import Model, Missing
 OIT_COMMENT_PREFIX = '#oit##'
 EMPTY_REPO = 'http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift_Empty/'
 
+CONTENT_SETS = """
+# This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images,
+# by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).
+# Any manual changes will be overwritten by OIT on the next build.
+#
+# This is a file defining which content sets (yum repositories) are needed to
+# update content in this image. Data provided here helps determine which images
+# are vulnerable to specific CVEs. Generally you should only need to update this
+# file when:
+#    1. You start depending on a new product
+#    2. You are preparing new product release and your content sets will change
+#
+# See https://mojo.redhat.com/docs/DOC-1023066 for more information on
+# maintaining this file and the format and examples
+#
+# You should have one top level item for each architecture being built. Most
+# likely this will be x86_64 and ppc64le initially.
+---
+"""
+
 
 def pull_image(runtime, url):
     runtime.info("Pulling image: %s" % url)
@@ -242,6 +262,27 @@ class ImageDistGitRepo(DistGitRepo):
                         rc.write('{} = {}\n'.format(k, v))
                     rc.write('\n')
 
+            # generate content_sets.yml
+            # required by QE tooling for images to properly pass checks
+            content_sets = []
+            # scan repos for any that are now enabled
+            for k, v in type_repos.iteritems():
+                if v['enabled']:
+                    # use either name field, or repo key if name not present
+                    content_sets.append(v.get('name', k))
+
+            if content_sets:
+                # generate yaml data with header
+                content_sets_yml = CONTENT_SETS
+                cs_base = ""
+                for cs in content_sets:
+                    cs_base += ('- ' + cs + '\n')
+                for arch in ['x86_64', 'ppc64le', 'aarch64', 's390x']:
+                    content_sets_yml += '{}:\n{}\n'.format(arch, cs_base)
+
+                with open('content_sets.yml', 'w') as rc:
+                    rc.write(content_sets_yml)
+
     def _read_master_data(self):
         with Dir(self.distgit_dir):
             self.org_image_name = None
@@ -299,7 +340,7 @@ class ImageDistGitRepo(DistGitRepo):
                 release = version_release_tuple[1]
             else:
 
-                ## History
+                # History
                 # We used to rely on the "release" label being set in the Dockerfile, but this is problematic for several reasons.
                 # (1) If 'release' is not set, OSBS will determine one automatically that does not conflict
                 #       with a pre-existing image build. This is extremely helpful since we don't have to
@@ -307,7 +348,6 @@ class ImageDistGitRepo(DistGitRepo):
                 #       want the release label in the file and can't, therefore, rely on it being there.
                 # (2) People have logged into distgit before in order to bump the release field. This happening
                 #       at the wrong time breaks the build.
-
 
                 # If the version & release information was not specified,
                 # try to detect latest build from brew.

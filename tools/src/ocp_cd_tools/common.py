@@ -138,7 +138,7 @@ def gather_exec(runtime, cmd):
         cmd_list, cwd=Dir.getcwd(),
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
-    runtime.log_verbose("Process exited with: %d\nstdout>>>%s<<<\nstderr>>>%s<<<\n" % (p.returncode, out, err))
+    runtime.log_verbose("Process exited with: %d\nstdout>>%s<<\nstderr>>%s<<\n" % (p.returncode, out, err))
     return p.returncode, out, err
 
 
