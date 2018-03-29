@@ -27,7 +27,7 @@ the enterprise-images repo contains metadata about how Dockerfiles from Origin s
 as a Dockerfile for OCP.
 
 Consider this image metadata file:
-groups/openshift-3.7/openshift-enterprise-node-docker/config.yml
+groups/openshift-3.7/images/openshift-enterprise-node-docker.yml
 
 The file describes a series of changes that must be made to the Origin Dockerfile:
 - Labels which should be added

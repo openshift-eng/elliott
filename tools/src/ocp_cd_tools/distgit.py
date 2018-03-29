@@ -62,7 +62,7 @@ class DistGitRepo(object):
 
         self.branch = self.runtime.branch
 
-        # Allow the config.yml to override branch
+        # Allow the config yaml to override branch
         # This is primarily useful for a sync only group.
         if self.config.distgit.branch is not Missing:
             self.branch = self.config.distgit.branch
@@ -974,7 +974,7 @@ class ImageDistGitRepo(DistGitRepo):
                 assert (match is not Missing)
                 replacement = modification.replacement
                 assert (replacement is not Missing)
-                if replacement is None:  # Nothing follows colon in config.yml; user attempting to remove string
+                if replacement is None:  # Nothing follows colon in config yaml; user attempting to remove string
                     replacement = ""
                 pre = dockerfile_data
                 dockerfile_data = pre.replace(match, replacement)

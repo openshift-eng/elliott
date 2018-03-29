@@ -28,8 +28,8 @@ remote_git_name = {name}
 
 class RPMMetadata(Metadata):
 
-    def __init__(self, runtime, dir, name):
-        super(RPMMetadata, self).__init__('rpm', runtime, dir, name)
+    def __init__(self, runtime, name):
+        super(RPMMetadata, self).__init__('rpm', runtime, name)
 
         self.info = self.runtime.info
 
@@ -49,7 +49,7 @@ class RPMMetadata(Metadata):
                 for spec in glob.glob('*.spec'):
                     specs.append(spec)
                 if len(specs) > 1:
-                    raise ValueError('More than one spec file found. Specify correct file in config.yml')
+                    raise ValueError('More than one spec file found. Specify correct file in config yaml')
                 elif len(specs) == 0:
                     raise ValueError('Unable to find any spec files in {}'.format(self.source_path))
                 else:

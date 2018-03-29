@@ -34,11 +34,10 @@ def tag_exists(registry, name, tag, fetch_f=None):
 
 
 class Metadata(object):
-    def __init__(self, meta_type, runtime, dir, name):
+    def __init__(self, meta_type, runtime, name):
         self.meta_type = meta_type
         self.runtime = runtime
-        self.dir = os.path.abspath(dir)
-        self.config_path = os.path.join(self.dir, "config.yml")
+        self.config_path = "{}.yml".format(name)
         self.name = name
 
         runtime.log_verbose("Loading metadata for %s from %s" % (name, self.config_path))
@@ -90,7 +89,7 @@ class Metadata(object):
 
     def get_component_name(self):
         # By default, the bugzilla compnent is the name of the distgit,
-        # but this can be overridden in the config.yml.
+        # but this can be overridden in the config yaml.
         component_name = self.name
 
         # For apbs, component name seems to have -apb appended.
