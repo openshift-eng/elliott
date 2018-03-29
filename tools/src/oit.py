@@ -641,19 +641,21 @@ def images_print(runtime, short, show_non_release, pattern):
         pattern = "{%s}" % pattern.strip()
 
     count = 0
-    non_release = 0
     if short:
         echo_verbose = lambda _: None
     else:
         echo_verbose = click.echo
+
     echo_verbose("")
     echo_verbose("------------------------------------------")
-    for image in runtime.image_metas():
 
-        if image.config.non_release and not show_non_release:
-            non_release += 1
-            continue
+    non_release_images = runtime.group_config.get('non_release', [])
+    if not show_non_release:
+        images = [i for i in runtime.image_metas() if i.name not in non_release_images]
+    else:
+        images = list(runtime.image_metas())
 
+    for image in images:
         dfp = DockerfileParser()
         dfp.content = image.fetch_cgit_file("Dockerfile")
 
@@ -680,11 +682,10 @@ def images_print(runtime, short, show_non_release, pattern):
     echo_verbose("------------------------------------------")
     echo_verbose("{} images".format(count))
 
-    if non_release > 0:
-        echo_verbose("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(non_release))
-        for image in runtime.image_metas():
-            if image.config.non_release:
-                echo_verbose("    {}".format(image.name))
+    if not show_non_release:
+        echo_verbose("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(len(non_release_images)))
+        for image in non_release_images:
+            echo_verbose("    {}".format(image))
 
 
 @cli.command("images:print-config-template", short_help="Create template config.yml from distgit Dockerfile.")
