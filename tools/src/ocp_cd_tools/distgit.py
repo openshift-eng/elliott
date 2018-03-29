@@ -253,7 +253,7 @@ class ImageDistGitRepo(DistGitRepo):
 
             for r in df_repos:
                 if r not in type_repos:
-                    type_repos[r] = resolve_repo(r, {'enabled': 1, 'baseurl': EMPTY_REPO})
+                    type_repos[r] = resolve_repo(r, {'enabled': 0, 'baseurl': EMPTY_REPO})
 
             with open('.oit/{}.repo'.format(t), 'w') as rc:
                 for name, cfg in type_repos.items():
@@ -262,27 +262,26 @@ class ImageDistGitRepo(DistGitRepo):
                         rc.write('{} = {}\n'.format(k, v))
                     rc.write('\n')
 
-            if False:  # disabling for now, until we can evaluate
-                # generate content_sets.yml
-                # required by QE tooling for images to properly pass checks
-                content_sets = []
-                # scan repos for any that are now enabled
-                for k, v in type_repos.iteritems():
-                    if v['enabled']:
-                        # use either name field, or repo key if name not present
-                        content_sets.append(v.get('name', k))
+            # generate content_sets.yml
+            # required by QE tooling for images to properly pass checks
+            content_sets = []
+            # scan repos for any that are now enabled
+            for k, v in type_repos.iteritems():
+                if v['enabled']:
+                    # use either name field, or repo key if name not present
+                    content_sets.append(v.get('name', k))
 
-                if content_sets:
-                    # generate yaml data with header
-                    content_sets_yml = CONTENT_SETS
-                    cs_base = ""
-                    for cs in content_sets:
-                        cs_base += ('- ' + cs + '\n')
-                    for arch in ['x86_64', 'ppc64le', 'aarch64', 's390x']:
-                        content_sets_yml += '{}:\n{}\n'.format(arch, cs_base)
+            if content_sets:
+                # generate yaml data with header
+                content_sets_yml = CONTENT_SETS
+                cs_base = ""
+                for cs in content_sets:
+                    cs_base += ('- ' + cs + '\n')
+                for arch in ['x86_64', 'ppc64le', 'aarch64', 's390x']:
+                    content_sets_yml += '{}:\n{}\n'.format(arch, cs_base)
 
-                    with open('content_sets.yml', 'w') as rc:
-                        rc.write(content_sets_yml)
+                with open('content_sets.yml', 'w') as rc:
+                    rc.write(content_sets_yml)
 
     def _read_master_data(self):
         with Dir(self.distgit_dir):
