@@ -554,8 +554,8 @@ def print_build_metrics(runtime):
         aggregate_wait_secs += wait_secs
 
         runtime.info('Task {} took {:.1f}m of active build and was waiting to start for {:.1f}m'.format(task_id,
-                                                                                                 build_secs / 60.0,
-                                                                                                 wait_secs / 60.0)
+                                                                                                        build_secs / 60.0,
+                                                                                                        wait_secs / 60.0)
                      )
     runtime.info('Aggregate time all builds spent building {:.1f}m'.format(aggregate_build_secs / 60.0))
     runtime.info('Aggregate time all builds spent waiting {:.1f}m'.format(aggregate_wait_secs / 60.0))
@@ -660,6 +660,13 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
     # Push all late images
     for image in runtime.image_metas():
         image.distgit_repo().push_image([], push_to, push_late=True)
+
+    try:
+        print_build_metrics(runtime)
+    except Exception:
+        # Never kill a build because of bad logic in metrics
+        traceback.print_exc()
+        runtime.info("Error trying to show build metrics")
 
 
 @cli.command("images:push", short_help="Push the most recent images to mirrors.")
@@ -824,7 +831,7 @@ def images_print(runtime, short, show_non_release, pattern):
 
     if not show_non_release:
         echo_verbose("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(
-                len(non_release_images)))
+                     len(non_release_images)))
         for image in non_release_images:
             echo_verbose("    {}".format(image))
 

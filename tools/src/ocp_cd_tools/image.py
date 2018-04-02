@@ -70,27 +70,17 @@ added come from the selected group YAML config file.
     # Use the running container ID to keep the repo files unique
     repo_file = os.path.join(runtime.working_dir, 'verify.repo')
     repos = {
-        'rhel-server-rpms': runtime.group_config.repos.common['rhel-server-rpms'],
-        'rhel-server-extras-rpms': runtime.group_config.repos.common['rhel-server-extras-rpms'],
-        'rhel-server-rhscl-rpms': runtime.group_config.repos.common['rhel-server-rhscl-rpms'],
-        'rhel-server-optional-rpms': runtime.group_config.repos.common['rhel-server-optional-rpms'],
-        'rhel-fast-datapath-rpms': runtime.group_config.repos.common['rhel-fast-datapath-rpms'],
-        'rhel-server-ose-rpms': runtime.group_config.repos[repo_type]['rhel-server-ose-rpms'],
+        'rhel-server-rpms': runtime.repos['rhel-server-rpms'],
+        'rhel-server-extras-rpms': runtime.repos['rhel-server-extras-rpms'],
+        'rhel-server-rhscl-rpms': runtime.repos['rhel-server-rhscl-rpms'],
+        'rhel-server-optional-rpms': runtime.repos['rhel-server-optional-rpms'],
+        'rhel-fast-datapath-rpms': runtime.repos['rhel-fast-datapath-rpms'],
+        'rhel-server-ose-rpms': runtime.repos['rhel-server-ose-rpms'],
     }
-
-    repo_string = """[{repo}]
-name={repo}
-baseurl={baseurl}
-enabled=1
-gpgcheck=0
-"""
 
     with open(repo_file, 'w') as fp:
         for repo in repos.keys():
-            fp.write(repo_string.format(
-                repo=repo,
-                baseurl=repos[repo]['baseurl']))
-
+            fp.write(repos[repo].conf_section(repo_type, enabled=True))
     return repo_file
 
 

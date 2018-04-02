@@ -18,27 +18,6 @@ from common import (
 from model import Model, Missing
 
 OIT_COMMENT_PREFIX = '#oit##'
-EMPTY_REPO = 'http://download.lab.bos.redhat.com/rcm-guest/puddles/RHAOS/AtomicOpenShift_Empty/'
-
-CONTENT_SETS = """
-# This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images,
-# by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).
-# Any manual changes will be overwritten by OIT on the next build.
-#
-# This is a file defining which content sets (yum repositories) are needed to
-# update content in this image. Data provided here helps determine which images
-# are vulnerable to specific CVEs. Generally you should only need to update this
-# file when:
-#    1. You start depending on a new product
-#    2. You are preparing new product release and your content sets will change
-#
-# See https://mojo.redhat.com/docs/DOC-1023066 for more information on
-# maintaining this file and the format and examples
-#
-# You should have one top level item for each architecture being built. Most
-# likely this will be x86_64 and ppc64le initially.
----
-"""
 
 COMPOSE = """
 # This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images,
@@ -252,77 +231,27 @@ class ImageDistGitRepo(DistGitRepo):
                         if arg != "enable" and arg != "enablerepo" and arg != "disable" and arg != "disablerepo":
                             continue
 
-                        # Must be a loop because:  yum-config-manager --enable repo1 repo2 repo3
-                        for repo_name in kvs:
-                            df_repos.append(repo_name)
-
-        gc_repos = self.runtime.group_config.repos
-        if gc_repos is Missing:
-            msg = 'group.yml must include a `repos` section to define RPM repos to load.'
-            raise ValueError(msg)
-
-        def resolve_repo(name, cfg):
-            cfg = dict(cfg)  # Make a copy so as to not modify the group definition
-            cfg['name'] = cfg.get('name', name)
-            cfg['enabled'] = cfg.get('enabled', 0)
-            cfg['gpgcheck'] = cfg.get('gpgcheck', 0)
-            return cfg
-
-        repo_types = list(gc_repos.keys())
-        repo_types.remove('common')
+                        if cmd == 'yum-config-manager':
+                            # Must be a loop because:  yum-config-manager --enable repo1 repo2 repo3
+                            for repo_name in kvs:
+                                df_repos.append(repo_name)
+                        else:
+                            # No loop because yum --enablerepo allows only one
+                            df_repos.append(kvs[0])
 
         # Make our metadata directory if it does not exist
         if not os.path.isdir(".oit"):
             os.mkdir(".oit")
 
-        for t in repo_types:
-            type_repos = {}
-            for name, cfg in gc_repos[t].items():
-                cfg = resolve_repo(name, cfg)
-                type_repos[name] = cfg
-
-            for name, cfg in gc_repos['common'].items():
-                cfg = resolve_repo(name, cfg)
-                type_repos[name] = cfg
-
-            if self.config.enabled_repos is not Missing:
-                for er in self.config.enabled_repos:
-                    if er in type_repos:
-                        type_repos[er]['enabled'] = 1
-                    else:
-                        raise ValueError('{} must be added to group.yml:repos'.format(er))
-
-            for r in df_repos:
-                if r not in type_repos:
-                    type_repos[r] = resolve_repo(r, {'enabled': 0, 'baseurl': EMPTY_REPO})
-
+        repos = self.runtime.repos
+        enabled_repos = self.config.get('enabled_repos', [])
+        for t in repos.repotypes:
             with open('.oit/{}.repo'.format(t), 'w') as rc:
-                for name, cfg in type_repos.items():
-                    rc.write('[{}]\n'.format(name))
-                    for k, v in cfg.items():
-                        rc.write('{} = {}\n'.format(k, v))
-                    rc.write('\n')
+                content = repos.repo_file(t, enabled_repos=enabled_repos, empty_repos=df_repos)
+                rc.write(content)
 
-            # generate content_sets.yml
-            # required by QE tooling for images to properly pass checks
-            content_sets = []
-            # scan repos for any that are now enabled
-            for k, v in type_repos.iteritems():
-                if v['enabled']:
-                    # use either name field, or repo key if name not present
-                    content_sets.append(v.get('name', k))
-
-            if content_sets:
-                # generate yaml data with header
-                content_sets_yml = CONTENT_SETS
-                cs_base = ""
-                for cs in content_sets:
-                    cs_base += ('- ' + cs + '\n')
-                for arch in ['x86_64', 'ppc64le', 'aarch64', 's390x']:
-                    content_sets_yml += '{}:\n{}\n'.format(arch, cs_base)
-
-                with open('content_sets.yml', 'w') as rc:
-                    rc.write(content_sets_yml)
+        with open('content_sets.yml', 'w') as rc:
+            rc.write(repos.content_sets(enabled_repos=enabled_repos))
 
     def _read_master_data(self):
         with Dir(self.distgit_dir):
