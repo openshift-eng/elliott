@@ -8,8 +8,8 @@ import container
 
 
 class ImageMetadata(Metadata):
-    def __init__(self, runtime, dir, name):
-        super(ImageMetadata, self).__init__('image', runtime, dir, name)
+    def __init__(self, runtime, name):
+        super(ImageMetadata, self).__init__('image', runtime, name)
 
     def get_latest_build_info(self):
 

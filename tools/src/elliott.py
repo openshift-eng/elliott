@@ -54,7 +54,7 @@ context_settings = dict(help_option_names=['-h', '--help'])
 @click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
-              help='Do not place OIT comment in Dockerfile. Can also be set in each config.yml')
+              help='Do not place OIT comment in Dockerfile. Can also be set in each config yaml')
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
               help="Associate a path with a given source alias.  [multiple]")
 @click.option("--sources", metavar="YAML_PATH",

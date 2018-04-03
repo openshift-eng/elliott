@@ -40,7 +40,7 @@ context_settings = dict(help_option_names=['-h', '--help'])
 @click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
-              help='Do not place OIT comment in Dockerfile. Can also be set in each config.yml')
+              help='Do not place OIT comment in Dockerfile. Can also be set in each config yaml')
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
               help="Associate a path with a given source alias.  [multiple]")
 @click.option("--sources", metavar="YAML_PATH",
@@ -315,7 +315,7 @@ def images_rebase(runtime, stream, version, release, repo_type, message, push):
     For example, openshift-enterprise-node-docker should always closely reflect the changes
     being made upstream in github.com/openshift/ose/images/node. This operation
     goes out and pulls the current source Dockerfile (and potentially other supporting
-    files) into distgit and applies any transformations defined in the config.yml associated
+    files) into distgit and applies any transformations defined in the config yaml associated
     with the distgit repo.
 
     This operation will also set the version and release in the file according to the
@@ -688,12 +688,12 @@ def images_print(runtime, short, show_non_release, pattern):
             echo_verbose("    {}".format(image))
 
 
-@cli.command("images:print-config-template", short_help="Create template config.yml from distgit Dockerfile.")
+@cli.command("images:print-config-template", short_help="Create template package yaml from distgit Dockerfile.")
 @click.argument("url", nargs=1)
 def distgit_config_template(url):
     """
     Pulls the specified URL (to a Dockerfile in distgit) and prints the boilerplate
-    for a config.yml for the image.
+    for a config yaml for the image.
     """
 
     f = urllib.urlopen(url)
@@ -794,7 +794,9 @@ _oit_completion() {
         cd "${mdir}" \
         && for g in ${group:-*}; do \
             for t in ${types}; do \
-                [ -d "${g}/${t}" ] && ls "${g}/${t}" || :; \
+                if [[ -d "${g}/${t}" ]]; then \
+                    basename --multiple --suffix .yml "${g}/${t}"/*; \
+                fi \
             done \
         done \
         | sort -u)
