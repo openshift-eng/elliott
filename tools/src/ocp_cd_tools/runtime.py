@@ -292,7 +292,6 @@ class Runtime(object):
                 self.rpm_map[name] = RPMMetadata(self, name)
 
             def collect_configs(search_type, search_dir, name_list, include, gen):
-                self.info("DEBUG: name_list = {}".format(name_list))
                 if len(name_list) == 0:
                     return  # no configs of this type found, bail out
 

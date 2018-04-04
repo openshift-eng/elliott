@@ -123,7 +123,7 @@ class DistGitRepo(object):
         alias = self.config.content.source.alias
 
         if alias is Missing:
-            raise IOError("Can't find source alias in config: %s" % self.metadata.dir)
+            raise IOError("Can't find source alias in config: %s" % self.metadata.config_path)
 
         source_root = self.runtime.resolve_source(alias)
         sub_path = self.config.content.source.path
@@ -132,7 +132,7 @@ class DistGitRepo(object):
         if sub_path is not Missing:
             path = os.path.join(source_root, sub_path)
 
-        assert_dir(path, "Unable to find path within source [%s] for config: %s" % (path, self.metadata.dir))
+        assert_dir(path, "Unable to find path within source [%s] for config: %s" % (path, self.metadata.config_path))
         return path
 
     def commit(self, commit_message, log_diff=False):
