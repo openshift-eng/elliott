@@ -93,8 +93,30 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     pool.close()
     pool.join()
 
+    print("Found candidate {n} builds for {tag}".format(n=len(candidate_builds.builds), tag=base_tag + "-candidate"))
+    print("Found shipped {n} builds for {tag}".format(n=len(shipped_builds.builds), tag=base_tag))
+
     # Builds only tagged with -candidate (not shipped yet)
     unshipped_builds = candidate_builds.builds.difference(shipped_builds.builds)
+    print("Found {n} builds only labeled as '-candidate': candidate_builds.difference(shipped_builds)".format(n=len(unshipped_builds)))
+    print(sorted(unshipped_builds))
+
+    unshipped_builds_rev = shipped_builds.builds.difference(candidate_builds.builds)
+    print("Found {n} builds only labeled as 'shipped': shipped_builds.difference(candidate_builds)".format(n=len(unshipped_builds_rev)))
+    print(sorted(unshipped_builds_rev))
+
+    build_intersection = candidate_builds.builds.intersection(shipped_builds.builds)
+    print("Found {n} builds present in both lists".format(n=len(build_intersection)))
+
+    # Filtering update: When we calculated unshipped_builds we
+    # filtered out duplicate builds. Now let's update the user with
+    # that number and list the removed candidates.
+    print("Removing {n} builds because they are tagged as '-candidate' and 'shipped':".format(n=len(build_intersection)))
+    # What builds were filtered out?
+    for b in sorted(build_intersection):
+        print(" -{b}".format(b=b))
+
+    print("Updating metadata for {n} remaining '-candidate' tagged builds".format(n=len(unshipped_builds)))
 
     # Re-use TCP connection to speed things up
     session = requests.Session()
@@ -110,7 +132,19 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     pool.join()
 
     # We only want builds not attached to an existing open advisory
-    return [b for b in results if not b.attached_to_open_erratum]
+    viable_builds = [b for b in results if not b.attached_to_open_erratum]
+    print("Removing {n} builds because they are attached to open erratum:".format(
+        n=(len(results)-len(viable_builds))))
+    for b in sorted(set(results).difference(set(viable_builds))):
+        print(" - {nvr}:".format(nvr=b.nvr))
+        print("   Open Advisory: {open_advs}".format(
+            open_advs=", ".join([str(erratum['id']) for erratum in b.open_erratum])))
+        print("   Closed Advisory: {closed_advs}".format(
+            closed_advs=", ".join([str(erratum['id']) for erratum in b.closed_erratum])))
+
+    print("After filtering there are {n} remaining builds".format(n=len(viable_builds)))
+
+    return viable_builds
 
 
 def get_tagged_image_builds(runtime, tag):
@@ -274,9 +308,19 @@ initialized Build object (provided the build exists).
         return self.nvr < other.nvr
 
     @property
+    def open_erratum(self):
+        """Any open erratum this build is attached to"""
+        return [e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_active_advisory_labels]
+
+    @property
     def attached_to_open_erratum(self):
         """Attached to any open erratum"""
         return len([e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_active_advisory_labels]) > 0
+
+    @property
+    def closed_erratum(self):
+        """Any closed erratum this build is attached to"""
+        return [e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_inactive_advisory_labels]
 
     @property
     def attached_to_closed_erratum(self):

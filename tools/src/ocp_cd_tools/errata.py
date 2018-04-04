@@ -176,17 +176,25 @@ class Erratum(object):
         """The `body` content is different based on where it came from."""
         # Erratum from the direct erratum GET method
         if 'params' in self.body:
-            rhba = self.body['errata']['rhba']
+            # An advisory will come back as one of the following
+            # kinda, we're just not sure which until we read the
+            # object body
+            for kind in ['rhba', 'rhsa', 'rhea']:
+                if kind in self.body['errata']:
+                    # Call it just a generic "red hat advisory"
+                    rha = self.body['errata'][kind]
+                    break
+
             content = self.body['content']['content']
 
-            self.advisory_id = rhba['id']
-            self.advisory_name = rhba['fulladvisory']
-            self.synopsis = rhba['synopsis']
+            self.advisory_id = rha['id']
+            self.advisory_name = rha['fulladvisory']
+            self.synopsis = rha['synopsis']
             self.description = content['description']
             self.solution = content['solution']
             self.topic = content['topic']
-            self.status = rhba['status']
-            self.created_at = datetime.datetime.strptime(rhba['created_at'], self.date_format)
+            self.status = rha['status']
+            self.created_at = datetime.datetime.strptime(rha['created_at'], self.date_format)
             self.url = "{et}/advisory/{id}".format(
                 et=ocp_cd_tools.constants.errata_url,
                 id=self.advisory_id)

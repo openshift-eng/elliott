@@ -227,7 +227,7 @@ advisory.
 # advisory:find-bugs
 #
 @cli.command("advisory:find-bugs", short_help="Find or add MODIFED bugs to ADVISORY")
-@click.option("--add", "-a",
+@click.option("--add", "-a", 'advisory',
               default=False, metavar='ADVISORY',
               help="Add found bugs to ADVISORY. Applies to bug flags as well (by default only a list of discovered bugs are displayed)")
 @click.option("--auto",
@@ -241,7 +241,7 @@ advisory.
               required=False, multiple=True,
               help="Optional flag to apply to found bugs [MULTIPLE]")
 @pass_runtime
-def find_bugs(runtime, add, auto, id, flag):
+def find_bugs(runtime, advisory, auto, id, flag):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--auto), or by
 manually specifying one or more bugs using the --id option. Mixing
@@ -252,6 +252,7 @@ described below:
 
 AUTOMATIC: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
+
 for MODIFIED bugs in.
 
 MANUAL: The --group option is not required if you are specifying bugs
@@ -277,10 +278,6 @@ manually. Provide one or more --id's for manual bug addition.
     if auto and len(id) > 0:
         raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
 
-    # The option name is 'add' but the metavar is more descriptive for
-    # some uses below, let's rename it for sanity
-    advisory = add
-
     if auto:
         # Initialization ensures a valid group was provided
         runtime.initialize(clone_distgits=False)
@@ -298,7 +295,7 @@ manually. Provide one or more --id's for manual bug addition.
 
     bug_count = len(bug_ids)
 
-    if add is not False:
+    if advisory is not False:
         try:
             advs = ocp_cd_tools.errata.get_erratum(advisory)
         except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
@@ -333,17 +330,17 @@ manually. Provide one or more --id's for manual bug addition.
 #
 @cli.command('advisory:find-builds',
              short_help='Find or attach builds to ADVISORY')
-@click.option('--attach', '-a', metavar='ADVISORY',
-              default=False,
+@click.option('--attach', '-a', 'advisory',
+              default=False, metavar='ADVISORY',
               help='Attach the builds to ADVISORY (by default only a list of builds are displayed)')
-@click.option('--build', '-b', metavar='NVR_OR_ID',
-              multiple=True,
+@click.option('--build', '-b', 'builds',
+              multiple=True, metavar='NVR_OR_ID',
               help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
 @click.option('--kind', '-k', metavar='KIND',
               required=True, type=click.Choice(['rpm', 'image']),
               help='Find builds of the given KIND [rpm, image]')
 @pass_runtime
-def find_builds(runtime, attach, build, kind):
+def find_builds(runtime, advisory, builds, kind):
     """Automatically or manually find or attach viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -393,11 +390,11 @@ PRESENT advisory. Here are some examples:
     except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
         exit_unauthorized()
 
-    if len(build) > 0:
+    if len(builds) > 0:
         green_prefix("Build NVRs provided: ")
         click.echo("Manually verifying the builds exist")
         try:
-            unshipped_builds = [ocp_cd_tools.brew.get_brew_build(b, product_version) for b in build]
+            unshipped_builds = [ocp_cd_tools.brew.get_brew_build(b, product_version) for b in builds]
         except ocp_cd_tools.exceptions.BrewBuildException as e:
             red_prefix("Error: ")
             click.echo(e)
@@ -409,11 +406,7 @@ PRESENT advisory. Here are some examples:
 
     build_count = len(unshipped_builds)
 
-    # The option name is 'attach' but the metavar is more descriptive
-    # for some uses below, let's rename it for sanity
-    advisory = attach
-
-    if attach is not False:
+    if advisory is not False:
         try:
             erratum = ocp_cd_tools.errata.get_erratum(advisory)
             erratum.add_builds(unshipped_builds)
