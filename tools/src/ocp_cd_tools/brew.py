@@ -3,6 +3,7 @@ Utility functions for general interactions with Brew and Builds
 """
 
 # stdlib
+import datetime
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
 import shlex
@@ -18,7 +19,7 @@ import requests
 from requests_kerberos import HTTPKerberosAuth
 
 
-def get_brew_build(nvr, product_version='', session=None):
+def get_brew_build(nvr, product_version='', session=None, progress=False):
     """5.2.2.1. GET /api/v1/build/{id_or_nvr}
 
     Get Brew build details.
@@ -37,6 +38,7 @@ def get_brew_build(nvr, product_version='', session=None):
 
     :return: An initialized Build object with the build details
     :raises ocp_cd_tools.exceptions.BrewBuildException: When build not found
+
     """
     if session is not None:
         res = session.get(ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
@@ -45,6 +47,8 @@ def get_brew_build(nvr, product_version='', session=None):
         res = requests.get(ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
                            auth=HTTPKerberosAuth())
     if res.status_code == 200:
+        if progress:
+            click.secho('.', nl=False)
         return Build(nvr=nvr, body=res.json(), product_version=product_version)
     else:
         raise ocp_cd_tools.exceptions.BrewBuildException("{build}: {msg}".format(
@@ -53,6 +57,7 @@ def get_brew_build(nvr, product_version='', session=None):
 
 
 def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
+
     """Find builds for a product and return a list of the builds only
     labeled with the -candidate tag that aren't attached to any open
     advisory.
@@ -147,13 +152,38 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     return viable_builds
 
 
-def get_tagged_image_builds(runtime, tag):
+def get_brew_buildinfo(runtime, build):
+    """Get the buildinfo of a brew build from brew
+
+Note: This is different from get_brew_build in that this function
+queries brew directly using the 'brew buildinfo' command. Whereas,
+get_brew_build queries the Errata Tool API for other information.
+
+This function will give information not provided by ET: build tags,
+finished date, built by, etc."""
+    query_string = "brew buildinfo {nvr}".format(nvr=build.nvr)
+    rc, stdout, stderr = ocp_cd_tools.common.gather_exec(runtime, shlex.split(query_string))
+    buildinfo = {}
+    for line in stdout.splitlines():
+        key, token, rest = line.partition(': ')
+        buildinfo[key] = rest
+
+    return buildinfo
+
+
+def get_tagged_image_builds(runtime, tag, latest=True):
     """Wrapper around shelling out to run 'brew list-tagged' for a given tag.
 
     :param Runtime runtime: A runtime context object
     :param str tag: The tag to list builds from
+    :param bool latest: Only show the single latest build of a package
     """
-    query_string = "brew list-tagged {tag} --latest --type=image --quiet".format(tag=tag)
+    if latest:
+        latest_option = '--latest'
+    else:
+        latest_option = ''
+
+    query_string = "brew list-tagged {tag} {latest} --type=image --quiet".format(tag=tag, latest=latest_option)
     # --latest - Only the last build for that package
     # --type=image - Only show container images builds
     # --quiet - Omit field headers in output
@@ -161,7 +191,7 @@ def get_tagged_image_builds(runtime, tag):
     return ocp_cd_tools.common.gather_exec(runtime, shlex.split(query_string))
 
 
-def get_tagged_rpm_builds(runtime, tag, arch='src'):
+def get_tagged_rpm_builds(runtime, tag, arch='src', latest=True):
     """Wrapper around shelling out to run 'brew list-tagged' for a given tag.
 
     :param Runtime runtime: A runtime context object
@@ -283,6 +313,7 @@ initialized Build object (provided the build exists).
         self.attached_erratum_ids = set([])
         self.attached_closed_erratum_ids = set([])
         self.product_version = product_version
+        self.buildinfo = {}
         self.process()
 
     def __str__(self):
@@ -363,6 +394,15 @@ don't have to do extra manipulation later back in the view"""
                     self.kind = 'image'
                     self.file_type = 'tar'
                     break
+
+    def add_buildinfo(self, runtime):
+        """Add buildinfo from upstream brew"""
+        import click
+        date_format = '%a, %d %b %Y %H:%M:%S %Z'
+        click.secho('.', nl=False)
+        # print("Fetching buildinfo for: {name}".format(name=self.nvr))
+        self.buildinfo = get_brew_buildinfo(runtime, self)
+        self.finished = datetime.datetime.strptime(self.buildinfo['Finished'], date_format)
 
     def to_json(self):
         """Method for adding this build to advisory via the Errata Tool

@@ -12,6 +12,8 @@ web service.
 # stdlib
 from __future__ import print_function
 import datetime
+from multiprocessing.dummy import Pool as ThreadPool
+from multiprocessing import cpu_count
 import os
 
 # ours
@@ -24,15 +26,17 @@ import ocp_cd_tools.exceptions
 
 # 3rd party
 import click
+import requests
 
 # -----------------------------------------------------------------------------
 # Constants and defaults
 # -----------------------------------------------------------------------------
 release_date = datetime.datetime.now() + datetime.timedelta(days=21)
-
+now = datetime.datetime.now()
+YMD = '%Y-%m-%d'
 pass_runtime = click.make_pass_decorator(Runtime)
 context_settings = dict(help_option_names=['-h', '--help'])
-
+pickle_in = pickle_out = os.path.realpath(os.curdir)
 
 @click.group(context_settings=context_settings)
 @click.option("--metadata-dir", metavar='PATH', default=os.getcwd(),
@@ -88,10 +92,11 @@ def exit_unauthorized():
     click.secho("401 status returned from Errata Tool, are you sure you have a kerberos ticket?")
     exit(1)
 
+
 def validate_release_date(ctx, param, value):
     """Ensures dates are provided in the correct format"""
     try:
-        datetime.datetime.strptime(value, '%Y-%m-%d')
+        datetime.datetime.strptime(value, YMD)
         return value
     except ValueError:
         raise click.BadParameter('Release date (--date) must be in YYYY-MM-DD format')
@@ -174,7 +179,7 @@ Bugzilla Bugs.
               type=click.Choice(['rpm', 'image']),
               help="Kind of Advisory to create. Affects boilerplate text.")
 @click.option("--date", required=False,
-              default=release_date.strftime('%Y-%m-%d'),
+              default=release_date.strftime(YMD),
               callback=validate_release_date,
               help="Release date for the advisory. Optional. Format: YYYY-MM-DD. Defaults to NOW + 3 weeks")
 @click.option('--yes', '-y', is_flag=True,
@@ -423,6 +428,142 @@ PRESENT advisory. Here are some examples:
         click.echo("to an advisory:")
         for b in sorted(unshipped_builds):
             click.echo(" " + str(b.to_json()))
+
+
+#
+# Find old builds Builds
+# advisory:find-old-builds
+#
+@cli.command('advisory:find-old-builds',
+             short_help='Find old builds')
+@click.option('--kind', '-k', metavar='KIND',
+              required=True, type=click.Choice(['rpm', 'image']),
+              help='Find builds of the given KIND [rpm, image]')
+@click.option('--tag', '-t', 'tags', metavar='TAG',
+              multiple=True, required=True,
+              help='Brew build tags, ex: rhaos-3.5-rhel-7-candidate, rhaos-3.5-rhel-7, rhaos-3.5-rhel-7-container-released [MULTIPLE]')
+@click.option("--date", required=False,
+              default=datetime.datetime.now().strftime(YMD),
+              callback=validate_release_date,
+              help="Builds finished on or before this date. Format: YYYY-MM-DD. Defaults to {now}".format(now=now.strftime(YMD)))
+@click.option("--output", "-o", required=False, type=click.File('wb'),
+              default=None, metavar='OUTPUT_FILE',
+              help="Write brew remote-tag commands to OUTPUT_FILE to run as a script")
+@pass_runtime
+def find_old_builds(runtime, kind, tags, date, output):
+    """Find old builds. Most likely you are trying to prune certain tags
+from them. This command can generate a shell script with brew
+'untag-build' commands in it for each old build it finds.
+
+Specify the minimum age of the old build with the --date option. Every
+build that finished at or before that date will be returned. Dates are
+entered in the format: YYYY-MM-DD. For example: 2018-04-20.
+
+You must provide one or more --tag to search. Additionally, the build
+kind must be specified with --kind {image,rpm}.
+
+Unfortunately at the time of writing, a --group option must be
+provided so we can use some OCP_CD_TOOLS utilities. This could change
+in the future. For now just give any valid group value (ex:
+--group=openshift-3.10).
+
+    Find image builds finished on or before 2017-06-20 tagged with
+    'rhaos-3.5-rhel-7-candidate':
+
+\b
+    $ elliott --group=openshift-3.10 advisory:find-old-builds --date 2017-06-20 -t rhaos-3.5-rhel-7-candidate -k image
+
+    Find all rpm builds finished before right now that are tagged
+
+    """
+    runtime.initialize(clone_distgits=False)
+    build_map = {}
+
+    green_prefix("Searching Brew for builds with tags: ")
+    click.echo(", ".join(tags))
+
+    for tag in tags:
+        if kind == 'rpm':
+            builds = ocp_cd_tools.brew.BrewTaggedRPMBuilds(tag)
+        elif kind == 'image':
+            builds = ocp_cd_tools.brew.BrewTaggedImageBuilds(tag)
+
+        builds.refresh(runtime)
+
+        # Re-use TCP connection to speed things up
+        session = requests.Session()
+
+        product_version = 'pv'
+        green_prefix("Fetching builddetails (errata tool): ")
+        click.echo("{n} builds in tag {tag}".format(n=len(builds.builds), tag=tag))
+        click.echo("[" + "*" * len(builds.builds) + "]")
+        click.secho("[", nl=False)
+        pool = ThreadPool(cpu_count())
+        results = pool.map(
+            lambda nvr: ocp_cd_tools.brew.get_brew_build(nvr, product_version, session=session, progress=True),
+            builds.builds)
+        # Wait for results
+        pool.close()
+        pool.join()
+        click.echo("]")
+
+        green_prefix("Fetching buildinfo (brew): ")
+        click.echo("{n} builds in tag {tag}".format(n=len(builds.builds), tag=tag))
+        click.echo("[" + ("*" * len(results)) + "]")
+        click.secho("[", nl=False)
+        pool = ThreadPool(cpu_count())
+        results2 = pool.map(
+            lambda build: build.add_buildinfo(runtime),
+            sorted(results))
+        # Wait for results
+        pool.close()
+        pool.join()
+        click.secho("]")
+
+        build_map[tag] = results
+
+
+    trim_date = datetime.datetime.strptime(date, YMD)
+
+    old_builds_map = {}
+    for tag, builds in build_map.items():
+        green_prefix("Building map: ")
+        click.echo(tag)
+        old_builds_map[tag] = [b for b in builds if b.finished <= trim_date]
+        click.echo("Original Builds: {n_orig}. Old builds: {n_old}. {n_orig}(orig) - {n_old}(old) = {n_remain}(removed) ".format(
+            n_orig=len(builds),
+            n_old=len(old_builds_map[tag]),
+            n_remain=len(builds)-len(old_builds_map[tag])))
+
+    click.echo()
+    click.secho("The following builds finished on or before", nl=False)
+    click.secho(" {d} ".format(d=trim_date.strftime(YMD)), bold=True, nl=False)
+    click.echo("and have not shipped yet")
+    click.echo()
+
+    click.echo("<tag> | <build> | <date> | <all_tags>")
+
+    remove_tag_commands = []
+
+    for tag, builds in old_builds_map.items():
+        for build in sorted(builds, key=lambda b: b.finished):
+            click.echo("{date} (days old: {do}) | {tag} | {build} | {all_tags}".format(
+                tag=tag,
+                build=str(build),
+                date=build.finished.strftime(YMD),
+                do=(trim_date - build.finished).days,
+                all_tags=", ".join(build.buildinfo['Tags'].split(' '))))
+            remove_tag_commands.append("brew untag-build {tag} {nvr}".format(
+                tag=tag,
+                nvr=str(build)))
+
+    if output is not None:
+        output.write("#!/bin/bash\n")
+        for line in remove_tag_commands:
+            output.write("{l}\n".format(l=line))
+
+        green_prefix("Brew untag-build command script written to: ")
+        click.echo("{spot}".format(spot=output.name))
 
 
 #
