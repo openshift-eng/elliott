@@ -817,6 +817,8 @@ class ImageDistGitRepo(DistGitRepo):
 
             self._reflow_labels()
 
+            return (version, release)
+
     def _reflow_labels(self, filename="Dockerfile"):
         """
         The Dockerfile parser we are presently using writes all labels on a single line
@@ -1011,7 +1013,9 @@ class ImageDistGitRepo(DistGitRepo):
             if self.config.content.source.modifications is not Missing:
                 self._run_modifications()
 
-        self.update_dockerfile(version, release)
+        (real_version, real_release) = self.update_dockerfile(version, release)
+
+        return (real_version, real_release)
 
 
 class RPMDistGitRepo(DistGitRepo):

@@ -190,9 +190,9 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
     runtime.clone_distgits()
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
-        dgr.update_dockerfile(version, release)
+        (real_version, real_release) = dgr.update_dockerfile(version, release)
         dgr.commit(message)
-        dgr.tag(version, release)
+        dgr.tag(real_version, real_release)
 
     if push:
         runtime.push_distgits()
@@ -347,9 +347,9 @@ def images_rebase(runtime, stream, version, release, repo_type, message, push):
     runtime.clone_distgits()
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
-        dgr.rebase_dir(version, release)
+        (real_version, real_release) = dgr.rebase_dir(version, release)
         sha = dgr.commit(message, log_diff=True)
-        dgr.tag(version, release)
+        dgr.tag(real_version, real_release)
         runtime.add_record("distgit_commit", distgit=dgr.metadata.qualified_name,
                            image=dgr.config.name, sha=sha)
 
