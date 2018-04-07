@@ -8,12 +8,14 @@ Classes representing an ERRATUM (a single errata)
 
 """
 
+import copy
 import datetime
 import json
 import shlex
 
 from ocp_cd_tools import constants
 import ocp_cd_tools.brew
+import ocp_cd_tools.exceptions
 
 import requests
 from requests_kerberos import HTTPKerberosAuth
@@ -28,19 +30,17 @@ def get_erratum(id):
 
     :return SUCCESS: An Erratum object
     :return FAILURE: :bool:False
+    :raises: ocp_cd_tools.exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
     """
     res = requests.get(constants.errata_get_erratum_url.format(id=id),
                        auth=HTTPKerberosAuth())
 
     if res.status_code == 200:
         return Erratum(body=res.json())
+    elif res.status_code == 401:
+        raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
     else:
         return False
-
-
-def parse_date(date):
-    """Parse the given ISO date string into a datetime object"""
-    return datetime.datetime.strptime(date, '%Y-%m-%dT%H:%M:%SZ')
 
 
 def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
@@ -62,7 +62,7 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
         release, you would provide '9' as the value for 'minor'
 
     :return: An Erratum object
-
+    :raises: ocp_cd_tools.exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
     """
     if release_date is None:
         release_date = datetime.datetime.now() + datetime.timedelta(days=21)
@@ -70,7 +70,7 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
     if kind is None:
         kind = 'rpm'
 
-    body = constants.errata_new_object
+    body = copy.deepcopy(constants.errata_new_object)
     body['advisory']['publish_date_override'] = release_date
     body['advisory']['synopsis'] = constants.errata_synopsis[kind].format(Y=minor)
 
@@ -88,11 +88,12 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
 
         if res.status_code == 201:
             return Erratum(body=res.json())
+        elif res.status_code == 401:
+            raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
         else:
-            print(res.status_code)
-            print(res.text)
-            print(res.headers)
-            raise Exception("Error while creating new advisory")
+            raise ocp_cd_tools.exceptions.ErraraToolError("Other error (status_code={code}): {msg}".format(
+                code=res.status_code,
+                msg=res.text))
     else:
         # This is a noop
         return json.dumps(body, indent=2)
@@ -106,17 +107,33 @@ filter_id
     :param int limit: How many erratum to list
     :return: A list of Erratum objects
 
+    :raises ocp_cd_tools.exceptions.ErrataToolUnauthorizedException: If the user is not authenticated to make the request
+    :raises ocp_cd_tools.exceptions.ErrataToolError: If the given filter does not exist, and, any other unexpected error
+
     Note: Errata filters are defined in the ET web interface
     """
     filter_endpoint = constants.errata_filter_list_url.format(
         id=filter_id)
     res = requests.get(filter_endpoint,
                        auth=HTTPKerberosAuth())
-
     if res.status_code == 200:
-        return [Erratum(body=advs) for advs in res.json()][:limit]
+        # When asked for an advisory list which does not exist
+        # normally you would expect a code like '404' (not
+        # found). However, the Errata Tool sadistically returns a 200
+        # response code. That leaves us with one option: Decide that
+        # successfully parsing the response as a JSON object indicates
+        # a successful API call.
+        try:
+            return [Erratum(body=advs) for advs in res.json()][:limit]
+        except Exception:
+            raise ocp_cd_tools.exceptions.ErrataToolError("Could not locate the given advisory filter: {fid}".format(
+                fid=filter_id))
+    elif res.status_code == 401:
+        raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
     else:
-        return False
+        raise ocp_cd_tools.exceptions.ErrataToolError("Other error (status_code={code}): {msg}".format(
+            code=res.status_code,
+            msg=res.text))
 
 
 class Erratum(object):
@@ -127,21 +144,12 @@ class Erratum(object):
     API. See also: get_erratum(id) for creating a filled in Erratum
     object automatically.
     """
-    # We'll need these for creating a new one from scratch
 
-    # Bug Advisory
-    errate_type = 'RHBA'
-    # We don't create RHSAs (security advisories)
-    security_impact = None
-    # OpenShift Enterprise
-    product = 'RHOSE'
-    # Not a GA release, this is a .z release
-    release = 'ASYNC'
-    idsfixed = []
+    date_format = '%Y-%m-%dT%H:%M:%SZ'
 
     def __init__(self, body=None):
         """If a `body` is provided then this is an EXISTING advisory and we
-        are filling in all the details the time of object creation.
+        are filling in all the  at the time of object creation.
         """
         self.body = body
 
@@ -178,7 +186,7 @@ class Erratum(object):
             self.solution = content['solution']
             self.topic = content['topic']
             self.status = rhba['status']
-            self.created_at = parse_date(rhba['created_at'])
+            self.created_at = datetime.datetime.strptime(rhba['created_at'], self.date_format)
             self.url = "{et}/advisory/{id}".format(
                 et=ocp_cd_tools.constants.errata_url,
                 id=self.advisory_id)
@@ -191,7 +199,7 @@ class Erratum(object):
             self.solution = self.body['content']['solution']
             self.topic = self.body['content']['topic']
             self.status = self.body.get('status', 'NEW_FILES')
-            self.created_at = parse_date(self.body['timestamps']['created_at'])
+            self.created_at = datetime.datetime.strptime(self.body['timestamps']['created_at'], self.date_format)
             self.url = "{et}/advisory/{id}".format(
                 et=ocp_cd_tools.constants.errata_url,
                 id=self.advisory_id)
@@ -213,7 +221,7 @@ class Erratum(object):
         :param Bug bugs: A list of :module:`ocp_cd_tools.bugzilla` Bug objects
         """
         for bug in bugs:
-            self.add_bug(bug)
+            yield (self.add_bug(bug), bug.id)
 
     def add_bug(self, bug):
         """5.2.1.5. POST /api/v1/erratum/{id}/add_bug
@@ -251,7 +259,8 @@ class Erratum(object):
 
         :return: True if builds were added successfully
 
-        :raises: ocp_cd_tools.brew.BrewBuildException if the builds could not be attached
+        :raises: ocp_cd_tools.exceptions.BrewBuildException if the builds could not be attached
+        :raises: ocp_cd_tools.exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
         """
         data = [b.to_json() for b in builds]
 
@@ -263,14 +272,18 @@ class Erratum(object):
         print(res.text)
 
         if res.status_code == 422:
+            # "Something" bad happened
             print(res.status_code)
             print(res.text)
-            raise ocp_cd_tools.brew.BrewBuildException(str(res.json()))
+            raise ocp_cd_tools.exceptions.BrewBuildException(str(res.json()))
+        elif res.status_code == 401:
+            raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
         # TODO: Find the success return code
         else:
             return True
 
-    def add_comment(self, comment='default'):
+    # We're not actually using the comment code yet
+    def add_comment(self, comment='default'):  # pragma: no cover
         """5.2.1.8. POST /api/v1/erratum/{id}/add_comment
 
         Add a comment to an advisory.
@@ -282,7 +295,7 @@ class Erratum(object):
 
         https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidadd_comment
 
-        :param string comment: The ID of one of the pre-defined
+        :param str comment: The ID of one of the pre-defined
         comment strings in ocp_cd_tools.constants.errata_comments
         """
         if comment not in constants.errata_comments:
@@ -305,21 +318,26 @@ class Erratum(object):
             new_state: e.g. 'QE' (required)
             comment: a comment to post on the advisory (optional)
 
+        :param str state: The state to change the advisory to
+        :return: True on successful state change
+        :raises: ocp_cd_tools.exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+
         https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidchange_state
         """
         res = requests.post(ocp_cd_tools.constants.errata_change_state_url.format(id=self.advisory_id),
                             auth=HTTPKerberosAuth(),
                             data={"new_state": state})
 
-        # Erratum isn't ready to move to QE, No builds in advisory,
-        # Errata Advisory has no Bugzilla bugs or JIRA issues
+        # You may receive this response when: Erratum isn't ready to
+        # move to QE, no builds in erratum, erratum has no Bugzilla
+        # bugs or JIRA issues.
         if res.status_code == 422:
-            # error
-            raise Exception("Erratum isn't ready to move to QE, No builds in advisory, Errata Advisory has no Bugzilla bugs or JIRA issues")
-        elif res.status_code == 'xxx':
-            # TODO
-            pass
-        else:
-            # TODO
+            # Conditions not met
+            raise ocp_cd_tools.exceptions.ErraraToolError("Can not change erratum state, preconditions not yet met. Error message: {msg}".format(
+                msg=res.text))
+        elif res.status_code == 401:
+            raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
+        elif res.status_code == 201:
+            # POST processed successfully
             self.refresh()
-            return self
+            return True

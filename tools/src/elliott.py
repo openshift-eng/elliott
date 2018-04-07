@@ -19,6 +19,8 @@ from ocp_cd_tools import Runtime
 import ocp_cd_tools.constants
 import ocp_cd_tools.bugzilla
 import ocp_cd_tools.brew
+import ocp_cd_tools.errata
+import ocp_cd_tools.exceptions
 
 # 3rd party
 import click
@@ -68,6 +70,24 @@ def cli(ctx, **kwargs):
 # -----------------------------------------------------------------------------
 # Utility Functions
 # -----------------------------------------------------------------------------
+def red_prefix(msg):
+    """Print out a message prefix in bold red letters, like for "Error: "
+messages"""
+    click.secho(msg, nl=False, bold=True, fg='red')
+
+
+def green_prefix(msg):
+    """Print out a message prefix in bold red letters, like for "Success: "
+messages"""
+    click.secho(msg, nl=False, bold=True, fg='green')
+
+
+def exit_unauthorized():
+    """Standard response when an API call returns 'unauthorized'"""
+    red_prefix("Error Unauthorized: ")
+    click.secho("401 status returned from Errata Tool, are you sure you have a kerberos ticket?")
+    exit(1)
+
 def validate_release_date(ctx, param, value):
     """Ensures dates are provided in the correct format"""
     try:
@@ -75,6 +95,7 @@ def validate_release_date(ctx, param, value):
         return value
     except ValueError:
         raise click.BadParameter('Release date (--date) must be in YYYY-MM-DD format')
+
 
 def minor_from_branch(ver):
     """Parse the minor version from the provided version (or 'branch').
@@ -126,11 +147,21 @@ Bugzilla Bugs.
 
     $ elliott advisory:change-state -s NEW_FILES 123456
     """
-    erratum = ocp_cd_tools.errata.get_erratum(advisory)
+    try:
+        erratum = ocp_cd_tools.errata.get_erratum(advisory)
+    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+        exit_unauthorized()
+
     click.echo("Changing state for {id} to {state}".format(id=advisory, state=state))
     click.echo(erratum)
-    erratum.change_state(state)
-    click.echo("Ran change state")
+    try:
+        erratum.change_state(state)
+    except ocp_cd_tools.exceptions.ErrataToolError as err:
+        click.secho("Error changing state: ", nl=False, bold=True, fg='red')
+        click.echo(str(err))
+        exit(1)
+
+    click.secho("Changed advisory state:", fg='green', bold=True)
     click.echo(erratum)
 
 
@@ -139,7 +170,7 @@ Bugzilla Bugs.
 # advisory:create
 #
 @cli.command("advisory:create", short_help="Create a new advisory")
-@click.option("--kind", '-k', default='rpm',
+@click.option("--kind", '-k', required=True,
               type=click.Choice(['rpm', 'image']),
               help="Kind of Advisory to create. Affects boilerplate text.")
 @click.option("--date", required=False,
@@ -151,8 +182,8 @@ Bugzilla Bugs.
               help="Create the advisory (by default only a preview is displayed)")
 @pass_runtime
 def create(runtime, kind, date, yes):
-    """Create a new advisory. By default an RPM Advisory is created. You
-may also create an Image Update Advisory.
+    """Create a new advisory. The kind of advisory must be specified with
+'--kind'. Valid choices are 'rpm' and 'image'.
 
     You MUST specify a group (ex: "openshift-3.9") manually using the
     --group option. See examples below.
@@ -178,10 +209,16 @@ advisory.
 
 \b
     $ elliott --group openshift-3.5 advisory:create --yes -k image --date 2018-03-05
-    """
+"""
     runtime.initialize(clone_distgits=False)
     minor = minor_from_branch(runtime.group_config.branch)
-    erratum = ocp_cd_tools.errata.new_erratum(kind=kind, release_date=date, create=yes, minor=minor)
+    try:
+        erratum = ocp_cd_tools.errata.new_erratum(kind=kind, release_date=date, create=yes, minor=minor)
+    except ocp_cd_tools.exceptions.ErraraToolError as err:
+        click.secho("Error creating advisory: ", nl=False, bold=True, fg='red')
+        click.echo(str(err))
+        exit(1)
+
     click.echo(erratum)
 
 
@@ -190,10 +227,9 @@ advisory.
 # advisory:find-bugs
 #
 @cli.command("advisory:find-bugs", short_help="Find or add MODIFED bugs to ADVISORY")
-@click.argument('advisory', type=int)
 @click.option("--add", "-a",
-              default=False, is_flag=True,
-              help="Add found bugs to ADVISORY. Applies to bug flags as well. (by default only a list of discovered bugs are displayed)")
+              default=False, metavar='ADVISORY',
+              help="Add found bugs to ADVISORY. Applies to bug flags as well (by default only a list of discovered bugs are displayed)")
 @click.option("--auto",
               required=False,
               default=False, is_flag=True,
@@ -205,7 +241,7 @@ advisory.
               required=False, multiple=True,
               help="Optional flag to apply to found bugs [MULTIPLE]")
 @pass_runtime
-def find_bugs(runtime, add, auto, id, flag, advisory):
+def find_bugs(runtime, add, auto, id, flag):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--auto), or by
 manually specifying one or more bugs using the --id option. Mixing
@@ -232,15 +268,18 @@ manually. Provide one or more --id's for manual bug addition.
 \b
     $ elliott --group openshift-3.7 advisory:find-bugs --auto --flag bro_ok 123456
 
-    Add two bugs to advisory 123456. Note that --group is not
-    required because we're not auto searching:
+    Add two bugs to advisory 123456. Note that --group is not required
+    because we're not auto searching:
 
 \b
     $ elliott advisory:find-bugs --id 8675309 --id 7001337 --add 123456
-    """
+"""
     if auto and len(id) > 0:
-        click.echo("Mixing automatic (--auto, default) bug attachment and manual (--id) options is not supported")
-        exit(1)
+        raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
+
+    # The option name is 'add' but the metavar is more descriptive for
+    # some uses below, let's rename it for sanity
+    advisory = add
 
     if auto:
         # Initialization ensures a valid group was provided
@@ -248,17 +287,9 @@ manually. Provide one or more --id's for manual bug addition.
         # Parse the Y component from the group version
         minor = minor_from_branch(runtime.group_config.branch)
         target_releases = ["3.{y}.Z".format(y=minor), "3.{y}.0".format(y=minor)]
-        click.echo("Adding bugs to {advs} for target releases: {tr}".format(advs=advisory, tr=", ".join(target_releases)))
     elif len(id) == 0:
         # No bugs were provided
-        click.echo("Error: If not using --auto then one or more --id's must be provided")
-        exit(1)
-
-    # Fetch the advisory to ensure it exists
-    advs = ocp_cd_tools.errata.get_erratum(advisory)
-    if advs is False:
-        click.echo("Error: Could not locate advisory {advs}".format(advs=advisory))
-        exit(1)
+        raise click.BadParameter("If not using --auto then one or more --id's must be provided")
 
     if auto:
         bug_ids = ocp_cd_tools.bugzilla.search_for_bugs(target_releases)
@@ -267,14 +298,33 @@ manually. Provide one or more --id's for manual bug addition.
 
     bug_count = len(bug_ids)
 
-    if add:
+    if add is not False:
+        try:
+            advs = ocp_cd_tools.errata.get_erratum(advisory)
+        except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+            exit_unauthorized()
+
+        if advs is False:
+            red_prefix("Error: ")
+            click.echo("Could not locate advisory {advs}".format(advs=advisory))
+            exit(1)
+
+        click.echo("Adding bugs to {advs} for target releases: {tr}".format(advs=advisory, tr=", ".join(target_releases)))
         if len(flag) > 0:
             for bug in bug_ids:
                 bug.add_flags(flag)
 
-        advs.add_bugs(bug_ids)
+        for res, bug in advs.add_bugs(bug_ids):
+            if res.status_code == 201:
+                green_prefix("Added bug: ")
+                click.secho("  {id}".format(id=bug.id))
+            else:
+                red_prefix("Failed to add bug: ")
+                click.echo("  {id} (rc={rc}, err={err})".format(id=bug.id, rc=res.status_code, err=res.text))
+    # Add bug is false (noop)
     else:
-        click.echo("Would have added {n} bugs: {bugs}".format(n=bug_count, bugs=", ".join([str(b) for b in bug_ids])))
+        green_prefix("Would have added {n} bugs: ".format(n=bug_count))
+        click.echo(", ".join([str(b) for b in bug_ids]))
 
 
 #
@@ -283,25 +333,26 @@ manually. Provide one or more --id's for manual bug addition.
 #
 @cli.command('advisory:find-builds',
              short_help='Find or attach builds to ADVISORY')
-@click.option('--attach', '-a', is_flag=True,
-              default=False, type=bool,
-              help='Attach the builds (by default only a list of builds are displayed)')
+@click.option('--attach', '-a', metavar='ADVISORY',
+              default=False,
+              help='Attach the builds to ADVISORY (by default only a list of builds are displayed)')
 @click.option('--build', '-b', metavar='NVR_OR_ID',
               multiple=True,
               help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
 @click.option('--kind', '-k', metavar='KIND',
               required=True, type=click.Choice(['rpm', 'image']),
               help='Find builds of the given KIND [rpm, image]')
-@click.argument('advisory', type=int)
 @pass_runtime
-def find_builds(runtime, attach, build, kind, advisory):
+def find_builds(runtime, attach, build, kind):
     """Automatically or manually find or attach viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
 (-b) options. Manually provided builds are verified against the Errata
 Tool API.
 
+\b
   * Attach the builds to ADVISORY by giving --attach
+  * Specify the build type using --kind KIND
 
 Example: Assuming --group=openshift-3.7, then a build is a VIABLE
 BUILD IFF it meets ALL of the following criteria:
@@ -315,48 +366,64 @@ That is to say, a viable build is tagged as a "candidate", has NOT
 received the "shipped" tag yet, and is NOT attached to any PAST or
 PRESENT advisory. Here are some examples:
 
-    SHOW the latest OSE 3.6 image builds that would be attached to
-    advisory 123456:
+    SHOW the latest OSE 3.6 image builds that would be attached to a
+    3.6 advisory:
 
-    $ elliott --group openshift-3.6 advisory:find-builds -k image 123456
+    $ elliott --group openshift-3.6 advisory:find-builds -k image
 
     ATTACH the latest OSE 3.6 rpm builds to advisory 123456:
 
 \b
     $ elliott --group openshift-3.6 advisory:find-builds -k rpm --attach 123456
 
-    VERIFY (no --attach) that the manually provided NVR and build ID
-    are viable builds:
+    VERIFY (no --attach) that the manually provided RPM NVR and build
+    ID are viable builds:
 
 \b
-    $ elliott --group openshift-3.6 advisory:find-builds 123456 -k rpm -b megafrobber-1.0.1-2.el7 -b 93170"""
+    $ elliott --group openshift-3.6 advisory:find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
+"""
     runtime.initialize(clone_distgits=False)
     minor = minor_from_branch(runtime.group_config.branch)
     product_version = 'RHEL-7-OSE-3.{Y}'.format(Y=minor)
     base_tag = "rhaos-3.{minor}-rhel-7".format(minor=minor)
 
+    # Get a list of ACTIVE erratum
+    try:
+        ocp_cd_tools.errata.get_filtered_list(ocp_cd_tools.constants.errata_live_advisory_filter, limit=100)
+    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+        exit_unauthorized()
+
     if len(build) > 0:
-        click.echo("Using provided build NVR list, verifying builds exist")
+        green_prefix("Build NVRs provided: ")
+        click.echo("Manually verifying the builds exist")
         try:
             unshipped_builds = [ocp_cd_tools.brew.get_brew_build(b, product_version) for b in build]
-        except ocp_cd_tools.brew.BrewBuildException as e:
-            click.secho("Error locating all builds", fg='red', bold=True)
+        except ocp_cd_tools.exceptions.BrewBuildException as e:
+            red_prefix("Error: ")
             click.echo(e)
             exit(1)
     else:
-        click.echo("Hold on a moment, searching Brew for build candidates")
+        green_prefix("Searching Brew for build candidates: ")
+        click.echo("Hold on a moment")
         unshipped_builds = ocp_cd_tools.brew.find_unshipped_builds(runtime, base_tag, product_version, kind=kind)
 
     build_count = len(unshipped_builds)
 
-    if attach:
-        erratum = ocp_cd_tools.errata.get_erratum(advisory)
+    # The option name is 'attach' but the metavar is more descriptive
+    # for some uses below, let's rename it for sanity
+    advisory = attach
+
+    if attach is not False:
         try:
+            erratum = ocp_cd_tools.errata.get_erratum(advisory)
             erratum.add_builds(unshipped_builds)
             click.secho("Attached build(s) successfully", fg='green', bold=True)
-        except ocp_cd_tools.brew.BrewBuildException as e:
-            click.secho("Error attaching builds:", fg='red', bold=True)
+        except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+            exit_unauthorized()
+        except ocp_cd_tools.exceptions.BrewBuildException as e:
+            red_prefix("Error attaching builds: ")
             click.echo(str(e))
+            exit(1)
     else:
         click.echo("The following {n} builds ".format(n=build_count), nl=False)
         click.secho("may be attached ", bold=True, nl=False)
@@ -399,7 +466,11 @@ Fields for the short format: Release date, State, Synopsys, URL
         "batch_id": null,
         ...
 """
-    advisory = ocp_cd_tools.errata.get_erratum(advisory)
+    try:
+        advisory = ocp_cd_tools.errata.get_erratum(advisory)
+    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+        exit_unauthorized()
+
     if json:
         click.echo(advisory.to_json())
     else:
@@ -416,8 +487,10 @@ Fields for the short format: Release date, State, Synopsys, URL
               help="A custom filter id to list from")
 @click.option("-n", default=5,
               help="Return only N latest results (default: 5)")
+@click.option('--json', is_flag=True, default=False,
+              help="Print the full JSON object of the advisory")
 @click.pass_context
-def list(runtime, filter_id, n):
+def list(runtime, filter_id, n, json):
     """Print a list of one-line informational strings of RHOSE
 advisories. By default the 5 most recently created advisories are
 printed. Note, they are NOT sorted by release date.
@@ -436,14 +509,16 @@ yourself online: https://errata.devel.redhat.com/filter/1965
 """
     try:
         for erratum in ocp_cd_tools.errata.get_filtered_list(filter_id, limit=n):
-            click.echo(erratum)
-    except ValueError:
-        click.echo("No filter matched #{fn}".format(fn=filter_id))
-
-#
-# Generate a puddle for image builds (unsigned, signed)
-# rpmrepo:create
-#
+            if json:
+                click.echo(erratum.to_json())
+            else:
+                click.echo(erratum)
+    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+        exit_unauthorized()
+    except ocp_cd_tools.exceptions.ErrataToolError as err:
+        red_prefix("Error: ")
+        click.echo(str(err))
+        exit(1)
 
 
 # -----------------------------------------------------------------------------
