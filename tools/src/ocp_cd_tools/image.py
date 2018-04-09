@@ -181,7 +181,7 @@ verify the contents.
             l = line.strip()
 
             # Don't worry about it, these aren't always signed
-            if l == 'gpg-pubkey':
+            if l == 'gpg-pubkey' or l.startswith('gpg-pubkey-'):
                 continue
 
             if l.endswith('(none)'):
