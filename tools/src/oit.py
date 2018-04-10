@@ -255,7 +255,7 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
 
     # Doing this manually, or automatic on a group?
     if len(image) == 0:
-        images = [Image(runtime, x.pull_url(), repo_file, enabled_checks) for x in runtime.image_metas()]
+        images = [Image(runtime, x.pull_url(), repo_file, enabled_checks, distgit=x.name) for x in runtime.image_metas()]
     else:
         images = [Image(runtime, img, repo_file, enabled_checks) for img in image]
 

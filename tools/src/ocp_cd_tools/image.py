@@ -99,7 +99,7 @@ class Image(object):
 verify the contents.
     """
 
-    def __init__(self, runtime, pull_url, repo_file, enabled_checks):
+    def __init__(self, runtime, pull_url, repo_file, enabled_checks, distgit=''):
         """
         :param Runtime runtime: Program runtime object
 
@@ -116,6 +116,8 @@ verify the contents.
         self.enabled_checks = enabled_checks
         # registry.redhat.com:8888/openshift3/ose:v3.4.1.44.38-12 => ose:v3.4.1.44.38-12
         self.name_tag = pull_url.split('/')[-1]
+        self.distgit = distgit
+
         # I must apologize for this...... Trim the version. Remove any
         # possible leaving 'v' characters, split on hyphen to isolate
         # the image release (-NN), take first item
@@ -147,6 +149,9 @@ verify the contents.
         # Image().verify_image() => {
         #     'image': 'brewblablabla/openshift3/ose:v3.y.z-nnnnn',
         #     'status': 'failed', # or maybe 'passed'
+        #     'distgit': 'ose', # or whatever the Dockerfile distgit
+        #                       # source is. Empty string if ran
+        #                       # from --images
         #     'failures': {
         #         'check_foo': {
         #             'description': 'words about a specific check',
@@ -154,7 +159,7 @@ verify the contents.
         #         }
         #     }
         # }
-        return {'image': self.pull_url, 'failures': self.failures, 'status': self.status}
+        return {'image': self.pull_url, 'failures': self.failures, 'status': self.status, 'distgit': self.distgit}
 
     def init_container(self):
         """Run basic initializion tasks"""
