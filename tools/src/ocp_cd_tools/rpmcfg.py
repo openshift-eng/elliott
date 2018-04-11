@@ -290,7 +290,7 @@ class RPMMetadata(Metadata):
         if self.build_status:
             try:
                 self.push_tag()
-            except:
-                raise RuntimeError('Build succeeded but failure pushing RPM tag.')
+            except Exception:
+                raise RuntimeError('Build succeeded but failure pushing RPM tag for {}'.format(self.qualified_name))
 
         return self.build_status
