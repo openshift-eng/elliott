@@ -139,7 +139,7 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     # We only want builds not attached to an existing open advisory
     viable_builds = [b for b in results if not b.attached_to_open_erratum]
     print("Removing {n} builds because they are attached to open erratum:".format(
-        n=(len(results)-len(viable_builds))))
+        n=(len(results) - len(viable_builds))))
     for b in sorted(set(results).difference(set(viable_builds))):
         print(" - {nvr}:".format(nvr=b.nvr))
         print("   Open Advisory: {open_advs}".format(
@@ -346,7 +346,7 @@ initialized Build object (provided the build exists).
     @property
     def attached_to_open_erratum(self):
         """Attached to any open erratum"""
-        return len([e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_active_advisory_labels]) > 0
+        return len(self.open_erratum) > 0
 
     @property
     def closed_erratum(self):
@@ -356,7 +356,7 @@ initialized Build object (provided the build exists).
     @property
     def attached_to_closed_erratum(self):
         """Attached to any closed erratum"""
-        return len([e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_inactive_advisory_labels]) > 0
+        return len(self.closed_erratum) > 0
 
     @property
     def attached(self):
@@ -395,12 +395,11 @@ don't have to do extra manipulation later back in the view"""
                     self.file_type = 'tar'
                     break
 
-    def add_buildinfo(self, runtime):
+    def add_buildinfo(self, runtime, verbose=False):
         """Add buildinfo from upstream brew"""
-        import click
         date_format = '%a, %d %b %Y %H:%M:%S %Z'
-        click.secho('.', nl=False)
-        # print("Fetching buildinfo for: {name}".format(name=self.nvr))
+        if verbose:
+            click.secho('.', nl=False)
         self.buildinfo = get_brew_buildinfo(runtime, self)
         self.finished = datetime.datetime.strptime(self.buildinfo['Finished'], date_format)
 

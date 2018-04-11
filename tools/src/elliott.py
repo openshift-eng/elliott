@@ -36,7 +36,7 @@ now = datetime.datetime.now()
 YMD = '%Y-%m-%d'
 pass_runtime = click.make_pass_decorator(Runtime)
 context_settings = dict(help_option_names=['-h', '--help'])
-pickle_in = pickle_out = os.path.realpath(os.curdir)
+
 
 @click.group(context_settings=context_settings)
 @click.option("--metadata-dir", metavar='PATH', default=os.getcwd(),
@@ -436,8 +436,8 @@ PRESENT advisory. Here are some examples:
             click.echo("[" + ("*" * len(unshipped_builds)) + "]")
             click.secho("[", nl=False)
             pool = ThreadPool(cpu_count())
-            results = pool.map(
-                lambda build: build.add_buildinfo(runtime),
+            pool.map(
+                lambda build: build.add_buildinfo(runtime, verbose=True),
                 sorted(unshipped_builds))
             # Wait for results
             pool.close()
@@ -496,9 +496,6 @@ in the future. For now just give any valid group value (ex:
 
 \b
     $ elliott --group=openshift-3.10 advisory:find-old-builds --date 2017-06-20 -t rhaos-3.5-rhel-7-candidate -k image
-
-    Find all rpm builds finished before right now that are tagged
-
     """
     runtime.initialize(clone_distgits=False)
     build_map = {}
@@ -536,7 +533,7 @@ in the future. For now just give any valid group value (ex:
         click.echo("[" + ("*" * len(results)) + "]")
         click.secho("[", nl=False)
         pool = ThreadPool(cpu_count())
-        results2 = pool.map(
+        pool.map(
             lambda build: build.add_buildinfo(runtime),
             sorted(results))
         # Wait for results
@@ -545,7 +542,6 @@ in the future. For now just give any valid group value (ex:
         click.secho("]")
 
         build_map[tag] = results
-
 
     trim_date = datetime.datetime.strptime(date, YMD)
 
@@ -557,7 +553,7 @@ in the future. For now just give any valid group value (ex:
         click.echo("Original Builds: {n_orig}. Old builds: {n_old}. {n_orig}(orig) - {n_old}(old) = {n_remain}(removed) ".format(
             n_orig=len(builds),
             n_old=len(old_builds_map[tag]),
-            n_remain=len(builds)-len(old_builds_map[tag])))
+            n_remain=len(builds) - len(old_builds_map[tag])))
 
     click.echo()
     click.secho("The following builds finished on or before", nl=False)
