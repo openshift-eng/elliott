@@ -346,8 +346,11 @@ manually. Provide one or more --id's for manual bug addition.
 @click.option('--kind', '-k', metavar='KIND',
               required=True, type=click.Choice(['rpm', 'image']),
               help='Find builds of the given KIND [rpm, image]')
+@click.option('--tags', '-t', 'show_tags',
+              default=False, required=False, is_flag=True,
+              help='Show Brew tags applied to builds (increases search time)')
 @pass_runtime
-def find_builds(runtime, advisory, builds, kind):
+def find_builds(runtime, advisory, builds, kind, show_tags):
     """Automatically or manually find or attach viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -414,6 +417,7 @@ PRESENT advisory. Here are some examples:
     build_count = len(unshipped_builds)
 
     if advisory is not False:
+        # Search and attach
         try:
             erratum = ocp_cd_tools.errata.get_erratum(advisory)
             erratum.add_builds(unshipped_builds)
@@ -425,11 +429,29 @@ PRESENT advisory. Here are some examples:
             click.echo(str(e))
             exit(1)
     else:
+        # Search only, do not attach
+        if show_tags:
+            green_prefix("Display-Build-Tags Requested: ")
+            click.echo("Fetching buildinfo (brew) for {n} builds ".format(n=len(unshipped_builds)))
+            click.echo("[" + ("*" * len(unshipped_builds)) + "]")
+            click.secho("[", nl=False)
+            pool = ThreadPool(cpu_count())
+            results = pool.map(
+                lambda build: build.add_buildinfo(runtime),
+                sorted(unshipped_builds))
+            # Wait for results
+            pool.close()
+            pool.join()
+            click.secho("]")
+
         click.echo("The following {n} builds ".format(n=build_count), nl=False)
         click.secho("may be attached ", bold=True, nl=False)
         click.echo("to an advisory:")
         for b in sorted(unshipped_builds):
             click.echo(" " + str(b.to_json()))
+            if show_tags:
+                click.echo(" Tags: " + ", ".join(b.buildinfo['Tags'].split(' ')))
+                click.echo('')
 
 
 #
