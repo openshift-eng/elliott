@@ -52,8 +52,8 @@ errata_assigned_to_email = 'openshift-qe-errata@redhat.com'
 # QE Group name
 errata_quality_responsibility_name = 'OpenShift QE'
 errata_synopsis = {
-    'rpm': 'TEST OpenShift Container Platform 3.{Y} bug fix and enhancement update',
-    'image': 'TEST OpenShift Container Platform 3.{Y} images update'
+    'rpm': 'OpenShift Container Platform 3.{Y} bug fix and enhancement update',
+    'image': 'OpenShift Container Platform 3.{Y} images update'
 }
 errata_topic = 'Red Hat OpenShift Container Platform releases 3.{Y}.z are now available with updates to packages and images that fix several bugs and add enhancements.'
 # 1965 => (RHBA; Active; Product: RHOSE; Devel Group: ENG OpenShift

@@ -38,6 +38,7 @@ def search_for_bugs(target_release, verbose=False):
     for r in target_release:
         query_url.addTargetRelease(r)
 
+    # TODO: Expose this for debugging
     if verbose:
         click.echo(query_url)
 

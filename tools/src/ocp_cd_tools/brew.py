@@ -3,6 +3,7 @@ Utility functions for general interactions with Brew and Builds
 """
 
 # stdlib
+import datetime
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
 import shlex
@@ -18,7 +19,7 @@ import requests
 from requests_kerberos import HTTPKerberosAuth
 
 
-def get_brew_build(nvr, product_version='', session=None):
+def get_brew_build(nvr, product_version='', session=None, progress=False):
     """5.2.2.1. GET /api/v1/build/{id_or_nvr}
 
     Get Brew build details.
@@ -37,6 +38,7 @@ def get_brew_build(nvr, product_version='', session=None):
 
     :return: An initialized Build object with the build details
     :raises ocp_cd_tools.exceptions.BrewBuildException: When build not found
+
     """
     if session is not None:
         res = session.get(ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
@@ -45,6 +47,8 @@ def get_brew_build(nvr, product_version='', session=None):
         res = requests.get(ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
                            auth=HTTPKerberosAuth())
     if res.status_code == 200:
+        if progress:
+            click.secho('.', nl=False)
         return Build(nvr=nvr, body=res.json(), product_version=product_version)
     else:
         raise ocp_cd_tools.exceptions.BrewBuildException("{build}: {msg}".format(
@@ -53,6 +57,7 @@ def get_brew_build(nvr, product_version='', session=None):
 
 
 def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
+
     """Find builds for a product and return a list of the builds only
     labeled with the -candidate tag that aren't attached to any open
     advisory.
@@ -93,8 +98,30 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     pool.close()
     pool.join()
 
+    print("Found candidate {n} builds for {tag}".format(n=len(candidate_builds.builds), tag=base_tag + "-candidate"))
+    print("Found shipped {n} builds for {tag}".format(n=len(shipped_builds.builds), tag=base_tag))
+
     # Builds only tagged with -candidate (not shipped yet)
     unshipped_builds = candidate_builds.builds.difference(shipped_builds.builds)
+    print("Found {n} builds only labeled as '-candidate': candidate_builds.difference(shipped_builds)".format(n=len(unshipped_builds)))
+    print(sorted(unshipped_builds))
+
+    unshipped_builds_rev = shipped_builds.builds.difference(candidate_builds.builds)
+    print("Found {n} builds only labeled as 'shipped': shipped_builds.difference(candidate_builds)".format(n=len(unshipped_builds_rev)))
+    print(sorted(unshipped_builds_rev))
+
+    build_intersection = candidate_builds.builds.intersection(shipped_builds.builds)
+    print("Found {n} builds present in both lists".format(n=len(build_intersection)))
+
+    # Filtering update: When we calculated unshipped_builds we
+    # filtered out duplicate builds. Now let's update the user with
+    # that number and list the removed candidates.
+    print("Removing {n} builds because they are tagged as '-candidate' and 'shipped':".format(n=len(build_intersection)))
+    # What builds were filtered out?
+    for b in sorted(build_intersection):
+        print(" -{b}".format(b=b))
+
+    print("Updating metadata for {n} remaining '-candidate' tagged builds".format(n=len(unshipped_builds)))
 
     # Re-use TCP connection to speed things up
     session = requests.Session()
@@ -110,16 +137,53 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     pool.join()
 
     # We only want builds not attached to an existing open advisory
-    return [b for b in results if not b.attached_to_open_erratum]
+    viable_builds = [b for b in results if not b.attached_to_open_erratum]
+    print("Removing {n} builds because they are attached to open erratum:".format(
+        n=(len(results) - len(viable_builds))))
+    for b in sorted(set(results).difference(set(viable_builds))):
+        print(" - {nvr}:".format(nvr=b.nvr))
+        print("   Open Advisory: {open_advs}".format(
+            open_advs=", ".join([str(erratum['id']) for erratum in b.open_erratum])))
+        print("   Closed Advisory: {closed_advs}".format(
+            closed_advs=", ".join([str(erratum['id']) for erratum in b.closed_erratum])))
+
+    print("After filtering there are {n} remaining builds".format(n=len(viable_builds)))
+
+    return viable_builds
 
 
-def get_tagged_image_builds(runtime, tag):
+def get_brew_buildinfo(runtime, build):
+    """Get the buildinfo of a brew build from brew
+
+Note: This is different from get_brew_build in that this function
+queries brew directly using the 'brew buildinfo' command. Whereas,
+get_brew_build queries the Errata Tool API for other information.
+
+This function will give information not provided by ET: build tags,
+finished date, built by, etc."""
+    query_string = "brew buildinfo {nvr}".format(nvr=build.nvr)
+    rc, stdout, stderr = ocp_cd_tools.common.gather_exec(runtime, shlex.split(query_string))
+    buildinfo = {}
+    for line in stdout.splitlines():
+        key, token, rest = line.partition(': ')
+        buildinfo[key] = rest
+
+    return buildinfo
+
+
+def get_tagged_image_builds(runtime, tag, latest=True):
     """Wrapper around shelling out to run 'brew list-tagged' for a given tag.
 
     :param Runtime runtime: A runtime context object
     :param str tag: The tag to list builds from
+    :param bool latest: Only show the single latest build of a package
     """
-    query_string = "brew list-tagged {tag} --latest --type=image --quiet".format(tag=tag)
+    if latest:
+        latest_option = '--latest'
+    else:
+        latest_option = ''
+
+    query_string = "brew list-tagged {tag} {latest} --type=image --quiet".format(tag=tag, latest=latest_option)
     # --latest - Only the last build for that package
     # --type=image - Only show container images builds
     # --quiet - Omit field headers in output
@@ -127,7 +191,7 @@ def get_tagged_image_builds(runtime, tag):
     return ocp_cd_tools.common.gather_exec(runtime, shlex.split(query_string))
 
 
-def get_tagged_rpm_builds(runtime, tag, arch='src'):
+def get_tagged_rpm_builds(runtime, tag, arch='src', latest=True):
     """Wrapper around shelling out to run 'brew list-tagged' for a given tag.
 
     :param Runtime runtime: A runtime context object
@@ -249,6 +313,7 @@ initialized Build object (provided the build exists).
         self.attached_erratum_ids = set([])
         self.attached_closed_erratum_ids = set([])
         self.product_version = product_version
+        self.buildinfo = {}
         self.process()
 
     def __str__(self):
@@ -274,14 +339,24 @@ initialized Build object (provided the build exists).
         return self.nvr < other.nvr
 
     @property
+    def open_erratum(self):
+        """Any open erratum this build is attached to"""
+        return [e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_active_advisory_labels]
+
+    @property
     def attached_to_open_erratum(self):
         """Attached to any open erratum"""
-        return len([e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_active_advisory_labels]) > 0
+        return len(self.open_erratum) > 0
+
+    @property
+    def closed_erratum(self):
+        """Any closed erratum this build is attached to"""
+        return [e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_inactive_advisory_labels]
 
     @property
     def attached_to_closed_erratum(self):
         """Attached to any closed erratum"""
-        return len([e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_inactive_advisory_labels]) > 0
+        return len(self.closed_erratum) > 0
 
     @property
     def attached(self):
@@ -319,6 +394,14 @@ don't have to do extra manipulation later back in the view"""
                     self.kind = 'image'
                     self.file_type = 'tar'
                     break
+
+    def add_buildinfo(self, runtime, verbose=False):
+        """Add buildinfo from upstream brew"""
+        date_format = '%a, %d %b %Y %H:%M:%S %Z'
+        if verbose:
+            click.secho('.', nl=False)
+        self.buildinfo = get_brew_buildinfo(runtime, self)
+        self.finished = datetime.datetime.strptime(self.buildinfo['Finished'], date_format)
 
     def to_json(self):
         """Method for adding this build to advisory via the Errata Tool

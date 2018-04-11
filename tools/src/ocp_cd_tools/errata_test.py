@@ -71,6 +71,45 @@ class TestBrew(unittest.TestCase):
         d_out = datetime.datetime.strptime(test_structures.example_erratum['errata']['rhba']['created_at'], '%Y-%m-%dT%H:%M:%SZ')
         self.assertEqual(str(d_out), d_expected)
 
+    def test_erratum_as_string(self):
+        """Verify str(Erratum) is formatted correctly"""
+        ds = test_structures.example_erratum
+        e = errata.Erratum(body=ds)
+        expected_str = "{date} {state} {synopsis} {url}".format(
+            date=datetime.datetime.strptime(ds['errata']['rhba']['created_at'], '%Y-%m-%dT%H:%M:%SZ').isoformat(),
+            state=ds['errata']['rhba']['status'],
+            synopsis=ds['errata']['rhba']['synopsis'],
+            url="{et}/advisory/{id}".format(
+                et=constants.errata_url,
+                id=ds['errata']['rhba']['id']))
+        self.assertEqual(expected_str, str(e))
+
+    def test_erratum_to_json(self):
+        """Ensure Erratum.to_json returns the source datastructure"""
+        e = errata.Erratum(body=test_structures.example_erratum)
+        self.assertEqual(json.loads(e.to_json()), test_structures.example_erratum)
+
+    def test_erratum_refresh(self):
+        """Ensure Erratum.refresh does the needful"""
+        with mock.patch('ocp_cd_tools.errata.requests.get') as get:
+            # Create the requests.response object. The status code
+            # here will change the path of execution to the not-found
+            # branch of errata.get_erratum
+            response = mock.MagicMock(status_code=200)
+            # response's have a 'json' function that returns a dict of
+            # the JSON response body ('example_erratum' defined below)
+            response.json.return_value = test_structures.example_erratum
+            # Set the return value of the requests.get call to the
+            # response we just created
+            get.return_value = response
+            e = errata.get_erratum(123456)
+
+            # Use the string representation for comparison, they should be identical
+            original_str = str(e)
+
+            e.refresh()
+            self.assertEqual(original_str, str(e))
+
     def test_get_filtered_list(self):
         """Ensure we can generate an Erratum List"""
         with mock.patch('ocp_cd_tools.errata.requests.get') as get:
