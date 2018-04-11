@@ -219,7 +219,9 @@ advisory.
     minor = minor_from_branch(runtime.group_config.branch)
     try:
         erratum = ocp_cd_tools.errata.new_erratum(kind=kind, release_date=date, create=yes, minor=minor)
-    except ocp_cd_tools.exceptions.ErraraToolError as err:
+    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+        exit_unauthorized()
+    except ocp_cd_tools.exceptions.ErrataToolError as err:
         click.secho("Error creating advisory: ", nl=False, bold=True, fg='red')
         click.echo(str(err))
         exit(1)
@@ -319,10 +321,10 @@ manually. Provide one or more --id's for manual bug addition.
         for res, bug in advs.add_bugs(bug_ids):
             if res.status_code == 201:
                 green_prefix("Added bug: ")
-                click.secho("  {id}".format(id=bug.id))
+                click.secho("  {id}".format(id=bug))
             else:
                 red_prefix("Failed to add bug: ")
-                click.echo("  {id} (rc={rc}, err={err})".format(id=bug.id, rc=res.status_code, err=res.text))
+                click.echo("  {id} (rc={rc}, err={err})".format(id=bug, rc=res.status_code, err=res.text))
     # Add bug is false (noop)
     else:
         green_prefix("Would have added {n} bugs: ".format(n=bug_count))
