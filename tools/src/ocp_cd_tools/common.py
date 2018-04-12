@@ -3,11 +3,13 @@ import errno
 import functools
 import subprocess
 import threading
+from multiprocessing import Lock
 import time
 import traceback
 import sys
 import koji
 import koji_cli.lib
+
 
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
@@ -164,6 +166,23 @@ def retry(n, f, check_f=bool, wait_f=None):
     raise RetryException("Giving up after {} failed attempt(s)".format(n))
 
 
+# Populated by watch_task. Each task_id will be a key in the dict and
+# each value will be a TaskInfo: https://github.com/openshift/enterprise-images/pull/178#discussion_r173812940
+watch_task_info = {}
+# Protects threaded access to watch_task_info
+watch_task_lock = Lock()
+
+
+def get_watch_task_info_copy():
+    """
+    :return: Returns a copy of the watch_task info dict in a thread safe way. Each key in this dict
+     is a task_id and each value is a koji TaskInfo with potentially useful data.
+     https://github.com/openshift/enterprise-images/pull/178#discussion_r173812940
+    """
+    with watch_task_lock:
+        return dict(watch_task_info)
+
+
 def watch_task(log_f, task_id, terminate_event):
     end = time.time() + 4 * 60 * 60
     watcher = koji_cli.lib.TaskWatcher(
@@ -171,6 +190,11 @@ def watch_task(log_f, task_id, terminate_event):
     error = None
     while error is None:
         watcher.update()
+
+        # Keep around metrics for each task we watch
+        with watch_task_lock:
+            watch_task_info[task_id] = dict(watcher.info)
+
         if watcher.is_done():
             return None if watcher.is_success() else watcher.get_failure()
         log_f("Task state: " + koji.TASK_STATES[watcher.info['state']])
