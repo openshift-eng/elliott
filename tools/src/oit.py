@@ -2,6 +2,7 @@
 
 from ocp_cd_tools import Runtime, Dir
 from ocp_cd_tools.image import pull_image, create_image_verify_repo_file, Image
+from ocp_cd_tools.common import get_watch_task_info_copy
 import datetime
 import click
 import os
@@ -36,7 +37,8 @@ context_settings = dict(help_option_names=['-h', '--help'])
               help="Name of group rpm member to include in operation (all by default). Can be comma delimited list.")
 @click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
               help="Name of group image or rpm member to exclude in operation (none by default). Can be comma delimited list.")
-@click.option('--ignore-missing-base', default=False, is_flag=True, help='If a base image is not included, proceed and do not update FROM.')
+@click.option('--ignore-missing-base', default=False, is_flag=True,
+              help='If a base image is not included, proceed and do not update FROM.')
 @click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
@@ -51,7 +53,8 @@ def cli(ctx, **kwargs):
     ctx.obj = Runtime(**kwargs)
 
 
-option_commit_message = click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.", required=True)
+option_commit_message = click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.",
+                                     required=True)
 option_push = click.option('--push/--no-push', default=False, is_flag=True,
                            help='Pushes to distgit after local changes (--no-push by default).')
 
@@ -147,8 +150,10 @@ def images_push_distgit(runtime):
 @cli.command("images:update-dockerfile", short_help="Update a group's distgit Dockerfile from metadata.")
 @click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
               help="Associate an image name with a given stream alias.  [multiple]")
-@click.option("--version", metavar='VERSION', default=None, help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
-@click.option("--release", metavar='RELEASE', default=None, help="Release label to populate in Dockerfiles (or + to bump).")
+@click.option("--version", metavar='VERSION', default=None,
+              help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
+@click.option("--release", metavar='RELEASE', default=None,
+              help="Release label to populate in Dockerfiles (or + to bump).")
 @click.option("--repo-type", default=None, metavar="REPO_TYPE",
               help="Repo group type to use for version autodetection scan (e.g. signed, unsigned).")
 @option_commit_message
@@ -302,7 +307,8 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
 @cli.command("images:rebase", short_help="Refresh a group's distgit content from source content.")
 @click.option("--stream", metavar="ALIAS REPO/NAME:TAG", nargs=2, multiple=True,
               help="Associate an image name with a given stream alias.  [multiple]")
-@click.option("--version", metavar='VERSION', default=None, help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
+@click.option("--version", metavar='VERSION', default=None,
+              help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
 @click.option("--release", metavar='RELEASE', default=None, help="Release string to populate in Dockerfiles.")
 @click.option("--repo-type", default=None, metavar="REPO_TYPE",
               help="Repo group type to use for version autodetection scan (e.g. signed, unsigned).")
@@ -461,12 +467,90 @@ def images_merge(runtime, target, push, allow_overwrite):
         runtime.push_distgits()
 
 
+def print_build_metrics(runtime):
+    watch_task_info = get_watch_task_info_copy()
+    runtime.info("\nImage build metrics:")
+    runtime.info("Number of brew tasks: {}".format(len(watch_task_info)))
+
+    # Make sure all the tasks have the expected timestamps:
+    # https://github.com/openshift/enterprise-images/pull/178#discussion_r173812940
+    for task_id in watch_task_info.keys():
+        info = watch_task_info[task_id]
+        if 'create_ts' not in info or 'completion_ts' not in info or 'create_ts' not in info or 'id' not in info:
+            runtime.info("Error finding timestamps in task info: {}".format(info))
+            del watch_task_info[task_id]
+
+    # An estimate of how long the build time was extended due to FREE state (i.e. waiting for capacity)
+    elapsed_wait_minutes = 0
+
+    # If two builds each take one minute of actual active CPU time to complete, this value will be 2.
+    aggregate_build_secs = 0
+
+    # If two jobs wait 1m for in FREE state, this value will be '2' even if
+    # the respective wait periods overlap. This is different from elapsed_wait_minutes
+    # which is harder to calculate.
+    aggregate_wait_secs = 0
+
+    # Will be populated with earliest creation timestamp found in all the koji tasks; initialize with
+    # infinity to support min() logic.
+    min_create_ts = float('inf')
+
+    # Will be populated with the latest completion timestamp found in all the koji tasks
+    max_completion_ts = 0
+
+    # Loop through all koji task infos and calculate min
+    for task_id, info in watch_task_info.iteritems():
+        create_ts = info['create_ts']
+        completion_ts = info['completion_ts']
+        start_ts = info['start_ts']
+        min_create_ts = min(create_ts, min_create_ts)
+        max_completion_ts = max(completion_ts, max_completion_ts)
+        build_secs = completion_ts - start_ts
+        aggregate_build_secs += build_secs
+        wait_secs = start_ts - create_ts
+        aggregate_wait_secs += wait_secs
+
+        runtime.info('Task {} took {:.1f}m of active build and was waiting to start for {:.1f}m'.format(task_id,
+                                                                                                 build_secs / 60.0,
+                                                                                                 wait_secs / 60.0)
+                     )
+    runtime.info('Aggregate time all builds spent building {:.1f}m'.format(aggregate_build_secs / 60.0))
+    runtime.info('Aggregate time all builds spent waiting {:.1f}m'.format(aggregate_wait_secs / 60.0))
+
+    # If we successfully found timestamps
+    if watch_task_info:
+
+        # For each minute which elapsed between the first build created (min_create_ts) to the
+        # last build to complete (max_completion_ts), check whether there was any build that
+        # was created but still waiting to start (i.e. in FREE state). If there is a build
+        # waiting, include that minute in the elapsed wait time.
+
+        for ts in xrange(int(min_create_ts), int(max_completion_ts), 60):
+            # See if any of the tasks were created but not started during this minute
+            for info in watch_task_info.itervalues():
+                create_ts = int(info['create_ts'])
+                start_ts = int(info['start_ts'])
+                # Was the build waiting to start during this minute?
+                if create_ts <= ts <= start_ts:
+                    # Increment and exit; we don't want to count overlapping wait periods
+                    # since it would not accurately reflect the overall time savings we could
+                    # expect with more capacity.
+                    elapsed_wait_minutes += 1
+                    break
+
+        runtime.info("Approximate elapsed time (wasted) waiting: {}m".format(elapsed_wait_minutes))
+        runtime.info("Elapsed time (from first submit to last completion) for all builds: {:.1f}m".format((max_completion_ts - min_create_ts) / 60.0))
+    else:
+        runtime.info('Unable to determine timestamps from collected info: {}'.format(watch_task_info))
+
+
 @cli.command("images:build", short_help="Build images for the group.")
 @click.option("--repo-type", default=None, metavar="REPO_TYPE",
               help="Repo type (e.g. signed, unsigned).")
 @click.option("--repo", default=[], metavar="REPO_URL",
               multiple=True, help="Custom repo URL to supply to brew build.")
-@click.option('--push-to-defaults', default=False, is_flag=True, help='Push to default registries when build completes.')
+@click.option('--push-to-defaults', default=False, is_flag=True,
+              help='Push to default registries when build completes.')
 @click.option("--push-to", default=[], metavar="REGISTRY", multiple=True,
               help="Specific registries to push to when image build completes.  [multiple]")
 @click.option('--scratch', default=False, is_flag=True, help='Perform a scratch build.')
@@ -522,9 +606,17 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
     for image in runtime.image_metas():
         image.distgit_repo().push_image([], push_to, push_late=True)
 
+    try:
+        print_build_metrics(runtime)
+    except:
+        # Never kill a build because of bad logic in metrics
+        traceback.print_exc()
+        runtime.info("Error trying to show build metrics")
+
 
 @cli.command("images:push", short_help="Push the most recent images to mirrors.")
-@click.option('--tag', default=[], metavar="PUSH_TAG", multiple=True, help='Push to registry using these tags instead of default set.')
+@click.option('--tag', default=[], metavar="PUSH_TAG", multiple=True,
+              help='Push to registry using these tags instead of default set.')
 @click.option('--to-defaults', default=False, is_flag=True, help='Push to default registries.')
 @click.option('--late-only', default=False, is_flag=True, help='Push only "late" images.')
 @click.option("--to", default=[], metavar="REGISTRY", multiple=True,
@@ -683,7 +775,8 @@ def images_print(runtime, short, show_non_release, pattern):
     echo_verbose("{} images".format(count))
 
     if not show_non_release:
-        echo_verbose("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(len(non_release_images)))
+        echo_verbose("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(
+                len(non_release_images)))
         for image in non_release_images:
             echo_verbose("    {}".format(image))
 
