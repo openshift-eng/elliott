@@ -140,12 +140,12 @@ class DistGitRepo(object):
             self.info("Adding commit to local repo: {}".format(commit_message))
             if log_diff:
                 rc, out, err = gather_exec(self.runtime, ["git", "diff", "Dockerfile"])
-                assert_rc0(rc, 'Failed fetching distgit diff')
+                assert_rc0(self.runtime, rc, 'Failed fetching distgit diff')
                 self.runtime.add_distgits_diff(self.metadata.name, out)
             assert_exec(self.runtime, ["git", "add", "-A", "."])
             assert_exec(self.runtime, ["git", "commit", "--allow-empty", "-m", commit_message])
             rc, sha, err = gather_exec(self.runtime, ["git", "rev-parse", "HEAD"])
-            assert_rc0(rc, "Failure fetching commit SHA for {}".format(self.distgit_dir))
+            assert_rc0(self.runtime, rc, "Failure fetching commit SHA for {}".format(self.distgit_dir))
         return sha.strip()
 
     def tag(self, version, release):
@@ -511,7 +511,7 @@ class ImageDistGitRepo(DistGitRepo):
             "task_url": "n/a",
             "status": -1,
             "push_status": -1,
-            # Status defaults to failure until explicitly set by succcess. This handles raised exceptions.
+            # Status defaults to failure until explicitly set by success. This handles raised exceptions.
         }
 
         target_tag = "-".join((self.org_version, release))
@@ -774,19 +774,26 @@ class ImageDistGitRepo(DistGitRepo):
 
             # If the release is specified as "+", this means the user wants to bump the release.
             if release == "+":
-                self.info("Bumping release field in Dockerfile")
 
                 # If release label is not present, default to 0, which will bump to 1
-                release = dfp.labels.get("release", dfp.labels.get("Release", "0"))
+                release = dfp.labels.get("release", dfp.labels.get("Release", None))
 
-                # If release has multiple fields (e.g. 0.173.0.0), increment final field
-                if "." in release:
-                    components = release.rsplit(".", 1)  # ["0.173","0"]
-                    bumped_field = int(components[1]) + 1
-                    release = "%s.%d" % (components[0], bumped_field)
+                if release:
+                    self.info("Bumping release field in Dockerfile")
+
+                    # If release has multiple fields (e.g. 0.173.0.0), increment final field
+                    if "." in release:
+                        components = release.rsplit(".", 1)  # ["0.173","0"]
+                        bumped_field = int(components[1]) + 1
+                        release = "%s.%d" % (components[0], bumped_field)
+                    else:
+                        # If release is specified and a single field, just increment it
+                        release = "%d" % (int(release) + 1)
                 else:
-                    # Otherwise, release is a single field; just increment it
-                    release = "%d" % (int(release) + 1)
+                    # When 'release' is not specified in the Dockerfile, OSBS will automatically
+                    # find a valid value for each build. This means OSBS is effectively auto-bumping.
+                    # This is better than us doing it, so let it.
+                    self.info("No release label found in Dockerfile; bumping unnecessary -- osbs will automatically select unique release value at build time")
 
             # If a release is specified, set it. If it is not specified, remove the field.
             # If osbs finds the field, unset, it will choose a value automatically. This is

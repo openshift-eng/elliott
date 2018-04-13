@@ -28,7 +28,7 @@ class ImageMetadata(Metadata):
         rc, stdout, stderr = gather_exec(self.runtime,
                                          ["brew", "latest-build", tag, component_name])
 
-        assert_rc0(rc, "Unable to search brew builds: %s" % stderr)
+        assert_rc0(self.runtime, rc, "Unable to search brew builds: %s" % stderr)
 
         latest = stdout.strip().splitlines()[-1].split(' ')[0]
 

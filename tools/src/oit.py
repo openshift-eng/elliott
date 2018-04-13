@@ -540,7 +540,11 @@ def print_build_metrics(runtime):
                     break
 
         runtime.info("Approximate elapsed time (wasted) waiting: {}m".format(elapsed_wait_minutes))
-        runtime.info("Elapsed time (from first submit to last completion) for all builds: {:.1f}m".format((max_completion_ts - min_create_ts) / 60.0))
+        elapsed_total_minutes = (max_completion_ts - min_create_ts) / 60.0
+        runtime.info("Elapsed time (from first submit to last completion) for all builds: {:.1f}m".format(elapsed_total_minutes))
+
+        runtime.add_record("image_build_metrics", elapsed_wait_minutes=int(elapsed_wait_minutes),
+                           elapsed_total_minutes=int(elapsed_total_minutes), task_count=len(watch_task_info))
     else:
         runtime.info('Unable to determine timestamps from collected info: {}'.format(watch_task_info))
 
