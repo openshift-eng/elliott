@@ -198,7 +198,7 @@ def watch_task(log_f, task_id, terminate_event):
         if watcher.is_done():
             return None if watcher.is_success() else watcher.get_failure()
         log_f("Task state: " + koji.TASK_STATES[watcher.info['state']])
-        if terminate_event.wait(timeout=2 * 60):
+        if terminate_event.wait(timeout=3 * 60):
             error = 'Interrupted'
         elif time.time() > end:
             error = 'Timeout building image'
