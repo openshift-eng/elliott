@@ -476,6 +476,7 @@ def print_build_metrics(runtime):
     # https://github.com/openshift/enterprise-images/pull/178#discussion_r173812940
     for task_id in watch_task_info.keys():
         info = watch_task_info[task_id]
+        runtime.log_verbose("Watch task info:\n {}\n\n".format(info))
         if 'create_ts' not in info or 'completion_ts' not in info or 'create_ts' not in info or 'id' not in info:
             runtime.info("Error finding timestamps in task info: {}".format(info))
             del watch_task_info[task_id]
