@@ -70,8 +70,10 @@ def assert_file(path, msg):
         raise FileNotFoundError(errno.ENOENT, "%s: %s" % (msg, os.strerror(errno.ENOENT)), path)
 
 
-def assert_rc0(rc, msg):
+def assert_rc0(runtime, rc, msg):
     if rc is not 0:
+        # If there is an error, keep logs around
+        runtime.remove_tmp_working_dir = False
         raise IOError("Command returned non-zero exit status: %s" % msg)
 
 
@@ -87,7 +89,7 @@ def assert_exec(runtime, cmd, retries=1):
         if rc == 0:
             break
 
-    assert_rc0(rc, "Error running %s. See debug log: %s." % (cmd, runtime.debug_log_path))
+    assert_rc0(runtime, rc, "Error running %s. See debug log: %s." % (cmd, runtime.debug_log_path))
 
 
 def exec_cmd(runtime, cmd):

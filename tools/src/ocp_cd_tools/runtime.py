@@ -57,7 +57,7 @@ class Runtime(object):
         for key, val in kwargs.items():
             self.__dict__[key] = val
 
-        self.remove_tmp_working_dir = False
+        self._remove_tmp_working_dir = False
         self.group_config = None
 
         # If source needs to be cloned by oit directly, the directory in which it will be placed.
@@ -391,6 +391,24 @@ class Runtime(object):
     def register_stream_alias(self, alias, image):
         self.info("Registering image stream alias override %s: %s" % (alias, image))
         self.stream_alias_overrides[alias] = image
+
+    @property
+    def remove_tmp_working_dir(self):
+        """
+        Provides thread safe method of checking whether runtime should clean up the working directory.
+        :return: Returns True if the directory should be deleted
+        """
+        with self.log_lock:
+            return self._remove_tmp_working_dir
+
+    @remove_tmp_working_dir.setter
+    def remove_tmp_working_dir(self, remove):
+        """
+        Provides thread safe method of setting whether runtime should clean up the working directory.
+        :param remove: True if the directory should be removed. Only the last value set impacts the decision.
+        """
+        with self.log_lock:
+            self._remove_tmp_working_dir = remove
 
     def add_record(self, record_type, **kwargs):
         """
