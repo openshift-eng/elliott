@@ -290,7 +290,7 @@ manually. Provide one or more --id's for manual bug addition.
         runtime.initialize(clone_distgits=False)
         # Parse the Y component from the group version
         minor = minor_from_branch(runtime.group_config.branch)
-        target_releases = ["3.{y}.Z".format(y=minor), "3.{y}.0".format(y=minor)]
+        target_releases = ["3.{y}.z".format(y=minor), "3.{y}.0".format(y=minor)]
     elif len(id) == 0:
         # No bugs were provided
         raise click.BadParameter("If not using --auto then one or more --id's must be provided")
