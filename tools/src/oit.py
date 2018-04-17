@@ -363,7 +363,7 @@ def images_rebase(runtime, stream, version, release, repo_type, message, push):
         runtime.push_distgits()
 
 
-@cli.command("images:foreach", help="Run a command relative to each distgit dir.")
+@cli.command("images:foreach", short_help="Run a command relative to each distgit dir.")
 @click.argument("cmd", nargs=-1)
 @click.option("--message", "-m", metavar='MSG', help="Commit message for dist-git.", required=False)
 @option_push
@@ -374,6 +374,16 @@ def images_foreach(runtime, cmd, message, push):
     command once for each local distgit directory. If the command runs without
     error for all directories, a commit will be made. If not a dry_run,
     the repo will be pushed.
+
+    \b
+    The following environment variables will be available in each invocation:
+    oit_repo_name : The name of the distgit repository
+    oit_repo_namespace : The distgit repository namespaces (e.g. containers, rpms))
+    oit_image_name : The name of the image from Dockerfile
+    oit_image_version : The current version found in the Dockerfile
+    oit_group: The group for this invocation
+    oit_metadata_dir: The directory containing the oit metadata
+    oit_working_dir: The current working directory
     """
     runtime.initialize(clone_distgits=True)
 
@@ -381,11 +391,25 @@ def images_foreach(runtime, cmd, message, push):
     runtime.remove_tmp_working_dir = push
 
     cmd_str = " ".join(cmd)
-    dgrs = [image.distgit_repo() for image in runtime.image_metas()]
-    for dgr in dgrs:
+
+    for image in runtime.image_metas():
+        dgr = image.distgit_repo()
         with Dir(dgr.distgit_dir):
             runtime.info("Executing in %s: [%s]" % (dgr.distgit_dir, cmd_str))
-            if subprocess.call(cmd_str, shell=True) != 0:
+
+            dfp = DockerfileParser()
+            dfp.content = image.fetch_cgit_file("Dockerfile")
+
+            if subprocess.call(cmd_str,
+                               shell=True,
+                               env={"oit_repo_name": image.name,
+                                    "oit_repo_namespace": image.namespace,
+                                    "oit_image_name": dfp.labels["name"],
+                                    "oit_image_version": dfp.labels["version"],
+                                    "oit_group": runtime.group,
+                                    "oit_metadata_dir": runtime.metadata_dir,
+                                    "oit_working_dir": runtime.working_dir,
+                                    }) != 0:
                 raise IOError("Command return non-zero status")
             runtime.info("\n")
 
