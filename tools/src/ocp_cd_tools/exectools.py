@@ -67,7 +67,7 @@ def cmd_log(cmd, logger=None):
     else:
         cmd_list = cmd
 
-    logger.info("Executing:cmd_log: {}".format(cmd_list))
+    logger.debug("Executing:cmd_log: {}".format(cmd_list))
     log_stream = logger.handlers[0].stream
     
     cwd = pushd.Dir.getcwd()
@@ -78,9 +78,9 @@ def cmd_log(cmd, logger=None):
 
     cmd_info = '[cwd={}]: {}'.format(cwd, cmd_list)
     if result != 0:
-        logger.info("Process exited with error {}: {}\n".format(cmd_info, result))
+        logger.debug("Process exited with error {}: {}\n".format(cmd_info, result))
     else:
-        logger.info("Process exited without error {}\n".format(cmd_info))
+        logger.debug("Process exited without error {}\n".format(cmd_info))
 
     return result
 
@@ -106,7 +106,7 @@ def cmd_assert(cmd, retries=1, pollrate=60, logger=None):
 
     for try_num in range(0, retries):
         if try_num > 0:
-            logger.info(
+            logger.debug(
                 "cmd_assert: Failed {} times. Retrying in {} seconds: {}".
                 format(try_num, pollrate, cmd))
             time.sleep(pollrate)
@@ -115,7 +115,7 @@ def cmd_assert(cmd, retries=1, pollrate=60, logger=None):
         if result == SUCCESS:
             break
 
-    logger.info("cmd_assert: Final result = {} in {} tries.".
+    logger.debug("cmd_assert: Final result = {} in {} tries.".
                 format(result, try_num))
 
     assertion.success(
@@ -151,13 +151,13 @@ def cmd_gather(cmd, logger=None):
     cwd = pushd.Dir.getcwd()
     cmd_info = '[cwd={}]: {}'.format(cwd, cmd_list)
 
-    logger.info("Executing:cmd_gather {}".format(cmd_info))
+    logger.debug("Executing:cmd_gather {}".format(cmd_info))
     proc = subprocess.Popen(
         cmd_list, cwd=cwd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = proc.communicate()
     rc = proc.returncode
-    logger.info(
+    logger.debug(
         "Process {}: exited with: {}\nstdout>>{}<<\nstderr>>{}<<\n".
         format(cmd_info, rc, out, err))
     return rc, out, err

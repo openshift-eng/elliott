@@ -349,7 +349,7 @@ class Runtime(object):
                 also_exclude = set(rpms_filenames).intersection(set(exclude_filenames))
                 if len(also_exclude):
                     self.logger.warning(
-                        "The following rpms were included and excluded but exclusion takes precendence: {}".format(', '.join(also_exclude))
+                        "The following rpms were included and excluded but exclusion takes precedence: {}".format(', '.join(also_exclude))
                     )
                 for rpm in rpms_filename_list:
                     if rpm in rpms_filenames:
@@ -364,6 +364,9 @@ class Runtime(object):
                 self.image_map[metadata.distgit_key] = metadata
 
             def gen_RPMMetadata(config_filename):
+                metadata = ImageMetadata(self, config_filename)
+                self.image_map[metadata.distgit_key] = metadata
+
                 metadata = RPMMetadata(self, config_filename)
                 self.rpm_map[metadata.distgit_key] = metadata
 
@@ -548,17 +551,25 @@ class Runtime(object):
 
         return self.streams[stream_name]
 
-    # Looks up a source alias and returns a path to the directory containing that source.
-    # sources can be specified on the command line, or, failing that, in group.yml.
-    # If a source specified in group.yaml has not be resolved before, this method will
-    # clone that source to checkout the group's desired branch before returning a path
-    # to the cloned repo.
+    # Looks up a source alias and returns a path to the directory containing
+    # that source. Sources can be specified on the command line, or, failing
+    # that, in group.yml.
+    # If a source specified in group.yaml has not be resolved before,
+    # this method will clone that source to checkout the group's desired
+    # branch before returning a path to the cloned repo.
     def resolve_source(self, alias, required=True):
 
+        self.logger.debug("Resolving local source directory for alias {}".
+                          format(alias))
         if alias in self.source_paths:
+            self.logger.debug(
+                "returning previously resolved path for alias {}: {}".
+                format(alias, self.source_paths[alias]))
             return self.source_paths[alias]
 
-        if self.group_config.sources is Missing or alias not in self.group_config.sources:
+        # Check if the group config specs the "alias" for the source location
+        if (self.group_config.sources is Missing or
+            alias not in self.group_config.sources):
             if required:
                 raise IOError("Source alias not found in specified sources or in the current group: %s" % alias)
             else:
@@ -566,12 +577,16 @@ class Runtime(object):
 
         # Where the source will land
         source_dir = os.path.join(self.sources_dir, alias)
-
+        self.logger.debug("checking for source directory in source_dir: {}".
+                          format(source_dir))
+        
         # If this source has already been extracted for this working directory
         if os.path.isdir(source_dir):
             # Store so that the next attempt to resolve the source hits the map
             self.source_paths[alias] = source_dir
-            self.logger.info("Source '%s' already exists in (skipping clone): %s" % (alias, source_dir))
+            self.logger.info(
+                "Source '{}' already exists in (skipping clone): {}".
+                format(alias, source_dir))
             return source_dir
 
         source_config = self.group_config.sources[alias]

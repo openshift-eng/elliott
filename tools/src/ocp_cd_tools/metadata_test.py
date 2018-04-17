@@ -15,6 +15,12 @@ distgit:
   namespace: 'hello'"""
 
 
+class MockRuntime(object):
+
+    def __init__(self, logger):
+        self.logger = logger
+
+
 class TestMetadata(unittest.TestCase):
 
     def setUp(self):
@@ -51,7 +57,7 @@ class TestMetadata(unittest.TestCase):
 
         """
         mt = 'image'
-        rt = None
+        rt = MockRuntime(self.logger)
         name = 'test.yml'
 
         md = metadata.Metadata(mt, rt, name)

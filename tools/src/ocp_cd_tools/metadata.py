@@ -36,13 +36,13 @@ def tag_exists(registry, name, tag, fetch_f=None):
 
 
 class Metadata(object):
-    def __init__(self, meta_type, runtime, config_filename, logger=None):
+    def __init__(self, meta_type, runtime, config_filename):
         """
         :param: meta_type - a string. Index to the sub-class <'rpm'|'image'>.
-        :param: runtime - a Runtime object.  used only for the .branch value.
+        :param: runtime - a Runtime object.  used only for the .branch value
+                and logger.
         :param: name - a string appenaded to the derived namespace to locate
                        the git repo root.
-        :param: logger - a python logger object.  Defaults to the root logger.
 
         The metadata object must be created when CWD is a directory containing
         a file named <name>.yml.
@@ -58,8 +58,6 @@ class Metadata(object):
         notation.
         """
 
-        self.logger = logger or logging.getLogger()
-
         self.meta_type = meta_type
         self.runtime = runtime
         self.config_filename = config_filename
@@ -73,8 +71,8 @@ class Metadata(object):
         self.distgit_key = config_filename.rsplit('.', 1)[0]  # Split off .yml
         self.name = self.distgit_key.split('.')[0]   # Split off any '.apb' style differentiator (if present)
 
-        self.logger.debug("Current working directory is {}".format(os.getcwd()))
-        self.logger.debug("Loading metadata from {}".format(self.config_filename))
+        self.runtime.logger.debug("Current working directory is {}".format(os.getcwd()))
+        self.runtime.logger.debug("Loading metadata from {}".format(self.config_filename))
 
         assertion.isfile(os.path.join(os.getcwd(), self.config_filename),
                          "Unable to find configuration file")
@@ -82,7 +80,7 @@ class Metadata(object):
         with open(self.config_filename, "r") as f:
             config_yml_content = f.read()
 
-        self.logger.debug(config_yml_content)
+        self.runtime.logger.debug(config_yml_content)
         self.config = Model(yaml.load(config_yml_content))
 
         # Basic config validation. All images currently required to have a name in the metadata.

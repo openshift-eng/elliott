@@ -47,7 +47,7 @@ context_settings = dict(help_option_names=['-h', '--help'])
               help='If a base image is not included, lookup latest FROM tag for parent. Implies --ignore-missing-base')
 @click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
 @click.option('--verbose', '-v', default=False, is_flag=True, help='Print progress information to the terminal during a run.')
-@click.option('--debug', '-v', default=False, is_flag=True, help='Log additional information for developers and operators.')
+@click.option('--debug', default=False, is_flag=True, help='Log additional information for developers and operators.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
               help='Do not place OIT comment in Dockerfile. Can also be set in each config yaml')
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
@@ -126,7 +126,7 @@ def rpms_build(runtime, version, release, scratch):
     results = results.get()
     failed = [m.distgit_key for m, r in zip(runtime.rpm_metas(), results) if not r]
     if failed:
-        runtime.info("\n".join(["Build failures:"] + sorted(failed)))
+        runtime.logger.error("\n".join(["Build/push failures:"] + sorted(failed)))
         exit(1)
 
 
@@ -407,7 +407,7 @@ def images_foreach(runtime, cmd, message, push):
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
         with Dir(dgr.distgit_dir):
-            runtime.info("Executing in %s: [%s]" % (dgr.distgit_dir, cmd_str))
+            runtime.logger.info("Executing in %s: [%s]" % (dgr.distgit_dir, cmd_str))
 
             dfp = DockerfileParser()
             dfp.content = image.fetch_cgit_file("Dockerfile")
@@ -425,7 +425,7 @@ def images_foreach(runtime, cmd, message, push):
                                     "oit_distgit_key": image.distgit_key,
                                     }) != 0:
                 raise IOError("Command return non-zero status")
-            runtime.info("\n")
+            runtime.logger.info("\n")
 
         if message is not None:
             dgr.commit(message)
@@ -451,7 +451,7 @@ def images_revert(runtime, count, message, push):
 
     count = int(count) - 1
     if count < 0:
-        runtime.info("Revert count must be >= 1")
+        runtime.logger.info("Revert count must be >= 1")
 
     if count == 0:
         commit_range = "HEAD"
@@ -465,10 +465,10 @@ def images_revert(runtime, count, message, push):
     dgrs = [image.distgit_repo() for image in runtime.image_metas()]
     for dgr in dgrs:
         with Dir(dgr.distgit_dir):
-            runtime.info("Running revert in %s: [%s]" % (dgr.distgit_dir, cmd_str))
+            runtime.logger.info("Running revert in %s: [%s]" % (dgr.distgit_dir, cmd_str))
             if subprocess.call(cmd_str, shell=True) != 0:
                 raise IOError("Command return non-zero status")
-            runtime.info("\n")
+            runtime.logger.info("\n")
 
         if message is not None:
             dgr.commit(message)
@@ -499,7 +499,7 @@ def images_merge(runtime, target, push, allow_overwrite):
         with Dir(dgr.distgit_dir):
             dgr.info("Merging from branch {} to {}".format(dgr.branch, target))
             dgr.merge_branch(target, allow_overwrite)
-            runtime.info("\n")
+            runtime.logger.info("\n")
 
     if push:
         runtime.push_distgits()
@@ -518,8 +518,8 @@ def _taskinfo_has_timestamp(task_info, key_name):
 
 def print_build_metrics(runtime):
     watch_task_info = get_watch_task_info_copy()
-    runtime.info("\n\n\nImage build metrics:")
-    runtime.info("Number of brew tasks attempted: {}".format(len(watch_task_info)))
+    runtime.logger.info("\n\n\nImage build metrics:")
+    runtime.logger.info("Number of brew tasks attempted: {}".format(len(watch_task_info)))
 
     # Make sure all the tasks have the expected timestamps:
     # https://github.com/openshift/enterprise-images/pull/178#discussion_r173812940
@@ -537,7 +537,7 @@ def print_build_metrics(runtime):
                 "Discarding incomplete/error task info: {}".format(info))
             del watch_task_info[task_id]
 
-    runtime.info("Number of brew tasks successful: {}".format(len(watch_task_info)))
+    runtime.logger.info("Number of brew tasks successful: {}".format(len(watch_task_info)))
 
     # An estimate of how long the build time was extended due to FREE state (i.e. waiting for capacity)
     elapsed_wait_minutes = 0
@@ -569,12 +569,12 @@ def print_build_metrics(runtime):
         wait_secs = start_ts - create_ts
         aggregate_wait_secs += wait_secs
 
-        runtime.info('Task {} took {:.1f}m of active build and was waiting to start for {:.1f}m'.format(
+        runtime.logger.info('Task {} took {:.1f}m of active build and was waiting to start for {:.1f}m'.format(
             task_id,
             build_secs / 60.0,
             wait_secs / 60.0))
-    runtime.info('Aggregate time all builds spent building {:.1f}m'.format(aggregate_build_secs / 60.0))
-    runtime.info('Aggregate time all builds spent waiting {:.1f}m'.format(aggregate_wait_secs / 60.0))
+    runtime.logger.info('Aggregate time all builds spent building {:.1f}m'.format(aggregate_build_secs / 60.0))
+    runtime.logger.info('Aggregate time all builds spent waiting {:.1f}m'.format(aggregate_wait_secs / 60.0))
 
     # If we successfully found timestamps in completed builds
     if watch_task_info:
@@ -597,14 +597,14 @@ def print_build_metrics(runtime):
                     elapsed_wait_minutes += 1
                     break
 
-        runtime.info("Approximate elapsed time (wasted) waiting: {}m".format(elapsed_wait_minutes))
+        runtime.logger.info("Approximate elapsed time (wasted) waiting: {}m".format(elapsed_wait_minutes))
         elapsed_total_minutes = (max_completion_ts - min_create_ts) / 60.0
-        runtime.info("Elapsed time (from first submit to last completion) for all builds: {:.1f}m".format(elapsed_total_minutes))
+        runtime.logger.info("Elapsed time (from first submit to last completion) for all builds: {:.1f}m".format(elapsed_total_minutes))
 
         runtime.add_record("image_build_metrics", elapsed_wait_minutes=int(elapsed_wait_minutes),
                            elapsed_total_minutes=int(elapsed_total_minutes), task_count=len(watch_task_info))
     else:
-        runtime.info('Unable to determine timestamps from collected info: {}'.format(watch_task_info))
+        runtime.logger.info('Unable to determine timestamps from collected info: {}'.format(watch_task_info))
 
 
 @cli.command("images:build", short_help="Build images for the group.")
@@ -643,12 +643,12 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
 
     items = [m.distgit_repo() for m in runtime.image_metas()]
     if not items:
-        runtime.info("No images found. Check the arguments.")
+        runtime.logger.info("No images found. Check the arguments.")
         exit(1)
 
     # Without one of these two arguments, brew would not enable any repos.
     if not repo_type and not repo:
-        runtime.info("No repos specified. --repo-type or --repo is required.")
+        runtime.logger.info("No repos specified. --repo-type or --repo is required.")
         exit(1)
 
     results = runtime.parallel_exec(
@@ -663,17 +663,23 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
     except:
         # Never kill a build because of bad logic in metrics
         traceback.print_exc()
-        runtime.info("Error trying to show build metrics")
+        runtime.logger.error("Error trying to show build metrics")
 
     failed = [m.distgit_key for m, r in zip(runtime.image_metas(), results) if not r]
     if failed:
-        runtime.info("\n".join(["Build/push failures:"] + sorted(failed)))
+        runtime.logger.error("\n".join(["Build/push failures:"] + sorted(failed)))
         exit(1)
 
     # Push all late images
     for image in runtime.image_metas():
         image.distgit_repo().push_image([], push_to_defaults, additional_registries=push_to, push_late=True)
 
+    try:
+        print_build_metrics(runtime)
+    except Exception:
+        # Never kill a build because of bad logic in metrics
+        traceback.print_exc()
+        runtime.logger.error("Error trying to show build metrics")
 
 @cli.command("images:push", short_help="Push the most recently built images to mirrors.")
 @click.option('--tag', default=[], metavar="PUSH_TAG", multiple=True,
@@ -723,7 +729,7 @@ def images_push(runtime, tag, to_defaults, late_only, to, dry_run):
                 failed.append(image.name)
 
         if failed:
-            runtime.info("\n".join(["Push failures:"] + sorted(failed)))
+            runtime.logger.info("\n".join(["Push failures:"] + sorted(failed)))
             exit(1)
 
     # Push all late images

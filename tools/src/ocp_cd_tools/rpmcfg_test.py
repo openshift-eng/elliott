@@ -6,6 +6,7 @@ import unittest
 
 import os
 import logging
+import StringIO
 import tempfile
 import shutil
 
@@ -23,8 +24,9 @@ distgit:
 
 class MockRuntime(object):
 
-    def __init__(self, tmpdir):
+    def __init__(self, tmpdir, logger):
         self.tmpdir = tmpdir
+        self.logger = logger
 
     def resolve_source(self, alias):
         return self.tmpdir
@@ -69,7 +71,7 @@ class TestRPMMetadata(unittest.TestCase):
           a Runtime object placeholder
 
         """
-        rt = MockRuntime(self.test_dir)
+        rt = MockRuntime(self.test_dir, self.logger)
         name = 'test.yml'
 
         md = rpmcfg.RPMMetadata(rt, name)
