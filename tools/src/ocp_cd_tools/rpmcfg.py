@@ -287,7 +287,7 @@ class RPMMetadata(Metadata):
         finally:
             self.runtime.add_record(action, **record)
 
-        if self.build_status:
+        if self.build_status and not scratch:
             try:
                 self.push_tag()
             except Exception:
