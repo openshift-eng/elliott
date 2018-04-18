@@ -154,6 +154,13 @@ class ListModel(list):
     def can_match(self, *vals):
         return self._list_is_subset(self, vals)
 
+    # Converts the model to a raw list
+    def primitive(self):
+        l = []
+        for e in self:
+            l.append(e)
+        return l
+
 
 class Model(dict):
 
@@ -185,3 +192,12 @@ class Model(dict):
 
     def __delitem__(self, key):
         super(Model, self).__delitem__(key)
+
+    def primitive(self):
+        """ Recursively turn Model into dicts. """
+        d = {}
+        for k, v in self.iteritems():
+            if isinstance(v, Model) or isinstance(v, ListModel):
+                v = v.primitive()
+            d[k] = v
+        return d

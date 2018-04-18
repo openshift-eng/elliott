@@ -5,6 +5,7 @@ import shutil
 import time
 import traceback
 from multiprocessing import Lock
+from yaml import safe_dump
 
 from dockerfile_parse import DockerfileParser
 
@@ -35,6 +36,17 @@ CONTENT_SETS = """
 #
 # You should have one top level item for each architecture being built. Most
 # likely this will be x86_64 and ppc64le initially.
+---
+"""
+
+COMPOSE = """
+# This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images,
+# by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).
+# Any manual changes will be overwritten by OIT on the next build.
+#
+# See https://mojo.redhat.com/docs/DOC-1159997 for more information on
+# maintaining this file and the format and examples
+
 ---
 """
 
@@ -167,6 +179,19 @@ class ImageDistGitRepo(DistGitRepo):
         super(ImageDistGitRepo, self).__init__(metadata)
         self.build_lock = Lock()
         self.build_lock.acquire()
+
+    def _generate_compose_conf(self):
+        """
+        Generates a compose conf file in container.yml
+        """
+        self.runtime.log_verbose("Generating compose file for Dockerfile {}".format(self.metadata.name))
+
+        if self.config.compose is not Missing:
+            # generate yaml data with header
+            compose_yml_str = safe_dump(self.config.compose.primitive(), default_flow_style=False)
+            compose_yml = COMPOSE + compose_yml_str
+            with open('containers.yml', 'w') as rc:
+                rc.write(compose_yml)
 
     def _generate_repo_conf(self):
         """
@@ -707,6 +732,7 @@ class ImageDistGitRepo(DistGitRepo):
             assert_file("Dockerfile", "Unable to find Dockerfile in distgit root")
 
             self._generate_repo_conf()
+            self._generate_compose_conf()
 
             dfp = DockerfileParser(path="Dockerfile")
 
