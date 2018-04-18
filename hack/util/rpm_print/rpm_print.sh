@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Invoke using something like:
-# ./oit.py --user ocp-build --working-dir play --group openshift-3.10 images:foreach $(pwd)/hack/util/rpm_printit.sh
+# ./oit.py --user ocp-build --working-dir play --group openshift-3.10 images:foreach $(pwd)/hack/util/rpm_print/rpm_printit.sh
 
 if [[ -z "${oit_image_name}" ]]; then
 	echo "Expected environment variable!"
