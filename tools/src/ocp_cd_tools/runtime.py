@@ -222,99 +222,103 @@ class Runtime(object):
                 self.include = flatten_comma_delimited_entries(self.include)
                 self.info("Include list set to: %s" % str(self.include))
 
-            images_list = []
+            # Initially populated with all .yml files found in the images directory.
+            images_filename_list = []
             if os.path.isdir(images_dir):
                 with Dir(images_dir):
-                    images_list = [os.path.splitext(x)[0] for x in os.listdir(".") if os.path.isfile(x)]
+                    images_filename_list = [x for x in os.listdir(".") if os.path.isfile(x)]
             else:
                 self.info('{} does not exist. Skipping image processing for group.'.format(images_dir))
 
-            rpms_list = []
+            rpms_filename_list = []
             if os.path.isdir(rpms_dir):
                 with Dir(rpms_dir):
-                    rpms_list = [os.path.splitext(x)[0] for x in os.listdir(".") if os.path.isfile(x)]
+                    rpms_filename_list = [x for x in os.listdir(".") if os.path.isfile(x)]
             else:
                 self.log_verbose('{} does not exist. Skipping RPM processing for group.'.format(rpms_dir))
 
+            # Flattens a list like like [ 'x', 'y,z' ] into [ 'x.yml', 'y.yml', 'z.yml' ]
             # for later checking we need to remove from the lists, but they are tuples. Clone to list
-            def flatten_names(names):
+            def flatten_into_filenames(names):
                 if not names:
                     return []
                 # split csv values
                 result = []
                 for n in names:
-                    result.append([x for x in n.replace(' ', ',').split(',') if x != ''])
+                    result.append(["{}.yml".format(x) for x in n.replace(' ', ',').split(',') if x != ''])
                 # flatten result and remove dupes
                 return list(set([y for x in result for y in x]))
 
             # process excludes before images and rpms
             # to ensure they never get added, -x is global
-            self.exclude = flatten_names(self.exclude)
-            if self.exclude:
-                for x in self.exclude:
-                    if x in images_list:
-                        images_list.remove(x)
-                    if x in rpms_list:
-                        rpms_list.remove(x)
+            exclude_filenames = flatten_into_filenames(self.exclude)
+            if exclude_filenames:
+                for x in exclude_filenames:
+                    if x in images_filename_list:
+                        images_filename_list.remove(x)
+                    if x in rpms_filename_list:
+                        rpms_filename_list.remove(x)
 
             image_include = []
-            self.images = flatten_names(self.images)
-            if self.images:
-                also_exclude = set(self.images).intersection(set(self.exclude))
+            image_filenames = flatten_into_filenames(self.images)
+            if image_filenames:
+                also_exclude = set(image_filenames).intersection(set(exclude_filenames))
                 if len(also_exclude):
                     self.info(
-                        "Warning: The following images were included and excluded but exclusion takes precendence: {}".format(', '.join(also_exclude))
+                        "Warning: The following images were included and excluded but exclusion takes precedence: {}".format(', '.join(also_exclude))
                     )
-                for image in images_list:
-                    if image in self.images:
+                for image in images_filename_list:
+                    if image in image_filenames:
                         image_include.append(image)
 
             rpm_include = []
-            self.rpms = flatten_names(self.rpms)
-            if self.rpms:
-                also_exclude = set(self.rpms).intersection(set(self.exclude))
+            rpms_filenames = flatten_into_filenames(self.rpms)
+            if rpms_filenames:
+                also_exclude = set(rpms_filenames).intersection(set(exclude_filenames))
                 if len(also_exclude):
                     self.info(
-                        "Warning: The following rpms were included and excluded but exclusion takes precendence: {}".format(', '.join(also_exclude))
+                        "Warning: The following rpms were included and excluded but exclusion takes precedence: {}".format(', '.join(also_exclude))
                     )
-                for rpm in rpms_list:
-                    if rpm in self.rpms:
+                for rpm in rpms_filename_list:
+                    if rpm in rpms_filenames:
                         rpm_include.append(rpm)
 
-            missed_include = set(self.images + self.rpms) - set(image_include + rpm_include)
+            missed_include = set(image_filenames + rpms_filenames) - set(image_include + rpm_include)
             if len(missed_include) > 0:
                 raise IOError('Unable to find the following images or rpms configs: {}'.format(', '.join(missed_include)))
 
-            def gen_ImageMetadata(name):
-                self.image_map[name] = ImageMetadata(self, name)
+            def gen_ImageMetadata(config_filename):
+                metadata =ImageMetadata(self, config_filename)
+                self.image_map[metadata.distgit_key] = metadata
 
-            def gen_RPMMetadata(name):
-                self.rpm_map[name] = RPMMetadata(self, name)
+            def gen_RPMMetadata(config_filename):
+                metadata = RPMMetadata(self, config_filename)
+                self.rpm_map[metadata.distgit_key] = metadata
 
-            def collect_configs(search_type, search_dir, name_list, include, gen):
-                if len(name_list) == 0:
+            def collect_configs(search_type, search_dir, filename_list, include, gen):
+                if len(filename_list) == 0:
                     return  # no configs of this type found, bail out
 
                 check_include = len(include) > 0
                 with Dir(search_dir):
-                    for distgit_repo_name in name_list:
+                    for config_filename in filename_list:
                         if check_include:
-                            if check_include and distgit_repo_name in include:
-                                self.log_verbose("include: " + distgit_repo_name)
-                                include.remove(distgit_repo_name)
+                            if check_include and config_filename in include:
+                                self.log_verbose("include: " + config_filename)
+                                include.remove(config_filename)
                             else:
-                                self.log_verbose("Skipping {} {} since it is not in the include list".format(search_type, distgit_repo_name))
+                                self.log_verbose("Skipping {} {} since it is not in the include list".format(search_type, config_filename))
                                 continue
 
-                        gen(distgit_repo_name)
+                        gen(config_filename)
 
             if mode in ['images', 'both']:
-                collect_configs('image', images_dir, images_list, image_include, gen_ImageMetadata)
+                collect_configs('image', images_dir, images_filename_list, image_include, gen_ImageMetadata)
                 if not self.image_map:
                     self.info("WARNING: No image metadata directories found within: {}".format(group_dir))
 
             if mode in ['rpms', 'both']:
-                collect_configs('rpm', rpms_dir, rpms_list, rpm_include, gen_RPMMetadata)
+                collect_configs('rpm', rpms_dir, rpms_filename_list, rpm_include, gen_RPMMetadata)
                 if not self.rpm_map:
                     self.info("WARNING: No rpm metadata directories found within: {}".format(group_dir))
 

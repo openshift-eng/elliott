@@ -89,16 +89,21 @@ class DistGitRepo(object):
     def clone(self, distgits_root_dir, distgit_branch):
         with Dir(distgits_root_dir):
 
-            self.distgit_dir = os.path.join(distgits_root_dir, self.metadata.name)
+            self.distgit_dir = os.path.join(distgits_root_dir, self.metadata.namespace, self.metadata.name)
             if os.path.isdir(self.distgit_dir):
                 self.info("Distgit directory already exists; skipping clone: %s" % self.distgit_dir)
             else:
+
+                # Make a directory for the distgit namespace if it does not already exist
+                if not os.path.isdir(self.metadata.namespace):
+                    os.mkdir(self.metadata.namespace)
+
                 cmd_list = ["rhpkg"]
 
                 if self.runtime.user is not None:
                     cmd_list.append("--user=%s" % self.runtime.user)
 
-                cmd_list.extend(["clone", self.metadata.qualified_name])
+                cmd_list.extend(["clone", self.metadata.qualified_name, self.distgit_dir])
 
                 self.info("Cloning distgit repository [branch:%s] into: %s" % (distgit_branch, self.distgit_dir))
 
@@ -135,7 +140,7 @@ class DistGitRepo(object):
         alias = self.config.content.source.alias
 
         if alias is Missing:
-            raise IOError("Can't find source alias in config: %s" % self.metadata.config_path)
+            raise IOError("Can't find any source alias in config: %s" % self.metadata.config_filename)
 
         source_root = self.runtime.resolve_source(alias)
         sub_path = self.config.content.source.path
@@ -144,7 +149,7 @@ class DistGitRepo(object):
         if sub_path is not Missing:
             path = os.path.join(source_root, sub_path)
 
-        assert_dir(path, "Unable to find path within source [%s] for config: %s" % (path, self.metadata.config_path))
+        assert_dir(path, "Unable to find path for source [%s] for config: %s" % (path, self.metadata.config_filename))
         return path
 
     def commit(self, commit_message, log_diff=False):

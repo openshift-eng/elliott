@@ -379,6 +379,8 @@ def images_foreach(runtime, cmd, message, push):
     The following environment variables will be available in each invocation:
     oit_repo_name : The name of the distgit repository
     oit_repo_namespace : The distgit repository namespaces (e.g. containers, rpms))
+    oit_config_filename : The config yaml (basename, no path) associated with an image
+    oit_distgit_key : The name of the distgit_key used with -i, -x for this image
     oit_image_name : The name of the image from Dockerfile
     oit_image_version : The current version found in the Dockerfile
     oit_group: The group for this invocation
@@ -409,6 +411,8 @@ def images_foreach(runtime, cmd, message, push):
                                     "oit_group": runtime.group,
                                     "oit_metadata_dir": runtime.metadata_dir,
                                     "oit_working_dir": runtime.working_dir,
+                                    "oit_config_filename": image.config_filename,
+                                    "oit_distgit_key": image.distgit_key,
                                     }) != 0:
                 raise IOError("Command return non-zero status")
             runtime.info("\n")

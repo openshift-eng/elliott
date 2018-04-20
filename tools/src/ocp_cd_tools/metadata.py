@@ -34,17 +34,26 @@ def tag_exists(registry, name, tag, fetch_f=None):
 
 
 class Metadata(object):
-    def __init__(self, meta_type, runtime, name):
+
+    def __init__(self, meta_type, runtime, config_filename):
         self.meta_type = meta_type
         self.runtime = runtime
-        self.config_path = "{}.yml".format(name)
-        self.name = name
+        self.config_filename = config_filename
 
-        runtime.log_verbose("Loading metadata for %s from %s" % (name, self.config_path))
 
-        assert_file(self.config_path, "Unable to find configuration file")
+        # Some config filenames have suffixes to avoid name collisions; strip off the suffix to find the real
+        # distgit repo name (which must be combined with the distgit namespace).
+        # e.g. openshift-enterprise-mediawiki.apb.yml
+        #      distgit_key=openshift-enterprise-mediawiki.apb
+        #      name (repo name)=openshift-enterprise-mediawiki
+        self.distgit_key = config_filename.rsplit('.', 1)[0]  # Split off .yml
+        self.name = self.distgit_key.split('.')[0]   # Split off any '.apb' style differentiator (if present)
 
-        with open(self.config_path, "r") as f:
+        runtime.log_verbose("Loading metadata from %s" % self.config_filename)
+
+        assert_file(self.config_filename, "Unable to find configuration file")
+
+        with open(self.config_filename, "r") as f:
             config_yml_content = f.read()
 
         runtime.log_verbose(config_yml_content)
@@ -56,11 +65,17 @@ class Metadata(object):
         # not implementing this until we actually need it.
         assert (self.config.name is not Missing)
 
-        self.namespace = "rpms"  # default type is rpms
+        # Choose default namespace for config data
+        if meta_type is "image":
+            self.namespace = "rpms"
+        else:
+            self.namespace = "rpms"
+
+        # Allow config data to override
         if self.config.distgit.namespace is not Missing:
             self.namespace = self.config.distgit.namespace
 
-        self.qualified_name = "%s/%s" % (self.namespace, name)
+        self.qualified_name = "%s/%s" % (self.namespace, self.name)
 
         self._distgit_repo = None
 

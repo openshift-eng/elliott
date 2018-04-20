@@ -28,8 +28,8 @@ remote_git_name = {name}
 
 class RPMMetadata(Metadata):
 
-    def __init__(self, runtime, name):
-        super(RPMMetadata, self).__init__('rpm', runtime, name)
+    def __init__(self, runtime, config_filename):
+        super(RPMMetadata, self).__init__('rpm', runtime, config_filename)
 
         self.info = self.runtime.info
 
@@ -41,7 +41,7 @@ class RPMMetadata(Metadata):
             self.specfile = os.path.join(self.source_path, self.source.specfile)
             if not os.path.isfile(self.specfile):
                 raise ValueError('{} config specified a spec file that does not exist: {}'.format(
-                    name, self.specfile
+                    config_filename, self.specfile
                 ))
         else:
             with Dir(self.source_path):
