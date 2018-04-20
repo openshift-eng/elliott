@@ -11,6 +11,7 @@ import sys
 import subprocess
 import urllib
 import traceback
+from numbers import Number
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
 from dockerfile_parse import DockerfileParser
@@ -495,19 +496,32 @@ def images_merge(runtime, target, push, allow_overwrite):
         runtime.push_distgits()
 
 
+def _taskinfo_has_timestamp(task_info, key_name):
+    """
+    Tests to see if a named timestamp exists in a koji taskinfo
+    dict.
+    :param task_info: The taskinfo dict to check
+    :param key_name: The name of the timestamp key
+    :return: Returns True if the timestamp is found and is a Number
+    """
+    return isinstance(task_info.get(key_name, None), Number)
+
+
 def print_build_metrics(runtime):
     watch_task_info = get_watch_task_info_copy()
-    runtime.info("\nImage build metrics:")
-    runtime.info("Number of brew tasks: {}".format(len(watch_task_info)))
+    runtime.info("\n\n\nImage build metrics:")
+    runtime.info("Number of brew tasks attempted: {}".format(len(watch_task_info)))
 
     # Make sure all the tasks have the expected timestamps:
     # https://github.com/openshift/enterprise-images/pull/178#discussion_r173812940
     for task_id in watch_task_info.keys():
         info = watch_task_info[task_id]
         runtime.log_verbose("Watch task info:\n {}\n\n".format(info))
-        if 'create_ts' not in info or 'completion_ts' not in info or 'create_ts' not in info or 'id' not in info:
+        if not _taskinfo_has_timestamp(info, 'create_ts') or not _taskinfo_has_timestamp(info, 'completion_ts') or not _taskinfo_has_timestamp(info, 'start_ts') or 'id' not in info:
             runtime.info("Error finding timestamps in task info: {}".format(info))
             del watch_task_info[task_id]
+
+    runtime.info("Number of brew tasks completed: {}".format(len(watch_task_info)))
 
     # An estimate of how long the build time was extended due to FREE state (i.e. waiting for capacity)
     elapsed_wait_minutes = 0
@@ -630,6 +644,14 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
             repo_type, repo, push_to, terminate_event, scratch),
         items)
     results = results.get()
+
+    try:
+        print_build_metrics(runtime)
+    except:
+        # Never kill a build because of bad logic in metrics
+        traceback.print_exc()
+        runtime.info("Error trying to show build metrics")
+
     failed = [m.name for m, r in zip(runtime.image_metas(), results) if not r]
     if failed:
         runtime.info("\n".join(["Build/push failures:"] + sorted(failed)))
@@ -638,13 +660,6 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
     # Push all late images
     for image in runtime.image_metas():
         image.distgit_repo().push_image([], push_to, push_late=True)
-
-    try:
-        print_build_metrics(runtime)
-    except:
-        # Never kill a build because of bad logic in metrics
-        traceback.print_exc()
-        runtime.info("Error trying to show build metrics")
 
 
 @cli.command("images:push", short_help="Push the most recent images to mirrors.")
