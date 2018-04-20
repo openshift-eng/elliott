@@ -4,6 +4,7 @@ import os
 import shutil
 import time
 import traceback
+import errno
 from multiprocessing import Lock
 from yaml import safe_dump
 
@@ -89,14 +90,20 @@ class DistGitRepo(object):
     def clone(self, distgits_root_dir, distgit_branch):
         with Dir(distgits_root_dir):
 
-            self.distgit_dir = os.path.join(distgits_root_dir, self.metadata.namespace, self.metadata.name)
+            namespace_dir = os.path.join(distgits_root_dir, self.metadata.namespace)
+
+            self.distgit_dir = os.path.join(namespace_dir, self.metadata.name)
+
             if os.path.isdir(self.distgit_dir):
                 self.info("Distgit directory already exists; skipping clone: %s" % self.distgit_dir)
             else:
 
                 # Make a directory for the distgit namespace if it does not already exist
-                if not os.path.isdir(self.metadata.namespace):
-                    os.mkdir(self.metadata.namespace)
+                try:
+                    os.mkdir(namespace_dir)
+                except OSError as e:
+                    if e.errno != errno.EEXIST:
+                        raise
 
                 cmd_list = ["rhpkg"]
 
