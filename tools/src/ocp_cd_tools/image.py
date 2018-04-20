@@ -19,7 +19,7 @@ class ImageMetadata(Metadata):
         associated with this image. This method does not rely on the "release"
         label needing to be present in the Dockerfile.
 
-        :return: A tuple: (component name, version, release); e.g. ("registry-console-docker", "v3.6.173.0.75", "1")
+        :return: A tuple: (component name, version, release); e.g. ("registry-console", "v3.6.173.0.75", "1")
         """
 
         component_name = self.get_component_name()
@@ -39,8 +39,8 @@ class ImageMetadata(Metadata):
             # ----------------------------------------  --------------------  ----------------
             raise IOError("No builds detected for %s using tag: %s" % (self.qualified_name, tag))
 
-        # latest example: "registry-console-docker-v3.6.173.0.75-1""
-        name, version, release = latest.rsplit("-", 2)  # [ "registry-console-docker", "v3.6.173.0.75", "1"]
+        # latest example: "registry-console-v3.6.173.0.75-1""
+        name, version, release = latest.rsplit("-", 2)  # [ "registry-console", "v3.6.173.0.75", "1"]
         return name, version, release
 
     def pull_url(self):

@@ -3,6 +3,7 @@
 from ocp_cd_tools import Runtime, Dir
 from ocp_cd_tools.image import pull_image, create_image_verify_repo_file, Image
 from ocp_cd_tools.common import get_watch_task_info_copy
+from ocp_cd_tools.model import Missing
 import datetime
 import click
 import os
@@ -321,7 +322,7 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
 def images_rebase(runtime, stream, version, release, repo_type, message, push):
     """
     Many of the Dockerfiles stored in distgit are based off of content managed in GitHub.
-    For example, openshift-enterprise-node-docker should always closely reflect the changes
+    For example, openshift-enterprise-node should always closely reflect the changes
     being made upstream in github.com/openshift/ose/images/node. This operation
     goes out and pulls the current source Dockerfile (and potentially other supporting
     files) into distgit and applies any transformations defined in the config yaml associated
@@ -759,12 +760,12 @@ def images_print(runtime, short, show_non_release, pattern):
 
     \b
     {type} - The type of the distgit (e.g. rpms)
-    {name} - The name of the distgit repository (e.g. openshift-enterprise-docker)
+    {name} - The name of the distgit repository (e.g. openshift-enterprise)
     {component} - The component identified in the Dockerfile
     {image} - The image name in the Dockerfile
     {version} - The version field in the Dockerfile
     {release} - The release field in the Dockerfile
-    {build} - Shorthand for {component}-{version}-{release} (e.g. container-engine-docker-v3.6.173.0.25-1)
+    {build} - Shorthand for {component}-{version}-{release} (e.g. container-engine-v3.6.173.0.25-1)
     {repository} - Shorthand for {image}:{version}-{release}
     {lf} - Line feed
 
@@ -787,9 +788,12 @@ def images_print(runtime, short, show_non_release, pattern):
     echo_verbose("")
     echo_verbose("------------------------------------------")
 
-    non_release_images = runtime.group_config.get('non_release', [])
+    non_release_images = runtime.group_config.non_release.images
+    if non_release_images is Missing:
+        non_release_images = []
+
     if not show_non_release:
-        images = [i for i in runtime.image_metas() if i.name not in non_release_images]
+        images = [i for i in runtime.image_metas() if i.distgit_key not in non_release_images]
     else:
         images = list(runtime.image_metas())
 
@@ -861,6 +865,8 @@ def distgit_config_template(url):
 
     if "cgit/rpms/" in url:
         type = "rpms"
+    elif "cgit/containers/" in url:
+        type = "containers"
     elif "cgit/apbs/" in url:
         type = "apbs"
     else:

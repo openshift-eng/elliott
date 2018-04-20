@@ -603,7 +603,7 @@ class ImageDistGitRepo(DistGitRepo):
         error = watch_task(self.info, task_id, terminate_event)
 
         # Looking for something like the following to conclude the image has already been built:
-        # BuildError: Build for openshift-enterprise-base-docker-v3.7.0-0.117.0.0 already exists, id 588961
+        # BuildError: Build for openshift-enterprise-base-v3.7.0-0.117.0.0 already exists, id 588961
         if error is not None and "already exists" in error:
             self.info("Image already built against this dist-git commit (or version-release tag): {}".format(target_image))
             error = None
