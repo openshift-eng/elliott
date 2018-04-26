@@ -41,12 +41,20 @@ def cmd_log(cmd):
     else:
         cmd_list = cmd
 
-    logger.info("Executing:cmd_log: {}".format(cmd_list))
+    cwd = pushd.Dir.getcwd()
+    cmd_info = '[cwd={}]: {}'.format(cwd, cmd_list)
+
+    logger.info("Executing:cmd_log {}".format(cmd_info))
     process = subprocess.Popen(
-        cmd_list, cwd=pushd.Dir.getcwd(),
+        cmd_list, cwd=cwd,
         stdout=logger._log_file, stderr=logger._log_file)
     result = process.wait()
-    logger.info("Process exited with: {}\n".format(result))
+
+    if result != 0:
+        logger.info("Process exited with error {}: {}\n".format(cmd_info, result))
+    else:
+        logger.info("Process exited without error {}\n".format(cmd_info))
+
     return result
 
 
@@ -85,7 +93,7 @@ def cmd_assert(cmd, retries=1, pollrate=60):
 
     assertion.success(
         result,
-        "Error running {}. See debug log: {}.".format(cmd, logger.log_path))
+        "Error running [{}] {}. See debug log: {}.".format(pushd.Dir.getcwd(), cmd, logger.log_path))
 
 
 #
@@ -111,12 +119,16 @@ def cmd_gather(cmd):
     else:
         cmd_list = cmd
 
-    logger.info("Executing:cmd_gather: {}".format(cmd_list))
+    cwd = pushd.Dir.getcwd()
+    cmd_info = '[cwd={}]: {}'.format(cwd, cmd_list)
+
+    logger.info("Executing:cmd_gather {}".format(cmd_info))
     proc = subprocess.Popen(
-        cmd_list, cwd=pushd.Dir.getcwd(),
+        cmd_list, cwd=cwd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = proc.communicate()
+    rc = proc.returncode
     logger.info(
-        "Process exited with: {}\nstdout>>{}<<\nstderr>>{}<<\n".
-        format(proc.returncode, out, err))
-    return proc.returncode, out, err
+        "Process {}: exited with: {}\nstdout>>{}<<\nstderr>>{}<<\n".
+        format(cmd_info, rc, out, err))
+    return rc, out, err

@@ -89,7 +89,7 @@ def assert_exec(runtime, cmd, retries=1):
         if rc == 0:
             break
 
-    assert_rc0(runtime, rc, "Error running %s. See debug log: %s." % (cmd, runtime.debug_log_path))
+    assert_rc0(runtime, rc, "Error running [%s] %s. See debug log: %s." % (Dir.getcwd(), cmd, runtime.debug_log_path))
 
 
 def exec_cmd(runtime, cmd):
@@ -109,14 +109,22 @@ def exec_cmd(runtime, cmd):
     else:
         cmd_list = cmd
 
-    runtime.log_verbose("Executing:exec_cmd: %s" % cmd_list)
+    cwd = Dir.getcwd()
+    cmd_info = '[cwd={}]: {}'.format(cwd, cmd_list)
+
+    runtime.log_verbose("Executing:exec_cmd {}".format(cmd_info))
     # https://stackoverflow.com/a/7389473
     runtime.debug_log.flush()
     process = subprocess.Popen(
-        cmd_list, cwd=Dir.getcwd(),
+        cmd_list, cwd=cwd,
         stdout=runtime.debug_log, stderr=runtime.debug_log)
-    runtime.log_verbose("Process exited with: %d\n" % process.wait())
-    return process.wait()
+    rc = process.wait()
+    if rc != 0:
+        runtime.log_verbose("Process exited with error {}: {}\n".format(cmd_info, rc))
+    else:
+        runtime.log_verbose("Process exited without error {}\n".format(cmd_info))
+
+    return rc
 
 
 def gather_exec(runtime, cmd):
@@ -137,13 +145,17 @@ def gather_exec(runtime, cmd):
     else:
         cmd_list = cmd
 
-    runtime.log_verbose("Executing:gather_exec: %s" % str(cmd_list))
+    cwd = Dir.getcwd()
+    cmd_info = '[cwd={}]: {}'.format(cwd, cmd_list)
+
+    runtime.log_verbose("Executing:gather_exec {}".format(cmd_info))
     p = subprocess.Popen(
-        cmd_list, cwd=Dir.getcwd(),
+        cmd_list, cwd=cwd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
-    runtime.log_verbose("Process exited with: %d\nstdout>>%s<<\nstderr>>%s<<\n" % (p.returncode, out, err))
-    return p.returncode, out, err
+    rc = p.returncode
+    runtime.log_verbose("Process {}: exited with: {}\nstdout>>{}<<\nstderr>>{}<<\n".format(cmd_info, rc, out, err))
+    return rc, out, err
 
 
 def recursive_overwrite(runtime, src, dest, ignore=set()):
