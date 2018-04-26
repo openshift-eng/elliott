@@ -721,6 +721,11 @@ class ImageDistGitRepo(DistGitRepo):
                     if from_image_metadata is None:
                         if not ignore_missing_base:
                             raise IOError("Unable to find base image metadata [%s] in included images. Use --ignore-missing-base to ignore." % base)
+                        elif self.runtime.latest_parent_version:
+                            self.runtime.info('[{}] parent image {} not included. Looking up FROM tag.'.format(self.config.name, base))
+                            base_meta = self.runtime.late_resolve_image(base)
+                            _, v, r = base_meta.get_latest_build_info()
+                            dfp.baseimage = "{}:{}-{}".format(base_meta.config.name, v, r)
                         # Otherwise, the user is not expecting the FROM field to be updated in this Dockerfile.
                     else:
                         # Everything in the group is going to be built with the uuid tag, so we must
