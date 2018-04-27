@@ -84,7 +84,7 @@ class DistGitRepo(object):
         self.clone(self.runtime.distgits_dir, self.branch)
 
     def info(self, msg, debug=None):
-        msg = "[%s] %s" % (self.metadata.qualified_name, msg)
+        msg = "[%s/%s] %s" % (self.metadata.namespace, self.metadata.distgit_key, msg)
         self.runtime.info(msg, debug)
 
     def clone(self, distgits_root_dir, distgit_branch):
@@ -92,7 +92,11 @@ class DistGitRepo(object):
 
             namespace_dir = os.path.join(distgits_root_dir, self.metadata.namespace)
 
-            self.distgit_dir = os.path.join(namespace_dir, self.metadata.name)
+            # It is possible we have metadata for the same distgit twice in a group.
+            # There are valid scenarios (when they represent different branches) and
+            # scenarios where this is a user error. In either case, make sure we
+            # don't conflict by stomping on the same git directory.
+            self.distgit_dir = os.path.join(namespace_dir, self.metadata.distgit_key)
 
             if os.path.isdir(self.distgit_dir):
                 self.info("Distgit directory already exists; skipping clone: %s" % self.distgit_dir)
