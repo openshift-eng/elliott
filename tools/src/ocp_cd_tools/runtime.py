@@ -322,6 +322,15 @@ class Runtime(object):
                 if not self.rpm_map:
                     self.info("WARNING: No rpm metadata directories found within: {}".format(group_dir))
 
+        # Make sure that the metadata is not asking us to check out the same exact distgit & branch.
+        # This would almost always indicate someone has checked in duplicate metadata into a group.
+        no_collide_check = {}
+        for meta in self.rpm_map.values() + self.image_map.values():
+            key = '{}/{}/#{}'.format(meta.namespace, meta.name, meta.branch())
+            if key in no_collide_check:
+                raise IOError('Complete duplicate distgit & branch; something wrong with metadata: {} from {} and {}'.format(key, meta.config_filename, no_collide_check[key].config_filename))
+            no_collide_check[key] = meta
+
         # Read in the streams definite for this group if one exists
         streams_path = os.path.join(group_dir, "streams.yml")
         if os.path.isfile(streams_path):
@@ -502,7 +511,7 @@ class Runtime(object):
         found = False
         with Dir(source_dir):
             if self.stage and stage_branch:
-                self.info('Normal branch overriden by --stage option, using "{}"'.format(stage_branch))
+                self.info('Normal branch overridden by --stage option, using "{}"'.format(stage_branch))
                 branch = stage_branch
             else:
                 branch = branches["target"]
@@ -627,13 +636,13 @@ class Runtime(object):
         pool.join()
         return ret
 
-    def clone_distgits(self, n_threads=5):
+    def clone_distgits(self, n_threads=20):
         return self._parallel_exec(
             lambda m: m.distgit_repo(),
             self.all_metas(),
             n_threads=n_threads).get()
 
-    def push_distgits(self, n_threads=5):
+    def push_distgits(self, n_threads=20):
         return self._parallel_exec(
             lambda m: m.distgit_repo().push(),
             self.all_metas(),
