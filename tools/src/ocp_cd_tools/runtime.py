@@ -14,6 +14,7 @@ from image import ImageMetadata
 from rpmcfg import RPMMetadata
 from model import Model, Missing
 from multiprocessing import Lock
+from repos import Repos
 
 DEFAULT_REGISTRIES = [
     "registry.reg-aws.openshift.com:443"
@@ -112,7 +113,7 @@ class Runtime(object):
             replace_vars = tmp_config.vars
             if replace_vars is not Missing:
                 try:
-                    return Model(yaml.load(group_yml.format(**replace_vars)))
+                    tmp_config = Model(yaml.load(group_yml.format(**replace_vars)))
                 except KeyError as e:
                     raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
             return tmp_config
@@ -201,6 +202,7 @@ class Runtime(object):
 
         with Dir(group_dir):
             self.group_config = self.get_group_config(group_dir)
+            self.repos = Repos(self.group_config.repos, self.group_config.get('arches', ['x86_64']))
 
             if self.group_config.name != self.group:
                 raise IOError(
@@ -581,17 +583,7 @@ class Runtime(object):
         rpms.  The caller must indicate which to use.
         """
 
-        if repo_type not in (self.group_config.repos):
-            raise ValueError(
-                "unknown repo-type {}, known types: {}".format(
-                    repo_type,
-                    ", ".join(self.group_config.repos.keys()))
-            )
-
-        # Are the repo keys in order? markllama 20180119 rhel-server-ose-rpms
-        # repo_name = 'rhel-server-ose-rpms'
-        repo_name = self.group_config.repos[repo_type].keys()[0]
-        repo_url = self.group_config.repos[repo_type][repo_name].baseurl
+        repo_url = self.repos['rhel-server-ose-rpms'].baseurl(repo_type)
         self.info(
             "Getting version from atomic-openshift package in {}".format(
                 repo_url)
