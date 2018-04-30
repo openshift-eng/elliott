@@ -46,6 +46,7 @@ class Metadata(object):
         # e.g. openshift-enterprise-mediawiki.apb.yml
         #      distgit_key=openshift-enterprise-mediawiki.apb
         #      name (repo name)=openshift-enterprise-mediawiki
+
         self.distgit_key = config_filename.rsplit('.', 1)[0]  # Split off .yml
         self.name = self.distgit_key.split('.')[0]   # Split off any '.apb' style differentiator (if present)
 

@@ -58,6 +58,9 @@ class Runtime(object):
         for key, val in kwargs.items():
             self.__dict__[key] = val
 
+        if self.latest_parent_version:
+            self.ignore_missing_base = True
+
         self._remove_tmp_working_dir = False
         self.group_config = None
 
@@ -178,7 +181,7 @@ class Runtime(object):
         group_dir = os.path.join(self.metadata_dir, "groups", self.group)
         assert_dir(group_dir, "Cannot find group directory")
 
-        images_dir = os.path.join(group_dir, 'images')
+        self.images_dir = images_dir = os.path.join(group_dir, 'images')
         assert_dir(group_dir, "Cannot find images directory for {}".format(group_dir))
 
         rpms_dir = os.path.join(group_dir, 'rpms')
@@ -466,6 +469,14 @@ class Runtime(object):
                 return None
             raise IOError("Unable to find image metadata in group / included images: %s" % distgit_name)
         return self.image_map[distgit_name]
+
+    def late_resolve_image(self, distgit_key):
+        """Resolve image and retrive meta without adding to image_map.
+        Mainly for looking up parent image info."""
+
+        with Dir(self.images_dir):
+            meta = ImageMetadata(self, distgit_key + '.yml')
+        return meta
 
     def resolve_stream(self, stream_name):
 
