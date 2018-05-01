@@ -1,5 +1,7 @@
 from model import Model, ModelException, Missing
 import yaml
+import requests
+import json
 
 DEFAULT_REPOTYPE = 'signed'
 
@@ -11,6 +13,7 @@ class Repo(object):
     def __init__(self, name, data, valid_arches):
         self.name = name
         self._valid_arches = valid_arches
+        self._invalid_cs_arches = set()
         self._data = Model(data)
         for req in ['conf', 'content_set']:
             if req not in self._data:
@@ -24,6 +27,7 @@ class Repo(object):
         conf.enabled = conf.get('enabled', 0)
         self.enabled = conf.enabled == 1
         conf.gpgcheck = conf.get('gpgcheck', 0)
+        self.cs_optional = self._data.content_set.get('optional', False)
 
         self.repotypes = [DEFAULT_REPOTYPE]
         self.baseurl(DEFAULT_REPOTYPE)  # run once just to populate self.repotypes
@@ -33,16 +37,25 @@ class Repo(object):
         """Allows access via repo.enabled"""
         return self._data.conf.enabled == 1
 
+    @property
+    def arches(self):
+        return list(self._valid_arches)
+
     @enabled.setter
     def enabled(self, val):
         """Set enabled option without digging direct into the underlying data"""
         self._data.conf.enabled = 1 if val else 0
+
+    def set_invalid_cs_arch(self, arch):
+        self._invalid_cs_arches.add(arch)
 
     def __repr__(self):
         """For debugging mainly, to display contents as a dict"""
         return str(self._data)
 
     def baseurl(self, repotype):
+        if not repotype:
+            repotype = 'unsigned'
         """Get baseurl based on repo type, if one was specified for this repo."""
         bu = self._data.conf.baseurl
         if isinstance(bu, str):
@@ -60,6 +73,8 @@ class Repo(object):
 
         if arch not in self._valid_arches:
             raise ValueError('{} is not a valid arch!')
+        if arch in self._invalid_cs_arches:
+            return None
         if self._data.content_set[arch] is Missing:
             if self._data.content_set['default'] is Missing:
                 raise ValueError('{} does not contain a content_set for {} and no default was provided.'.format(self.name, arch))
@@ -70,6 +85,9 @@ class Repo(object):
     def conf_section(self, repotype, enabled=None):
         """Generates and returns the yum .repo section for this repo,
         based on given type and enabled state"""
+
+        if not repotype:
+            repotype = 'unsigned'
 
         result = '[{}]\n'.format(self.name)
         for k, v in self._data.conf.iteritems():
@@ -139,6 +157,9 @@ class Repos(object):
             raise ValueError('{} is not a valid repo name!'.format(item))
         return self._repos[item]
 
+    def iteritems(self):
+        return self._repos.iteritems()
+
     def __repr__(self):
         """Mainly for debugging to dump a dict representation of the collection"""
         return str(self._repos)
@@ -156,6 +177,29 @@ class Repos(object):
             result += EMPTY_REPO.format(er)
         return result
 
+    def empty_repo_file_from_list(self, repos, odcs=False):
+        full_cs = self.full_content_sets_list()
+        result = ''
+        for er in repos:
+            if not odcs or er not in full_cs:
+                result += EMPTY_REPO.format(er)
+        return result
+
+    def full_content_sets_dict(self):
+        result = {}
+        for a in self._arches:
+            result[a] = {}
+            for r in self._repos.itervalues():
+                result[a][r.name] = r.content_set(a)
+        return result
+
+    def full_content_sets_list(self):
+        result = []
+        for a in self._arches:
+            for r in self._repos.itervalues():
+                result.append(r.content_set(a))
+        return list(set(result))  # make unique list
+
     def content_sets(self, enabled_repos=[]):
         """Generates a valid content_sets.yml file based on the currently
         configured and enabled repos in the collection. Using the correct
@@ -171,3 +215,62 @@ class Repos(object):
                         result[a].append(cs)
 
         return CONTENT_SETS + yaml.dump(result, default_flow_style=False)
+
+    def _validate_content_sets(self, arch, names):
+        url = "https://pulp.dist.prod.ext.phx2.redhat.com/pulp/api/v2/repositories/search/"
+        payload = {
+            "criteria": {
+                "fields": [
+                    "id",
+                    "notes.content_set"
+                ],
+                "filters": {
+                    "notes.arch": {
+                        "$in": [
+                            arch
+                        ]
+                    },
+                    "notes.content_set": {
+                        "$in": names
+                    }
+                }
+            }
+        }
+
+        headers = {
+            'Content-Type': "application/json",
+            'Authorization': "Basic cWE6cWE=",  # qa:qa
+            'Cache-Control': "no-cache"
+        }
+
+        response = requests.request("POST", url, data=json.dumps(payload), headers=headers, verify=False)
+
+        resp_dict = response.json()
+
+        result = []
+        for cs in resp_dict:
+            result.append(Model(cs).notes.content_set)
+
+        return set(result)
+
+    def validate_content_sets(self):
+        invalid = []
+        for arch in self._arches:
+            cs_names = {}
+            for name, repo in self._repos.iteritems():
+                cs = repo.content_set(arch)
+                cs_names[name] = cs
+
+            arch_cs_values = cs_names.values()
+            if arch_cs_values:
+                # no point in making empty call
+                valid = self._validate_content_sets(arch, arch_cs_values)
+                for name, cs in cs_names.iteritems():
+                    if cs not in valid:
+                        if not self._repos[name].cs_optional:
+                            invalid.append('{}/{}'.format(arch, cs))
+                        self._repos[name].set_invalid_cs_arch(arch)
+
+        if invalid:
+            cs_lst = ', '.join(invalid)
+            raise ValueError('The following content set names are given, do not exist, and are not optional: ' + cs_lst)

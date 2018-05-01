@@ -1,7 +1,11 @@
 import os
+import json
+import bashlex
+from dockerfile_parse import DockerfileParser
 from distgit import pull_image
 from metadata import Metadata
 from model import Missing
+from pushd import Dir
 
 import assertion
 import constants
@@ -11,6 +15,30 @@ import container
 import logutil
 
 logger = logutil.getLogger(__name__)
+
+
+YUM_NON_FLAGS = [
+    '-c', '--config',
+    '--installroot',
+    '--enableplugin',
+    '--disableplugin',
+    '--setopt',
+    '-R', '--randomwait',
+    '-d', '--debuglevel',
+    '-e', '--errorlevel',
+    '--rpmverbosity',
+    '--enablerepo',
+    '--disablerepo',
+    '--repo', '--repoid',
+    '-x', '--exclude', '--excludepkgs',
+    '--disableexcludes', '--disableexcludepkgs',
+    '--repofrompath',
+    '--destdir', '--downloaddir',
+    '--comment',
+    '--advisory', '--advisories',
+    '--bzs', '--cves', '--sec-severity',
+    '--forearch'
+]
 
 
 class ImageMetadata(Metadata):
@@ -25,6 +53,85 @@ class ImageMetadata(Metadata):
         if present.
         """
         return self.config.base_only
+
+    def get_rpm_install_list(self, valid_pkg_list=None):
+        """Parse dockerfile and find any RPMs that are being installed
+        It will automatically do any bash variable replacement during this parse
+        """
+        if self._distgit_repo:
+            # Already cloned, load from there
+            with Dir(self._distgit_repo.distgit_dir):
+                dfp = DockerfileParser('Dockerfile')
+
+        else:
+            # not yet cloned, just download it
+            dfp = DockerfileParser()
+            dfp.content = self.fetch_cgit_file("Dockerfile")
+
+        def env_replace(envs, val):
+            # find $VAR and ${VAR} style replacements
+            for k, v in envs.iteritems():
+                opts = ['${}'.format(k), '${{{}}}'.format(k)]
+                for opt in opts:
+                    if opt in val:
+                        val = val.replace(opt, v)
+            return val
+
+        def is_assignment(line):
+            # if this is an assignment node we need to add
+            # to env dict for later replacement in commands
+            try:
+                parts = bashlex.parse(line)
+            except:
+                # bashlex does not get along well with some inline
+                # conditionals and may emit ParsingError
+                # if that's the case, it's not an assigment, so move along
+                return None
+            for ast in parts:
+                if ast.kind != 'compound':  # ignore multi part commands
+                    for part in ast.parts:
+                        if part.kind == 'assignment':
+                            return part.word.split('=')
+            return None
+
+        envs = dict(dfp.envs)
+        run_lines = []
+        for entry in json.loads(dfp.json):
+            if isinstance(entry, dict) and 'RUN' in entry:
+                line = entry['RUN']
+                for line in line.replace('|', '&').split("&"):
+                    line = line.strip()
+                    if line:
+                        line = env_replace(envs, line)
+                        assign = is_assignment(line)
+                        if assign:
+                            envs[assign[0]] = assign[1]
+                        run_lines.append(line)
+
+        rpms = []
+        for line in run_lines:
+            split = list(bashlex.split(line))
+            if 'yum' in split and 'install' in split:
+                # remove as to not mess with checking below
+                split.remove('yum')
+                split.remove('install')
+
+                i = 0
+                rpm_start = 0
+                while i < len(split):
+                    sub = split[i]
+                    if sub.startswith('-'):
+                        if sub in YUM_NON_FLAGS:
+                            i += 1
+                            continue
+                    else:
+                        rpm_start = i
+                        break  # found start of rpm names, exit
+                    i += 1
+
+                rpms.extend(split[rpm_start:])
+
+        return [str(r) for r in rpms]  # strip unicode
 
     def get_latest_build_info(self):
 
@@ -160,7 +267,7 @@ class ImageMetadata(Metadata):
 
 def create_image_verify_repo_file(runtime, repo_type='signed'):
     """Create a repo file to copy into a container. The repos that are
-added come from the selected group YAML config file.
+    added come from the selected group YAML config file.
 
     :param string repo_type: Currently one of 'signed' or
     'unsigned'. Determines which OSE repo will be installed. Reference
@@ -189,7 +296,7 @@ added come from the selected group YAML config file.
 
 class Image(object):
     """This is an image. We're going to launch a container from it and
-verify the contents.
+    verify the contents.
     """
 
     def __init__(self, runtime, pull_url, repo_file, enabled_checks, distgit=''):
