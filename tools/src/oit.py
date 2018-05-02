@@ -627,10 +627,6 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
     # clarity in the logs.
     runtime.initialize(clone_distgits=True)
 
-    push_to = list(push_to)  # In case we get a tuple
-    if push_to_defaults:
-        push_to.extend(runtime.default_registries)
-
     items = [m.distgit_repo() for m in runtime.image_metas()]
     if not items:
         runtime.info("No images found. Check the arguments.")
@@ -643,7 +639,8 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
 
     results = runtime.parallel_exec(
         lambda (dgr, terminate_event): dgr.build_container(
-            repo_type, repo, push_to, terminate_event, scratch),
+            repo_type, repo, push_to_defaults, additional_registries=push_to,
+            terminate_event=terminate_event, scratch=scratch),
         items)
     results = results.get()
 
@@ -661,7 +658,7 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
 
     # Push all late images
     for image in runtime.image_metas():
-        image.distgit_repo().push_image([], push_to, push_late=True)
+        image.distgit_repo().push_image([], push_to_defaults, additional_registries=push_to, push_late=True)
 
     try:
         print_build_metrics(runtime)
@@ -671,15 +668,16 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
         runtime.info("Error trying to show build metrics")
 
 
-@cli.command("images:push", short_help="Push the most recent images to mirrors.")
+@cli.command("images:push", short_help="Push the most recently built images to mirrors.")
 @click.option('--tag', default=[], metavar="PUSH_TAG", multiple=True,
               help='Push to registry using these tags instead of default set.')
 @click.option('--to-defaults', default=False, is_flag=True, help='Push to default registries.')
 @click.option('--late-only', default=False, is_flag=True, help='Push only "late" images.')
 @click.option("--to", default=[], metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
+@click.option('--dry-run', default=False, is_flag=True, help='Only print tag/push operations which would have occurred.')
 @pass_runtime
-def images_push(runtime, tag, to_defaults, late_only, to):
+def images_push(runtime, tag, to_defaults, late_only, to, dry_run):
     """
     Each distgit repository will be cloned and the version and release information
     will be extracted. That information will be used to determine the most recently
@@ -689,16 +687,13 @@ def images_push(runtime, tag, to_defaults, late_only, to):
     docker registries specified on the command line.
     """
 
-    runtime.initialize()
+    additional_registries = list(to)  # In case we get a tuple
 
-    to = list(to)  # In case we get a tuple
-    if to_defaults:
-        to.extend(runtime.default_registries)
-
-    if len(to) == 0:
+    if to_defaults is False and len(additional_registries) == 0:
         click.echo("You need specify at least one destination registry.")
         exit(1)
-    runtime.clone_distgits()
+
+    runtime.initialize()
 
     # late-only is useful if we are resuming a partial build in which not all images
     # can be built/pushed. Calling images:push can end up hitting the same
@@ -715,7 +710,7 @@ def images_push(runtime, tag, to_defaults, late_only, to):
         # Push early images
         for image in runtime.image_metas():
             try:
-                image.distgit_repo().push_image(tag, to)
+                image.distgit_repo().push_image(tag, to_defaults, additional_registries, dry_run=dry_run)
             except Exception:
                 traceback.print_exc()
                 failed.append(image.name)
@@ -728,7 +723,7 @@ def images_push(runtime, tag, to_defaults, late_only, to):
     for image in runtime.image_metas():
         # Check if actually a late image to prevent cloning all distgit on --late-only
         if image.config.push.late is True:
-            image.distgit_repo().push_image(tag, to, push_late=True)
+            image.distgit_repo().push_image(tag, to_defaults, additional_registries, push_late=True, dry_run=dry_run)
 
 
 @cli.command("images:pull", short_help="Pull latest images from pulp")
@@ -762,7 +757,7 @@ def images_scan_for_cves(runtime):
     help="Suppress all output other than the data itself")
 @click.option('--show-non-release', default=False, is_flag=True,
               help='Include images which have been marked as non-release.')
-@click.argument("pattern", nargs=1)
+@click.argument("pattern", default="{build}", nargs=1)
 @pass_runtime
 def images_print(runtime, short, show_non_release, pattern):
     """
@@ -778,12 +773,13 @@ def images_print(runtime, short, show_non_release, pattern):
     {release} - The release field in the Dockerfile
     {build} - Shorthand for {component}-{version}-{release} (e.g. container-engine-docker-v3.6.173.0.25-1)
     {repository} - Shorthand for {image}:{version}-{release}
+    {lf} - Line feed
 
     If pattern contains no braces, it will be wrapped with them automatically. For example:
     "build" will be treated as "{build}"
     """
 
-    runtime.initialize(clone_distgits=True)
+    runtime.initialize(clone_distgits=False)
 
     # If user omitted braces, add them.
     if "{" not in pattern:
@@ -805,8 +801,10 @@ def images_print(runtime, short, show_non_release, pattern):
         images = list(runtime.image_metas())
 
     for image in images:
-        dfp = DockerfileParser()
+        dfp = DockerfileParser(path=runtime.working_dir)
         dfp.content = image.fetch_cgit_file("Dockerfile")
+
+        version = dfp.labels["version"]
 
         s = pattern
         s = s.replace("{build}", "{component}-{version}-{release}")
@@ -815,12 +813,26 @@ def images_print(runtime, short, show_non_release, pattern):
         s = s.replace("{name}", image.name)
         s = s.replace("{component}", image.get_component_name())
         s = s.replace("{image}", dfp.labels["name"])
-        s = s.replace("{version}", dfp.labels["version"])
+        s = s.replace("{version}", version)
+        s = s.replace("{lf}", "\n")
+
+        release_query_needed = '{release}' in s or '{pushes}' in s
 
         # Since querying release takes time, check before executing replace
-        if "{release}" in s:
+        release = ''
+        if release_query_needed:
             _, _, release = image.get_latest_build_info()
-            s = s.replace("{release}", release)
+
+        s = s.replace("{release}", release)
+
+        pushes_formatted = ''
+        for push_name in image.get_default_push_names():
+            pushes_formatted += '\t{} : [{}]\n'.format(push_name, ', '.join(image.get_default_push_tags(version, release)))
+
+        if pushes_formatted is '':
+            pushes_formatted = "(None)"
+
+        s = s.replace("{pushes}", '{}\n'.format(pushes_formatted))
 
         if "{" in s:
             raise IOError("Unrecognized fields remaining in pattern: %s" % s)

@@ -2,6 +2,7 @@ import os
 from dockerfile_parse import DockerfileParser
 from distgit import pull_image
 from metadata import Metadata
+from model import Missing
 
 from common import BREW_IMAGE_HOST, assert_rc0, gather_exec
 import container
@@ -43,16 +44,104 @@ class ImageMetadata(Metadata):
         return name, version, release
 
     def pull_url(self):
-        dfp = DockerfileParser()
-        dfp.content = self.fetch_cgit_file("Dockerfile")
         # Don't trust what is the Dockerfile for version & release. This field may not even be present.
         # Query brew to find the most recently built release for this component version.
         _, version, release = self.get_latest_build_info()
         return "{host}/{l[name]}:{version}-{release}".format(
-            host=BREW_IMAGE_HOST, l=dfp.labels, version=version, release=release)
+            host=BREW_IMAGE_HOST, name=self.config.name, version=version, release=release)
 
     def pull_image(self):
         pull_image(self.runtime, self.pull_url())
+
+    def get_default_push_tags(self, version, release):
+        push_tags = [
+            "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
+            "%s" % version,  # e.g. "v3.7.0"
+        ]
+
+        # it's possible but rare that an image will have an alternate
+        # tags along with the regular ones
+        # append those to the tag list.
+        if self.config.push.additional_tags is not Missing:
+            push_tags.extend(self.config.push.additional_tags)
+
+        # In v3.7, we use the last .0 in the release as a bump field to differentiate
+        # image refreshes. Strip this off since OCP will have no knowledge of it when reaching
+        # out for its node image.
+        if "." in release:
+            # Strip off the last field; "0.114.0.0" -> "0.114.0"
+            push_tags.append("%s-%s" % (version, release.rsplit(".", 1)[0]))
+
+        # Push as v3.X; "v3.7.0" -> "v3.7"
+        push_tags.append("%s" % (version.rsplit(".", 1)[0]))
+        return push_tags
+
+    def get_default_repos(self):
+        """
+        :return: Returns a list of ['ns/repo', 'ns/repo'] found in the image config yaml specified for default pushes.
+        """
+        # Repos default to just the name of the image (e.g. 'openshift3/node')
+        default_repos = [self.config.name]
+
+        # Unless overridden in the config.yml
+        if self.config.push.repos is not Missing:
+            default_repos = self.config.push.repos.primitive()
+
+        return default_repos
+
+    def get_default_push_names(self):
+        """
+        :return: Returns a list of push names that should be pushed to for registries defined in
+        group.yml and for additional repos defined in image config yaml.
+        (e.g. ['registry/ns/repo', 'registry/ns/repo', ...]).
+        """
+
+        # Will be built to include a list of 'registry/ns/repo'
+        push_names = []
+
+        default_repos = self.get_default_repos()  # Get a list of [ ns/repo, ns/repo, ...]
+
+        default_registries = []
+        if self.runtime.group_config.push.registries is not Missing:
+            default_registries = self.runtime.group_config.push.registries.primitive()
+
+        for registry in default_registries:
+            registry = registry.rstrip("/")   # Remove any trailing slash to avoid mistaking it for a namespace
+            for repo in default_repos:
+                namespace, repo_name = repo.split('/')
+                if '/' in registry:  # If registry overrides namespace
+                    registry, namespace = registry.split('/')
+                push_names.append('{}/{}/{}'.format(registry, namespace, repo_name))
+
+        # image config can contain fully qualified image names to push to (registry/ns/repo)
+        if self.config.push.also is not Missing:
+            push_names.extend(self.config.push.also)
+
+        return push_names
+
+    def get_additional_push_names(self, additional_registries):
+        """
+        :return: Returns a list of push names based on a list of additional registries that
+        need to be pushed to (e.g. ['registry/ns/repo', 'registry/ns/repo', ...]).
+        """
+
+        if not additional_registries:
+            return []
+
+        # Will be built to include a list of 'registry/ns/repo'
+        push_names = []
+
+        default_repos = self.get_default_repos()  # Get a list of [ ns/repo, ns/repo, ...]
+
+        for registry in additional_registries:
+            registry = registry.rstrip("/")   # Remove any trailing slash to avoid mistaking it for a namespace
+            for repo in default_repos:
+                namespace, repo_name = repo.split('/')
+                if '/' in registry:  # If registry overrides namespace
+                    registry, namespace = registry.split('/')
+                push_names.append('{}/{}/{}'.format(registry, namespace, repo_name))
+
+        return push_names
 
 
 def create_image_verify_repo_file(runtime, repo_type='signed'):

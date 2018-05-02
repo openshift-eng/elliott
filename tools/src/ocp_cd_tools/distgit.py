@@ -262,20 +262,24 @@ class ImageDistGitRepo(DistGitRepo):
             dockerfile = os.path.join(Dir.getcwd(), 'Dockerfile')
             if os.path.isfile(dockerfile):
                 dfp = DockerfileParser(path=dockerfile)
-                self.org_image_name = dfp.labels["name"]
-                self.org_version = dfp.labels["version"]
+                self.org_image_name = dfp.labels.get("name")
+                self.org_version = dfp.labels.get("version")
                 self.org_release = dfp.labels.get("release")  # occasionally no release given
 
-    def push_image(self, tag_list, push_to_list, version_release_tuple=None, push_late=False):
+    def push_image(self, tag_list, push_to_defaults, additional_registries=[], version_release_tuple=None,
+                   push_late=False, dry_run=False):
 
         """
         Pushes the most recent image built for this distgit repo. This is
-        accomplished by looking the 'version' field in the Dockerfile and querying
+        accomplished by looking at the 'version' field in the Dockerfile or
+        the version_release_tuple argument and querying
         brew for the most recent images built for that version.
-        :param tag_list: The list of tags to apply to the image (overrides default tagging pattern)
-        :param push_to_list: A list of registries to push the image to
-        :param version_release_tuple: Specify a version/release to pull as the source (if None, the latest build will be pulled)
-        :param push_late: Whether late pushes should be included
+        :param tag_list: The list of tags to apply to the image (overrides default tagging pattern).
+        :param push_to_defaults: Boolean indicating whether group/image yaml defined registries should be pushed to.
+        :param additional_registries: A list of non-default registries (optional namespace included) to push the image to.
+        :param version_release_tuple: Specify a version/release to pull as the source (if None, the latest build will be pulled).
+        :param push_late: Whether late pushes should be included.
+        :param dry_run: Will only print the docker operations that would have taken place.
         """
 
         # Late pushes allow certain images to be the last of a group to be
@@ -294,16 +298,18 @@ class ImageDistGitRepo(DistGitRepo):
         if push_late != is_late_push:
             return
 
+        push_names = []
+
+        if push_to_defaults:
+            push_names.extend(self.metadata.get_default_push_names())
+
+        push_names.extend(self.metadata.get_additional_push_names(additional_registries))
+
         # Nothing to push to? We are done.
-        if not push_to_list:
+        if not push_names:
             return
 
         with Dir(self.distgit_dir):
-            names = [self.config.name]
-            # it's possible but rare that an image will have an alternate_name
-            # it must be pushed with that name as well
-            if self.config.alt_name is not Missing:
-                names.append(self.config.alt_name)
 
             if version_release_tuple:
                 version = version_release_tuple[0]
@@ -326,8 +332,8 @@ class ImageDistGitRepo(DistGitRepo):
 
             try:
                 record = {
-                    "dir": self.distgit_dir,
-                    "dockerfile": "%s/Dockerfile" % self.distgit_dir,
+                    "distgit_key": self.metadata.distgit_key,
+                    "distgit": '{}/{}'.format(self.metadata.namespace, self.metadata.name),
                     "image": self.config.name,
                     "version": version,
                     "release": release,
@@ -349,80 +355,59 @@ class ImageDistGitRepo(DistGitRepo):
             finally:
                 self.runtime.add_record('pull', **record)
 
-            for image_name in names:
+            push_tags = list(tag_list)
+
+            # If no tags were specified, build defaults
+            if not push_tags:
+                push_tags = self.metadata.get_default_push_tags(version, release)
+
+            for image_name in push_names:
                 try:
-                    push_tags = list(tag_list)
 
-                    # it's possible but rare that an image will have an alternate
-                    # tags along with the regular ones
-                    # append those to the tag list.
-                    if self.config.alt_tags is not Missing:
-                        push_tags.extend(self.config.alt_tags)
-
-                    # If no tags were specified, build defaults
-                    if not push_tags:
-                        push_tags = [
-                            "%s-%s" % (version, release),  # e.g. "v3.7.0-0.114.0.0"
-                            "%s" % version,  # e.g. "v3.7.0"
-                        ]
-
-                        # In v3.7, we use the last .0 in the release as a bump field to differentiate
-                        # image refreshes. Strip this off since OCP will have no knowledge of it when reaching
-                        # out for its node image.
-                        if "." in release:
-                            # Strip off the last field; "0.114.0.0" -> "0.114.0"
-                            push_tags.append("%s-%s" % (version, release.rsplit(".", 1)[0]))
-
-                        # Push as v3.X; "v3.7.0" -> "v3.7"
-                        push_tags.append("%s" % (version.rsplit(".", 1)[0]))
+                    repo = image_name.split('/', 1)
 
                     action = "push"
                     record = {
-                        "dir": self.distgit_dir,
-                        "dockerfile": "%s/Dockerfile" % self.distgit_dir,
-                        "image": image_name,
+                        "distgit_key": self.metadata.distgit_key,
+                        "distgit": '{}/{}'.format(self.metadata.namespace, self.metadata.name),
+                        "repo": repo,  # ns/repo
+                        "name": image_name,  # full registry/ns/repo
                         "version": version,
                         "release": release,
                         "message": "Unknown failure",
-                        "tags": ",".join(push_tags),
-                        "registries": ",".join(push_to_list),
+                        "tags": ", ".join(push_tags),
                         "status": -1,
                         # Status defaults to failure until explicitly set by success. This handles raised exceptions.
                     }
 
-                    for push_to in push_to_list:
-                        for push_tag in push_tags:
-                            # If someone passed in a URL with a trailing slash, prevent it from triggering our
-                            # namespace override logic.
-                            push_to = push_to.rstrip("/")
+                    for push_tag in push_tags:
+                        push_url = '{}:{}'.format(image_name, push_tag)
 
-                            if "/" not in push_to:
-                                push_url = "%s/%s:%s" % (push_to, image_name, push_tag)
-                            else:
-                                # This is not typical at the moment, but we support it. If there is a slash in the push
-                                # url, we override the namespace/project into which we push the image.
-                                # For example, if the image is openshift3/node and the registry url is
-                                # "registry.reg-aws.openshift.com:443/online", we would push to
-                                # "registry.reg-aws.openshift.com:443/online/node".
-                                push_url = "%s/%s:%s" % (push_to, image_name.split("/", 1)[1], push_tag)
-
+                        if dry_run:
+                            rc = 0
+                            self.info('Would have tagged {} as {}'.format(brew_image_url, push_url))
+                        else:
                             rc, out, err = gather_exec(self.runtime, ["docker", "tag", brew_image_url, push_url])
 
-                            if rc != 0:
-                                # Unable to tag the image
-                                raise IOError("Error tagging image as: %s" % push_url)
+                        if rc != 0:
+                            # Unable to tag the image
+                            raise IOError("Error tagging image as: %s" % push_url)
 
-                            for r in range(10):
-                                self.info("Pushing image to mirror [retry=%d]: %s" % (r, push_url))
+                        for r in range(10):
+                            self.info("Pushing image to mirror [retry=%d]: %s" % (r, push_url))
+                            if dry_run:
+                                rc = 0
+                                self.info('Would have pushed {}'.format(push_url))
+                            else:
                                 rc, out, err = gather_exec(self.runtime, ["docker", "push", push_url])
-                                if rc == 0:
-                                    break
-                                self.info("Error pushing image -- retrying in 60 seconds")
-                                time.sleep(60)
+                            if rc == 0:
+                                break
+                            self.info("Error pushing image -- retrying in 60 seconds")
+                            time.sleep(60)
 
-                            if rc != 0:
-                                # Unable to push to registry
-                                raise IOError("Error pushing image: %s" % push_url)
+                        if rc != 0:
+                            # Unable to push to registry
+                            raise IOError("Error pushing image: %s" % push_url)
 
                     record["message"] = "Successfully pushed all tags"
                     record["status"] = 0
@@ -446,7 +431,7 @@ class ImageDistGitRepo(DistGitRepo):
                 self.info("repo successfully waited for me to build: %s" % who_is_waiting)
 
     def build_container(
-            self, repo_type, repo, push_to_list, terminate_event,
+            self, repo_type, repo, push_to_defaults, additional_registries, terminate_event,
             scratch=False, retries=3):
         """
         This method is designed to be thread-safe. Multiple builds should take place in brew
@@ -454,7 +439,8 @@ class ImageDistGitRepo(DistGitRepo):
         DONT try to change cwd during this time, all threads active will change cwd
         :param repo_type: Repo type to choose from group.yml
         :param repo: A list/tuple of custom repo URLs to include for build
-        :param push_to_list: A list of registries resultant builds should be pushed to.
+        :param push_to_defaults: If default registries should be pushed to.
+        :param additional_registries: A list of non-default registries resultant builds should be pushed to.
         :param terminate_event: Allows the main thread to interrupt the build.
         :param scratch: Whether this is a scratch build. UNTESTED.
         :param retries: Number of times the build should be retried.
@@ -537,7 +523,7 @@ class ImageDistGitRepo(DistGitRepo):
             self.build_lock.release()
 
         self.push_status = True  # if if never pushes, the status is True
-        if not scratch and self.build_status and push_to_list:
+        if not scratch and self.build_status and additional_registries:
             # If this is a scratch build, we aren't going to be pushing. We might be able to determine the
             # image name by parsing the build log, but not worth the effort until we need scratch builds.
             # The image name for a scratch build looks something like:
@@ -547,7 +533,7 @@ class ImageDistGitRepo(DistGitRepo):
             with self.runtime.mutex:
                 self.push_status = False
                 try:
-                    self.push_image([], push_to_list, version_release_tuple=(push_version, push_release))
+                    self.push_image([], push_to_defaults, additional_registries, version_release_tuple=(push_version, push_release))
                     self.push_status = True
                 except Exception as push_e:
                     self.info("Error during push after successful build: %s" % str(push_e))
