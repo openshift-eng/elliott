@@ -124,12 +124,12 @@ class RPMMetadata(Metadata):
                 pre = specfile_data
                 specfile_data = pre.replace(match, replacement)
                 if specfile_data == pre:
-                    raise IOError("Replace (%s->%s) modification did not make a change to the Dockerfile content" % (
-                        match, replacement))
+                    raise IOError("%s: Replace (%s->%s) modification did not make a change to the Dockerfile content" % (
+                        self.distgit_key, match, replacement))
                 self.runtime.log_verbose("Performed string replace '%s' -> '%s':\n%s\n" %
                                          (match, replacement, specfile_data))
             else:
-                raise IOError("Don't know how to perform modification action: %s" % modification.action)
+                raise IOError("%s: Don't know how to perform modification action: %s" % (self.distgit_key, modification.action))
 
         with open(self.specfile, 'w') as df:
             df.write(specfile_data)

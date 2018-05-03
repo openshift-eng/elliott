@@ -16,10 +16,6 @@ from model import Model, Missing
 from multiprocessing import Lock
 from repos import Repos
 
-DEFAULT_REGISTRIES = [
-    "registry.reg-aws.openshift.com:443"
-]
-
 
 # Registered atexit to close out debug/record logs
 def close_file(f):
@@ -78,9 +74,6 @@ class Runtime(object):
         self.brew_logs_dir = None
 
         self.flags_dir = None
-
-        # Registries to push to if not specified on the command line; populated by group.yml
-        self.default_registries = DEFAULT_REGISTRIES
 
         # Map of dist-git repo name -> ImageMetadata object. Populated when group is set.
         self.image_map = {}
