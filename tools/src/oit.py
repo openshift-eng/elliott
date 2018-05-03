@@ -660,13 +660,6 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
     for image in runtime.image_metas():
         image.distgit_repo().push_image([], push_to_defaults, additional_registries=push_to, push_late=True)
 
-    try:
-        print_build_metrics(runtime)
-    except Exception:
-        # Never kill a build because of bad logic in metrics
-        traceback.print_exc()
-        runtime.info("Error trying to show build metrics")
-
 
 @cli.command("images:push", short_help="Push the most recently built images to mirrors.")
 @click.option('--tag', default=[], metavar="PUSH_TAG", multiple=True,
