@@ -166,7 +166,7 @@ class RPMMetadata(Metadata):
                 for i in range(len(lines)):
 
                     if "%global os_git_vars " in lines[i]:
-                        lines[i] = "%global os_git_vars OS_GIT_VERSION={version} OS_GIT_MAJOR={major} OS_GIT_MINOR={minor} OS_GIT_PATCH={patch} OS_GIT_COMMIT={commit} OS_GIT_TREE_STATE=clean".format(
+                        lines[i] = "%global os_git_vars OS_GIT_VERSION={version} OS_GIT_MAJOR={major} OS_GIT_MINOR={minor} OS_GIT_PATCH={patch} OS_GIT_COMMIT={commit} OS_GIT_TREE_STATE=clean\n".format(
                             version=full, major=major, minor=minor, patch=patch, commit=self.commit_sha
                         )
 
