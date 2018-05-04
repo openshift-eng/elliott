@@ -68,7 +68,7 @@ class Metadata(object):
 
         # Choose default namespace for config data
         if meta_type is "image":
-            self.namespace = "rpms"
+            self.namespace = "containers"
         else:
             self.namespace = "rpms"
 
@@ -104,7 +104,7 @@ class Metadata(object):
         return tag_exists("http://" + BREW_IMAGE_HOST, self.config.name, tag)
 
     def get_component_name(self):
-        # By default, the bugzilla compnent is the name of the distgit,
+        # By default, the bugzilla component is the name of the distgit,
         # but this can be overridden in the config yaml.
         component_name = self.name
 
@@ -112,6 +112,9 @@ class Metadata(object):
         # ex. http://dist-git.host.prod.eng.bos.redhat.com/cgit/apbs/openshift-enterprise-mediawiki/tree/Dockerfile?h=rhaos-3.7-rhel-7
         if self.namespace == "apbs":
             component_name = "%s-apb" % component_name
+
+        if self.namespace == "containers":
+            component_name = "%s-container" % component_name
 
         if self.config.distgit.component is not Missing:
             component_name = self.config.distgit.component
