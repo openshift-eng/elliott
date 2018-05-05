@@ -121,9 +121,9 @@ def rpms_build(runtime, version, release, scratch):
             version, release, terminate_event, scratch),
         items)
     results = results.get()
-    failed = [m.name for m, r in zip(runtime.rpm_metas(), results) if not r]
+    failed = [m.distgit_key for m, r in zip(runtime.rpm_metas(), results) if not r]
     if failed:
-        runtime.info("\n".join(["Build/push failures:"] + sorted(failed)))
+        runtime.info("\n".join(["Build failures:"] + sorted(failed)))
         exit(1)
 
 
@@ -652,7 +652,7 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
         traceback.print_exc()
         runtime.info("Error trying to show build metrics")
 
-    failed = [m.name for m, r in zip(runtime.image_metas(), results) if not r]
+    failed = [m.distgit_key for m, r in zip(runtime.image_metas(), results) if not r]
     if failed:
         runtime.info("\n".join(["Build/push failures:"] + sorted(failed)))
         exit(1)
