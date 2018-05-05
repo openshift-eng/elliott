@@ -12,6 +12,7 @@ import sys
 import subprocess
 import urllib
 import traceback
+import koji
 from numbers import Number
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
@@ -520,11 +521,15 @@ def print_build_metrics(runtime):
     for task_id in watch_task_info.keys():
         info = watch_task_info[task_id]
         runtime.log_verbose("Watch task info:\n {}\n\n".format(info))
-        if not _taskinfo_has_timestamp(info, 'create_ts') or not _taskinfo_has_timestamp(info, 'completion_ts') or not _taskinfo_has_timestamp(info, 'start_ts') or 'id' not in info:
-            runtime.info("Error finding timestamps in task info: {}".format(info))
+        if not _taskinfo_has_timestamp(info, 'create_ts') \
+                or not _taskinfo_has_timestamp(info, 'completion_ts') \
+                or not _taskinfo_has_timestamp(info, 'start_ts') \
+                or 'id' not in info \
+                or koji.TASK_STATES[info['state']] is not 'CLOSED':
+            runtime.info("Discarding incomplete/error task info: {}".format(info))
             del watch_task_info[task_id]
 
-    runtime.info("Number of brew tasks completed: {}".format(len(watch_task_info)))
+    runtime.info("Number of brew tasks successful: {}".format(len(watch_task_info)))
 
     # An estimate of how long the build time was extended due to FREE state (i.e. waiting for capacity)
     elapsed_wait_minutes = 0
@@ -563,7 +568,7 @@ def print_build_metrics(runtime):
     runtime.info('Aggregate time all builds spent building {:.1f}m'.format(aggregate_build_secs / 60.0))
     runtime.info('Aggregate time all builds spent waiting {:.1f}m'.format(aggregate_wait_secs / 60.0))
 
-    # If we successfully found timestamps
+    # If we successfully found timestamps in completed builds
     if watch_task_info:
 
         # For each minute which elapsed between the first build created (min_create_ts) to the
