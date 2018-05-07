@@ -421,6 +421,13 @@ class ImageDistGitRepo(DistGitRepo):
                     self.runtime.add_record(action, **record)
 
     def wait_for_build(self, who_is_waiting):
+        """
+        Blocks the calling thread until this image has been built by oit or throws an exception if this
+        image cannot be built.
+        :param who_is_waiting: The caller's distgit_key (i.e. the waiting image).
+        :return: Returns when the image has been built or throws an exception if the image could not be built.
+        """
+        self.info("Member waiting for me to build: %s" % who_is_waiting)
         # This lock is in an acquired state until this image definitively succeeds or fails.
         # It is then released. Child images waiting on this image should block here.
         with self.build_lock:
@@ -428,7 +435,7 @@ class ImageDistGitRepo(DistGitRepo):
                 raise IOError(
                     "Error building image: %s (%s was waiting)" % (self.metadata.qualified_name, who_is_waiting))
             else:
-                self.info("repo successfully waited for me to build: %s" % who_is_waiting)
+                self.info("Member successfully waited for me to build: %s" % who_is_waiting)
 
     def build_container(
             self, repo_type, repo, push_to_defaults, additional_registries, terminate_event,
@@ -479,6 +486,7 @@ class ImageDistGitRepo(DistGitRepo):
                 self.info("Image already built for: {}".format(target_image))
             else:
                 # If this image is FROM another group member, we need to wait on that group member
+                # Use .get('from',None) since from is a reserved word.
                 image_from = Model(self.config.get('from', None))
                 if image_from.member is not Missing:
                     parent_name = image_from.member
@@ -488,6 +496,19 @@ class ImageDistGitRepo(DistGitRepo):
                     else:
                         parent_dgr = parent_img.distgit_repo()
                         parent_dgr.wait_for_build(self.metadata.qualified_name)
+                        if terminate_event.is_set():
+                            raise KeyboardInterrupt()
+
+                # Allow an image to wait on an arbitrary image in the group. This is presently
+                # just a workaround for: https://projects.engineering.redhat.com/browse/OSBS-5592
+                if self.config.wait_for is not Missing:
+                    wait_on_key = self.config.wait_for
+                    wait_img = self.runtime.resolve_image(wait_on_key, False)
+                    if wait_img is None:
+                        self.info("Skipping wait_for image build since it is not included: %s" % wait_on_key)
+                    else:
+                        wait_dgr = wait_img.distgit_repo()
+                        wait_dgr.wait_for_build(self.metadata.qualified_name)
                         if terminate_event.is_set():
                             raise KeyboardInterrupt()
 
