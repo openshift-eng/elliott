@@ -1,0 +1,94 @@
+
+type: map
+
+mapping:
+  "vars":
+    type: map
+    mapping:
+      '=':
+        type: text
+
+  "branch":
+    type: str
+
+  "name":
+    type: str
+    required: yes
+
+  "arches":
+    type: seq
+    sequence:
+      - type: enum
+        enum: [x86_64]
+
+  "push":
+    required: yes
+    type: map
+    mapping:
+      "registries":
+        type: seq
+        sequence:
+          - type: str
+
+  "non_release":
+    type: map
+    mapping:
+      "images":
+        type: seq
+        sequence:
+          - type: str
+      "rpms":
+        type: seq
+        sequence:
+          - type: str
+
+  "sources":
+    type: map
+    mapping:
+      "=":
+        type: map
+        mapping:
+          "url":
+            required: yes
+            type: str
+          "branch":
+            required: yes
+            type: map
+            mapping:
+              "target":
+                required: true
+                type: str
+              "fallback":
+                type: str
+              "stage":
+                type: str
+
+  "repos":
+    type: map
+    required: yes
+    mapping:
+      "=":
+        type: map
+        mapping:
+
+          "conf":
+            type: map
+            mapping:
+              "baseurl":
+                # baseurl can be a map or a single string
+                # TODO: change this so that it is always a map with 'default'.
+                required: yes
+                type: any
+              "=":
+                # all other keys must be strings and will go straight into repo definition
+                type: text
+
+          "content_set":
+            type: map
+            mapping:
+              "default":
+                type: str
+                required: yes
+              "=":
+                type: str
+

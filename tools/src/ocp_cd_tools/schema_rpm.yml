@@ -1,0 +1,28 @@
+
+type: map
+
+mapping:
+
+  "content":
+    type: map
+    mapping:
+      'source':
+        type: map
+        mapping:
+          "alias":
+            required: yes
+            type: str
+          "specfile":
+            type: str
+          "path":
+            type: str
+
+  "owners":
+    type: seq
+    sequence:
+      - type: str
+
+  "name":
+    required: yes
+    type: str
+
