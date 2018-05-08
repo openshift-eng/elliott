@@ -17,13 +17,11 @@ else:
 
 import ocp_cd_tools
 import ocp_cd_tools.exceptions
-import constants
-import errata
+import ocp_cd_tools.constants
+import ocp_cd_tools.errata as errata
 import bugzilla
 import brew
-from . import test_structures
-
-from requests_kerberos import HTTPKerberosAuth
+import ocp_cd_tools.test_structures as test_structures
 
 
 class TestBrew(unittest.TestCase):
@@ -80,7 +78,7 @@ class TestBrew(unittest.TestCase):
             state=ds['errata']['rhba']['status'],
             synopsis=ds['errata']['rhba']['synopsis'],
             url="{et}/advisory/{id}".format(
-                et=constants.errata_url,
+                et=ocp_cd_tools.constants.errata_url,
                 id=ds['errata']['rhba']['id']))
         self.assertEqual(expected_str, str(e))
 

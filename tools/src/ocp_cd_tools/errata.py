@@ -11,7 +11,6 @@ Classes representing an ERRATUM (a single errata)
 import copy
 import datetime
 import json
-import shlex
 
 from ocp_cd_tools import constants
 import ocp_cd_tools.brew

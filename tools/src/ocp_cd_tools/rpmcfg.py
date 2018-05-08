@@ -1,12 +1,11 @@
 import glob
 import os
-import time
 import traceback
 
-from common import (
-    RetryException,
-    assert_exec, gather_exec, retry, Dir, watch_task,
-)
+import exectools
+from pushd import Dir
+from brew import watch_task
+
 from metadata import Metadata
 from model import Missing
 
@@ -28,10 +27,8 @@ remote_git_name = {name}
 
 class RPMMetadata(Metadata):
 
-    def __init__(self, runtime, config_filename):
-        super(RPMMetadata, self).__init__('rpm', runtime, config_filename)
-
-        self.info = self.runtime.info
+    def __init__(self, runtime, config_filename, logger=None):
+        super(RPMMetadata, self).__init__('rpm', runtime, config_filename, logger)
 
         self.source = self.config.content.source
         if self.source is Missing:
@@ -73,8 +70,8 @@ class RPMMetadata(Metadata):
 
         with Dir(self.source_path):
             if not scratch:
-                assert_exec(self.runtime, 'git tag {}'.format(self.tag))
-            rc, sha, err = gather_exec(self.runtime, 'git rev-parse HEAD')
+                exectools.cmd_assert('git tag {}'.format(self.tag))
+            rc, sha, err = exectools.cmd_gather('git rev-parse HEAD')
             self.commit_sha = sha.strip()
 
     def push_tag(self):
@@ -82,18 +79,18 @@ class RPMMetadata(Metadata):
             raise ValueError('Must run set_nvr() before calling!')
 
         with Dir(self.source_path):
-            assert_exec(self.runtime, 'git push origin {}'.format(self.tag))
+            exectools.cmd_assert('git push origin {}'.format(self.tag))
 
     def commit_changes(self):
         with Dir(self.source_path):
-            assert_exec(self.runtime, "git add .")
-            assert_exec(self.runtime, ['git', 'commit', '-m', "Local commit for dist-git build"])
+            exectools.cmd_assert("git add .")
+            exectools.cmd_assert(['git', 'commit', '-m', "Local commit for dist-git build"])
 
     def tito_setup(self):
         tito_dir = os.path.join(self.source_path, '.tito')
         with Dir(self.source_path):
             if not os.path.isdir(tito_dir):
-                assert_exec(self.runtime, 'tito init')
+                exectools.cmd_assert('tito init')
 
             with open(os.path.join(tito_dir, 'releasers.conf'), 'w') as r:
                 r.write(RELEASERS_CONF.format(branch=self.runtime.branch,
@@ -112,8 +109,9 @@ class RPMMetadata(Metadata):
         with open(self.specfile, 'r') as df:
             specfile_data = df.read()
 
-        self.runtime.log_verbose("About to start modifying spec file [%s]:\n%s\n" %
-                                 (self.name, specfile_data))
+        self.logger.debug(
+            "About to start modifying spec file [{}]:\n{}\n".
+            format(self.name, specfile_data))
 
         for modification in self.config.content.source.modifications:
             if modification.action == "replace":
@@ -124,10 +122,11 @@ class RPMMetadata(Metadata):
                 pre = specfile_data
                 specfile_data = pre.replace(match, replacement)
                 if specfile_data == pre:
-                    raise IOError("%s: Replace (%s->%s) modification did not make a change to the Dockerfile content" % (
-                        self.distgit_key, match, replacement))
-                self.runtime.log_verbose("Performed string replace '%s' -> '%s':\n%s\n" %
-                                         (match, replacement, specfile_data))
+                    raise IOError("Replace (%s->%s) modification did not make a change to the Dockerfile content" % (
+                        match, replacement))
+                self.logger.debug(
+                    "Performed string replace '%s' -> '%s':\n%s\n" %
+                    (match, replacement, specfile_data))
             else:
                 raise IOError("%s: Don't know how to perform modification action: %s" % (self.distgit_key, modification.action))
 
@@ -190,7 +189,7 @@ class RPMMetadata(Metadata):
         separated for clarity.
         """
         with Dir(self.source_path):
-            self.info("Building rpm: %s" % self.rpm_name)
+            self.logger.info("Building rpm: %s" % self.rpm_name)
 
             cmd_list = ['tito', 'release', '--debug', '--yes', '--test']
             if scratch:
@@ -198,11 +197,11 @@ class RPMMetadata(Metadata):
             cmd_list.append('aos')
 
             # Run the build with --nowait so that we can immediately get information about the brew task
-            rc, out, err = gather_exec(self.runtime, cmd_list)
+            rc, out, err = exectools.cmd_gather(cmd_list)
 
             if rc != 0:
                 # Probably no point in continuing.. can't contact brew?
-                self.info("Unable to create brew task: out={}  ; err={}".format(out, err))
+                self.logger.info("Unable to create brew task: out={}  ; err={}".format(out, err))
                 return False
 
             # Otherwise, we should have a brew task we can monitor listed in the stdout.
@@ -218,26 +217,27 @@ class RPMMetadata(Metadata):
             task_url = next((info_line.split(":", 1)[1]).strip() for info_line in out_lines if
                             info_line.startswith("Task info:"))
 
-            self.info("Build running: {} - {}".format(self.rpm_name, task_url))
+            self.logger.info("Build running: {} - {}".format(self.rpm_name, task_url))
 
             record["task_url"] = task_url
 
             # Now that we have the basics about the task, wait for it to complete
-            error = watch_task(self.info, task_id, terminate_event)
+            error = watch_task(self.logger.info, task_id, terminate_event)
 
             # Gather brew-logs
             logs_dir = "%s/%s" % (self.runtime.brew_logs_dir, self.name)
-            logs_rc, _, logs_err = gather_exec(self.runtime, ["brew", "download-logs", "-d", logs_dir, task_id])
+            logs_rc, _, logs_err = exectools.cmd_gather(
+                ["brew", "download-logs", "-d", logs_dir, task_id])
 
             if logs_rc != 0:
-                self.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
+                self.logger.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
 
             if error is not None:
                 # An error occurred. We don't have a viable build.
-                self.info("Error building rpm: {}, {}".format(task_url, error))
+                self.logger.info("Error building rpm: {}, {}".format(task_url, error))
                 return False
 
-            self.info("Successfully built rpm: {} ; {}".format(self.rpm_name, task_url))
+            self.logger.info("Successfully built rpm: {} ; {}".format(self.rpm_name, task_url))
         return True
 
     def build_rpm(
@@ -260,18 +260,18 @@ class RPMMetadata(Metadata):
 
         try:
             def wait(n):
-                self.info("Async error in rpm build thread [attempt #{}]: {}".format(n + 1, self.qualified_name))
+                self.logger.info("Async error in rpm build thread [attempt #{}]: {}".format(n + 1, self.qualified_name))
                 # Brew does not handle an immediate retry correctly, wait
                 # before trying another build, terminating if interrupted.
                 if terminate_event.wait(timeout=5 * 60):
                     raise KeyboardInterrupt()
             try:
-                retry(
+                exectools.retry(
                     n=3, wait_f=wait,
                     f=lambda: self._build_rpm(
                         scratch, record, terminate_event))
-            except RetryException as err:
-                self.info(str(err))
+            except exectools.RetryException as err:
+                self.logger.info(str(err))
                 return False
 
             record["message"] = "Success"
@@ -281,7 +281,7 @@ class RPMMetadata(Metadata):
         except (Exception, KeyboardInterrupt):
             tb = traceback.format_exc()
             record["message"] = "Exception occurred:\n{}".format(tb)
-            self.info("Exception occurred during build:\n{}".format(tb))
+            self.logger.info("Exception occurred during build:\n{}".format(tb))
             # This is designed to fall through to finally. Since this method is designed to be
             # threaded, we should not throw an exception; instead return False.
         finally:

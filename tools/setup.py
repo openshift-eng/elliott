@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from setuptools import setup, find_packages
+from setuptools import setup
 
 with open('./requirements.txt') as f:
     INSTALL_REQUIRES = f.read().splitlines()
@@ -19,7 +19,7 @@ setup(
     #packages=find_packages(),
     include_package_data=True,
 
-    entry_points = {
+    entry_points={
         'console_scripts': [
             'elliott = elliott:cli',
             'oit = oit:cli'

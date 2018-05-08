@@ -1,14 +1,14 @@
 import shlex
-import common
+import exectools
 
 
 class DockerContainer(object):
     """This is an abstraction for launching containers from images and
 then running a subset of operations in the new container."""
 
-    def __init__(self, image, runtime, autostart=False):
+    def __init__(self, image, autostart=False, logger=None):
         self.image = image
-        self.runtime = runtime
+        self.logger = logger
         self.name_tag = image.split('/')[-1]
         self.cid = None
         if autostart:
@@ -16,12 +16,12 @@ then running a subset of operations in the new container."""
 
     def _cmd(self, cmd):
         """Run a docker related command"""
-        return common.gather_exec(self.runtime, shlex.split(cmd))
+        return exectools.cmd_gather(shlex.split(cmd), logger=self.logger)
 
     def start(self):
         """Start the container"""
         run_str = 'docker run --network=host -d -ti -u 0 --entrypoint /bin/bash {img}'.format(img=self.image)
-        self.runtime.info("[Verify] image: {img}".format(img=self.name_tag))
+        self.logger.info("[Verify] image: {img}".format(img=self.name_tag))
         # TODO: Check if this failed
         rc, stdout, stderr = self._cmd(run_str)
         self.cid = stdout.rstrip()

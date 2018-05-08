@@ -6,61 +6,6 @@ import unittest
 import task
 
 
-class RetryTestCase(unittest.TestCase):
-    """
-    Test the task.retry() method
-    """
-    ERROR_MSG = r"Giving up after {} failed attempt\(s\)"
-
-    def test_success(self):
-        """
-        Given a function that passes, make sure it returns successfully with
-        a single retry or greater.
-        """
-        pass_function = lambda: True
-        self.assertTrue(task.retry(1, pass_function))
-        self.assertTrue(task.retry(2, pass_function))
-
-    def test_failure(self):
-        """
-        Given a function that fails, make sure that it raise an exception
-        correctly with a single retry limit and greater.
-        """
-        fail_function = lambda: False
-        self.assertRaisesRegexp(
-            Exception, self.ERROR_MSG.format(1), task.retry, 1, fail_function)
-        self.assertRaisesRegexp(
-            Exception, self.ERROR_MSG.format(2), task.retry, 2, fail_function)
-
-    def test_wait(self):
-        """
-        Verify that the retry fails and raises an exception as needed.
-        Further, verify that the indicated wait loops occurred.
-        """
-
-        expected_calls = list("fw0fw1f")
-
-        # initialize a collector for loop information
-        calls = []
-
-        # loop 3 times, writing into the collector each try and wait
-        self.assertRaisesRegexp(
-            Exception, self.ERROR_MSG.format(3),
-            task.retry, 3, lambda: calls.append("f"),
-            wait_f=lambda n: calls.extend(("w", str(n))))
-
-        # check that the test and wait loop operated as expected
-        self.assertEqual(calls, expected_calls)
-
-    def test_return(self):
-        """
-        Verify that the retry task return value is passed back out faithfully.
-        """
-        obj = {}
-        func = lambda: obj
-        self.assertIs(task.retry(1, func, check_f=lambda _: True), obj)
-
-
 class ParseTaskinfoTestCase(unittest.TestCase):
     """
     Test the reduction of brew task list output to status values
@@ -110,6 +55,15 @@ Host: x86-034.build.eng.bos.redhat.com
         actual = task.parse_taskinfo(open_sample)
 
         self.assertEqual(actual, expected)
+
+
+class TestWatchTask(unittest.TestCase):
+
+    def test_watch_task(self):
+        """
+        Check that a watched task completes as expected without timeout
+        """
+        self.fail("test not implemented")
 
 
 if __name__ == "__main__":

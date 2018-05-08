@@ -1,22 +1,29 @@
+from multiprocessing import Lock
 from multiprocessing.dummy import Pool as ThreadPool
 from pykwalify.core import Core
 import os
-import click
+import sys
 import tempfile
 import threading
 import shutil
 import atexit
-import yaml
 import datetime
 import re
+import yaml
+import click
+import logging
+import functools
+import traceback
 
-from common import assert_dir, assert_exec, gather_exec, wrap_exception, Dir
+import assertion
+import exectools
+from pushd import Dir
+
 from image import ImageMetadata
 from rpmcfg import RPMMetadata
 from model import Model, Missing
 from multiprocessing import Lock
 from repos import Repos
-
 
 # Registered atexit to close out debug/record logs
 def close_file(f):
@@ -41,16 +48,49 @@ def remove_tmp_working_dir(runtime):
         click.echo("Temporary working directory preserved by operation: %s" % runtime.working_dir)
 
 
+class WrapException(Exception):
+    """ https://bugs.python.org/issue13831 """
+    def __init__(self):
+        super(WrapException, self).__init__()
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        self.exception = exc_value
+        self.formatted = "".join(
+            traceback.format_exception(exc_type, exc_value, exc_tb))
+
+    def __str__(self):
+        return "{}\nOriginal traceback:\n{}".format(
+            Exception.__str__(self), self.formatted)
+
+
+def wrap_exception(func):
+    """ Decorate a function, wrap exception if it occurs. """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            raise WrapException()
+    return wrapper
+
+# ============================================================================
+# Runtime object definition
+# ============================================================================
+
+
 class Runtime(object):
     # Use any time it is necessary to synchronize feedback from multiple threads.
     mutex = Lock()
 
-    # Serialize access to the debug_log, console, and record log
+    # Serialize access to the console, and record log
     log_lock = Lock()
 
     def __init__(self, **kwargs):
 
         self.include = []
+
+        # initialize defaults in case no value is given
+        self.verbose = False
+        self.quiet = False
 
         for key, val in kwargs.items():
             self.__dict__[key] = val
@@ -69,7 +109,6 @@ class Runtime(object):
         self.record_log = None
         self.record_log_path = None
 
-        self.debug_log = None
         self.debug_log_path = None
 
         self.brew_logs_dir = None
@@ -136,7 +175,7 @@ class Runtime(object):
             click.echo("Group must be specified")
             exit(1)
 
-        assert_dir(self.metadata_dir, "Invalid metadata-dir directory")
+        assertion.isdir(self.metadata_dir, "Invalid metadata-dir directory")
 
         if self.working_dir is None:
             self.working_dir = tempfile.mkdtemp(".tmp", "oit-")
@@ -145,7 +184,7 @@ class Runtime(object):
             atexit.register(remove_tmp_working_dir, self)
         else:
             self.working_dir = os.path.abspath(self.working_dir)
-            assert_dir(self.working_dir, "Invalid working directory")
+            assertion.isdir(self.working_dir, "Invalid working directory")
 
         self.distgits_dir = os.path.join(self.working_dir, "distgits")
         if not os.path.isdir(self.distgits_dir):
@@ -159,13 +198,39 @@ class Runtime(object):
         if not os.path.isdir(self.sources_dir):
             os.mkdir(self.sources_dir)
 
+        # Three flags control the output modes of the command:
+        # --verbose prints logs to CLI as well as to files
+        # --debug increases the log level to produce more detailed internal
+        #         behavior logging
+        # --quiet opposes both verbose and debug
+        if self.debug:
+            log_level = logging.DEBUG
+        elif self.quiet:
+            log_level = logging.ERROR
+        else:
+            log_level = logging.INFO
+
         self.debug_log_path = os.path.join(self.working_dir, "debug.log")
-        self.debug_log = open(self.debug_log_path, 'a')
-        atexit.register(close_file, self.debug_log)
+        logging.basicConfig(level=log_level,
+                            format='%(asctime)s %(levelname)s - %(message)s',
+                            filename=self.debug_log_path)
+
+        logging.getLogger('core').setLevel(logging.DEBUG)
+
+        self.logger = logging.getLogger()
+        # When the user asks for verbose output add a stream handler to
+        # the root logger.
+        if self.verbose:
+            formatter = logging.Formatter(
+                "%(asctime)s %(levelname)s - %(message)s")
+            vhandler = logging.StreamHandler()
+            vhandler.setFormatter(formatter)
+            self.logger.addHandler(vhandler)
 
         self.record_log_path = os.path.join(self.working_dir, "record.log")
-        self.record_log = open(self.record_log_path, 'a')
-        atexit.register(close_file, self.record_log)
+        self.record_log = logging.getLogger('record')
+        self.record_log.addHandler(
+            logging.FileHandler(filename=self.record_log_path))
 
         # Directory where brew-logs will be downloaded after a build
         self.brew_logs_dir = os.path.join(self.working_dir, "brew-logs")
@@ -178,13 +243,13 @@ class Runtime(object):
             os.mkdir(self.flags_dir)
 
         group_dir = os.path.join(self.metadata_dir, "groups", self.group)
-        assert_dir(group_dir, "Cannot find group directory")
+        assertion.isdir(group_dir, "Cannot find group directory")
 
         self.images_dir = images_dir = os.path.join(group_dir, 'images')
-        assert_dir(group_dir, "Cannot find images directory for {}".format(group_dir))
+        assertion.isdir(group_dir, "Cannot find images directory for {}".format(group_dir))
 
         rpms_dir = os.path.join(group_dir, 'rpms')
-        assert_dir(group_dir, "Cannot find rpms directory for {}".format(group_dir))
+        assertion.isdir(group_dir, "Cannot find rpms directory for {}".format(group_dir))
 
         # register the sources
         # For each "--source alias path" on the command line, register its existence with
@@ -200,7 +265,10 @@ class Runtime(object):
                 for key, val in source_dict.items():
                     self.register_source_alias(key, val)
 
-        self.info("Searching group directory: %s" % group_dir)
+        self.logger.info("Searching group directory: %s" % group_dir)
+        with Dir(group_dir):
+            with open("group.yml", "r") as f:
+                group_yml = f.read()
 
         with Dir(group_dir):
             self.group_config = self.get_group_config(group_dir)
@@ -216,15 +284,15 @@ class Runtime(object):
             if self.branch is None:
                 if self.group_config.branch is not Missing:
                     self.branch = self.group_config.branch
-                    self.info("Using branch from group.yml: %s" % self.branch)
+                    self.logger.info("Using branch from group.yml: %s" % self.branch)
                 else:
-                    self.info("No branch specified either in group.yml or on the command line; all included images will need to specify their own.")
+                    self.logger.info("No branch specified either in group.yml or on the command line; all included images will need to specify their own.")
             else:
-                self.info("Using branch from command line: %s" % self.branch)
+                self.logger.info("Using branch from command line: %s" % self.branch)
 
             if len(self.include) > 0:
                 self.include = flatten_comma_delimited_entries(self.include)
-                self.info("Include list set to: %s" % str(self.include))
+                self.logger.info("Include list set to: %s" % str(self.include))
 
             # Initially populated with all .yml files found in the images directory.
             images_filename_list = []
@@ -232,14 +300,14 @@ class Runtime(object):
                 with Dir(images_dir):
                     images_filename_list = [x for x in os.listdir(".") if os.path.isfile(x)]
             else:
-                self.info('{} does not exist. Skipping image processing for group.'.format(images_dir))
+                self.logger.debug('{} does not exist. Skipping image processing for group.'.format(images_dir))
 
             rpms_filename_list = []
             if os.path.isdir(rpms_dir):
                 with Dir(rpms_dir):
                     rpms_filename_list = [x for x in os.listdir(".") if os.path.isfile(x)]
             else:
-                self.log_verbose('{} does not exist. Skipping RPM processing for group.'.format(rpms_dir))
+                self.logger.debug('{} does not exist. Skipping RPM processing for group.'.format(rpms_dir))
 
             # Flattens a list like like [ 'x', 'y,z' ] into [ 'x.yml', 'y.yml', 'z.yml' ]
             # for later checking we need to remove from the lists, but they are tuples. Clone to list
@@ -268,8 +336,8 @@ class Runtime(object):
             if image_filenames:
                 also_exclude = set(image_filenames).intersection(set(exclude_filenames))
                 if len(also_exclude):
-                    self.info(
-                        "Warning: The following images were included and excluded but exclusion takes precedence: {}".format(', '.join(also_exclude))
+                    self.logger.warning(
+                        "The following images were included and excluded but exclusion takes precedence: {}".format(', '.join(also_exclude))
                     )
                 for image in images_filename_list:
                     if image in image_filenames:
@@ -280,8 +348,8 @@ class Runtime(object):
             if rpms_filenames:
                 also_exclude = set(rpms_filenames).intersection(set(exclude_filenames))
                 if len(also_exclude):
-                    self.info(
-                        "Warning: The following rpms were included and excluded but exclusion takes precedence: {}".format(', '.join(also_exclude))
+                    self.logger.warning(
+                        "The following rpms were included and excluded but exclusion takes precendence: {}".format(', '.join(also_exclude))
                     )
                 for rpm in rpms_filename_list:
                     if rpm in rpms_filenames:
@@ -308,10 +376,10 @@ class Runtime(object):
                     for config_filename in filename_list:
                         if check_include:
                             if check_include and config_filename in include:
-                                self.log_verbose("include: " + config_filename)
+                                self.logger.debug("include: " + config_filename)
                                 include.remove(config_filename)
                             else:
-                                self.log_verbose("Skipping {} {} since it is not in the include list".format(search_type, config_filename))
+                                self.logger.debug("Skipping {} {} since it is not in the include list".format(search_type, config_filename))
                                 continue
                         try:
                             schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_{}.yml".format(search_type))
@@ -326,12 +394,12 @@ class Runtime(object):
             if mode in ['images', 'both']:
                 collect_configs('image', images_dir, images_filename_list, image_include, gen_ImageMetadata)
                 if not self.image_map:
-                    self.info("WARNING: No image metadata directories found within: {}".format(group_dir))
+                    self.logger.warning("No image metadata directories found within: {}".format(group_dir))
 
             if mode in ['rpms', 'both']:
                 collect_configs('rpm', rpms_dir, rpms_filename_list, rpm_include, gen_RPMMetadata)
                 if not self.rpm_map:
-                    self.info("WARNING: No rpm metadata directories found within: {}".format(group_dir))
+                    self.logger.warning("No rpm metadata directories found within: {}".format(group_dir))
 
         # Make sure that the metadata is not asking us to check out the same exact distgit & branch.
         # This would almost always indicate someone has checked in duplicate metadata into a group.
@@ -354,26 +422,6 @@ class Runtime(object):
     def timestamp():
         return datetime.datetime.utcnow().isoformat()
 
-    def log_verbose(self, message):
-        message = " ".join((self.timestamp(), message))
-        with self.log_lock:
-            if self.verbose:
-                click.echo(message)
-            self.debug_log.write(message + "\n")
-            self.debug_log.flush()
-
-    def info(self, message, debug=None):
-        if self.quiet:
-            return
-        if self.verbose:
-            if debug is not None:
-                self.log_verbose("%s [%s]" % (message, debug))
-            else:
-                self.log_verbose(message)
-        else:
-            with self.log_lock:
-                click.echo(" ".join((self.timestamp(), message)))
-
     def image_metas(self):
         return self.image_map.values()
 
@@ -384,13 +432,14 @@ class Runtime(object):
         return self.image_metas() + self.rpm_metas()
 
     def register_source_alias(self, alias, path):
-        self.info("Registering source alias %s: %s" % (alias, path))
+        self.logger.info("Registering source alias %s: %s" % (alias, path))
         path = os.path.abspath(path)
-        assert_dir(path, "Error registering source alias %s" % alias)
+        assertion.isdir(path, "Error registering source alias %s" % alias)
         self.source_paths[alias] = path
         with Dir(path):
             origin_url = "?"
-            rc1, out_origin, err_origin = gather_exec(self, ["git", "config", "--get", "remote.origin.url"])
+            rc1, out_origin, err_origin = exectools.cmd_gather(
+                ["git", "config", "--get", "remote.origin.url"])
             if rc1 == 0:
                 origin_url = out_origin.strip()
                 # Usually something like "git@github.com:openshift/origin.git"
@@ -401,19 +450,20 @@ class Runtime(object):
                     origin_url = origin_url.replace(":", "/", 1)  # replace first colon with /
                     origin_url = "https://%s" % origin_url
             else:
-                self.info("Error acquiring origin url for source alias %s: %s" % (alias, err_origin))
+                self.logger.error("Failed acquiring origin url for source alias %s: %s" % (alias, err_origin))
 
             branch = "?"
-            rc2, out_branch, err_branch = gather_exec(self, ["git", "rev-parse", "--abbrev-ref", "HEAD"])
+            rc2, out_branch, err_branch = exectools.cmd_gather(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"])
             if rc2 == 0:
                 branch = out_branch.strip()
             else:
-                self.info("Error acquiring origin branch for source alias %s: %s" % (alias, err_branch))
+                self.logger.error("failed acquiring origin branch for source alias %s: %s" % (alias, err_branch))
 
             self.add_record("source_alias", alias=alias, origin_url=origin_url, branch=branch, path=path)
 
     def register_stream_alias(self, alias, image):
-        self.info("Registering image stream alias override %s: %s" % (alias, image))
+        self.logger.info("Registering image stream alias override %s: %s" % (alias, image))
         self.stream_alias_overrides[alias] = image
 
     @property
@@ -436,10 +486,13 @@ class Runtime(object):
 
     def add_record(self, record_type, **kwargs):
         """
-        Records an action taken by oit that needs to be communicated to outside systems. For example,
-        the update a Dockerfile which needs to be reviewed by an owner. Each record is encoded on a single
-        line in the record.log. Records cannot contain line feeds -- if you need to communicate multi-line
-        data, create a record with a path to a file in the working directory.
+        Records an action taken by oit that needs to be communicated to outside
+        systems. For example, the update a Dockerfile which needs to be
+        reviewed by an owner. Each record is encoded on a single line in the
+        record.log. Records cannot contain line feeds -- if you need to
+        communicate multi-line data, create a record with a path to a file in
+        the working directory.
+
         :param record_type: The type of record to create.
         :param kwargs: key/value pairs
 
@@ -447,8 +500,8 @@ class Runtime(object):
         record_type|key1=value1|key2=value2|...|
         """
 
-        # Multiple image build processes could be calling us with action simultaneously, so
-        # synchronize output to the file.
+        # Multiple image build processes could be calling us with action
+        # simultaneously, so synchronize output to the file.
         with self.log_lock:
             record = "%s|" % record_type
             for k, v in kwargs.iteritems():
@@ -458,8 +511,8 @@ class Runtime(object):
                 record += "%s=%s|" % (k, v)
 
             # Add the record to the file
-            self.record_log.write("%s\n" % record)
-            self.record_log.flush()
+
+            self.record_log.info(record)
 
     def add_distgits_diff(self, distgit, diff):
         """
@@ -501,6 +554,7 @@ class Runtime(object):
     # clone that source to checkout the group's desired branch before returning a path
     # to the cloned repo.
     def resolve_source(self, alias, required=True):
+
         if alias in self.source_paths:
             return self.source_paths[alias]
 
@@ -517,27 +571,28 @@ class Runtime(object):
         if os.path.isdir(source_dir):
             # Store so that the next attempt to resolve the source hits the map
             self.source_paths[alias] = source_dir
-            self.info("Source '%s' already exists in (skipping clone): %s" % (alias, source_dir))
+            self.logger.info("Source '%s' already exists in (skipping clone): %s" % (alias, source_dir))
             return source_dir
 
         source_config = self.group_config.sources[alias]
         url = source_config["url"]
         branches = source_config['branch']
-        self.info("Cloning source '%s' from %s as specified by group into: %s" % (alias, url, source_dir))
-        assert_exec(self, ["git", "clone", url, source_dir])
+        self.logger.info("Cloning source '%s' from %s as specified by group into: %s" % (alias, url, source_dir))
+        exectools.cmd_assert(["git", "clone", url, source_dir])
         stage_branch = branches.get('stage', None)
         fallback_branch = branches.get("fallback", None)
         found = False
         with Dir(source_dir):
             if self.stage and stage_branch:
-                self.info('Normal branch overridden by --stage option, using "{}"'.format(stage_branch))
+                self.logger.info('Normal branch overridden by --stage option, using "{}"'.format(stage_branch))
                 branch = stage_branch
             else:
                 branch = branches["target"]
-            self.info("Attempting to checkout source '%s' branch %s in: %s" % (alias, branch, source_dir))
+            self.logger.info("Attempting to checkout source '%s' branch %s in: %s" % (alias, branch, source_dir))
 
             if branch != "master":
-                rc, out, err = gather_exec(self, ["git", "checkout", "-b", branch, "origin/%s" % branch])
+                rc, out, err = exectools.cmd_gather(
+                    ["git", "checkout", "-b", branch, "origin/%s" % branch])
             else:
                 rc = 0
 
@@ -547,19 +602,19 @@ class Runtime(object):
                 if self.stage and stage_branch:
                     raise IOError('--stage option specified and no stage branch named "{}" exists for {}|{}'.format(stage_branch, alias, url))
                 elif fallback_branch is not None:
-                    self.info("  Unable to checkout branch %s ; trying fallback %s" % (branch, fallback_branch))
-                    self.info("Attempting to checkout source '%s' fallback-branch %s in: %s" % (alias, fallback_branch, source_dir))
+                    self.logger.info("Unable to checkout branch %s ; trying fallback %s" % (branch, fallback_branch))
+                    self.logger.info("Attempting to checkout source '%s' fallback-branch %s in: %s" % (alias, fallback_branch, source_dir))
                     if fallback_branch != "master":
-                        rc2, out, err = gather_exec(self, ["git", "checkout", "-b", fallback_branch, "origin/%s" % fallback_branch])
+                        rc2, out, err = exectools.cmd_gather(["git", "checkout", "-b", fallback_branch, "origin/%s" % fallback_branch])
                     else:
                         rc2 = 0
 
                     if rc2 == 0:
                         found = True
                     else:
-                        self.info("  Error checking out fallback-branch %s: %s" % (branch, err))
+                        self.logger.error("Failed checking out fallback-branch %s: %s" % (branch, err))
                 else:
-                    self.info("  Error checking out branch %s: %s" % (branch, err))
+                    self.error("Failed checking out branch %s: %s" % (branch, err))
 
             if found:
                 # Store so that the next attempt to resolve the source hits the map
@@ -572,7 +627,7 @@ class Runtime(object):
                     return None
 
     def export_sources(self, output):
-        self.info('Writing sources to {}'.format(output))
+        self.logger.info('Writing sources to {}'.format(output))
         with open(output, 'w') as sources_file:
             yaml.dump(self.source_paths, sources_file, default_flow_style=False)
 
@@ -601,7 +656,7 @@ class Runtime(object):
         """
 
         repo_url = self.repos['rhel-server-ose-rpms'].baseurl(repo_type)
-        self.info(
+        self.logger.info(
             "Getting version from atomic-openshift package in {}".format(
                 repo_url)
         )
@@ -613,7 +668,7 @@ class Runtime(object):
                          "--repofrompath", repoid + "," + repo_url,
                          "--queryformat", "%{VERSION}",
                          "atomic-openshift"]
-        rc, auto_version, err = gather_exec(self, version_query)
+        rc, auto_version, err = exectools.cmd_gather(version_query)
         if rc != 0:
             raise RuntimeError(
                 "Unable to get OCP version from RPM repository: {}".format(err)
@@ -621,7 +676,7 @@ class Runtime(object):
 
         version = "v" + auto_version.strip()
 
-        self.info("Auto-detected OCP version: {}".format(version))
+        self.logger.info("Auto-detected OCP version: {}".format(version))
         return version
 
     def valid_version(self, version):

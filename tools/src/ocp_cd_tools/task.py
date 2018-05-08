@@ -4,33 +4,12 @@ asynchronous tasks and sub processes.
 """
 
 import time
+import koji
+import koji_cli
 import subprocess
+import logging
 
-
-class RetryException(Exception):
-    """
-    Provide a custom exception for retry failures
-    """
-    pass
-
-
-def retry(retries, task_f, check_f=bool, wait_f=None):
-    """
-    Try a function up to n times.
-    Raise an exception if it does not pass in time
-
-    :param retries int: The number of times to retry
-    :param task_f func: The function to be run and observed
-    :param func()bool check_f: a function to check of task_f is complete
-    :param func()bool wait_f: a function to run between checks
-    """
-    for attempt in range(retries):
-        ret = task_f()
-        if check_f(ret):
-            return ret
-        if attempt < retries - 1 and wait_f is not None:
-            wait_f(attempt)
-    raise RetryException("Giving up after {} failed attempt(s)".format(retries))
+import constants
 
 
 def parse_taskinfo(out):
@@ -45,24 +24,52 @@ def parse_taskinfo(out):
         "unknown")
 
 
-def watch_task(log_f, task_id):
+def cancel_brew_build(task_id, reason, logger=None):
+    """
+    """
+    logger = logger or logging.getLogger()
+
+    # Task still running, cancel and clean up
+    logger.error(reason + ": canceling build")
+    subprocess.check_call(("brew", "cancel", str(task_id)))
+
+
+def watch_task(task_id, terminate_event=None,
+               timeout=14400, poll_interval=120, logger=None):
     """
     This function opens a brew CLI sub-process and observes the output stream.
     When the task exits, the funtion returns the return state.
     The loop polls every 2 minutes.
     If a timeout is exceeded (4 hours), the watching process is killed.
+
+    :param task_id: The id number of a brew/koji task in process
+    :param terminate_event: A threading.Event() object
+
+    :return: True for success, False for incompleted, otherwise the fail result
     """
     start = time.time()
-    task = subprocess.Popen(
-        ("brew", "watch-task", str(task_id)),
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    while task.poll() is None:
-        info = subprocess.check_output(("brew", "taskinfo", str(task_id)))
-        log_f("Task state: {}".format(parse_taskinfo(info)))
-        if time.time() - start < 4 * 60 * 60:
-            time.sleep(2 * 60)
-        else:
-            log_f("Timeout building image")
-            subprocess.check_call(("brew", "cancel", str(task_id)))
-            task.kill()
-    return task.returncode, task.stdout.read(), task.stderr.read()
+    end = start + timeout
+
+    if terminate_event is not None:
+        interrupted = lambda p: not terminate_event.wait(timeout=p)
+    else:
+        interrupted = lambda p: time.sleep(p) and False
+
+    watcher = koji_cli.lib.TaskWatcher(
+        task_id,
+        koji.ClientSession(constants.BREW_HUB),
+        quiet=True)
+
+    while not watcher.is_done():
+
+        # wait one poll interval (unless interrupted)
+        if interrupted(poll_interval):
+            cancel_brew_build(task_id, "Build Interrupted")
+            return False
+
+        # Test
+        if time.time() > end:
+            cancel_brew_build(task_id, "Timeout exceeded")
+            return False
+
+    return watcher.is_success() or watcher.get_failure()

@@ -1,17 +1,19 @@
 import yaml
-import shutil
 import os
-import tempfile
-import hashlib
-import time
 import urllib
-import json
-from distgit import ImageDistGitRepo, RPMDistGitRepo, pull_image
 
-from common import BREW_IMAGE_HOST, CGIT_URL, RetryException, assert_rc0, assert_file, assert_exec, assert_dir, exec_cmd, retry, recursive_overwrite
+import logging
+
+import assertion
+import constants
+from distgit import ImageDistGitRepo, RPMDistGitRepo
+import exectools
+
 from model import Model, Missing
 
-
+#
+# These are used as labels to index selection of a subclass.
+#
 DISTGIT_TYPES = {
     'image': ImageDistGitRepo,
     'rpm': RPMDistGitRepo
@@ -19,7 +21,7 @@ DISTGIT_TYPES = {
 
 
 def cgit_url(name, filename, rev=None):
-    ret = "/".join((CGIT_URL, name, "plain", filename))
+    ret = "/".join((constants.CGIT_URL, name, "plain", filename))
     if rev is not None:
         ret = "{}?h={}".format(ret, rev)
     return ret
@@ -34,12 +36,33 @@ def tag_exists(registry, name, tag, fetch_f=None):
 
 
 class Metadata(object):
+    def __init__(self, meta_type, runtime, config_filename, logger=None):
+        """
+        :param: meta_type - a string. Index to the sub-class <'rpm'|'image'>.
+        :param: runtime - a Runtime object.  used only for the .branch value.
+        :param: name - a string appenaded to the derived namespace to locate
+                       the git repo root.
+        :param: logger - a python logger object.  Defaults to the root logger.
 
-    def __init__(self, meta_type, runtime, config_filename):
+        The metadata object must be created when CWD is a directory containing
+        a file named <name>.yml.
+
+        This file must contain a YAML data structure like this:
+
+          ---
+          name: <value>
+          distgit:
+            namespace: <value>
+
+        This file is converted to a Model which can be queried using dot
+        notation.
+        """
+
+        self.logger = logger or logging.getLogger()
+
         self.meta_type = meta_type
         self.runtime = runtime
         self.config_filename = config_filename
-
 
         # Some config filenames have suffixes to avoid name collisions; strip off the suffix to find the real
         # distgit repo name (which must be combined with the distgit namespace).
@@ -50,14 +73,16 @@ class Metadata(object):
         self.distgit_key = config_filename.rsplit('.', 1)[0]  # Split off .yml
         self.name = self.distgit_key.split('.')[0]   # Split off any '.apb' style differentiator (if present)
 
-        runtime.log_verbose("Loading metadata from %s" % self.config_filename)
+        self.logger.debug("Current working directory is {}".format(os.getcwd()))
+        self.logger.debug("Loading metadata from {}".format(self.config_filename))
 
-        assert_file(self.config_filename, "Unable to find configuration file")
+        assertion.isfile(os.path.join(os.getcwd(), self.config_filename),
+                         "Unable to find configuration file")
 
         with open(self.config_filename, "r") as f:
             config_yml_content = f.read()
 
-        runtime.log_verbose(config_yml_content)
+        self.logger.debug(config_yml_content)
         self.config = Model(yaml.load(config_yml_content))
 
         # Basic config validation. All images currently required to have a name in the metadata.
@@ -95,13 +120,13 @@ class Metadata(object):
 
     def fetch_cgit_file(self, filename):
         url = self.cgit_url(filename)
-        req = retry(
+        req = exectools.retry(
             3, lambda: urllib.urlopen(url),
             check_f=lambda req: req.code == 200)
         return req.read()
 
     def tag_exists(self, tag):
-        return tag_exists("http://" + BREW_IMAGE_HOST, self.config.name, tag)
+        return tag_exists("http://" + constants.BREW_IMAGE_HOST, self.config.name, tag)
 
     def get_component_name(self):
         # By default, the bugzilla component is the name of the distgit,

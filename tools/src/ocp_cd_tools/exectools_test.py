@@ -7,13 +7,68 @@ from __future__ import print_function
 
 import unittest
 
+import os
 import tempfile
 import shutil
-import atexit
 
-import logs
+import logging
 
 import exectools
+
+
+class RetryTestCase(unittest.TestCase):
+    """
+    Test the exectools.retry() method
+    """
+    ERROR_MSG = r"Giving up after {} failed attempt\(s\)"
+
+    def test_success(self):
+        """
+        Given a function that passes, make sure it returns successfully with
+        a single retry or greater.
+        """
+        pass_function = lambda: True
+        self.assertTrue(exectools.retry(1, pass_function))
+        self.assertTrue(exectools.retry(2, pass_function))
+
+    def test_failure(self):
+        """
+        Given a function that fails, make sure that it raise an exception
+        correctly with a single retry limit and greater.
+        """
+        fail_function = lambda: False
+        self.assertRaisesRegexp(
+            Exception, self.ERROR_MSG.format(1), exectools.retry, 1, fail_function)
+        self.assertRaisesRegexp(
+            Exception, self.ERROR_MSG.format(2), exectools.retry, 2, fail_function)
+
+    def test_wait(self):
+        """
+        Verify that the retry fails and raises an exception as needed.
+        Further, verify that the indicated wait loops occurred.
+        """
+
+        expected_calls = list("fw0fw1f")
+
+        # initialize a collector for loop information
+        calls = []
+
+        # loop 3 times, writing into the collector each try and wait
+        self.assertRaisesRegexp(
+            Exception, self.ERROR_MSG.format(3),
+            exectools.retry, 3, lambda: calls.append("f"),
+            wait_f=lambda n: calls.extend(("w", str(n))))
+
+        # check that the test and wait loop operated as expected
+        self.assertEqual(calls, expected_calls)
+
+    def test_return(self):
+        """
+        Verify that the retry task return value is passed back out faithfully.
+        """
+        obj = {}
+        func = lambda: obj
+        self.assertIs(exectools.retry(1, func, check_f=lambda _: True), obj)
 
 
 class TestCmdLog(unittest.TestCase):
@@ -22,28 +77,21 @@ class TestCmdLog(unittest.TestCase):
     This function executes a shell command and writes the stdout and stderr
     to a log file provided by the logs module
     """
-
     def setUp(self):
-        logs._Log._reset()
-        self.test_dir = tempfile.mkdtemp(prefix="oit-test-cmd-log")
-        atexit.register(logs._cleanup_log_dir, self.test_dir)
+        self.test_dir = tempfile.mkdtemp(prefix="ocp-cd-test-logs")
+        self.test_file = os.path.join(self.test_dir, "test_file")
+        logging.basicConfig(filename=self.test_file, level=logging.INFO)
+        self.logger = logging.getLogger()
 
     def tearDown(self):
-        """
-        This command requires an existing logger to operate.
-        Create the logger before each test
-        """
-        self.logger._reset()
+        logging.shutdown()
+        reload(logging)
+        shutil.rmtree(self.test_dir)
 
     def test_cmd_log(self):
-        self.logger = logs.Log(log_dir=self.test_dir)
-        self.logger.open()
-
         exectools.cmd_log("/usr/bin/echo this is the output line")
 
-        self.logger.close()
-
-        testfile = open(self.logger.log_path)
+        testfile = open(self.test_file)
         lines = testfile.readlines()
         testfile.close()
         self.assertEquals(len(lines), 4)
@@ -54,18 +102,15 @@ class TestCmdExec(unittest.TestCase):
     """
 
     def setUp(self):
-        self.test_dir = tempfile.mkdtemp(prefix="test-cmd-exec")
-        atexit.register(logs._cleanup_log_dir, self.test_dir)
-        self.logger = logs.Log(self.test_dir)
-        self.logger.open()
+        self.test_dir = tempfile.mkdtemp(prefix="ocp-cd-test-logs")
+        self.test_file = os.path.join(self.test_dir, "test_file")
+        logging.basicConfig(filename=self.test_file, level=logging.INFO)
+        self.logger = logging.getLogger()
 
     def tearDown(self):
-        """
-        This command requires an existing logger to operate.
-        Create the logger before each test
-        """
-        self.logger.close()
-        self.logger._reset()
+        logging.shutdown()
+        reload(logging)
+        shutil.rmtree(self.test_dir)
 
     def test_cmd_assert_success(self):
         """
@@ -77,8 +122,9 @@ class TestCmdExec(unittest.TestCase):
             self.Fail("/bin/truereturned failure: {}".format(error))
 
         # check that the log file has all of the tests.
-        log_file = open(self.logger.log_path, 'r')
+        log_file = open(self.test_file, 'r')
         lines = log_file.readlines()
+        log_file.close()
 
         self.assertEquals(len(lines), 4)
 
@@ -91,8 +137,10 @@ class TestCmdExec(unittest.TestCase):
             exectools.cmd_assert("/usr/bin/false", 3, 1)
 
         # check that the log file has all of the tests.
-        log_file = open(self.logger.log_path, 'r')
+        log_file = open(self.test_file, 'r')
         lines = log_file.readlines()
+        log_file.close()
+
         self.assertEquals(len(lines), 12)
 
 
@@ -101,26 +149,22 @@ class TestGather(unittest.TestCase):
     """
 
     def setUp(self):
-        self.test_dir = tempfile.mkdtemp(prefix="oit-test-exectools")
-        atexit.register(logs._cleanup_log_dir, self.test_dir)
-        self.logger = logs.Log(self.test_dir)
-        self.logger.open()
+        self.test_dir = tempfile.mkdtemp(prefix="ocp-cd-test-logs")
+        self.test_file = os.path.join(self.test_dir, "test_file")
+        logging.basicConfig(filename=self.test_file, level=logging.INFO)
+        self.logger = logging.getLogger()
 
     def tearDown(self):
-        """
-        This command requires an existing logger to operate.
-        Create the logger before each test
-        """
-        self.logger.close()
-        self.logger._reset()
+        logging.shutdown()
+        reload(logging)
+        shutil.rmtree(self.test_dir)
 
     def test_gather_success(self):
         """
         """
 
-        (status, stdout, stderr) = exectools.cmd_gather("/usr/bin/echo hello there")
-        self.logger.close()
-
+        (status, stdout, stderr) = exectools.cmd_gather(
+            "/usr/bin/echo hello there")
         status_expected = 0
         stdout_expected = "hello there\n"
         stderr_expected = ""
@@ -131,7 +175,7 @@ class TestGather(unittest.TestCase):
 
         # check that the log file has all of the tests.
 
-        log_file = open(self.logger.log_path, 'r')
+        log_file = open(self.test_file, 'r')
         lines = log_file.readlines()
 
         self.assertEquals(len(lines), 6)
@@ -140,9 +184,8 @@ class TestGather(unittest.TestCase):
         """
         """
 
-        (status, stdout, stderr) = exectools.cmd_gather(["/usr/bin/sed", "-e", "f"])
-
-        self.logger.close()
+        (status, stdout, stderr) = exectools.cmd_gather(
+            ["/usr/bin/sed", "-e", "f"])
 
         status_expected = 1
         stdout_expected = ""
@@ -153,7 +196,7 @@ class TestGather(unittest.TestCase):
         self.assertEquals(stderr, stderr_expected)
 
         # check that the log file has all of the tests.
-        log_file = open(self.logger.log_path, 'r')
+        log_file = open(self.test_file, 'r')
         lines = log_file.readlines()
 
         self.assertEquals(len(lines), 6)

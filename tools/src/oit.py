@@ -4,6 +4,7 @@ from ocp_cd_tools import Runtime, Dir
 from ocp_cd_tools.image import pull_image, create_image_verify_repo_file, Image
 from ocp_cd_tools.common import get_watch_task_info_copy
 from ocp_cd_tools.model import Missing
+from ocp_cd_tools.brew import get_watch_task_info_copy
 import datetime
 import click
 import os
@@ -45,7 +46,8 @@ context_settings = dict(help_option_names=['-h', '--help'])
 @click.option('--latest-parent-version', default=False, is_flag=True,
               help='If a base image is not included, lookup latest FROM tag for parent. Implies --ignore-missing-base')
 @click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
-@click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
+@click.option('--verbose', '-v', default=False, is_flag=True, help='Print progress information to the terminal during a run.')
+@click.option('--debug', '-v', default=False, is_flag=True, help='Log additional information for developers and operators.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
               help='Do not place OIT comment in Dockerfile. Can also be set in each config yaml')
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
@@ -273,10 +275,10 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
     # --no-pull isn't given, then we will pre-pull all images.
     if not no_pull:
         for image in images:
-            pull_image(runtime, image.pull_url)
+            pull_image(image.pull_url)
 
     count_images = len(images)
-    runtime.info("[Verify] Running verification checks on {count} images: {chks}".format(count=count_images, chks=", ".join(enabled_checks)))
+    runtime.logger.info("[Verify] Running verification checks on {count} images: {chks}".format(count=count_images, chks=", ".join(enabled_checks)))
 
     pool = ThreadPool(cpu_count())
     results = pool.map(
@@ -293,7 +295,7 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
 
     fail_log = os.path.join(runtime.working_dir, 'verify_fail_log.yml')
 
-    runtime.info("[Verify] Checks finished. {fail_count} failed".format(fail_count=failed_images_count))
+    runtime.logger.info("[Verify] Checks finished. {fail_count} failed".format(fail_count=failed_images_count))
 
     if failed_images_count > 0:
         runtime.remove_tmp_working_dir = False
@@ -304,7 +306,7 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
 
         with open(fail_log, 'w') as fp:
             fp.write(yaml.safe_dump(fail_log_data, indent=4, default_flow_style=False))
-            runtime.info("[Verify] Failed images check details: {fail_log}".format(fail_log=fail_log))
+            runtime.logger.info("[Verify] Failed images check details: {fail_log}".format(fail_log=fail_log))
 
     exit(failed_images_count)
 
@@ -361,8 +363,11 @@ def images_rebase(runtime, stream, version, release, repo_type, message, push):
         (real_version, real_release) = dgr.rebase_dir(version, release)
         sha = dgr.commit(message, log_diff=True)
         dgr.tag(real_version, real_release)
-        runtime.add_record("distgit_commit", distgit=dgr.metadata.qualified_name,
-                           image=dgr.config.name, sha=sha)
+        runtime.add_record(
+            "distgit_commit",
+            distgit=dgr.metadata.qualified_name,
+            image=dgr.config.name,
+            sha=sha)
 
     if push:
         runtime.push_distgits()
@@ -520,13 +525,16 @@ def print_build_metrics(runtime):
     # https://github.com/openshift/enterprise-images/pull/178#discussion_r173812940
     for task_id in watch_task_info.keys():
         info = watch_task_info[task_id]
-        runtime.log_verbose("Watch task info:\n {}\n\n".format(info))
-        if not _taskinfo_has_timestamp(info, 'create_ts') \
-                or not _taskinfo_has_timestamp(info, 'completion_ts') \
-                or not _taskinfo_has_timestamp(info, 'start_ts') \
-                or 'id' not in info \
-                or koji.TASK_STATES[info['state']] is not 'CLOSED':
-            runtime.info("Discarding incomplete/error task info: {}".format(info))
+        runtime.logger.debug("Watch task info:\n {}\n\n".format(info))
+        # Error unless all true
+        if not ('id' in info and
+                koji.TASK_STATES[info['state']] is 'CLOSED' and
+                _taskinfo_has_timestamp(info, 'create_ts') and
+                _taskinfo_has_timestamp(info, 'start_ts') and
+                _taskinfo_has_timestamp(info, 'completion_ts')
+        ):
+            runtime.logger.error(
+                "Discarding incomplete/error task info: {}".format(info))
             del watch_task_info[task_id]
 
     runtime.info("Number of brew tasks successful: {}".format(len(watch_task_info)))
@@ -561,10 +569,10 @@ def print_build_metrics(runtime):
         wait_secs = start_ts - create_ts
         aggregate_wait_secs += wait_secs
 
-        runtime.info('Task {} took {:.1f}m of active build and was waiting to start for {:.1f}m'.format(task_id,
-                                                                                                        build_secs / 60.0,
-                                                                                                        wait_secs / 60.0)
-                     )
+        runtime.info('Task {} took {:.1f}m of active build and was waiting to start for {:.1f}m'.format(
+            task_id,
+            build_secs / 60.0,
+            wait_secs / 60.0))
     runtime.info('Aggregate time all builds spent building {:.1f}m'.format(aggregate_build_secs / 60.0))
     runtime.info('Aggregate time all builds spent waiting {:.1f}m'.format(aggregate_wait_secs / 60.0))
 
@@ -852,7 +860,7 @@ def images_print(runtime, short, show_non_release, pattern):
     # If non-release images are being suppressed, let the user know
     if not show_non_release and non_release_images:
         echo_verbose("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(
-                     len(non_release_images)))
+            len(non_release_images)))
         for image in non_release_images:
             echo_verbose("    {}".format(image))
 
