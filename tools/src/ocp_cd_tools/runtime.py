@@ -292,18 +292,10 @@ class Runtime(object):
                 raise IOError('Unable to find the following images or rpms configs: {}'.format(', '.join(missed_include)))
 
             def gen_ImageMetadata(config_filename):
-                image_schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_image.yml")
-                c = Core(source_file=config_filename, schema_files=[image_schema_path])
-                c.validate(raise_exception=True)
-
                 metadata =ImageMetadata(self, config_filename)
                 self.image_map[metadata.distgit_key] = metadata
 
             def gen_RPMMetadata(config_filename):
-                rpm_schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_rpm.yml")
-                c = Core(source_file=config_filename, schema_files=[rpm_schema_path])
-                c.validate(raise_exception=True)
-
                 metadata = RPMMetadata(self, config_filename)
                 self.rpm_map[metadata.distgit_key] = metadata
 
@@ -322,6 +314,10 @@ class Runtime(object):
                                 self.log_verbose("Skipping {} {} since it is not in the include list".format(search_type, config_filename))
                                 continue
                         try:
+                            schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_{}.yml".format(search_type))
+                            c = Core(source_file=config_filename, schema_files=[schema_path])
+                            c.validate(raise_exception=True)
+
                             gen(config_filename)
                         except Exception:
                             self.info("ERROR: configuration file failed to load: {}".format(os.path.join(search_dir,config_filename)))
