@@ -47,7 +47,7 @@ class ImageMetadata(Metadata):
         # Don't trust what is the Dockerfile for version & release. This field may not even be present.
         # Query brew to find the most recently built release for this component version.
         _, version, release = self.get_latest_build_info()
-        return "{host}/{l[name]}:{version}-{release}".format(
+        return "{host}/{name}:{version}-{release}".format(
             host=BREW_IMAGE_HOST, name=self.config.name, version=version, release=release)
 
     def pull_image(self):
