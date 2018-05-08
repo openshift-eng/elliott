@@ -2,12 +2,11 @@ import yaml
 import os
 import urllib
 
-import logging
-
 import assertion
 import constants
 from distgit import ImageDistGitRepo, RPMDistGitRepo
 import exectools
+import logutil
 
 from model import Model, Missing
 
@@ -39,23 +38,8 @@ class Metadata(object):
     def __init__(self, meta_type, runtime, config_filename):
         """
         :param: meta_type - a string. Index to the sub-class <'rpm'|'image'>.
-        :param: runtime - a Runtime object.  used only for the .branch value
-                and logger.
-        :param: name - a string appenaded to the derived namespace to locate
-                       the git repo root.
-
-        The metadata object must be created when CWD is a directory containing
-        a file named <name>.yml.
-
-        This file must contain a YAML data structure like this:
-
-          ---
-          name: <value>
-          distgit:
-            namespace: <value>
-
-        This file is converted to a Model which can be queried using dot
-        notation.
+        :param: runtime - a Runtime object.
+        :param: name - a filename to load as metadata
         """
 
         self.meta_type = meta_type
@@ -71,7 +55,6 @@ class Metadata(object):
         self.distgit_key = config_filename.rsplit('.', 1)[0]  # Split off .yml
         self.name = self.distgit_key.split('.')[0]   # Split off any '.apb' style differentiator (if present)
 
-        self.runtime.logger.debug("Current working directory is {}".format(os.getcwd()))
         self.runtime.logger.debug("Loading metadata from {}".format(self.config_filename))
 
         assertion.isfile(os.path.join(os.getcwd(), self.config_filename),
@@ -80,7 +63,6 @@ class Metadata(object):
         with open(self.config_filename, "r") as f:
             config_yml_content = f.read()
 
-        self.runtime.logger.debug(config_yml_content)
         self.config = Model(yaml.load(config_yml_content))
 
         # Basic config validation. All images currently required to have a name in the metadata.
@@ -100,6 +82,10 @@ class Metadata(object):
             self.namespace = self.config.distgit.namespace
 
         self.qualified_name = "%s/%s" % (self.namespace, self.name)
+        self.qualified_key = "%s/%s" % (self.namespace, self.distgit_key)
+
+        # Includes information to identify the metadata being used with each log message
+        self.logger = logutil.EntityLoggingAdapter(logger=self.runtime.logger, extra={'entity': self.qualified_key})
 
         self._distgit_repo = None
 

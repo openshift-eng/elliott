@@ -71,32 +71,6 @@ class RetryTestCase(unittest.TestCase):
         self.assertIs(exectools.retry(1, func, check_f=lambda _: True), obj)
 
 
-class TestCmdLog(unittest.TestCase):
-    """
-    Test the cmd_log() function.
-    This function executes a shell command and writes the stdout and stderr
-    to a log file provided by the logs module
-    """
-    def setUp(self):
-        self.test_dir = tempfile.mkdtemp(prefix="ocp-cd-test-logs")
-        self.test_file = os.path.join(self.test_dir, "test_file")
-        logging.basicConfig(filename=self.test_file, level=logging.INFO)
-        self.logger = logging.getLogger()
-
-    def tearDown(self):
-        logging.shutdown()
-        reload(logging)
-        shutil.rmtree(self.test_dir)
-
-    def test_cmd_log(self):
-        exectools.cmd_log("/usr/bin/echo this is the output line")
-
-        testfile = open(self.test_file)
-        lines = testfile.readlines()
-        testfile.close()
-        self.assertEquals(len(lines), 4)
-
-
 class TestCmdExec(unittest.TestCase):
     """
     """

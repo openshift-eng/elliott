@@ -19,7 +19,6 @@ Example:
 
 import os
 import threading
-import logging
 
 
 class Dir(object):
@@ -38,22 +37,17 @@ class Dir(object):
     """
     _tl = threading.local()
 
-    def __init__(self, newdir, logger=None):
-        self.logger = logger or logging.getLogger()
+    def __init__(self, newdir):
         self.dir = newdir
         self.previous_dir = None
 
     def __enter__(self):
         self.previous_dir = self.getcwd()
-        self.logger.debug("Dir - changing to: {}, starting in: {}".
-                          format(self.dir, self.previous_dir))
         os.chdir(self.dir)
         self._tl.cwd = self.dir
         return self.dir
 
     def __exit__(self, *args):
-        self.logger.debug("Dir - returning from: {}, to: {}".
-                          format(self.dir, self.previous_dir))
         os.chdir(self.previous_dir)
         self._tl.cwd = self.previous_dir
 

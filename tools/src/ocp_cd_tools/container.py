@@ -1,22 +1,26 @@
 import shlex
 import exectools
+import logutil
+import constants
+
+logger = logutil.getLogger(__name__)
 
 
 class DockerContainer(object):
     """This is an abstraction for launching containers from images and
 then running a subset of operations in the new container."""
 
-    def __init__(self, image, autostart=False, logger=None):
+    def __init__(self, image, autostart=False):
         self.image = image
-        self.logger = logger
         self.name_tag = image.split('/')[-1]
+        self.logger = constants.EntityLoggingAdapter(logger, {'entity', '{}'.format(self.name_tag)})
         self.cid = None
         if autostart:
             self.start()
 
     def _cmd(self, cmd):
         """Run a docker related command"""
-        return exectools.cmd_gather(shlex.split(cmd), logger=self.logger)
+        return exectools.cmd_gather(shlex.split(cmd))
 
     def start(self):
         """Start the container"""

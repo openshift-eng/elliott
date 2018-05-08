@@ -4,12 +4,17 @@ from metadata import Metadata
 from model import Missing
 
 import assertion
-import common
+import constants
+import logutil
 import exectools
 import container
+import logutil
+
+logger = logutil.getLogger(__name__)
 
 
 class ImageMetadata(Metadata):
+
     def __init__(self, runtime, config_filename):
         super(ImageMetadata, self).__init__('image', runtime, config_filename)
 
@@ -27,8 +32,7 @@ class ImageMetadata(Metadata):
 
         tag = "{}-candidate".format(self.branch())
 
-        rc, stdout, stderr = exectools.cmd_gather(
-            ["brew", "latest-build", tag, component_name])
+        rc, stdout, stderr = exectools.cmd_gather(["brew", "latest-build", tag, component_name])
 
         assertion.success(rc, "Unable to search brew builds: %s" % stderr)
 
@@ -49,10 +53,10 @@ class ImageMetadata(Metadata):
         # Query brew to find the most recently built release for this component version.
         _, version, release = self.get_latest_build_info()
         return "{host}/{name}:{version}-{release}".format(
-            host=common.BREW_IMAGE_HOST, name=self.config.name, version=version, release=release)
+            host=constants.BREW_IMAGE_HOST, name=self.config.name, version=version, release=release)
 
     def pull_image(self):
-        pull_image(self.runtime, self.pull_url())
+        pull_image(self.pull_url())
 
     def get_default_push_tags(self, version, release):
         push_tags = [
@@ -196,15 +200,14 @@ verify the contents.
         self.enabled_checks = enabled_checks
         # registry.redhat.com:8888/openshift3/ose:v3.4.1.44.38-12 => ose:v3.4.1.44.38-12
         self.name_tag = pull_url.split('/')[-1]
+        self.logger = logutil.EntityLoggingAdapter(logger=logger, extra={'entity': '{}'.format(self.name_tag)})
         self.distgit = distgit
 
         # I must apologize for this...... Trim the version. Remove any
         # possible leaving 'v' characters, split on hyphen to isolate
         # the image release (-NN), take first item
         self.image_version = self.name_tag.split(':')[-1].lstrip('v').split('-')[0]
-        self.container = container.DockerContainer(
-            pull_url,
-            logger=self.runtime.logger)
+        self.container = container.DockerContainer(pull_url)
         # Full and abbreviated container IDs once started
         self.cid = None
         self.failures = {}
@@ -223,7 +226,7 @@ verify the contents.
                 # We attempted to run a check which doesn't
                 # exist. This should not be possible. Who updated the
                 # @click.option's and didn't add the required check?
-                self.runtime.logger.error("Attempted to run an unknown check: {bad_check} during image verification".format(bad_check=check))
+                self.logger.error("Attempted to run an unknown check: {bad_check} during image verification".format(bad_check=check))
 
         # All checks ran, shut it down, clean up after it, analyze results
         self.container.stop()
@@ -252,7 +255,7 @@ verify the contents.
 
     def check_sigs(self):
         """Ensure installed packages are signed using a valid key"""
-        self.runtime.logger.debug("[Verify: {name}] Grabbing package signature list".format(name=self.name_tag))
+        self.logger.debug("[Verify: {name}] Grabbing package signature list".format(name=self.name_tag))
         # If anything is broke here it will be specific to the RPM database.
         rc, rpm_sigs, stderr = self.container.execute("rpm -qa --qf '%{name}-%{VERSION}-%{RELEASE} %{SIGPGP:pgpsig}\n'")
         res = {
@@ -277,7 +280,7 @@ verify the contents.
                 # Let's normalize that.
                 clean_pkg_name = l[:-7]
                 res['items'].append(clean_pkg_name)
-                self.runtime.logger.info("[Verify: {name}] Unsigned package: {pkg}".format(pkg=clean_pkg_name, name=self.name_tag))
+                self.logger.info("[Verify: {name}] Unsigned package: {pkg}".format(pkg=clean_pkg_name, name=self.name_tag))
 
         if len(res['items']) > 0:
             self.status = 'failed'
@@ -289,7 +292,7 @@ verify the contents.
             'description': 'Installed package target version validation',
             'items': [],
         }
-        self.runtime.logger.info("[Verify: {name}] Checking atomic openshift version".format(name=self.name_tag))
+        self.logger.info("[Verify: {name}] Checking atomic openshift version".format(name=self.name_tag))
         # rc check not required as atomic-openshift may not always be
         # installed (rc=1 for non-installed packages)
         _, ver, _ = self.container.execute('rpm -q --qf %{VERSION} atomic-openshift')
@@ -329,7 +332,7 @@ verify the contents.
                 continue
             else:
                 res['items'].append(l)
-                self.runtime.logger.info("[Verify: {name}] Orphaned Package: {pkg}".format(name=self.name_tag, pkg=l))
+                self.logger.info("[Verify: {name}] Orphaned Package: {pkg}".format(name=self.name_tag, pkg=l))
 
         if len(res['items']) > 0:
             self.status = 'failed'

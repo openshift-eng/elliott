@@ -11,6 +11,7 @@ import logging
 
 from dockerfile_parse import DockerfileParser
 
+import logutil
 import assertion
 import constants
 import exectools
@@ -31,8 +32,10 @@ COMPOSE = """
 ---
 """
 
+logger = logutil.getLogger(__name__)
 
-def recursive_overwrite(src, dest, ignore=set(), logger=None):
+
+def recursive_overwrite(src, dest, ignore=set()):
     """
     Use rsync to copy one file tree to a new location
     """
@@ -40,11 +43,10 @@ def recursive_overwrite(src, dest, ignore=set(), logger=None):
     for i in ignore:
         exclude += ' --exclude="{}" '.format(i)
     cmd = 'rsync -av {} {}/ {}/'.format(exclude, src, dest)
-    exectools.cmd_assert(cmd.split(' '), logger=logger)
+    exectools.cmd_assert(cmd.split(' '))
 
 
-def pull_image(url, logger=None):
-    logger = logger or logging.getLogger()
+def pull_image(url):
     logger.info("Pulling image: %s" % url)
 
     def wait(_):
@@ -53,7 +55,7 @@ def pull_image(url, logger=None):
 
     exectools.retry(
         3, wait_f=wait,
-        task_f=lambda: exectools.cmd_log(["docker", "pull", url], logger) == 0)
+        task_f=lambda: exectools.cmd_gather(["docker", "pull", url])[0] == 0)
 
 
 class DistGitRepo(object):
@@ -73,10 +75,7 @@ class DistGitRepo(object):
         if self.config.distgit.branch is not Missing:
             self.branch = self.config.distgit.branch
 
-        self.logger = metadata.runtime.logger.getChild(
-            "[{}/{}]".format(
-                self.metadata.namespace,
-                self.metadata.distgit_key))
+        self.logger = self.metadata.logger
 
         # Initialize our distgit directory, if necessary
         if autoclone:
@@ -114,30 +113,30 @@ class DistGitRepo(object):
                 self.logger.info("Cloning distgit repository [branch:%s] into: %s" % (distgit_branch, self.distgit_dir))
 
                 # Clone the distgit repository. Occasional flakes in clone, so use retry.
-                exectools.cmd_assert(cmd_list, retries=3, logger=self.runtime.logger)
+                exectools.cmd_assert(cmd_list, retries=3)
 
             with Dir(self.distgit_dir):
 
-                rc, out, err = exectools.cmd_gather(["git", "rev-parse", "--abbrev-ref", "HEAD"], self.runtime.logger)
+                rc, out, err = exectools.cmd_gather(["git", "rev-parse", "--abbrev-ref", "HEAD"])
                 out = out.strip()
 
                 # Only switch if we are not already in the branch. This allows us to work in
                 # working directories with uncommited changes.
                 if out != distgit_branch:
                     # Switch to the target branch
-                    exectools.cmd_assert(["rhpkg", "switch-branch", distgit_branch], logger=self.runtime.logger)
+                    exectools.cmd_assert(["rhpkg", "switch-branch", distgit_branch])
 
             self._read_master_data()
 
     def merge_branch(self, target, allow_overwrite=False):
         self.logger.info('Switching to branch: {}'.format(target))
-        exectools.cmd_assert(["rhpkg", "switch-branch", target], logger=self.runtime.logger)
+        exectools.cmd_assert(["rhpkg", "switch-branch", target])
         if not allow_overwrite:
             if os.path.isfile('Dockerfile') or os.path.isdir('.oit'):
                 raise IOError('Unable to continue merge. Dockerfile found in target branch. Use --allow-overwrite to force.')
         self.logger.info('Merging source branch history over current branch')
         msg = 'Merge branch {} into {}'.format(self.branch, target)
-        exectools.cmd_assert(['git', 'merge', '--allow-unrelated-histories', '-m', msg, self.branch], logger=self.runtime.logger)
+        exectools.cmd_assert(['git', 'merge', '--allow-unrelated-histories', '-m', msg, self.branch])
 
     def source_path(self):
         """
@@ -148,11 +147,7 @@ class DistGitRepo(object):
         if alias is Missing:
             raise IOError("Can't find any source alias in config: %s" % self.metadata.config_filename)
 
-        try:
-            source_root = self.runtime.resolve_source(alias)
-        except IOError as err:
-            raise IOError("could not find alias {} for package {}".
-                          format(alias, self.name))
+        source_root = self.runtime.resolve_source(alias)
         sub_path = self.config.content.source.path
 
         path = source_root
@@ -166,12 +161,12 @@ class DistGitRepo(object):
         with Dir(self.distgit_dir):
             self.logger.info("Adding commit to local repo: {}".format(commit_message))
             if log_diff:
-                rc, out, err = exectools.cmd_gather(["git", "diff", "Dockerfile"], self.runtime.logger)
+                rc, out, err = exectools.cmd_gather(["git", "diff", "Dockerfile"])
                 assertion.success(rc, 'Failed fetching distgit diff')
                 self.runtime.add_distgits_diff(self.metadata.name, out)
-            exectools.cmd_assert(["git", "add", "-A", "."], logger=self.runtime.logger)
-            exectools.cmd_assert(["git", "commit", "--allow-empty", "-m", commit_message], logger=self.runtime.logger)
-            rc, sha, err = exectools.cmd_gather(["git", "rev-parse", "HEAD"], self.runtime.logger)
+            exectools.cmd_assert(["git", "add", "-A", "."])
+            exectools.cmd_assert(["git", "commit", "--allow-empty", "-m", commit_message])
+            rc, sha, err = exectools.cmd_gather(["git", "rev-parse", "HEAD"])
             assertion.success(rc, "Failure fetching commit SHA for {}".format(self.distgit_dir))
         return sha.strip()
 
@@ -186,7 +181,7 @@ class DistGitRepo(object):
 
         with Dir(self.distgit_dir):
             self.logger.info("Adding tag to local repo: {}".format(tag))
-            exectools.cmd_gather(["git", "tag", "-f", tag, "-m", tag], self.runtime.logger)
+            exectools.cmd_gather(["git", "tag", "-f", tag, "-m", tag])
 
 
 class ImageDistGitRepo(DistGitRepo):
@@ -194,12 +189,13 @@ class ImageDistGitRepo(DistGitRepo):
         super(ImageDistGitRepo, self).__init__(metadata)
         self.build_lock = Lock()
         self.build_lock.acquire()
+        self.logger = metadata.logger
 
     def _generate_compose_conf(self):
         """
         Generates a compose conf file in container.yml
         """
-        self.runtime.logger.debug("Generating compose file for Dockerfile {}".format(self.metadata.name))
+        self.logger.debug("Generating compose file for Dockerfile {}".format(self.metadata.name))
 
         if self.config.compose is not Missing:
             # generate yaml data with header
@@ -215,7 +211,7 @@ class ImageDistGitRepo(DistGitRepo):
 
         dfp = DockerfileParser(path="Dockerfile")
 
-        self.runtime.logger.debug("Generating repo file for Dockerfile {}".format(self.metadata.name))
+        self.logger.debug("Generating repo file for Dockerfile {}".format(self.metadata.name))
 
         df_repos = []
         for entry in json.loads(dfp.json):
@@ -365,7 +361,7 @@ class ImageDistGitRepo(DistGitRepo):
                 # pull just the main image name first
                 image_name_and_version = "%s:%s-%s" % (self.config.name, version, release)
                 brew_image_url = "/".join((constants.BREW_IMAGE_HOST, image_name_and_version))
-                pull_image(brew_image_url, self.runtime.logger)
+                pull_image(brew_image_url)
                 record['message'] = "Successfully pulled image"
                 record['status'] = 0
             except Exception as err:
@@ -405,10 +401,10 @@ class ImageDistGitRepo(DistGitRepo):
 
                         if dry_run:
                             rc = 0
-                            self.info('Would have tagged {} as {}'.format(brew_image_url, push_url))
-                            self.info('Would have pushed {}'.format(push_url))
+                            self.logger.info('Would have tagged {} as {}'.format(brew_image_url, push_url))
+                            self.logger.info('Would have pushed {}'.format(push_url))
                         else:
-                            rc, out, err = exectools.cmd_gather(["docker", "tag", brew_image_url, push_url], self.runtime.logger)
+                            rc, out, err = exectools.cmd_gather(["docker", "tag", brew_image_url, push_url])
 
                             if rc != 0:
                                 # Unable to tag the image
@@ -416,7 +412,7 @@ class ImageDistGitRepo(DistGitRepo):
 
                             for r in range(10):
                                 self.logger.info("Pushing image to mirror [retry=%d]: %s" % (r, push_url))
-                                rc, out, err = exectools.cmd_gather(["docker", "push", push_url], self.runtime.logger)
+                                rc, out, err = exectools.cmd_gather(["docker", "push", push_url])
                                 if rc == 0:
                                     break
                                 self.logger.info("Error pushing image -- retrying in 60 seconds")
@@ -444,7 +440,7 @@ class ImageDistGitRepo(DistGitRepo):
         :param who_is_waiting: The caller's distgit_key (i.e. the waiting image).
         :return: Returns when the image has been built or throws an exception if the image could not be built.
         """
-        self.info("Member waiting for me to build: %s" % who_is_waiting)
+        self.logger.info("Member waiting for me to build: %s" % who_is_waiting)
         # This lock is in an acquired state until this image definitively succeeds or fails.
         # It is then released. Child images waiting on this image should block here.
         with self.build_lock:
@@ -522,7 +518,7 @@ class ImageDistGitRepo(DistGitRepo):
                     wait_on_key = self.config.wait_for
                     wait_img = self.runtime.resolve_image(wait_on_key, False)
                     if wait_img is None:
-                        self.info("Skipping wait_for image build since it is not included: %s" % wait_on_key)
+                        self.logger.info("Skipping wait_for image build since it is not included: %s" % wait_on_key)
                     else:
                         wait_dgr = wait_img.distgit_repo()
                         wait_dgr.wait_for_build(self.metadata.qualified_name)
@@ -537,8 +533,8 @@ class ImageDistGitRepo(DistGitRepo):
                         raise KeyboardInterrupt()
 
                 exectools.retry(
-                    n=3, wait_f=wait,
-                    f=lambda: self._build_container(
+                    retries=3, wait_f=wait,
+                    task_f=lambda: self._build_container(
                         target_image, repo_type, repo, terminate_event,
                         scratch, record))
 
@@ -613,7 +609,7 @@ class ImageDistGitRepo(DistGitRepo):
             cmd_list.append("--scratch")
 
         # Run the build with --nowait so that we can immediately get information about the brew task
-        rc, out, err = exectools.cmd_gather(cmd_list, self.runtime.logger)
+        rc, out, err = exectools.cmd_gather(cmd_list)
 
         if rc != 0:
             # Probably no point in continuing.. can't contact brew?
@@ -648,7 +644,7 @@ class ImageDistGitRepo(DistGitRepo):
 
         # Gather brew-logs
         logs_dir = "%s/%s" % (self.runtime.brew_logs_dir, self.metadata.name)
-        logs_rc, _, logs_err = exectools.cmd_gather(["brew", "download-logs", "-d", logs_dir, task_id], self.runtime.logger)
+        logs_rc, _, logs_err = exectools.cmd_gather(["brew", "download-logs", "-d", logs_dir, task_id])
 
         if logs_rc != 0:
             self.logger.info("Error downloading build logs from brew for task %s: %s" % (task_id, logs_err))
@@ -664,10 +660,10 @@ class ImageDistGitRepo(DistGitRepo):
     def push(self):
         with Dir(self.distgit_dir):
             self.logger.info("Pushing repository")
-            exectools.cmd_assert(["rhpkg", "push"], retries=3, logger=self.runtime.logger)
+            exectools.cmd_assert(["rhpkg", "push"], retries=3)
             # rhpkg will create but not push tags :(
             # Not asserting this exec since this is non-fatal if the tag already exists
-            exectools.cmd_gather(['git', 'push', '--tags'], self.runtime.logger)
+            exectools.cmd_gather(['git', 'push', '--tags'])
 
     def update_dockerfile(self, version, release):
         ignore_missing_base = self.runtime.ignore_missing_base
@@ -720,9 +716,9 @@ class ImageDistGitRepo(DistGitRepo):
                 if len(vsplit) > 1:
                     at.write("%s.%s\n" % (vsplit[0], vsplit[1]))  # e.g. "v3.7.0" -> "v3.7"
 
-            self.runtime.logger.debug("Dockerfile contains the following labels:")
+            self.logger.debug("Dockerfile contains the following labels:")
             for k, v in dfp.labels.iteritems():
-                self.runtime.logger.debug("  '%s'='%s'" % (k, v))
+                self.logger.debug("  '%s'='%s'" % (k, v))
 
             # Set all labels in from config into the Dockerfile content
             if self.config.labels is not Missing:
@@ -890,7 +886,7 @@ class ImageDistGitRepo(DistGitRepo):
                 shutil.rmtree(ent)
 
         # Copy all files and overwrite where necessary
-        recursive_overwrite(self.source_path(), self.distgit_dir, logger=self.runtime.logger)
+        recursive_overwrite(self.source_path(), self.distgit_dir)
 
         if dockerfile_name != "Dockerfile":
             # Does a non-distgit Dockerfile already exist from copying source; remove if so
@@ -938,9 +934,9 @@ class ImageDistGitRepo(DistGitRepo):
             with Dir(self.source_path()):
                 author_email = None
                 err = None
-                rc, sha, err = exectools.cmd_gather('git log -n 1 --pretty=format:%H {}'.format(dockerfile_name), self.runtime.logger)
+                rc, sha, err = exectools.cmd_gather('git log -n 1 --pretty=format:%H {}'.format(dockerfile_name))
                 if rc == 0:
-                    rc, ae, err = exectools.cmd_gather('git show -s --pretty=format:%ae {}'.format(sha), self.runtime.logger)
+                    rc, ae, err = exectools.cmd_gather('git show -s --pretty=format:%ae {}'.format(sha))
                     if rc == 0:
                         if ae.lower().endswith('@redhat.com'):
                             self.logger.info('Last Dockerfile commiter: {}'.format(ae))
@@ -973,7 +969,7 @@ class ImageDistGitRepo(DistGitRepo):
         with open("Dockerfile", 'r') as df:
             dockerfile_data = df.read()
 
-        self.runtime.logger.debug(
+        self.logger.debug(
             "About to start modifying Dockerfile [%s]:\n%s\n" %
             (self.metadata.name, dockerfile_data))
 
@@ -990,7 +986,7 @@ class ImageDistGitRepo(DistGitRepo):
                 if dockerfile_data == pre:
                     raise IOError("Replace (%s->%s) modification did not make a change to the Dockerfile content" % (
                         match, replacement))
-                self.runtime.logger.debug(
+                self.logger.debug(
                     "Performed string replace '%s' -> '%s':\n%s\n" %
                     (match, replacement, dockerfile_data))
             else:

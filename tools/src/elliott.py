@@ -57,9 +57,10 @@ context_settings = dict(help_option_names=['-h', '--help'])
 @click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
               help="Name of group image or rpm member to exclude in operation (none by default). Can be comma delimited list.")
 @click.option('--ignore-missing-base', default=False, is_flag=True, help='If a base image is not included, proceed and do not update FROM.')
+@click.option('--latest-parent-version', default=False, is_flag=True,
+              help='If a base image is not included, lookup latest FROM tag for parent. Implies --ignore-missing-base')
 @click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
-@click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
-@click.option('--debug', '-v', default=False, is_flag=True, help='Log additional information for developers and operators.')
+@click.option('--debug', default=False, is_flag=True, help='Show debug output on console.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
               help='Do not place OIT comment in Dockerfile. Can also be set in each config yaml')
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,

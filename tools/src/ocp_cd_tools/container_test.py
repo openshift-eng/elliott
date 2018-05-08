@@ -56,7 +56,7 @@ class TestDockerContainer(unittest.TestCase):
             ""
         ]
 
-        c0 = container.DockerContainer("test/image", logger=self.logger)
+        c0 = container.DockerContainer("test/image")
         c0._cmd("echo hello")
 
         actual = self.stream.getvalue()

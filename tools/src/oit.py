@@ -2,7 +2,6 @@
 
 from ocp_cd_tools import Runtime, Dir
 from ocp_cd_tools.image import pull_image, create_image_verify_repo_file, Image
-from ocp_cd_tools.common import get_watch_task_info_copy
 from ocp_cd_tools.model import Missing
 from ocp_cd_tools.brew import get_watch_task_info_copy
 import datetime
@@ -46,8 +45,7 @@ context_settings = dict(help_option_names=['-h', '--help'])
 @click.option('--latest-parent-version', default=False, is_flag=True,
               help='If a base image is not included, lookup latest FROM tag for parent. Implies --ignore-missing-base')
 @click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
-@click.option('--verbose', '-v', default=False, is_flag=True, help='Print progress information to the terminal during a run.')
-@click.option('--debug', default=False, is_flag=True, help='Log additional information for developers and operators.')
+@click.option('--debug', default=False, is_flag=True, help='Show debug output on console.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
               help='Do not place OIT comment in Dockerfile. Can also be set in each config yaml')
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
@@ -674,12 +672,6 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
     for image in runtime.image_metas():
         image.distgit_repo().push_image([], push_to_defaults, additional_registries=push_to, push_late=True)
 
-    try:
-        print_build_metrics(runtime)
-    except Exception:
-        # Never kill a build because of bad logic in metrics
-        traceback.print_exc()
-        runtime.logger.error("Error trying to show build metrics")
 
 @cli.command("images:push", short_help="Push the most recently built images to mirrors.")
 @click.option('--tag', default=[], metavar="PUSH_TAG", multiple=True,
@@ -758,10 +750,10 @@ def images_scan_for_cves(runtime):
     Pulls images and scans them for CVEs using `atomic scan` and `openscap`.
     """
     runtime.initialize(clone_distgits=True)
-    images = [x.pull_url() for x in runtime.image_metas()]
-    for image in images:
-        pull_image(runtime, image)
-    subprocess.check_call(["atomic", "scan"] + images)
+    image_urls = [x.pull_url() for x in runtime.image_metas()]
+    for image_url in image_urls:
+        pull_image(image_url, runtime.logger)
+    subprocess.check_call(["atomic", "scan"] + image_urls)
 
 
 @cli.command("images:print", short_help="Print data from each distgit.")

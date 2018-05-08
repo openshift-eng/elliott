@@ -7,8 +7,7 @@ import unittest
 import StringIO
 import logging
 
-import ocp_cd_tools.metadata as metadata
-import ocp_cd_tools.distgit as distgit
+import distgit
 
 class MockDistgit(object):
     def __init__(self):

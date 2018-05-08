@@ -15,6 +15,7 @@ import logging
 import functools
 import traceback
 
+import logutil
 import assertion
 import exectools
 from pushd import Dir
@@ -198,39 +199,11 @@ class Runtime(object):
         if not os.path.isdir(self.sources_dir):
             os.mkdir(self.sources_dir)
 
-        # Three flags control the output modes of the command:
-        # --verbose prints logs to CLI as well as to files
-        # --debug increases the log level to produce more detailed internal
-        #         behavior logging
-        # --quiet opposes both verbose and debug
-        if self.debug:
-            log_level = logging.DEBUG
-        elif self.quiet:
-            log_level = logging.ERROR
-        else:
-            log_level = logging.INFO
-
-        self.debug_log_path = os.path.join(self.working_dir, "debug.log")
-        logging.basicConfig(level=log_level,
-                            format='%(asctime)s %(levelname)s - %(message)s',
-                            filename=self.debug_log_path)
-
-        logging.getLogger('core').setLevel(logging.DEBUG)
-
-        self.logger = logging.getLogger()
-        # When the user asks for verbose output add a stream handler to
-        # the root logger.
-        if self.verbose:
-            formatter = logging.Formatter(
-                "%(asctime)s %(levelname)s - %(message)s")
-            vhandler = logging.StreamHandler()
-            vhandler.setFormatter(formatter)
-            self.logger.addHandler(vhandler)
+        self.initialize_logging()
 
         self.record_log_path = os.path.join(self.working_dir, "record.log")
-        self.record_log = logging.getLogger('record')
-        self.record_log.addHandler(
-            logging.FileHandler(filename=self.record_log_path))
+        self.record_log = open(self.record_log_path, 'a')
+        atexit.register(close_file, self.record_log)
 
         # Directory where brew-logs will be downloaded after a build
         self.brew_logs_dir = os.path.join(self.working_dir, "brew-logs")
@@ -367,9 +340,6 @@ class Runtime(object):
                 metadata = ImageMetadata(self, config_filename)
                 self.image_map[metadata.distgit_key] = metadata
 
-                metadata = RPMMetadata(self, config_filename)
-                self.rpm_map[metadata.distgit_key] = metadata
-
             def collect_configs(search_type, search_dir, filename_list, include, gen):
                 if len(filename_list) == 0:
                     return  # no configs of this type found, bail out
@@ -391,7 +361,7 @@ class Runtime(object):
 
                             gen(config_filename)
                         except Exception:
-                            self.info("ERROR: configuration file failed to load: {}".format(os.path.join(search_dir,config_filename)))
+                            self.logger.error("Configuration file failed to load: {}".format(os.path.join(search_dir,config_filename)))
                             raise
 
             if mode in ['images', 'both']:
@@ -420,6 +390,55 @@ class Runtime(object):
                 self.streams = Model(yaml.load(s.read()))
         if clone_distgits:
             self.clone_distgits()
+
+    def initialize_logging(self):
+
+        if self.initialized:
+            return
+
+        # Three flags control the output modes of the command:
+        # --verbose prints logs to CLI as well as to files
+        # --debug increases the log level to produce more detailed internal
+        #         behavior logging
+        # --quiet opposes both verbose and debug
+        if self.debug:
+            log_level = logging.DEBUG
+        elif self.quiet:
+            log_level = logging.WARN
+        else:
+            log_level = logging.INFO
+
+        default_log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.WARN)
+        root_stream_handler = logging.StreamHandler()
+        root_stream_handler.setFormatter(default_log_formatter)
+        root_logger.addHandler(root_stream_handler)
+
+        # If in debug mode, let all modules log
+        if not self.debug:
+            # Otherwise, only allow children of ocp to log
+            root_logger.addFilter(logging.Filter("ocp"))
+
+        # Get a reference to the logger for ocp_cd_tools
+        self.logger = logutil.getLogger()
+        self.logger.propagate = False
+
+        # levels will be set at the handler level. Make sure master level is low.
+        self.logger.setLevel(logging.DEBUG)
+
+        main_stream_handler = logging.StreamHandler()
+        main_stream_handler.setFormatter(default_log_formatter)
+        main_stream_handler.setLevel(log_level)
+        self.logger.addHandler(main_stream_handler)
+
+        self.debug_log_path = os.path.join(self.working_dir, "debug.log")
+        debug_log_handler = logging.FileHandler(self.debug_log_path)
+        # Add thread information for debug log
+        debug_log_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s (%(thread)d) %(message)s'))
+        debug_log_handler.setLevel(logging.DEBUG)
+        self.logger.addHandler(debug_log_handler)
 
     @staticmethod
     def timestamp():
@@ -461,7 +480,7 @@ class Runtime(object):
             if rc2 == 0:
                 branch = out_branch.strip()
             else:
-                self.logger.error("failed acquiring origin branch for source alias %s: %s" % (alias, err_branch))
+                self.logger.error("Failed acquiring origin branch for source alias %s: %s" % (alias, err_branch))
 
             self.add_record("source_alias", alias=alias, origin_url=origin_url, branch=branch, path=path)
 
@@ -503,8 +522,8 @@ class Runtime(object):
         record_type|key1=value1|key2=value2|...|
         """
 
-        # Multiple image build processes could be calling us with action
-        # simultaneously, so synchronize output to the file.
+        # Multiple image build processes could be calling us with action simultaneously, so
+        # synchronize output to the file.
         with self.log_lock:
             record = "%s|" % record_type
             for k, v in kwargs.iteritems():
@@ -514,8 +533,8 @@ class Runtime(object):
                 record += "%s=%s|" % (k, v)
 
             # Add the record to the file
-
-            self.record_log.info(record)
+            self.record_log.write("%s\n" % record)
+            self.record_log.flush()
 
     def add_distgits_diff(self, distgit, diff):
         """
@@ -629,7 +648,7 @@ class Runtime(object):
                     else:
                         self.logger.error("Failed checking out fallback-branch %s: %s" % (branch, err))
                 else:
-                    self.error("Failed checking out branch %s: %s" % (branch, err))
+                    self.logger.error("Failed checking out branch %s: %s" % (branch, err))
 
             if found:
                 # Store so that the next attempt to resolve the source hits the map
@@ -740,7 +759,7 @@ class Runtime(object):
             while not ret.ready():
                 ret.wait(60)
         except KeyboardInterrupt:
-            self.info('SIGINT received, signaling threads to terminate...')
+            self.logger.warn('SIGINT received, signaling threads to terminate...')
             terminate_event.set()
         pool.join()
         return ret
