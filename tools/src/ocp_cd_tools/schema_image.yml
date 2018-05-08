@@ -9,6 +9,10 @@ mapping:
       "namespace":
         type: enum
         enum: [rpms,apbs,containers]
+      "component":
+        type: str
+      "branch":
+        type: str
 
   "rpms":
     type: seq
@@ -30,6 +34,14 @@ mapping:
         type: seq
         sequence:
           - type: scalar
+      "late":
+          type: bool
+
+  "no_oit_comments":
+      type: bool
+
+  "wait_for":
+      type: str
 
   "content":
     type: map

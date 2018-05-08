@@ -65,7 +65,6 @@ mapping:
 
   "repos":
     type: map
-    required: yes
     mapping:
       "=":
         type: map
