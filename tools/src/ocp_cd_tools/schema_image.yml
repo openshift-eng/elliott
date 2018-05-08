@@ -1,0 +1,102 @@
+
+type: map
+
+mapping:
+
+  "distgit":
+    type: map
+    mapping:
+      "namespace":
+        type: enum
+        enum: [rpms,apbs,containers]
+      "component":
+        type: str
+      "branch":
+        type: str
+
+  "rpms":
+    type: seq
+    sequence:
+      - type: str
+
+  "push":
+    type: map
+    mapping:
+      "repos":
+        type: seq
+        sequence:
+          - type: str
+      "also":
+        type: seq
+        sequence:
+          - type: str
+      "additional_tags":
+        type: seq
+        sequence:
+          - type: scalar
+      "late":
+          type: bool
+
+  "no_oit_comments":
+      type: bool
+
+  "wait_for":
+      type: str
+
+  "content":
+    type: map
+    mapping:
+      'source':
+        type: map
+        mapping:
+          "alias":
+            required: yes
+            type: str
+          "dockerfile":
+            type: str
+          "path":
+            type: str
+          "modifications":
+            type: seq
+            sequence:
+              - type: map
+                mapping:
+                  action:
+                    type: enum
+                    enum: [replace]
+                  match:
+                    type: str
+                  replacement:
+                    type: str
+
+  "enabled_repos":
+    type: seq
+    sequence:
+      - type: str
+
+  "from":
+    type: map
+    mapping:
+      "stream":
+        type: enum
+        enum: [rhel]
+      "member":
+        type: str
+      "image":
+        type: str
+
+  "owners":
+    type: seq
+    sequence:
+      - type: str
+
+  "name":
+    required: yes
+    type: str
+
+  "labels":
+    type: map
+    mapping:
+      "=":
+        type: text
+

@@ -804,7 +804,11 @@ def images_print(runtime, short, show_non_release, pattern):
 
     for image in images:
         dfp = DockerfileParser(path=runtime.working_dir)
-        dfp.content = image.fetch_cgit_file("Dockerfile")
+        try:
+            dfp.content = image.fetch_cgit_file("Dockerfile")
+        except Exception:
+            click.echo("Error reading Dockerfile from distgit: {}".format(image.distgit_key))
+            raise
 
         version = dfp.labels["version"]
 

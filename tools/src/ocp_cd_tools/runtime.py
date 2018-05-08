@@ -1,4 +1,5 @@
 from multiprocessing.dummy import Pool as ThreadPool
+from pykwalify.core import Core
 import os
 import click
 import tempfile
@@ -98,6 +99,11 @@ class Runtime(object):
 
     def get_group_config(self, group_dir):
         with Dir(group_dir):
+
+            group_schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_group.yml")
+            c = Core(source_file="group.yml", schema_files=[group_schema_path])
+            c.validate(raise_exception=True)
+
             with open("group.yml", "r") as f:
                 group_yml = f.read()
 
@@ -286,10 +292,18 @@ class Runtime(object):
                 raise IOError('Unable to find the following images or rpms configs: {}'.format(', '.join(missed_include)))
 
             def gen_ImageMetadata(config_filename):
+                image_schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_image.yml")
+                c = Core(source_file=config_filename, schema_files=[image_schema_path])
+                c.validate(raise_exception=True)
+
                 metadata =ImageMetadata(self, config_filename)
                 self.image_map[metadata.distgit_key] = metadata
 
             def gen_RPMMetadata(config_filename):
+                rpm_schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_rpm.yml")
+                c = Core(source_file=config_filename, schema_files=[rpm_schema_path])
+                c.validate(raise_exception=True)
+
                 metadata = RPMMetadata(self, config_filename)
                 self.rpm_map[metadata.distgit_key] = metadata
 
@@ -307,8 +321,11 @@ class Runtime(object):
                             else:
                                 self.log_verbose("Skipping {} {} since it is not in the include list".format(search_type, config_filename))
                                 continue
-
-                        gen(config_filename)
+                        try:
+                            gen(config_filename)
+                        except Exception:
+                            self.info("ERROR: configuration file failed to load: {}".format(os.path.join(search_dir,config_filename)))
+                            raise
 
             if mode in ['images', 'both']:
                 collect_configs('image', images_dir, images_filename_list, image_include, gen_ImageMetadata)

@@ -1,3 +1,4 @@
+pykwalify
 pyyaml
 click
 dockerfile-parse
