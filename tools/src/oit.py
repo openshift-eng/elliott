@@ -849,7 +849,8 @@ def images_print(runtime, short, show_non_release, pattern):
     echo_verbose("------------------------------------------")
     echo_verbose("{} images".format(count))
 
-    if not show_non_release:
+    # If non-release images are being suppressed, let the user know
+    if not show_non_release and non_release_images:
         echo_verbose("\nThe following {} non-release images were excluded; use --show-non-release to include them:".format(
                      len(non_release_images)))
         for image in non_release_images:
