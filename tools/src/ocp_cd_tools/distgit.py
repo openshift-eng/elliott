@@ -544,7 +544,7 @@ class ImageDistGitRepo(DistGitRepo):
             self.build_lock.release()
 
         self.push_status = True  # if if never pushes, the status is True
-        if not scratch and self.build_status and additional_registries:
+        if not scratch and self.build_status and (push_to_defaults or additional_registries):
             # If this is a scratch build, we aren't going to be pushing. We might be able to determine the
             # image name by parsing the build log, but not worth the effort until we need scratch builds.
             # The image name for a scratch build looks something like:
