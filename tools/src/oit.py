@@ -114,7 +114,7 @@ def rpms_build(runtime, version, release, scratch):
 
     items = runtime.rpm_metas()
     if not items:
-        runtime.info("No RPMs found. Check the arguments.")
+        runtime.logger.info("No RPMs found. Check the arguments.")
         exit(0)
 
     results = runtime.parallel_exec(
