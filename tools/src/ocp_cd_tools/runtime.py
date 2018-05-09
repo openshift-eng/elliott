@@ -219,10 +219,7 @@ class Runtime(object):
         assertion.isdir(group_dir, "Cannot find group directory")
 
         self.images_dir = images_dir = os.path.join(group_dir, 'images')
-        assertion.isdir(group_dir, "Cannot find images directory for {}".format(group_dir))
-
-        rpms_dir = os.path.join(group_dir, 'rpms')
-        assertion.isdir(group_dir, "Cannot find rpms directory for {}".format(group_dir))
+        self.rpms_dir = rpms_dir = os.path.join(group_dir, 'rpms')
 
         # register the sources
         # For each "--source alias path" on the command line, register its existence with
@@ -337,8 +334,8 @@ class Runtime(object):
                 self.image_map[metadata.distgit_key] = metadata
 
             def gen_RPMMetadata(config_filename):
-                metadata = ImageMetadata(self, config_filename)
-                self.image_map[metadata.distgit_key] = metadata
+                metadata = RPMMetadata(self, config_filename)
+                self.rpm_map[metadata.distgit_key] = metadata
 
             def collect_configs(search_type, search_dir, filename_list, include, gen):
                 if len(filename_list) == 0:
