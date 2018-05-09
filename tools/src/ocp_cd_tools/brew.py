@@ -3,20 +3,74 @@ Utility functions for general interactions with Brew and Builds
 """
 
 # stdlib
+import time
 import datetime
+import subprocess
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
+from multiprocessing import Lock
 import shlex
+import koji
+import koji_cli.lib
 
 # ours
-import ocp_cd_tools.common
-import ocp_cd_tools.constants
-import ocp_cd_tools.exceptions
+import constants
+import exceptions
+import exectools
+import logutil
 
 # 3rd party
 import click
 import requests
 from requests_kerberos import HTTPKerberosAuth
+
+logger = logutil.getLogger(__name__)
+
+# ============================================================================
+# Brew/Koji service interaction functions
+# ============================================================================
+
+# Populated by watch_task. Each task_id will be a key in the dict and
+# each value will be a TaskInfo: https://github.com/openshift/enterprise-images/pull/178#discussion_r173812940
+watch_task_info = {}
+# Protects threaded access to watch_task_info
+watch_task_lock = Lock()
+
+
+def get_watch_task_info_copy():
+    """
+    :return: Returns a copy of the watch_task info dict in a thread safe way. Each key in this dict
+     is a task_id and each value is a koji TaskInfo with potentially useful data.
+     https://github.com/openshift/enterprise-images/pull/178#discussion_r173812940
+    """
+    with watch_task_lock:
+        return dict(watch_task_info)
+
+
+def watch_task(log_f, task_id, terminate_event):
+    end = time.time() + 4 * 60 * 60
+    watcher = koji_cli.lib.TaskWatcher(
+        task_id,
+        koji.ClientSession(constants.BREW_HUB),
+        quiet=True)
+    error = None
+    while error is None:
+        watcher.update()
+
+        # Keep around metrics for each task we watch
+        with watch_task_lock:
+            watch_task_info[task_id] = dict(watcher.info)
+
+        if watcher.is_done():
+            return None if watcher.is_success() else watcher.get_failure()
+        log_f("Task state: " + koji.TASK_STATES[watcher.info['state']])
+        if terminate_event.wait(timeout=3 * 60):
+            error = 'Interrupted'
+        elif time.time() > end:
+            error = 'Timeout building image'
+    log_f(error + ", canceling build")
+    subprocess.check_call(("brew", "cancel", str(task_id)))
+    return error
 
 
 def get_brew_build(nvr, product_version='', session=None, progress=False):
@@ -37,32 +91,31 @@ def get_brew_build(nvr, product_version='', session=None, progress=False):
     http://docs.python-requests.org/en/master/user/advanced/#session-objects
 
     :return: An initialized Build object with the build details
-    :raises ocp_cd_tools.exceptions.BrewBuildException: When build not found
+    :raises exceptions.BrewBuildException: When build not found
 
     """
     if session is not None:
-        res = session.get(ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
+        res = session.get(constants.errata_get_build_url.format(id=nvr),
                           auth=HTTPKerberosAuth())
     else:
-        res = requests.get(ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
+        res = requests.get(constants.errata_get_build_url.format(id=nvr),
                            auth=HTTPKerberosAuth())
     if res.status_code == 200:
         if progress:
             click.secho('.', nl=False)
         return Build(nvr=nvr, body=res.json(), product_version=product_version)
     else:
-        raise ocp_cd_tools.exceptions.BrewBuildException("{build}: {msg}".format(
+        raise exceptions.BrewBuildException("{build}: {msg}".format(
             build=nvr,
             msg=res.text))
 
 
-def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
+def find_unshipped_builds(base_tag, product_version, kind='rpm'):
 
     """Find builds for a product and return a list of the builds only
     labeled with the -candidate tag that aren't attached to any open
     advisory.
 
-    :param Runtime runtime: The runtime context object
     :param str base_tag: The tag to search for shipped/candidate
     builds. This is combined with '-candidate' to return the build
     difference.
@@ -92,7 +145,7 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     # longer than you'd like
     pool = ThreadPool(cpu_count())
     results = pool.map(
-        lambda builds: builds.refresh(runtime),
+        lambda builds: builds.refresh(),
         [candidate_builds, shipped_builds])
     # Wait for results
     pool.close()
@@ -152,8 +205,8 @@ def find_unshipped_builds(runtime, base_tag, product_version, kind='rpm'):
     return viable_builds
 
 
-def get_brew_buildinfo(runtime, build):
-    """Get the buildinfo of a brew build from brew
+def get_brew_buildinfo(build):
+    """Get the buildinfo of a brew build from brew.
 
 Note: This is different from get_brew_build in that this function
 queries brew directly using the 'brew buildinfo' command. Whereas,
@@ -162,7 +215,7 @@ get_brew_build queries the Errata Tool API for other information.
 This function will give information not provided by ET: build tags,
 finished date, built by, etc."""
     query_string = "brew buildinfo {nvr}".format(nvr=build.nvr)
-    rc, stdout, stderr = ocp_cd_tools.common.gather_exec(runtime, shlex.split(query_string))
+    rc, stdout, stderr = exectools.cmd_gather(shlex.split(query_string))
     buildinfo = {}
     for line in stdout.splitlines():
         key, token, rest = line.partition(': ')
@@ -171,10 +224,9 @@ finished date, built by, etc."""
     return buildinfo
 
 
-def get_tagged_image_builds(runtime, tag, latest=True):
+def get_tagged_image_builds(tag, latest=True):
     """Wrapper around shelling out to run 'brew list-tagged' for a given tag.
 
-    :param Runtime runtime: A runtime context object
     :param str tag: The tag to list builds from
     :param bool latest: Only show the single latest build of a package
     """
@@ -188,24 +240,32 @@ def get_tagged_image_builds(runtime, tag, latest=True):
     # --type=image - Only show container images builds
     # --quiet - Omit field headers in output
 
-    return ocp_cd_tools.common.gather_exec(runtime, shlex.split(query_string))
+    return exectools.cmd_gather(shlex.split(query_string))
 
 
-def get_tagged_rpm_builds(runtime, tag, arch='src', latest=True):
+def get_tagged_rpm_builds(tag, arch='src', latest=True):
     """Wrapper around shelling out to run 'brew list-tagged' for a given tag.
 
-    :param Runtime runtime: A runtime context object
     :param str tag: The tag to list builds from
     :param str arch: Filter results to only this architecture
+    :param bool latest: Only show the single latest build of a package
     """
-    query_string = "brew list-tagged {tag} --latest --rpm --quiet --arch {arch}".format(
-        tag=tag, arch=arch)
+    if latest is True:
+        latest_flag = "--latest"
+    else:
+        latest_flag = ""
+
+    query_string = "brew list-tagged {tag} {latest} --rpm --quiet --arch {arch}".format(tag=tag, latest=latest_flag, arch=arch)
     # --latest - Only the last build for that package
     # --rpm - Only show RPM builds
     # --quiet - Omit field headers in output
     # --arch {arch} - Only show builds of this architecture
 
-    return ocp_cd_tools.common.gather_exec(runtime, shlex.split(query_string))
+    return exectools.cmd_gather(shlex.split(query_string))
+
+# ============================================================================
+# Brew object interaction models
+# ============================================================================
 
 
 class BrewTaggedImageBuilds(object):
@@ -218,19 +278,19 @@ class BrewTaggedImageBuilds(object):
         self.tag = tag
         self.builds = set([])
 
-    def refresh(self, runtime):
+    def refresh(self):
         """Refresh or build initial list of brew builds
 
         :return: True if builds could be found for the given tag
 
         :raises: Exception if there is an error looking up builds
         """
-        rc, stdout, stderr = get_tagged_image_builds(runtime, self.tag)
+        rc, stdout, stderr = get_tagged_image_builds(self.tag)
 
         print("Refreshing for tag: {tag}".format(tag=self.tag))
 
         if rc != 0:
-            raise ocp_cd_tools.exceptions.BrewBuildException("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
+            raise exceptions.BrewBuildException("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
         else:
             builds = set(stdout.splitlines())
             for b in builds:
@@ -249,19 +309,19 @@ class BrewTaggedRPMBuilds(object):
         self.tag = tag
         self.builds = set([])
 
-    def refresh(self, runtime):
+    def refresh(self):
         """Refresh or build initial list of brew builds
 
         :return: True if builds could be found for the given tag
 
         :raises: Exception if there is an error looking up builds
         """
-        rc, stdout, stderr = get_tagged_rpm_builds(runtime, self.tag)
+        rc, stdout, stderr = get_tagged_rpm_builds(self.tag)
 
         print("Refreshing for tag: {tag}".format(tag=self.tag))
 
         if rc != 0:
-            raise ocp_cd_tools.exceptions.BrewBuildException("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
+            raise exceptions.BrewBuildException("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
         else:
             builds = set(stdout.splitlines())
             for b in builds:
@@ -285,7 +345,7 @@ the details of a known build from the Errata Tool using the
 and the build object from the API and initialize a new Build object
 from those.
 
-Save yourself some time and use the ocp_cd_tools.brew.get_brew_build()
+Save yourself some time and use the brew.get_brew_build()
 function. Give it an NVR or a build ID and it will give you an
 initialized Build object (provided the build exists).
 
@@ -341,7 +401,7 @@ initialized Build object (provided the build exists).
     @property
     def open_erratum(self):
         """Any open erratum this build is attached to"""
-        return [e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_active_advisory_labels]
+        return [e for e in self.all_errata if e['status'] in constants.errata_active_advisory_labels]
 
     @property
     def attached_to_open_erratum(self):
@@ -351,7 +411,7 @@ initialized Build object (provided the build exists).
     @property
     def closed_erratum(self):
         """Any closed erratum this build is attached to"""
-        return [e for e in self.all_errata if e['status'] in ocp_cd_tools.constants.errata_inactive_advisory_labels]
+        return [e for e in self.all_errata if e['status'] in constants.errata_inactive_advisory_labels]
 
     @property
     def attached_to_closed_erratum(self):
@@ -395,12 +455,12 @@ don't have to do extra manipulation later back in the view"""
                     self.file_type = 'tar'
                     break
 
-    def add_buildinfo(self, runtime, verbose=False):
+    def add_buildinfo(self, verbose=False):
         """Add buildinfo from upstream brew"""
         date_format = '%a, %d %b %Y %H:%M:%S %Z'
         if verbose:
             click.secho('.', nl=False)
-        self.buildinfo = get_brew_buildinfo(runtime, self)
+        self.buildinfo = get_brew_buildinfo(self)
         self.finished = datetime.datetime.strptime(self.buildinfo['Finished'], date_format)
 
     def to_json(self):

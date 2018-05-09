@@ -60,7 +60,7 @@ context_settings = dict(help_option_names=['-h', '--help'])
 @click.option('--latest-parent-version', default=False, is_flag=True,
               help='If a base image is not included, lookup latest FROM tag for parent. Implies --ignore-missing-base')
 @click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
-@click.option('--verbose', '-v', default=False, is_flag=True, help='Enables verbose mode.')
+@click.option('--debug', default=False, is_flag=True, help='Show debug output on console.')
 @click.option('--no_oit_comment', default=False, is_flag=True,
               help='Do not place OIT comment in Dockerfile. Can also be set in each config yaml')
 @click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
@@ -135,7 +135,7 @@ you read the docs.
               help="New state for the Advisory. NEW_FILES, QE, REL_PREP.")
 @click.argument('advisory', type=int)
 @click.pass_context
-def change_state(runtime, state, advisory):
+def change_state(ctx, state, advisory):
     """Change the state of ADVISORY. Additional permissions may be
 required to change an advisory to certain states.
 
@@ -414,7 +414,7 @@ PRESENT advisory. Here are some examples:
     else:
         green_prefix("Searching Brew for build candidates: ")
         click.echo("Hold on a moment")
-        unshipped_builds = ocp_cd_tools.brew.find_unshipped_builds(runtime, base_tag, product_version, kind=kind)
+        unshipped_builds = ocp_cd_tools.brew.find_unshipped_builds(base_tag, product_version, kind=kind)
 
     build_count = len(unshipped_builds)
 
@@ -439,7 +439,7 @@ PRESENT advisory. Here are some examples:
             click.secho("[", nl=False)
             pool = ThreadPool(cpu_count())
             pool.map(
-                lambda build: build.add_buildinfo(runtime, verbose=True),
+                lambda build: build.add_buildinfo(verbose=True),
                 sorted(unshipped_builds))
             # Wait for results
             pool.close()
@@ -475,8 +475,8 @@ PRESENT advisory. Here are some examples:
 @click.option("--output", "-o", required=False, type=click.File('wb'),
               default=None, metavar='OUTPUT_FILE',
               help="Write brew remote-tag commands to OUTPUT_FILE to run as a script")
-@pass_runtime
-def find_old_builds(runtime, kind, tags, date, output):
+@click.pass_context
+def find_old_builds(ctx, kind, tags, date, output):
     """Find old builds. Most likely you are trying to prune certain tags
 from them. This command can generate a shell script with brew
 'untag-build' commands in it for each old build it finds.
@@ -499,7 +499,6 @@ in the future. For now just give any valid group value (ex:
 \b
     $ elliott --group=openshift-3.10 advisory:find-old-builds --date 2017-06-20 -t rhaos-3.5-rhel-7-candidate -k image
     """
-    runtime.initialize(clone_distgits=False)
     build_map = {}
 
     green_prefix("Searching Brew for builds with tags: ")
@@ -511,7 +510,7 @@ in the future. For now just give any valid group value (ex:
         elif kind == 'image':
             builds = ocp_cd_tools.brew.BrewTaggedImageBuilds(tag)
 
-        builds.refresh(runtime)
+        builds.refresh()
 
         # Re-use TCP connection to speed things up
         session = requests.Session()
@@ -536,7 +535,7 @@ in the future. For now just give any valid group value (ex:
         click.secho("[", nl=False)
         pool = ThreadPool(cpu_count())
         pool.map(
-            lambda build: build.add_buildinfo(runtime),
+            lambda build: build.add_buildinfo(),
             sorted(results))
         # Wait for results
         pool.close()
@@ -597,7 +596,7 @@ in the future. For now just give any valid group value (ex:
 @click.option('--json', is_flag=True, default=False,
               help="Print the full JSON object of the advisory")
 @click.pass_context
-def get(runtime, json, advisory):
+def get(ctx, json, advisory):
     """Get details about a specific advisory from the Errata Tool. By
 default a brief one-line informational string is printed. Use the
 --json option to fetch and print the full details of the advisory.
@@ -646,7 +645,7 @@ Fields for the short format: Release date, State, Synopsys, URL
 @click.option('--json', is_flag=True, default=False,
               help="Print the full JSON object of the advisory")
 @click.pass_context
-def list(runtime, filter_id, n, json):
+def list(ctx, filter_id, n, json):
     """Print a list of one-line informational strings of RHOSE
 advisories. By default the 5 most recently created advisories are
 printed. Note, they are NOT sorted by release date.

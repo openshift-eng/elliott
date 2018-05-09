@@ -5,8 +5,10 @@ Test the brew related functions/classes
 """
 
 import mock
-import json
 from contextlib import nested
+
+import logging
+import StringIO
 
 import platform
 (major, minor, patch) = platform.python_version_tuple()
@@ -15,16 +17,28 @@ if int(major) == 2 and int(minor) < 7:
 else:
     import unittest
 
-import ocp_cd_tools.constants
-import ocp_cd_tools.exceptions
-import ocp_cd_tools.runtime
+import exceptions
+import constants
 import brew
-from . import test_structures
-
-from requests_kerberos import HTTPKerberosAuth
+import test_structures
 
 
 class TestBrew(unittest.TestCase):
+
+    def setUp(self):
+        """
+        Define and provide mock logging for test/response
+        """
+        self.stream = StringIO.StringIO()
+        logging.basicConfig(level=logging.DEBUG, stream=self.stream)
+        self.logger = logging.getLogger()
+
+    def tearDown(self):
+        """
+        Reset logging for each test.
+        """
+        logging.shutdown()
+        reload(logging)
 
     def test_build_attached_to_open_erratum(self):
         """We can tell if a build is attached to any open erratum"""
@@ -154,9 +168,9 @@ class TestBrew(unittest.TestCase):
     def test_get_brew_build_success(self):
         """Ensure a 'proper' brew build returns a Build object"""
         with nested(
-                mock.patch('ocp_cd_tools.brew.requests.get'),
+                mock.patch('brew.requests.get'),
                 # Mock the HTTPKerberosAuth object in the module
-                mock.patch('ocp_cd_tools.brew.HTTPKerberosAuth')) as (get, kerb):
+                mock.patch('brew.HTTPKerberosAuth')) as (get, kerb):
             nvr = 'coreutils-8.22-21.el7'
             pv = 'rhaos-test-7'
             response = mock.MagicMock(status_code=200)
@@ -171,13 +185,13 @@ class TestBrew(unittest.TestCase):
             self.assertEqual(nvr, b.nvr)
 
             get.assert_called_once_with(
-                ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
+                constants.errata_get_build_url.format(id=nvr),
                 auth=kerb()
             )
 
     def test_get_brew_build_success_session(self):
         """Ensure a provided requests session is used when getting brew builds"""
-        with mock.patch('ocp_cd_tools.brew.HTTPKerberosAuth') as kerb:
+        with mock.patch('brew.HTTPKerberosAuth') as kerb:
             nvr = 'coreutils-8.22-21.el7'
             pv = 'rhaos-test-7'
             # This is the return result from the session.get() call
@@ -204,16 +218,16 @@ class TestBrew(unittest.TestCase):
             # Our session object+get method were used, not the
             # requests.get (default) method
             session.get.assert_called_once_with(
-                ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
+                constants.errata_get_build_url.format(id=nvr),
                 auth=kerb()
             )
 
     def test_get_brew_build_failure(self):
         """Ensure we notice invalid get-build responses from the API"""
         with nested(
-                mock.patch('ocp_cd_tools.brew.requests.get'),
+                mock.patch('brew.requests.get'),
                 # Mock the HTTPKerberosAuth object in the module
-                mock.patch('ocp_cd_tools.brew.HTTPKerberosAuth')) as (get, kerb):
+                mock.patch('brew.HTTPKerberosAuth')) as (get, kerb):
             nvr = 'coreutils-8.22-21.el7'
             pv = 'rhaos-test-7'
             # Engage the failure logic branch, will raise
@@ -223,11 +237,11 @@ class TestBrew(unittest.TestCase):
 
             # The 404 status code will send us down the exception
             # branch of code
-            with self.assertRaises(ocp_cd_tools.exceptions.BrewBuildException):
+            with self.assertRaises(exceptions.BrewBuildException):
                 brew.get_brew_build(nvr, product_version=pv)
 
             get.assert_called_once_with(
-                ocp_cd_tools.constants.errata_get_build_url.format(id=nvr),
+                constants.errata_get_build_url.format(id=nvr),
                 auth=kerb()
             )
 
@@ -235,25 +249,23 @@ class TestBrew(unittest.TestCase):
         """Ensure the brew list-tagged command is correct for images"""
         # Any value will work for this. Let's use a real one though to
         # maintain our sanity. This matches with the example data in
-        # ocp_cd_tools.test_structures
+        # test_structures
         tag = 'rhaos-3.9-rhel-7-candidate'
-        # runtime required for gather_exec
-        runtime_mock = mock.MagicMock(ocp_cd_tools.runtime.Runtime)
         # Big multi-line string with brew image build ouput.
-        image_builds_mock_return = ocp_cd_tools.test_structures.brew_list_tagged_3_9_image_builds
+        image_builds_mock_return = test_structures.brew_list_tagged_3_9_image_builds
         image_builds_mock_length = len(image_builds_mock_return.splitlines())
 
-        with mock.patch('ocp_cd_tools.common.gather_exec') as gexec:
+        with mock.patch('exectools.cmd_gather') as gexec:
             # gather_exec => (rc, stdout, stderr)
             gexec.return_value = tuple([0, image_builds_mock_return, ""])
 
             # Now we can test the BrewTaggedImageBuilds
             # collecter/parser class as well as the
             # get_tagged_image_builds function
-            tagged_image_builds = ocp_cd_tools.brew.BrewTaggedImageBuilds(tag)
+            tagged_image_builds = brew.BrewTaggedImageBuilds(tag)
             # This invokes get_tagged_image_builds, which in turn
             # invokes our mocked gather_exec
-            images_refreshed = tagged_image_builds.refresh(runtime_mock)
+            images_refreshed = tagged_image_builds.refresh()
 
             # Refreshing returns True after parsing the results from
             # the brew CLI command, errors will raise an exception
@@ -263,62 +275,58 @@ class TestBrew(unittest.TestCase):
             self.assertEqual(image_builds_mock_length, len(tagged_image_builds.builds))
 
             gexec.assert_called_once_with(
-                runtime_mock,
                 # shlex must split our command string into a list
-                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--type=image', '--quiet']
+                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--type=image', '--quiet'],
+                logger=self.logger
             )
 
     def test_get_tagged_image_builds_failed(self):
         """Ensure the brew list-tagged explodes if the brew subprocess fails"""
         # Any value will work for this. Let's use a real one though to
         # maintain our sanity. This matches with the example data in
-        # ocp_cd_tools.test_structures
+        # test_structures
         tag = 'rhaos-3.9-rhel-7-candidate'
-        # runtime required for gather_exec
-        runtime_mock = mock.MagicMock(ocp_cd_tools.runtime.Runtime)
         # Big multi-line string with brew image build ouput.
-        image_builds_mock_return = ocp_cd_tools.test_structures.brew_list_tagged_3_9_image_builds
+        image_builds_mock_return = test_structures.brew_list_tagged_3_9_image_builds
 
-        with mock.patch('ocp_cd_tools.common.gather_exec') as gexec:
+        with mock.patch('exectools.cmd_gather') as gexec:
             # gather_exec => (rc, stdout, stderr)
             #
             # The '1' in position 0 is the brew subprocess return
             # code, this invokes the error raising branch of code
             gexec.return_value = tuple([1, image_builds_mock_return, ""])
-            tagged_image_builds = ocp_cd_tools.brew.BrewTaggedImageBuilds(tag)
+            tagged_image_builds = brew.BrewTaggedImageBuilds(tag)
 
-            with self.assertRaises(ocp_cd_tools.exceptions.BrewBuildException):
-                tagged_image_builds.refresh(runtime_mock)
+            with self.assertRaises(exceptions.BrewBuildException):
+                tagged_image_builds.refresh()
 
             gexec.assert_called_once_with(
-                runtime_mock,
                 # shlex must split our command string into a list
-                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--type=image', '--quiet']
+                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--type=image', '--quiet'],
+                logger=self.logger
             )
 
     def test_get_tagged_rpm_builds_success(self):
         """Ensure the brew list-tagged command is correct for rpms"""
         # Any value will work for this. Let's use a real one though to
         # maintain our sanity. This matches with the example data in
-        # ocp_cd_tools.test_structures
+        # test_structures
         tag = 'rhaos-3.9-rhel-7-candidate'
-        # runtime required for gather_exec
-        runtime_mock = mock.MagicMock(ocp_cd_tools.runtime.Runtime)
         # Big multi-line string with brew rpm build ouput.
-        rpm_builds_mock_return = ocp_cd_tools.test_structures.brew_list_tagged_3_9_rpm_builds
+        rpm_builds_mock_return = test_structures.brew_list_tagged_3_9_rpm_builds
         rpm_builds_mock_length = len(rpm_builds_mock_return.splitlines())
 
-        with mock.patch('ocp_cd_tools.common.gather_exec') as gexec:
+        with mock.patch('exectools.cmd_gather') as gexec:
             # gather_exec => (rc, stdout, stderr)
             gexec.return_value = tuple([0, rpm_builds_mock_return, ""])
 
             # Now we can test the BrewTaggedRPMBuilds
             # collecter/parser class as well as the
             # get_tagged_rpm_builds function
-            tagged_rpm_builds = ocp_cd_tools.brew.BrewTaggedRPMBuilds(tag)
+            tagged_rpm_builds = brew.BrewTaggedRPMBuilds(tag)
             # This invokes get_tagged_rpm_builds, which in turn
             # invokes our mocked gather_exec
-            rpms_refreshed = tagged_rpm_builds.refresh(runtime_mock)
+            rpms_refreshed = tagged_rpm_builds.refresh()
 
             # Refreshing returns True after parsing the results from
             # the brew CLI command, errors will raise an exception
@@ -328,37 +336,35 @@ class TestBrew(unittest.TestCase):
             self.assertEqual(rpm_builds_mock_length, len(tagged_rpm_builds.builds))
 
             gexec.assert_called_once_with(
-                runtime_mock,
                 # shlex must split our command string into a list
-                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--rpm', '--quiet', '--arch', 'src']
+                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--rpm', '--quiet', '--arch', 'src'],
+                logger=self.logger
             )
 
     def test_get_tagged_rpm_builds_failed(self):
         """Ensure the brew list-tagged explodes if the brew subprocess fails"""
         # Any value will work for this. Let's use a real one though to
         # maintain our sanity. This matches with the example data in
-        # ocp_cd_tools.test_structures
+        # test_structures
         tag = 'rhaos-3.9-rhel-7-candidate'
-        # runtime required for gather_exec
-        runtime_mock = mock.MagicMock(ocp_cd_tools.runtime.Runtime)
         # Big multi-line string with brew rpm build ouput.
-        rpm_builds_mock_return = ocp_cd_tools.test_structures.brew_list_tagged_3_9_rpm_builds
+        rpm_builds_mock_return = test_structures.brew_list_tagged_3_9_rpm_builds
 
-        with mock.patch('ocp_cd_tools.common.gather_exec') as gexec:
+        with mock.patch('exectools.cmd_gather') as gexec:
             # gather_exec => (rc, stdout, stderr)
             #
             # The '1' in position 0 is the brew subprocess return
             # code, this invokes the error raising branch of code
             gexec.return_value = tuple([1, rpm_builds_mock_return, ""])
-            tagged_rpm_builds = ocp_cd_tools.brew.BrewTaggedRPMBuilds(tag)
+            tagged_rpm_builds = brew.BrewTaggedRPMBuilds(tag)
 
-            with self.assertRaises(ocp_cd_tools.exceptions.BrewBuildException):
-                tagged_rpm_builds.refresh(runtime_mock)
+            with self.assertRaises(exceptions.BrewBuildException):
+                tagged_rpm_builds.refresh()
 
             gexec.assert_called_once_with(
-                runtime_mock,
                 # shlex must split our command string into a list
-                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--rpm', '--quiet', '--arch', 'src']
+                ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--rpm', '--quiet', '--arch', 'src'],
+                logger=self.logger
             )
 
 

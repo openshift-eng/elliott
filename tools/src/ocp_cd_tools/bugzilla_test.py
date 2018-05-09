@@ -5,8 +5,8 @@ import bugzilla
 
 hostname = "bugzilla.redhat.com"
 
-class TestSearchFilter(unittest.TestCase):
 
+class TestSearchFilter(unittest.TestCase):
 
     def test_search_filter(self):
         """Verify the bugzilla SearchFilter works as expected"""

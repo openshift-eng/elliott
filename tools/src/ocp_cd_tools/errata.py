@@ -11,11 +11,10 @@ Classes representing an ERRATUM (a single errata)
 import copy
 import datetime
 import json
-import shlex
 
-from ocp_cd_tools import constants
-import ocp_cd_tools.brew
-import ocp_cd_tools.exceptions
+import constants
+import brew
+import exceptions
 
 import requests
 from requests_kerberos import HTTPKerberosAuth
@@ -30,7 +29,7 @@ def get_erratum(id):
 
     :return SUCCESS: An Erratum object
     :return FAILURE: :bool:False
-    :raises: ocp_cd_tools.exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+    :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
     """
     res = requests.get(constants.errata_get_erratum_url.format(id=id),
                        auth=HTTPKerberosAuth())
@@ -38,7 +37,7 @@ def get_erratum(id):
     if res.status_code == 200:
         return Erratum(body=res.json())
     elif res.status_code == 401:
-        raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
+        raise exceptions.ErrataToolUnauthorizedException(res.text)
     else:
         return False
 
@@ -58,11 +57,11 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
         returned
     :param str/int minor: The minor release to substitute into the
         errata boilerplate text (see:
-        :mod:`ocp_cd_tools.constants`). E.g., if this is a '3.9'
+        :mod:`constants`). E.g., if this is a '3.9'
         release, you would provide '9' as the value for 'minor'
 
     :return: An Erratum object
-    :raises: ocp_cd_tools.exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+    :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
     """
     if release_date is None:
         release_date = datetime.datetime.now() + datetime.timedelta(days=21)
@@ -89,9 +88,9 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
         if res.status_code == 201:
             return Erratum(body=res.json())
         elif res.status_code == 401:
-            raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
+            raise exceptions.ErrataToolUnauthorizedException(res.text)
         else:
-            raise ocp_cd_tools.exceptions.ErraraToolError("Other error (status_code={code}): {msg}".format(
+            raise exceptions.ErraraToolError("Other error (status_code={code}): {msg}".format(
                 code=res.status_code,
                 msg=res.text))
     else:
@@ -99,7 +98,7 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
         return json.dumps(body, indent=2)
 
 
-def get_filtered_list(filter_id=ocp_cd_tools.constants.errata_default_filter, limit=5):
+def get_filtered_list(filter_id=constants.errata_default_filter, limit=5):
     """return a list of Erratum() objects from results using the provided
 filter_id
 
@@ -107,8 +106,8 @@ filter_id
     :param int limit: How many erratum to list
     :return: A list of Erratum objects
 
-    :raises ocp_cd_tools.exceptions.ErrataToolUnauthorizedException: If the user is not authenticated to make the request
-    :raises ocp_cd_tools.exceptions.ErrataToolError: If the given filter does not exist, and, any other unexpected error
+    :raises exceptions.ErrataToolUnauthorizedException: If the user is not authenticated to make the request
+    :raises exceptions.ErrataToolError: If the given filter does not exist, and, any other unexpected error
 
     Note: Errata filters are defined in the ET web interface
     """
@@ -121,17 +120,17 @@ filter_id
         # normally you would expect a code like '404' (not
         # found). However, the Errata Tool sadistically returns a 200
         # response code. That leaves us with one option: Decide that
-        # successfully parsing the response as a JSON object indicates
+        # successfully parsing the response as a JSONinfo object indicates
         # a successful API call.
         try:
             return [Erratum(body=advs) for advs in res.json()][:limit]
         except Exception:
-            raise ocp_cd_tools.exceptions.ErrataToolError("Could not locate the given advisory filter: {fid}".format(
+            raise exceptions.ErrataToolError("Could not locate the given advisory filter: {fid}".format(
                 fid=filter_id))
     elif res.status_code == 401:
-        raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
+        raise exceptions.ErrataToolUnauthorizedException(res.text)
     else:
-        raise ocp_cd_tools.exceptions.ErrataToolError("Other error (status_code={code}): {msg}".format(
+        raise exceptions.ErrataToolError("Other error (status_code={code}): {msg}".format(
             code=res.status_code,
             msg=res.text))
 
@@ -196,7 +195,7 @@ class Erratum(object):
             self.status = rha['status']
             self.created_at = datetime.datetime.strptime(rha['created_at'], self.date_format)
             self.url = "{et}/advisory/{id}".format(
-                et=ocp_cd_tools.constants.errata_url,
+                et=constants.errata_url,
                 id=self.advisory_id)
         else:
             # Erratum returned from an advisory filtered list
@@ -209,7 +208,7 @@ class Erratum(object):
             self.status = self.body.get('status', 'NEW_FILES')
             self.created_at = datetime.datetime.strptime(self.body['timestamps']['created_at'], self.date_format)
             self.url = "{et}/advisory/{id}".format(
-                et=ocp_cd_tools.constants.errata_url,
+                et=constants.errata_url,
                 id=self.advisory_id)
 
     def refresh(self):
@@ -226,7 +225,7 @@ class Erratum(object):
     def add_bugs(self, bugs=[]):  # pragma: no cover
         """Shortcut for several calls to self.add_bug()
 
-        :param Bug bugs: A list of :module:`ocp_cd_tools.bugzilla` Bug objects
+        :param Bug bugs: A list of :module:`bugzilla` Bug objects
         """
         for bug in bugs:
             yield (self.add_bug(bug), bug.id)
@@ -241,9 +240,9 @@ class Erratum(object):
 
         https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidadd_bug
 
-        :param Bug bug: A :module:`ocp_cd_tools.bugzilla` Bug object
+        :param Bug bug: A :module:`bugzilla` Bug object
         """
-        return requests.post(ocp_cd_tools.constants.errata_add_bug_url.format(id=self.advisory_id),
+        return requests.post(constants.errata_add_bug_url.format(id=self.advisory_id),
                              auth=HTTPKerberosAuth(),
                              json={'bug': bug.id})
 
@@ -267,12 +266,12 @@ class Erratum(object):
 
         :return: True if builds were added successfully
 
-        :raises: ocp_cd_tools.exceptions.BrewBuildException if the builds could not be attached
-        :raises: ocp_cd_tools.exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+        :raises: exceptions.BrewBuildException if the builds could not be attached
+        :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
         """
         data = [b.to_json() for b in builds]
 
-        res = requests.post(ocp_cd_tools.constants.errata_add_builds_url.format(id=self.advisory_id),
+        res = requests.post(constants.errata_add_builds_url.format(id=self.advisory_id),
                             auth=HTTPKerberosAuth(),
                             json=data)
 
@@ -283,9 +282,9 @@ class Erratum(object):
             # "Something" bad happened
             print(res.status_code)
             print(res.text)
-            raise ocp_cd_tools.exceptions.BrewBuildException(str(res.json()))
+            raise exceptions.BrewBuildException(str(res.json()))
         elif res.status_code == 401:
-            raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
+            raise exceptions.ErrataToolUnauthorizedException(res.text)
         # TODO: Find the success return code
         else:
             return True
@@ -304,13 +303,13 @@ class Erratum(object):
         https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidadd_comment
 
         :param str comment: The ID of one of the pre-defined
-        comment strings in ocp_cd_tools.constants.errata_comments
+        comment strings in constants.errata_comments
         """
         if comment not in constants.errata_comments:
-            raise Exception("Invalid comment selected. See ocp_cd_tools.constants.errata_comments for legal values")
+            raise Exception("Invalid comment selected. See constants.errata_comments for legal values")
         else:
             data = {"comment": constants.errata_comments[comment]}
-            return requests.post(ocp_cd_tools.constants.errata_add_comment_url.format(id=self.advisory_id),
+            return requests.post(constants.errata_add_comment_url.format(id=self.advisory_id),
                                  auth=HTTPKerberosAuth(),
                                  data=data)
 
@@ -328,11 +327,11 @@ class Erratum(object):
 
         :param str state: The state to change the advisory to
         :return: True on successful state change
-        :raises: ocp_cd_tools.exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+        :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
 
         https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidchange_state
         """
-        res = requests.post(ocp_cd_tools.constants.errata_change_state_url.format(id=self.advisory_id),
+        res = requests.post(constants.errata_change_state_url.format(id=self.advisory_id),
                             auth=HTTPKerberosAuth(),
                             data={"new_state": state})
 
@@ -341,10 +340,10 @@ class Erratum(object):
         # bugs or JIRA issues.
         if res.status_code == 422:
             # Conditions not met
-            raise ocp_cd_tools.exceptions.ErraraToolError("Can not change erratum state, preconditions not yet met. Error message: {msg}".format(
+            raise exceptions.ErraraToolError("Can not change erratum state, preconditions not yet met. Error message: {msg}".format(
                 msg=res.text))
         elif res.status_code == 401:
-            raise ocp_cd_tools.exceptions.ErrataToolUnauthorizedException(res.text)
+            raise exceptions.ErrataToolUnauthorizedException(res.text)
         elif res.status_code == 201:
             # POST processed successfully
             self.refresh()

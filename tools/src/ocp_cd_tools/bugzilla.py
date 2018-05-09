@@ -6,12 +6,15 @@ with Red Hat Bugzilla
 # stdlib
 from subprocess import call, check_output
 import urllib
+import logutil
 
 # ours
-import ocp_cd_tools.constants
+import constants
 
 # 3rd party
 import click
+
+logger = logutil.getLogger(__name__)
 
 
 def search_for_bugs(target_release, verbose=False):
@@ -26,13 +29,13 @@ def search_for_bugs(target_release, verbose=False):
 
     # query_url = BUGZILLA_QUERY_URL.format(target_releases_str)
 
-    query_url = SearchURL(ocp_cd_tools.constants.BUGZILLA_SERVER, "MODIFIED")
+    query_url = SearchURL(constants.BUGZILLA_SERVER, "MODIFIED")
     query_url.addFilter("component", "notequals", "RFE")
     query_url.addFilter("component", "notequals", "Documentation")
     query_url.addFilter("component", "notequals", "Security")
     query_url.addFilter("cf_verified", "notequals", "FailedQA")
 
-    for v in ocp_cd_tools.constants.DEFAULT_VERSIONS:
+    for v in constants.DEFAULT_VERSIONS:
         query_url.addVersion(v)
 
     for r in target_release:
