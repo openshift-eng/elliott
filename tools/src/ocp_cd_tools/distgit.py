@@ -296,6 +296,7 @@ class ImageDistGitRepo(DistGitRepo):
         :param version_release_tuple: Specify a version/release to pull as the source (if None, the latest build will be pulled).
         :param push_late: Whether late pushes should be included.
         :param dry_run: Will only print the docker operations that would have taken place.
+        :return: Returns True if successful (exception otherwise)
         """
 
         # Late pushes allow certain images to be the last of a group to be
@@ -312,7 +313,7 @@ class ImageDistGitRepo(DistGitRepo):
             is_late_push = self.config.push.late
 
         if push_late != is_late_push:
-            return
+            return True
 
         push_names = []
 
@@ -323,7 +324,7 @@ class ImageDistGitRepo(DistGitRepo):
 
         # Nothing to push to? We are done.
         if not push_names:
-            return
+            return True
 
         with Dir(self.distgit_dir):
 
@@ -424,6 +425,7 @@ class ImageDistGitRepo(DistGitRepo):
 
                     record["message"] = "Successfully pushed all tags"
                     record["status"] = 0
+                    return True
 
                 except Exception as err:
                     record["message"] = "Exception occurred: %s" % str(err)
