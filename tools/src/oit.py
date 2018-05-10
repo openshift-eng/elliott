@@ -713,15 +713,19 @@ def images_push(runtime, tag, to_defaults, late_only, to, dry_run):
         # operations registry.
         failed = []
         # Push early images
-        for image in runtime.image_metas():
-            try:
-                image.distgit_repo().push_image(tag, to_defaults, additional_registries, dry_run=dry_run)
-            except Exception:
-                traceback.print_exc()
-                failed.append(image.name)
 
+        items = runtime.image_metas()
+        results = runtime.parallel_exec(
+            lambda (img, terminate_event):
+                img.distgit_repo().push_image(tag, to_defaults, additional_registries, dry_run=dry_run),
+                items,
+                n_threads=4
+            )
+        results = results.get()
+
+        failed = [m.distgit_key for m, r in zip(items, results) if not r]
         if failed:
-            runtime.logger.info("\n".join(["Push failures:"] + sorted(failed)))
+            runtime.logger.error("\n".join(["Push failures:"] + sorted(failed)))
             exit(1)
 
     # Push all late images
