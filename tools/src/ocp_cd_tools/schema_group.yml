@@ -13,7 +13,7 @@ mapping:
 
   "name":
     type: str
-    required: yes
+    required: true
 
   "arches":
     type: seq
@@ -22,7 +22,7 @@ mapping:
         enum: [x86_64]
 
   "push":
-    required: yes
+    required: true
     type: map
     mapping:
       "registries":
@@ -49,10 +49,10 @@ mapping:
         type: map
         mapping:
           "url":
-            required: yes
+            required: true
             type: str
           "branch":
-            required: yes
+            required: true
             type: map
             mapping:
               "target":
@@ -76,7 +76,7 @@ mapping:
               "baseurl":
                 # baseurl can be a map or a single string
                 # TODO: change this so that it is always a map with 'default'.
-                required: yes
+                required: true
                 type: any
               "=":
                 # all other keys must be strings and will go straight into repo definition
@@ -87,7 +87,7 @@ mapping:
             mapping:
               "default":
                 type: str
-                required: yes
+                required: true
               "=":
                 type: str
 
