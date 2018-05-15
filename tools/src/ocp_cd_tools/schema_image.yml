@@ -50,7 +50,7 @@ mapping:
         type: map
         mapping:
           "alias":
-            required: yes
+            required: true
             type: str
           "dockerfile":
             type: str
@@ -91,7 +91,7 @@ mapping:
       - type: str
 
   "name":
-    required: yes
+    required: true
     type: str
 
   "labels":
