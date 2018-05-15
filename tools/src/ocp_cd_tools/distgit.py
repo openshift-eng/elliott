@@ -713,7 +713,7 @@ class ImageDistGitRepo(DistGitRepo):
 
             with open('additional-tags', 'w') as at:
                 at.write("%s\n" % uuid_tag)  # The uuid which we ensure we get the right FROM tag
-                at.write("%s\n" % version)
+                # at.write("%s\n" % version)  # Removed for https://projects.engineering.redhat.com/browse/OSBS-5638?focusedCommentId=837662&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-837662
                 vsplit = version.split(".")
                 if len(vsplit) > 1:
                     at.write("%s.%s\n" % (vsplit[0], vsplit[1]))  # e.g. "v3.7.0" -> "v3.7"
