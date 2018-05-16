@@ -3,6 +3,7 @@ Utility functions for general interactions with Brew and Builds
 """
 
 # stdlib
+import ast
 import time
 import datetime
 import subprocess
@@ -73,7 +74,7 @@ def watch_task(log_f, task_id, terminate_event):
     return error
 
 
-def get_brew_build(nvr, product_version='', session=None, progress=False):
+def get_brew_build(nvr, product_version='', session=None, progress_func=None):
     """5.2.2.1. GET /api/v1/build/{id_or_nvr}
 
     Get Brew build details.
@@ -87,6 +88,7 @@ def get_brew_build(nvr, product_version='', session=None, progress=False):
     used for for connection pooling. Providing `session` object can
     yield a significant reduction in total query time when looking up
     many builds.
+    :param function progress_func: A function to run after the build info has been grabbed
 
     http://docs.python-requests.org/en/master/user/advanced/#session-objects
 
@@ -101,8 +103,8 @@ def get_brew_build(nvr, product_version='', session=None, progress=False):
         res = requests.get(constants.errata_get_build_url.format(id=nvr),
                            auth=HTTPKerberosAuth())
     if res.status_code == 200:
-        if progress:
-            click.secho('.', nl=False)
+        if progress_func is not None:
+            progress_func()
         return Build(nvr=nvr, body=res.json(), product_version=product_version)
     else:
         raise exceptions.BrewBuildException("{build}: {msg}".format(
@@ -110,8 +112,7 @@ def get_brew_build(nvr, product_version='', session=None, progress=False):
             msg=res.text))
 
 
-def find_unshipped_builds(base_tag, product_version, kind='rpm'):
-
+def find_unshipped_builds(base_tag, product_version, kind='rpm', progress_func=None):
     """Find builds for a product and return a list of the builds only
     labeled with the -candidate tag that aren't attached to any open
     advisory.
@@ -123,6 +124,7 @@ def find_unshipped_builds(base_tag, product_version, kind='rpm'):
     when attaching a build
     :param str kind: Search for RPM builds by default. 'image' is also
     acceptable
+    :param function progress_func: A function to run after the build info has been grabbed
 
     For example, if `base_tag` is 'rhaos-3.7-rhel7' then this will
     look for two sets of tagged builds:
@@ -151,30 +153,8 @@ def find_unshipped_builds(base_tag, product_version, kind='rpm'):
     pool.close()
     pool.join()
 
-    print("Found candidate {n} builds for {tag}".format(n=len(candidate_builds.builds), tag=base_tag + "-candidate"))
-    print("Found shipped {n} builds for {tag}".format(n=len(shipped_builds.builds), tag=base_tag))
-
     # Builds only tagged with -candidate (not shipped yet)
     unshipped_builds = candidate_builds.builds.difference(shipped_builds.builds)
-    print("Found {n} builds only labeled as '-candidate': candidate_builds.difference(shipped_builds)".format(n=len(unshipped_builds)))
-    print(sorted(unshipped_builds))
-
-    unshipped_builds_rev = shipped_builds.builds.difference(candidate_builds.builds)
-    print("Found {n} builds only labeled as 'shipped': shipped_builds.difference(candidate_builds)".format(n=len(unshipped_builds_rev)))
-    print(sorted(unshipped_builds_rev))
-
-    build_intersection = candidate_builds.builds.intersection(shipped_builds.builds)
-    print("Found {n} builds present in both lists".format(n=len(build_intersection)))
-
-    # Filtering update: When we calculated unshipped_builds we
-    # filtered out duplicate builds. Now let's update the user with
-    # that number and list the removed candidates.
-    print("Removing {n} builds because they are tagged as '-candidate' and 'shipped':".format(n=len(build_intersection)))
-    # What builds were filtered out?
-    for b in sorted(build_intersection):
-        print(" -{b}".format(b=b))
-
-    print("Updating metadata for {n} remaining '-candidate' tagged builds".format(n=len(unshipped_builds)))
 
     # Re-use TCP connection to speed things up
     session = requests.Session()
@@ -183,7 +163,7 @@ def find_unshipped_builds(base_tag, product_version, kind='rpm'):
     # we need information about. May as well do it in parallel.
     pool = ThreadPool(cpu_count())
     results = pool.map(
-        lambda nvr: get_brew_build(nvr, product_version, session=session),
+        lambda nvr: get_brew_build(nvr, product_version, session=session, progress_func=progress_func),
         list(unshipped_builds))
     # Wait for results
     pool.close()
@@ -191,16 +171,6 @@ def find_unshipped_builds(base_tag, product_version, kind='rpm'):
 
     # We only want builds not attached to an existing open advisory
     viable_builds = [b for b in results if not b.attached_to_open_erratum]
-    print("Removing {n} builds because they are attached to open erratum:".format(
-        n=(len(results) - len(viable_builds))))
-    for b in sorted(set(results).difference(set(viable_builds))):
-        print(" - {nvr}:".format(nvr=b.nvr))
-        print("   Open Advisory: {open_advs}".format(
-            open_advs=", ".join([str(erratum['id']) for erratum in b.open_erratum])))
-        print("   Closed Advisory: {closed_advs}".format(
-            closed_advs=", ".join([str(erratum['id']) for erratum in b.closed_erratum])))
-
-    print("After filtering there are {n} remaining builds".format(n=len(viable_builds)))
 
     return viable_builds
 
@@ -208,20 +178,59 @@ def find_unshipped_builds(base_tag, product_version, kind='rpm'):
 def get_brew_buildinfo(build):
     """Get the buildinfo of a brew build from brew.
 
+    :param str|int build: A build NVR or numeric ID
+
+    :return dict buildinfo: A dict of the build info. Certain fields
+    may be transformed such as 'Tags' turned into a list, and 'Extra'
+    into a proper dict object instead of a JSON string
+
+    :return str buildinfo: The raw unparsed buildinfo as a string
+
 Note: This is different from get_brew_build in that this function
 queries brew directly using the 'brew buildinfo' command. Whereas,
 get_brew_build queries the Errata Tool API for other information.
 
 This function will give information not provided by ET: build tags,
-finished date, built by, etc."""
+finished date, built by, etc.
+    """
     query_string = "brew buildinfo {nvr}".format(nvr=build.nvr)
     rc, stdout, stderr = exectools.cmd_gather(shlex.split(query_string))
     buildinfo = {}
-    for line in stdout.splitlines():
-        key, token, rest = line.partition(': ')
-        buildinfo[key] = rest
 
-    return buildinfo
+    if as_string and rc == 0:
+        return stdout
+    else:
+        buildinfo = {}
+
+        # These keys indicate content which can be whitespace split into
+        # an array, ex: the value of the "Tags" key comes as a string, but
+        # we can split it on space characters and have a list of tags
+        # instead.
+        split_keys = ['Tags']
+        # The value of these keys contain json strings which we can
+        # attempt to load into a datastructure
+        json_keys = ['Extra']
+        for line in stdout.splitlines():
+            key, token, rest = line.partition(': ')
+            if key in split_keys:
+                buildinfo[key] = rest.split(' ')
+                continue
+            elif key in json_keys:
+                try:
+                    # Why would we use the ast module for this? Is
+                    # json.loads not enough? Actually, no, it isn't
+                    # enough. The <airquotes>JSON</airquotes> returned
+                    # from 'brew buildinfo' uses single-quotes to wrap
+                    # strings, that is not valid json. Whereas,
+                    # ast.literal_eval() can handle that and load the
+                    # string into a structure we can work with
+                    buildinfo[key] = ast.literal_eval(rest)
+                except Exception as e:
+                    buildinfo[key] = rest
+                    continue
+            else:
+                buildinfo[key] = rest
+        return buildinfo
 
 
 def get_tagged_image_builds(tag, latest=True):

@@ -121,6 +121,39 @@ you read the docs.
     """
     return ver.split('-')[1].split('.')[1]
 
+
+def pbar_header(msg_prefix='', msg='', seq=[], char='*'):
+    """Generate a progress bar header for a given iterable or
+sequence. The given sequence must have a countable length. A bar of
+`char` characters is printed between square brackets.
+
+    :param string msg_prefix: Header text to print in heavy green text
+    :param string msg: Header text to print in the default char face
+    :param sequence seq: A sequence (iterable) to size the progress
+    bar against
+    :param str char: The character to use when drawing the progress
+    bar
+
+For example:
+
+    pbar_header("Foo: ", "bar", seq=[None, None, None], char='-')
+
+would produce:
+
+    Foo: bar
+    [---]
+
+where 'Foo: ' is printed using green_prefix() and 'bar' is in the
+default console fg color and weight.
+
+TODO: This would make a nice context wrapper.
+
+    """
+    green_prefix(msg_prefix)
+    click.echo(msg)
+    click.echo("[" + (char * len(seq))+ "]")
+
+
 # -----------------------------------------------------------------------------
 # CLI Commands - Please keep these in alphabetical order
 # -----------------------------------------------------------------------------
@@ -348,11 +381,8 @@ manually. Provide one or more --id's for manual bug addition.
 @click.option('--kind', '-k', metavar='KIND',
               required=True, type=click.Choice(['rpm', 'image']),
               help='Find builds of the given KIND [rpm, image]')
-@click.option('--tags', '-t', 'show_tags',
-              default=False, required=False, is_flag=True,
-              help='Show Brew tags applied to builds (increases search time)')
 @pass_runtime
-def find_builds(runtime, advisory, builds, kind, show_tags):
+def find_builds(runtime, advisory, builds, kind):
     """Automatically or manually find or attach viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -396,25 +426,77 @@ PRESENT advisory. Here are some examples:
     product_version = 'RHEL-7-OSE-3.{Y}'.format(Y=minor)
     base_tag = "rhaos-3.{minor}-rhel-7".format(minor=minor)
 
-    # Get a list of ACTIVE erratum
+    # Test authentication
     try:
-        ocp_cd_tools.errata.get_filtered_list(ocp_cd_tools.constants.errata_live_advisory_filter, limit=100)
+        ocp_cd_tools.errata.get_filtered_list(ocp_cd_tools.constants.errata_live_advisory_filter)
     except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
         exit_unauthorized()
+
+    session = requests.Session()
 
     if len(builds) > 0:
         green_prefix("Build NVRs provided: ")
         click.echo("Manually verifying the builds exist")
         try:
-            unshipped_builds = [ocp_cd_tools.brew.get_brew_build(b, product_version) for b in builds]
+            unshipped_builds = [ocp_cd_tools.brew.get_brew_build(b, product_version, session=session) for b in builds]
         except ocp_cd_tools.exceptions.BrewBuildException as e:
             red_prefix("Error: ")
             click.echo(e)
             exit(1)
     else:
-        green_prefix("Searching Brew for build candidates: ")
-        click.echo("Hold on a moment")
-        unshipped_builds = ocp_cd_tools.brew.find_unshipped_builds(base_tag, product_version, kind=kind)
+        if kind == 'image':
+            initial_builds = runtime.image_metas()
+            pbar_header("Generating list of {kind}s: ".format(kind=kind),
+                        "Hold on a moment, fetching Brew buildinfo",
+                        initial_builds)
+            pool = ThreadPool(cpu_count())
+            # Look up builds concurrently
+            click.secho("[", nl=False)
+
+            # Returns a list of (n, v, r) tuples of each build
+            potential_builds = pool.map(
+                lambda build: build.get_latest_build_info(
+                    progress_func=lambda: click.secho('*', fg='green', nl=False)),
+                initial_builds)
+            # Wait for results
+            pool.close()
+            pool.join()
+            click.echo(']')
+
+            pbar_header("Generating build metadata: ",
+                        "Fetching data for {n} builds ".format(n=len(potential_builds)),
+                        potential_builds)
+            click.secho("[", nl=False)
+
+            # Reassign variable contents, filter out remove non_release builds
+            potential_builds = [i for i in potential_builds
+                                    if i[0] not in runtime.group_config.get('non_release', [])]
+
+            # By 'meta' I mean the lil bits of meta data given back from
+            # get_latest_build_info
+            #
+            # TODO: Update the ImageMetaData class to include the NVR as
+            # an object attribute.
+            pool = ThreadPool(cpu_count())
+            unshipped_builds = pool.map(
+                lambda meta: ocp_cd_tools.brew.get_brew_build("{}-{}-{}".format(meta[0], meta[1], meta[2]),
+                                                               product_version,
+                                                               session=session,
+                                                               progress_func=lambda: click.secho('*', fg='green', nl=False)),
+                potential_builds)
+            # Wait for results
+            pool.close()
+            pool.join()
+            click.echo(']')
+        elif kind == 'rpm':
+            green_prefix("Generating list of {kind}s: ".format(kind=kind))
+            click.echo("Hold on a moment, fetching Brew buildinfo")
+            unshipped_builds = ocp_cd_tools.brew.find_unshipped_builds(
+                base_tag,
+                product_version,
+                kind=kind,
+                progress_func=lambda: click.secho('*', fg='green', nl=False))
+            click.echo()
 
     build_count = len(unshipped_builds)
 
@@ -431,160 +513,11 @@ PRESENT advisory. Here are some examples:
             click.echo(str(e))
             exit(1)
     else:
-        # Search only, do not attach
-        if show_tags:
-            green_prefix("Display-Build-Tags Requested: ")
-            click.echo("Fetching buildinfo (brew) for {n} builds ".format(n=len(unshipped_builds)))
-            click.echo("[" + ("*" * len(unshipped_builds)) + "]")
-            click.secho("[", nl=False)
-            pool = ThreadPool(cpu_count())
-            pool.map(
-                lambda build: build.add_buildinfo(verbose=True),
-                sorted(unshipped_builds))
-            # Wait for results
-            pool.close()
-            pool.join()
-            click.secho("]")
-
         click.echo("The following {n} builds ".format(n=build_count), nl=False)
         click.secho("may be attached ", bold=True, nl=False)
         click.echo("to an advisory:")
         for b in sorted(unshipped_builds):
-            click.echo(" " + str(b.to_json()))
-            if show_tags:
-                click.echo(" Tags: " + ", ".join(b.buildinfo['Tags'].split(' ')))
-                click.echo('')
-
-
-#
-# Find old builds Builds
-# advisory:find-old-builds
-#
-@cli.command('advisory:find-old-builds',
-             short_help='Find old builds')
-@click.option('--kind', '-k', metavar='KIND',
-              required=True, type=click.Choice(['rpm', 'image']),
-              help='Find builds of the given KIND [rpm, image]')
-@click.option('--tag', '-t', 'tags', metavar='TAG',
-              multiple=True, required=True,
-              help='Brew build tags, ex: rhaos-3.5-rhel-7-candidate, rhaos-3.5-rhel-7, rhaos-3.5-rhel-7-container-released [MULTIPLE]')
-@click.option("--date", required=False,
-              default=datetime.datetime.now().strftime(YMD),
-              callback=validate_release_date,
-              help="Builds finished on or before this date. Format: YYYY-MM-DD. Defaults to {now}".format(now=now.strftime(YMD)))
-@click.option("--output", "-o", required=False, type=click.File('wb'),
-              default=None, metavar='OUTPUT_FILE',
-              help="Write brew remote-tag commands to OUTPUT_FILE to run as a script")
-@click.pass_context
-def find_old_builds(ctx, kind, tags, date, output):
-    """Find old builds. Most likely you are trying to prune certain tags
-from them. This command can generate a shell script with brew
-'untag-build' commands in it for each old build it finds.
-
-Specify the minimum age of the old build with the --date option. Every
-build that finished at or before that date will be returned. Dates are
-entered in the format: YYYY-MM-DD. For example: 2018-04-20.
-
-You must provide one or more --tag to search. Additionally, the build
-kind must be specified with --kind {image,rpm}.
-
-Unfortunately at the time of writing, a --group option must be
-provided so we can use some OCP_CD_TOOLS utilities. This could change
-in the future. For now just give any valid group value (ex:
---group=openshift-3.10).
-
-    Find image builds finished on or before 2017-06-20 tagged with
-    'rhaos-3.5-rhel-7-candidate':
-
-\b
-    $ elliott --group=openshift-3.10 advisory:find-old-builds --date 2017-06-20 -t rhaos-3.5-rhel-7-candidate -k image
-    """
-    build_map = {}
-
-    green_prefix("Searching Brew for builds with tags: ")
-    click.echo(", ".join(tags))
-
-    for tag in tags:
-        if kind == 'rpm':
-            builds = ocp_cd_tools.brew.BrewTaggedRPMBuilds(tag)
-        elif kind == 'image':
-            builds = ocp_cd_tools.brew.BrewTaggedImageBuilds(tag)
-
-        builds.refresh()
-
-        # Re-use TCP connection to speed things up
-        session = requests.Session()
-
-        product_version = 'pv'
-        green_prefix("Fetching builddetails (errata tool): ")
-        click.echo("{n} builds in tag {tag}".format(n=len(builds.builds), tag=tag))
-        click.echo("[" + "*" * len(builds.builds) + "]")
-        click.secho("[", nl=False)
-        pool = ThreadPool(cpu_count())
-        results = pool.map(
-            lambda nvr: ocp_cd_tools.brew.get_brew_build(nvr, product_version, session=session, progress=True),
-            builds.builds)
-        # Wait for results
-        pool.close()
-        pool.join()
-        click.echo("]")
-
-        green_prefix("Fetching buildinfo (brew): ")
-        click.echo("{n} builds in tag {tag}".format(n=len(builds.builds), tag=tag))
-        click.echo("[" + ("*" * len(results)) + "]")
-        click.secho("[", nl=False)
-        pool = ThreadPool(cpu_count())
-        pool.map(
-            lambda build: build.add_buildinfo(),
-            sorted(results))
-        # Wait for results
-        pool.close()
-        pool.join()
-        click.secho("]")
-
-        build_map[tag] = results
-
-    trim_date = datetime.datetime.strptime(date, YMD)
-
-    old_builds_map = {}
-    for tag, builds in build_map.items():
-        green_prefix("Building map: ")
-        click.echo(tag)
-        old_builds_map[tag] = [b for b in builds if b.finished <= trim_date]
-        click.echo("Original Builds: {n_orig}. Old builds: {n_old}. {n_orig}(orig) - {n_old}(old) = {n_remain}(removed) ".format(
-            n_orig=len(builds),
-            n_old=len(old_builds_map[tag]),
-            n_remain=len(builds) - len(old_builds_map[tag])))
-
-    click.echo()
-    click.secho("The following builds finished on or before", nl=False)
-    click.secho(" {d} ".format(d=trim_date.strftime(YMD)), bold=True, nl=False)
-    click.echo("and have not shipped yet")
-    click.echo()
-
-    click.echo("<tag> | <build> | <date> | <all_tags>")
-
-    remove_tag_commands = []
-
-    for tag, builds in old_builds_map.items():
-        for build in sorted(builds, key=lambda b: b.finished):
-            click.echo("{date} (days old: {do}) | {tag} | {build} | {all_tags}".format(
-                tag=tag,
-                build=str(build),
-                date=build.finished.strftime(YMD),
-                do=(trim_date - build.finished).days,
-                all_tags=", ".join(build.buildinfo['Tags'].split(' '))))
-            remove_tag_commands.append("brew untag-build {tag} {nvr}".format(
-                tag=tag,
-                nvr=str(build)))
-
-    if output is not None:
-        output.write("#!/bin/bash\n")
-        for line in remove_tag_commands:
-            output.write("{l}\n".format(l=line))
-
-        green_prefix("Brew untag-build command script written to: ")
-        click.echo("{spot}".format(spot=output.name))
+            click.echo(" " + b.nvr)
 
 
 #
