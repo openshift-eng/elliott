@@ -676,13 +676,15 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
 @cli.command("images:push", short_help="Push the most recently built images to mirrors.")
 @click.option('--tag', default=[], metavar="PUSH_TAG", multiple=True,
               help='Push to registry using these tags instead of default set.')
+@click.option("--version-release", default=None, metavar="VERSION-RELEASE",
+              help="Specify an exact version to pull/push (e.g. 'v3.9.31-1' ; default is latest built).")
 @click.option('--to-defaults', default=False, is_flag=True, help='Push to default registries.')
 @click.option('--late-only', default=False, is_flag=True, help='Push only "late" images.')
 @click.option("--to", default=[], metavar="REGISTRY", multiple=True,
               help="Registry to push to when image build completes.  [multiple]")
 @click.option('--dry-run', default=False, is_flag=True, help='Only print tag/push operations which would have occurred.')
 @pass_runtime
-def images_push(runtime, tag, to_defaults, late_only, to, dry_run):
+def images_push(runtime, tag, version_release, to_defaults, late_only, to, dry_run):
     """
     Each distgit repository will be cloned and the version and release information
     will be extracted. That information will be used to determine the most recently
@@ -699,6 +701,12 @@ def images_push(runtime, tag, to_defaults, late_only, to, dry_run):
         exit(1)
 
     runtime.initialize()
+
+    version_release_tuple = None
+
+    if version_release:
+        version_release_tuple = version_release.split('-')
+        click.echo('Setting up to push: version={} release={}'.format(version_release_tuple[0], version_release_tuple[1]))
 
     # late-only is useful if we are resuming a partial build in which not all images
     # can be built/pushed. Calling images:push can end up hitting the same
@@ -717,7 +725,8 @@ def images_push(runtime, tag, to_defaults, late_only, to, dry_run):
         items = runtime.image_metas()
         results = runtime.parallel_exec(
             lambda (img, terminate_event):
-                img.distgit_repo().push_image(tag, to_defaults, additional_registries, dry_run=dry_run),
+                img.distgit_repo().push_image(tag, to_defaults, additional_registries,
+                                              version_release_tuple=version_release_tuple, dry_run=dry_run),
                 items,
                 n_threads=4
             )
@@ -732,7 +741,9 @@ def images_push(runtime, tag, to_defaults, late_only, to, dry_run):
     for image in runtime.image_metas():
         # Check if actually a late image to prevent cloning all distgit on --late-only
         if image.config.push.late is True:
-            image.distgit_repo().push_image(tag, to_defaults, additional_registries, push_late=True, dry_run=dry_run)
+            image.distgit_repo().push_image(tag, to_defaults, additional_registries,
+                                            version_release_tuple=version_release_tuple,
+                                            push_late=True, dry_run=dry_run)
 
 
 @cli.command("images:pull", short_help="Pull latest images from pulp")
