@@ -12,6 +12,7 @@ from multiprocessing import Lock
 import shlex
 import koji
 import koji_cli.lib
+import traceback
 
 # ours
 import constants
@@ -54,20 +55,33 @@ def watch_task(log_f, task_id, terminate_event):
         koji.ClientSession(constants.BREW_HUB),
         quiet=True)
     error = None
+    except_count = 0
     while error is None:
-        watcher.update()
+        try:
+            watcher.update()
+            except_count = 0
 
-        # Keep around metrics for each task we watch
-        with watch_task_lock:
-            watch_task_info[task_id] = dict(watcher.info)
+            # Keep around metrics for each task we watch
+            with watch_task_lock:
+                watch_task_info[task_id] = dict(watcher.info)
 
-        if watcher.is_done():
-            return None if watcher.is_success() else watcher.get_failure()
-        log_f("Task state: " + koji.TASK_STATES[watcher.info['state']])
+            if watcher.is_done():
+                return None if watcher.is_success() else watcher.get_failure()
+            log_f("Task state: " + koji.TASK_STATES[watcher.info['state']])
+        except:
+            except_count += 1
+            # possible for watcher.update() to except during connection issue, try again
+            log_f('watcher.update() exception. Trying again in 60s.\n{}'.format(traceback.format_exc()))
+            if except_count >= 10:
+                log_f('watcher.update() excepted 10 times. Giving up.')
+                error = traceback.format_exc()
+                break
+
         if terminate_event.wait(timeout=3 * 60):
             error = 'Interrupted'
         elif time.time() > end:
             error = 'Timeout building image'
+
     log_f(error + ", canceling build")
     subprocess.check_call(("brew", "cancel", str(task_id)))
     return error
