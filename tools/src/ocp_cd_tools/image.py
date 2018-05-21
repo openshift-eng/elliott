@@ -18,14 +18,12 @@ class ImageMetadata(Metadata):
     def __init__(self, runtime, config_filename):
         super(ImageMetadata, self).__init__('image', runtime, config_filename)
 
-    def get_latest_build_info(self, progress_func=None):
+    def get_latest_build_info(self):
 
         """
         Queries brew to determine the most recently built release of the component
         associated with this image. This method does not rely on the "release"
         label needing to be present in the Dockerfile.
-
-        :param function progress_func: A function to run after the build info has been grabbed
 
         :return: A tuple: (component name, version, release); e.g. ("registry-console-docker", "v3.6.173.0.75", "1")
         """
@@ -48,9 +46,6 @@ class ImageMetadata(Metadata):
 
         # latest example: "registry-console-docker-v3.6.173.0.75-1""
         name, version, release = latest.rsplit("-", 2)  # [ "registry-console-docker", "v3.6.173.0.75", "1"]
-
-        if progress_func is not None:
-            progress_func()
 
         return name, version, release
 
