@@ -151,7 +151,23 @@ TODO: This would make a nice context wrapper.
     """
     green_prefix(msg_prefix)
     click.echo(msg)
-    click.echo("[" + (char * len(seq))+ "]")
+    click.echo("[" + (char * len(seq)) + "]")
+
+
+def progress_func(func, char='*'):
+    """Use to wrap functions called in parallel. Prints a character for
+each function call.
+
+    :param lambda-function func: A 'lambda wrapped' function to call
+    after printing a progress character
+    :param str char: The character (or multi-char string, if you
+    really wanted to) to print before calling `func`
+
+    Usage examples:
+      * See advisory:find-builds
+    """
+    click.secho(char, fg='green', nl=False)
+    return func()
 
 
 # -----------------------------------------------------------------------------
@@ -455,8 +471,7 @@ PRESENT advisory. Here are some examples:
 
             # Returns a list of (n, v, r) tuples of each build
             potential_builds = pool.map(
-                lambda build: build.get_latest_build_info(
-                    progress_func=lambda: click.secho('*', fg='green', nl=False)),
+                lambda build: progress_func(lambda: build.get_latest_build_info(), '*'),
                 initial_builds)
             # Wait for results
             pool.close()
@@ -470,7 +485,7 @@ PRESENT advisory. Here are some examples:
 
             # Reassign variable contents, filter out remove non_release builds
             potential_builds = [i for i in potential_builds
-                                    if i[0] not in runtime.group_config.get('non_release', [])]
+                                if i[0] not in runtime.group_config.get('non_release', [])]
 
             # By 'meta' I mean the lil bits of meta data given back from
             # get_latest_build_info
@@ -479,10 +494,11 @@ PRESENT advisory. Here are some examples:
             # an object attribute.
             pool = ThreadPool(cpu_count())
             unshipped_builds = pool.map(
-                lambda meta: ocp_cd_tools.brew.get_brew_build("{}-{}-{}".format(meta[0], meta[1], meta[2]),
-                                                               product_version,
-                                                               session=session,
-                                                               progress_func=lambda: click.secho('*', fg='green', nl=False)),
+                lambda meta: progress_func(
+                    lambda: ocp_cd_tools.brew.get_brew_build("{}-{}-{}".format(meta[0], meta[1], meta[2]),
+                                                             product_version,
+                                                             session=session),
+                    '*'),
                 potential_builds)
             # Wait for results
             pool.close()
@@ -490,13 +506,30 @@ PRESENT advisory. Here are some examples:
             click.echo(']')
         elif kind == 'rpm':
             green_prefix("Generating list of {kind}s: ".format(kind=kind))
-            click.echo("Hold on a moment, fetching Brew buildinfo")
-            unshipped_builds = ocp_cd_tools.brew.find_unshipped_builds(
+            click.echo("Hold on a moment, fetching Brew builds")
+            unshipped_build_candidates = ocp_cd_tools.brew.find_unshipped_build_candidates(
                 base_tag,
                 product_version,
-                kind=kind,
-                progress_func=lambda: click.secho('*', fg='green', nl=False))
-            click.echo()
+                kind=kind)
+
+            pbar_header("Gathering additional information: ", "Brew buildinfo is required to continue", unshipped_build_candidates)
+            click.secho("[", nl=False)
+
+            # We could easily be making scores of requests, one for each build
+            # we need information about. May as well do it in parallel.
+            pool = ThreadPool(cpu_count())
+            results = pool.map(
+                lambda nvr: progress_func(
+                    lambda: ocp_cd_tools.brew.get_brew_build(nvr, product_version, session=session),
+                    '*'),
+                unshipped_build_candidates)
+            # Wait for results
+            pool.close()
+            pool.join()
+            click.echo(']')
+
+            # We only want builds not attached to an existing open advisory
+            unshipped_builds = [b for b in results if not b.attached_to_open_erratum]
 
     build_count = len(unshipped_builds)
 

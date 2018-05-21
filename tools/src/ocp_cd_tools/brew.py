@@ -88,7 +88,7 @@ def watch_task(log_f, task_id, terminate_event):
     return error
 
 
-def get_brew_build(nvr, product_version='', session=None, progress_func=None):
+def get_brew_build(nvr, product_version='', session=None):
     """5.2.2.1. GET /api/v1/build/{id_or_nvr}
 
     Get Brew build details.
@@ -102,7 +102,6 @@ def get_brew_build(nvr, product_version='', session=None, progress_func=None):
     used for for connection pooling. Providing `session` object can
     yield a significant reduction in total query time when looking up
     many builds.
-    :param function progress_func: A function to run after the build info has been grabbed
 
     http://docs.python-requests.org/en/master/user/advanced/#session-objects
 
@@ -117,8 +116,6 @@ def get_brew_build(nvr, product_version='', session=None, progress_func=None):
         res = requests.get(constants.errata_get_build_url.format(id=nvr),
                            auth=HTTPKerberosAuth())
     if res.status_code == 200:
-        if progress_func is not None:
-            progress_func()
         return Build(nvr=nvr, body=res.json(), product_version=product_version)
     else:
         raise exceptions.BrewBuildException("{build}: {msg}".format(
@@ -126,7 +123,7 @@ def get_brew_build(nvr, product_version='', session=None, progress_func=None):
             msg=res.text))
 
 
-def find_unshipped_builds(base_tag, product_version, kind='rpm', progress_func=None):
+def find_unshipped_build_candidates(base_tag, product_version, kind='rpm'):
     """Find builds for a product and return a list of the builds only
     labeled with the -candidate tag that aren't attached to any open
     advisory.
@@ -138,7 +135,6 @@ def find_unshipped_builds(base_tag, product_version, kind='rpm', progress_func=N
     when attaching a build
     :param str kind: Search for RPM builds by default. 'image' is also
     acceptable
-    :param function progress_func: A function to run after the build info has been grabbed
 
     For example, if `base_tag` is 'rhaos-3.7-rhel7' then this will
     look for two sets of tagged builds:
@@ -146,9 +142,8 @@ def find_unshipped_builds(base_tag, product_version, kind='rpm', progress_func=N
     (1) 'rhaos-3.7-rhel7'
     (2) 'rhaos-3.7-rhel7-candidate'
 
-    :return: A list of Build objects of builds that are not attached
-    to any open advisory
-
+    :return: A set of build strings where each build is only tagged as
+    a -candidate build
     """
     if kind == 'rpm':
         candidate_builds = BrewTaggedRPMBuilds(base_tag + "-candidate")
@@ -168,25 +163,7 @@ def find_unshipped_builds(base_tag, product_version, kind='rpm', progress_func=N
     pool.join()
 
     # Builds only tagged with -candidate (not shipped yet)
-    unshipped_builds = candidate_builds.builds.difference(shipped_builds.builds)
-
-    # Re-use TCP connection to speed things up
-    session = requests.Session()
-
-    # We could easily be making scores of requests, one for each build
-    # we need information about. May as well do it in parallel.
-    pool = ThreadPool(cpu_count())
-    results = pool.map(
-        lambda nvr: get_brew_build(nvr, product_version, session=session, progress_func=progress_func),
-        list(unshipped_builds))
-    # Wait for results
-    pool.close()
-    pool.join()
-
-    # We only want builds not attached to an existing open advisory
-    viable_builds = [b for b in results if not b.attached_to_open_erratum]
-
-    return viable_builds
+    return candidate_builds.builds.difference(shipped_builds.builds)
 
 
 def get_brew_buildinfo(build):
