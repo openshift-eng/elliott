@@ -18,6 +18,14 @@ class ImageMetadata(Metadata):
     def __init__(self, runtime, config_filename):
         super(ImageMetadata, self).__init__('image', runtime, config_filename)
 
+    @property
+    def base_only(self):
+        """
+        Some images are marked base-only.  Return the flag from the config file
+        if present.
+        """
+        return self.config.base_only
+
     def get_latest_build_info(self):
 
         """

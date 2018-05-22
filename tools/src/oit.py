@@ -777,9 +777,11 @@ def images_scan_for_cves(runtime):
     help="Suppress all output other than the data itself")
 @click.option('--show-non-release', default=False, is_flag=True,
               help='Include images which have been marked as non-release.')
+@click.option('--show-base-only', default=False, is_flag=True,
+              help='Include images which have been marked as base images.')
 @click.argument("pattern", default="{build}", nargs=1)
 @pass_runtime
-def images_print(runtime, short, show_non_release, pattern):
+def images_print(runtime, short, show_non_release, show_base_only, pattern):
     """
     Prints data from each distgit. The pattern specified should be a string
     with replacement fields:
@@ -824,6 +826,11 @@ def images_print(runtime, short, show_non_release, pattern):
         images = list(runtime.image_metas())
 
     for image in images:
+
+        # skip base images unless requested
+        if image.base_only and not show_base_only:
+            continue
+
         dfp = DockerfileParser(path=runtime.working_dir)
         try:
             dfp.content = image.fetch_cgit_file("Dockerfile")

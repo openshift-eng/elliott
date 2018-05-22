@@ -100,3 +100,6 @@ mapping:
       "=":
         type: text
 
+  "base_only":
+    required: false
+    type: bool

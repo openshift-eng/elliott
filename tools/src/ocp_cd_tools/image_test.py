@@ -16,6 +16,13 @@ name: 'test'
 distgit:
   namespace: 'hello'"""
 
+# base only images have have an additional flag
+TEST_BASE_YAML = """---
+name: 'test_base'
+base_only: true
+distgit:
+  namespace: 'hello'"""
+
 class MockRuntime(object):
 
     def __init__(self, logger):
@@ -67,13 +74,40 @@ class TestImageMetadata(unittest.TestCase):
         #
         logs = [l.rstrip() for l in open(self.test_file).readlines()]
 
-        expected = 6
+        expected = 1
         actual = len(logs)
         self.assertEqual(
             expected, actual,
             "logging lines - expected: {}, actual: {}".
             format(expected, actual))
 
+
+
+    def test_base_only(self):
+        """
+        Some images are used only as a base for other images.  These base images
+        are not included in a formal release.
+        """
+
+        test_base_yml = open('test_base.yml', 'w')
+        test_base_yml.write(TEST_BASE_YAML)
+        test_base_yml.close()
+
+        rt = MockRuntime(self.logger)
+        name = 'test.yml'
+        name_base = 'test_base.yml'
+
+        md = image.ImageMetadata(rt, name)
+        md_base = image.ImageMetadata(rt, name_base)
+
+        # Test the internal config value (will fail if implementation changes)
+        # If the flag is absent, default to false
+        self.assertFalse(md.config.base_only)
+        self.assertTrue(md_base.config.base_only)
+
+        # Test the base_only property of the ImageMetadata object
+        self.assertFalse(md.base_only)
+        self.assertTrue(md_base.base_only)
 
 if __name__ == "__main__":
     unittest.main()
