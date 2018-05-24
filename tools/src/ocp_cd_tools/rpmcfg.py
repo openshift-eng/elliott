@@ -34,6 +34,7 @@ class RPMMetadata(Metadata):
         if self.source is Missing:
             raise ValueError('RPM config must contain source entry.')
         self.source_path = self.runtime.resolve_source(self.source.alias)
+        self.source_head = self.runtime.resolve_source_head(self.source.alias)
         if self.source.specfile:
             self.specfile = os.path.join(self.source_path, self.source.specfile)
             if not os.path.isfile(self.specfile):
@@ -249,7 +250,9 @@ class RPMMetadata(Metadata):
         self.commit_changes()
         action = "build_rpm"
         record = {
-            "specfile": "{}/{}".format(self.source_path, self.specfile),
+            "specfile": self.specfile,
+            "source_head": self.source_head,
+            "distgit_key": self.distgit_key,
             "rpm": self.rpm_name,
             "version": self.version,
             "release": self.release,

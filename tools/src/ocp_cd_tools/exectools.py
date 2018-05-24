@@ -54,6 +54,7 @@ def cmd_assert(cmd, retries=1, pollrate=60):
     :param cmd <string|list>: A shell command
     :param retries int: The number of times to try before declaring failure
     :param pollrate int: how long to sleep between tries
+    :return: (stdout,stderr) if exit code is zero
     """
 
     for try_num in range(0, retries):
@@ -63,7 +64,7 @@ def cmd_assert(cmd, retries=1, pollrate=60):
                 format(try_num, pollrate, cmd))
             time.sleep(pollrate)
 
-        result, _, _ = cmd_gather(cmd)
+        result, stdout, stderr = cmd_gather(cmd)
         if result == SUCCESS:
             break
 
@@ -73,6 +74,8 @@ def cmd_assert(cmd, retries=1, pollrate=60):
         result,
         "Error running [{}] {}. See debug log.".
         format(pushd.Dir.getcwd(), cmd))
+
+    return stdout, stderr
 
 
 def cmd_gather(cmd):

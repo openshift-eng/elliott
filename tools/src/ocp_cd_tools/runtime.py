@@ -567,13 +567,18 @@ class Runtime(object):
 
         return self.streams[stream_name]
 
-    # Looks up a source alias and returns a path to the directory containing
-    # that source. Sources can be specified on the command line, or, failing
-    # that, in group.yml.
-    # If a source specified in group.yaml has not be resolved before,
-    # this method will clone that source to checkout the group's desired
-    # branch before returning a path to the cloned repo.
     def resolve_source(self, alias, required=True):
+        """
+        Looks up a source alias and returns a path to the directory containing
+        that source. Sources can be specified on the command line, or, failing
+        that, in group.yml.
+        If a source specified in group.yaml has not be resolved before,
+        this method will clone that source to checkout the group's desired
+        branch before returning a path to the cloned repo.
+        :param alias: The source alias to resolve
+        :param required: If True, thrown an exception if not found
+        :return: Returns the source path or None (if required=False)
+        """
 
         self.logger.debug("Resolving local source directory for alias {}".
                           format(alias))
@@ -656,6 +661,30 @@ class Runtime(object):
                     raise IOError("Error checking out target branch of source '%s' in: %s" % (alias, source_dir))
                 else:
                     return None
+
+    def resolve_source_head(self, alias, required=True):
+        """
+        Attempts to resolve the branch a given source alias has checked out. If not on a branch
+        returns SHA of head.
+        :param alias: The source alias to analyze
+        :param required: Whether an error should be thrown or None returned if it cannot be determined
+        :return: The name of the checked out branch or None (if required=False)
+        """
+        source_dir = self.resolve_source(alias, required)
+
+        if not source_dir:
+            return None
+
+        with open(os.path.join(source_dir, '.git/HEAD')) as f:
+            head_content = f.read().strip()
+            # This will either be:
+            # a SHA like: "52edbcd8945af0dc728ad20f53dcd78c7478e8c2"
+            # a local branch name like: "ref: refs/heads/master"
+            if head_content.startswith("ref:"):
+                return head_content.split('/', 2)[2]  # limit split in case branch name contains /
+
+            # Otherwise, just return SHA
+            return head_content
 
     def export_sources(self, output):
         self.logger.info('Writing sources to {}'.format(output))
