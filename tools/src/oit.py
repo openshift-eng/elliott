@@ -495,7 +495,7 @@ def images_merge(runtime, target, push, allow_overwrite):
     dgrs = [image.distgit_repo() for image in runtime.image_metas()]
     for dgr in dgrs:
         with Dir(dgr.distgit_dir):
-            dgr.info("Merging from branch {} to {}".format(dgr.branch, target))
+            dgr.logger.info("Merging from branch {} to {}".format(dgr.branch, target))
             dgr.merge_branch(target, allow_overwrite)
             runtime.logger.info("\n")
 
