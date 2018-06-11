@@ -63,7 +63,13 @@ errata_topic = 'Red Hat OpenShift Container Platform releases 3.{Y}.z are now av
 errata_default_filter = '1965'
 # 1991 => (Active; Product: RHOSE; Devel Group: ENG OpenShift
 #          Enterprise; sorted by newest)
+# https://errata.devel.redhat.com/filter/1991
 errata_live_advisory_filter = '1991'
+# 2051 => (RHBA; State REL PREP, PUSH READY, IN PUSH, SHIPPED;
+#          Product: RHOSE; Devel Group: ENG OpenShift Enterprise;
+#          sorted by newest)
+# https://errata.devel.redhat.com/filter/2051
+errata_immutable_advisory_filter = '2051'
 errata_active_advisory_labels = [
     "NEW_FILES",
     "QE",
@@ -96,6 +102,8 @@ errata_change_state_url = errata_url + "/api/v1/erratum/{id}/change_state"
 errata_filter_list_url = errata_url + "/filter/{id}.json"
 errata_get_build_url = errata_url + "/api/v1/build/{id}"
 errata_get_builds_url = errata_url + "/api/v1/erratum/{id}/builds"
+errata_get_comment_url = errata_url + "/api/v1/comments/{id}"
+errata_get_comments_url = errata_url + "/api/v1/comments"
 errata_get_erratum_url = errata_url + "/api/v1/erratum/{id}"
 errata_post_erratum_url = errata_url + "/api/v1/erratum"
 ######################################################################

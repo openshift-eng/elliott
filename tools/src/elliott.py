@@ -276,7 +276,7 @@ Bugzilla Bugs.
 @click.option("--date", required=False,
               default=release_date.strftime(YMD),
               callback=validate_release_date,
-              help="Release date for the advisory. Optional. Format: YYYY-MM-DD. Defaults to NOW + 3 weeks")
+              help="Release date for the advisory. Optional. Format: YYYY-MM-DD. Defaults to 3 weeks after the release with the highest date for that series")
 @click.option('--yes', '-y', is_flag=True,
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
@@ -318,31 +318,64 @@ advisory.
     minor = minor_from_branch(runtime.group_config.branch)
 
     try:
-        erratum = ocp_cd_tools.errata.new_erratum(kind=kind, release_date=date, create=yes, minor=minor)
+        latest_advisory = ocp_cd_tools.errata.find_latest_erratum(kind, minor)
     except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
+    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+        exit_unauthorized()
     except ocp_cd_tools.exceptions.ErrataToolError as err:
-        click.secho("Error creating advisory: ", nl=False, bold=True, fg='red')
+        red_prefix("Error searching advisories: ")
+        click.echo(str(err))
+        exit(1)
+    else:
+        if latest_advisory is None:
+            red_prefix("No metadata discovered: ")
+            click.echo("No advisory for 3.{y} has been released in recent history, can not auto determine next release date".format(
+                y=minor))
+            exit(1)
+
+    green_prefix("Found an advisory to calculate new release date from: ")
+    click.echo("{synopsis} - {rel_date}".format(
+        synopsis=latest_advisory.synopsis,
+        rel_date=str(latest_advisory.release_date)))
+    release_date = latest_advisory.release_date + datetime.timedelta(days=21)
+    green_prefix("Calculated release date: ")
+    click.echo("{}".format(str(release_date)))
+
+    try:
+        erratum = ocp_cd_tools.errata.new_erratum(kind=kind,
+                                                  release_date=release_date.strftime(YMD),
+                                                  create=yes,
+                                                  minor=minor)
+    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+        exit_unauthorized()
+    except ocp_cd_tools.exceptions.ErrataToolError as err:
+        red_prefix("Error creating advisory: ")
         click.echo(str(err))
         exit(1)
 
-    green_prefix("Created new advisory: ")
-    click.echo(erratum.synopsis)
-    click.echo(erratum.url)
+    if yes:
+        green_prefix("Created new advisory: ")
+        click.echo(str(erratum.synopsis))
 
-    # This is a little strange, I grant you that. For reference you
-    # may wish to review the click docs
-    #
-    # http://click.pocoo.org/5/advanced/#invoking-other-commands
-    #
-    # You may be thinking, "But, add_metadata doesn't take keyword
-    # arguments!" and that would be correct. However, we're not
-    # calling that function directly. We actually use the context
-    # 'invoke' method to call the _command_ (remember, it's wrapped
-    # with click to create a 'command'). 'invoke' ensures the correct
-    # options/arguments are mapped to the right parameters.
-    ctx.invoke(add_metadata, kind=kind, impetus=impetus, advisory=erratum.advisory_id)
-    click.echo(str(erratum))
+        # This is a little strange, I grant you that. For reference you
+        # may wish to review the click docs
+        #
+        # http://click.pocoo.org/5/advanced/#invoking-other-commands
+        #
+        # You may be thinking, "But, add_metadata doesn't take keyword
+        # arguments!" and that would be correct. However, we're not
+        # calling that function directly. We actually use the context
+        # 'invoke' method to call the _command_ (remember, it's wrapped
+        # with click to create a 'command'). 'invoke' ensures the correct
+        # options/arguments are mapped to the right parameters.
+        ctx.invoke(add_metadata, kind=kind, impetus=impetus, advisory=erratum.advisory_id)
+        click.echo(str(erratum))
+    else:
+        green_prefix("Would have created advisory: ")
+        click.echo("JSON body displayed in full below")
+        click.echo(erratum)
+
 
 #
 # Collect bugs
