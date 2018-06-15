@@ -75,6 +75,12 @@ errata_inactive_advisory_labels = [
     "SHIPPED_LIVE",
     "DROPPED_NO_SHIP"
 ]
+errata_valid_impetus = [
+    'standard',
+    'cve',
+    'ga',
+    'test'
+]
 ######################################################################
 # API endpoints with string formatting placeholders as
 # necessary. Index of all available endpoints is available in the
@@ -117,15 +123,6 @@ errata_new_object = {
     }
 }
 ######################################################################
-# Pre-defined comments for consistent messaging when using elliott
-errata_comments = {
-    'add-bugs': 'Bugs automatically added to advisory using elliott',
-    'attach-images': 'Images automatically attached to advisory using elliott',
-    'attach-rpms': 'RPMs automatically attached to advisory using elliott',
-    'change-state': 'Advisory state changed using elliott',
-    'create': 'Advisory created using elliott',
-    'default': 'Advisory updated using elliott',
-}
 # We ship updates for various architectures. Images are
 # architecture-agnostic
 errata_shipped_arches = {

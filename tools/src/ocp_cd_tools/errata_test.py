@@ -51,7 +51,7 @@ class TestBrew(unittest.TestCase):
             # unauthorized branch of code
             response = mock.MagicMock(status_code=401)
             get.return_value = response
-            with self.assertRaises(exceptions.ErrataToolUnauthorizedException):
+            with self.assertRaises(exceptions.ErrataToolUnauthenticatedException):
                 errata.get_erratum(123456)
 
     def test_get_erratum_failure(self):

@@ -88,10 +88,17 @@ messages"""
     click.secho(msg, nl=False, bold=True, fg='green')
 
 
+def exit_unauthenticated():
+    """Standard response when an API call returns 'unauthenticated' (401)"""
+    red_prefix("Error Unauthenticated: ")
+    click.echo("401 - user is not authenticated, are you sure you have a kerberos ticket?")
+    exit(1)
+
+
 def exit_unauthorized():
-    """Standard response when an API call returns 'unauthorized'"""
+    """Standard response when an API call returns 'unauthorized' (403)"""
     red_prefix("Error Unauthorized: ")
-    click.secho("401 status returned from Errata Tool, are you sure you have a kerberos ticket?")
+    click.echo("403 - user is authenticated, but unauthorized to perform this action")
     exit(1)
 
 
@@ -104,6 +111,40 @@ def validate_release_date(ctx, param, value):
         raise click.BadParameter('Release date (--date) must be in YYYY-MM-DD format')
 
 
+def release_from_branch(ver):
+    """Parse the release version from the provided 'branch'.
+
+For example, if --group=openshift-3.9 then runtime.group_config.branch
+will have the value rhaos-3.9-rhel-7. When passed to this function the
+return value would be the number 3.9, where in considering '3.9' then
+'3.9' is the RELEASE version.
+
+This behavior is HIGHLY dependent on the format of the input
+argument. Hence, why this function indicates the results are based on
+the 'branch' variable. Arbitrary input will fail. Use of this implies
+you read the docs.
+    """
+    return ver.split('-')[1]
+
+
+def major_from_branch(ver):
+    """Parse the major version from the provided version (or 'branch').
+
+For example, if --group=openshift-3.9 then runtime.group_config.branch
+will have the value rhaos-3.9-rhel-7. When passed to this function the
+return value would be the number 3, where in considering '3.9' then
+'3' is the MAJOR version.
+
+I.e., this gives you the X component if 3.9 => X.Y.
+
+This behavior is HIGHLY dependent on the format of the input
+argument. Hence, why this function indicates the results are based on
+the 'branch' variable. Arbitrary input will fail. Use of this implies
+you read the docs.
+    """
+    return ver.split('-')[1].split('.')[0]
+
+
 def minor_from_branch(ver):
     """Parse the minor version from the provided version (or 'branch').
 
@@ -114,7 +155,7 @@ return value would be the number 9, where in considering '3.9' then
 
 I.e., this gives you the Y component if 3.9 => X.Y.
 
-This behavior is HIGHLY dependant on the format of the input
+This behavior is HIGHLY dependent on the format of the input
 argument. Hence, why this function indicates the results are based on
 the 'branch' variable. Arbitrary input will fail. Use of this implies
 you read the docs.
@@ -205,8 +246,8 @@ Bugzilla Bugs.
     """
     try:
         erratum = ocp_cd_tools.errata.get_erratum(advisory)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
-        exit_unauthorized()
+    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        exit_unauthenticated()
 
     click.echo("Changing state for {id} to {state}".format(id=advisory, state=state))
     click.echo(erratum)
@@ -229,6 +270,9 @@ Bugzilla Bugs.
 @click.option("--kind", '-k', required=True,
               type=click.Choice(['rpm', 'image']),
               help="Kind of Advisory to create. Affects boilerplate text.")
+@click.option("--impetus", default='standard',
+              type=click.Choice(ocp_cd_tools.constants.errata_valid_impetus),
+              help="Impetus for the advisory creation [standard, cve, ga, test]")
 @click.option("--date", required=False,
               default=release_date.strftime(YMD),
               callback=validate_release_date,
@@ -237,7 +281,8 @@ Bugzilla Bugs.
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
 @pass_runtime
-def create(runtime, kind, date, yes):
+@click.pass_context
+def create(ctx, runtime, kind, impetus, date, yes):
     """Create a new advisory. The kind of advisory must be specified with
 '--kind'. Valid choices are 'rpm' and 'image'.
 
@@ -254,6 +299,9 @@ advisory would look like. The raw JSON used to create the advisory
 will be printed to the screen instead of posted to the Errata Tool
 API.
 
+The impetus option only effects the metadata added to the new
+advisory.
+
 Provide the '--yes' or '-y' option to confirm creation of the
 advisory.
 
@@ -268,17 +316,33 @@ advisory.
 """
     runtime.initialize(clone_distgits=False)
     minor = minor_from_branch(runtime.group_config.branch)
+
     try:
         erratum = ocp_cd_tools.errata.new_erratum(kind=kind, release_date=date, create=yes, minor=minor)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
-        exit_unauthorized()
+    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        exit_unauthenticated()
     except ocp_cd_tools.exceptions.ErrataToolError as err:
         click.secho("Error creating advisory: ", nl=False, bold=True, fg='red')
         click.echo(str(err))
         exit(1)
 
-    click.echo(erratum)
+    green_prefix("Created new advisory: ")
+    click.echo(erratum.synopsis)
+    click.echo(erratum.url)
 
+    # This is a little strange, I grant you that. For reference you
+    # may wish to review the click docs
+    #
+    # http://click.pocoo.org/5/advanced/#invoking-other-commands
+    #
+    # You may be thinking, "But, add_metadata doesn't take keyword
+    # arguments!" and that would be correct. However, we're not
+    # calling that function directly. We actually use the context
+    # 'invoke' method to call the _command_ (remember, it's wrapped
+    # with click to create a 'command'). 'invoke' ensures the correct
+    # options/arguments are mapped to the right parameters.
+    ctx.invoke(add_metadata, kind=kind, impetus=impetus, advisory=erratum.advisory_id)
+    click.echo(str(erratum))
 
 #
 # Collect bugs
@@ -356,8 +420,8 @@ manually. Provide one or more --id's for manual bug addition.
     if advisory is not False:
         try:
             advs = ocp_cd_tools.errata.get_erratum(advisory)
-        except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
-            exit_unauthorized()
+        except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+            exit_unauthenticated()
 
         if advs is False:
             red_prefix("Error: ")
@@ -445,8 +509,8 @@ PRESENT advisory. Here are some examples:
     # Test authentication
     try:
         ocp_cd_tools.errata.get_filtered_list(ocp_cd_tools.constants.errata_live_advisory_filter)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
-        exit_unauthorized()
+    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        exit_unauthenticated()
 
     session = requests.Session()
 
@@ -539,8 +603,8 @@ PRESENT advisory. Here are some examples:
             erratum = ocp_cd_tools.errata.get_erratum(advisory)
             erratum.add_builds(unshipped_builds)
             click.secho("Attached build(s) successfully", fg='green', bold=True)
-        except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
-            exit_unauthorized()
+        except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+            exit_unauthenticated()
         except ocp_cd_tools.exceptions.BrewBuildException as e:
             red_prefix("Error attaching builds: ")
             click.echo(str(e))
@@ -589,8 +653,8 @@ Fields for the short format: Release date, State, Synopsys, URL
 """
     try:
         advisory = ocp_cd_tools.errata.get_erratum(advisory)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
-        exit_unauthorized()
+    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        exit_unauthenticated()
 
     if json:
         click.echo(advisory.to_json())
@@ -634,11 +698,58 @@ yourself online: https://errata.devel.redhat.com/filter/1965
                 click.echo(erratum.to_json())
             else:
                 click.echo(erratum)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
-        exit_unauthorized()
+    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        exit_unauthenticated()
     except ocp_cd_tools.exceptions.ErrataToolError as err:
         red_prefix("Error: ")
         click.echo(str(err))
+        exit(1)
+
+
+#
+# Add metadata comment to an Advisory
+# advisory:add-metadata
+#
+@cli.command("advisory:add-metadata", short_help="Add metadata comment to an advisory")
+@click.argument('advisory', type=int)
+@click.option('--kind', '-k', required=True,
+              type=click.Choice(['rpm', 'image']),
+              help="KIND of advisory [rpm, image]")
+@click.option('--impetus', default='standard',
+              type=click.Choice(ocp_cd_tools.constants.errata_valid_impetus),
+              help="Impetus for the advisory creation [standard, cve, ga, test]")
+@pass_runtime
+def add_metadata(runtime, kind, impetus, advisory):
+    """Add metadata to an advisory. This is usually called by
+advisory:create immediately after creation. It is only useful to you
+if you are going back and adding metadata to older advisories.
+
+    Note: Requires you provide a --group
+
+Example to add standard metadata to a 3.10 images release
+
+\b
+    $ elliott --group=openshift-3.10 advisory:add-metadata --impetus standard --kind image
+"""
+    runtime.initialize(clone_distgits=False)
+    release = release_from_branch(runtime.group_config.branch)
+
+    try:
+        advisory = ocp_cd_tools.errata.get_erratum(advisory)
+    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        exit_unauthenticated()
+
+    result = advisory.add_comment({'release': release, 'kind': kind, 'impetus': impetus})
+
+    if result.status_code == 201:
+        green_prefix("Added metadata successfully")
+        click.echo()
+    elif result.status_code == 403:
+        exit_unauthorized()
+    else:
+        red_prefix("Something weird may have happened: ")
+        click.echo("Unexpected response from ET API: {code}".format(
+            code=result.status_code))
         exit(1)
 
 

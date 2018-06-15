@@ -8,8 +8,13 @@ class BrewBuildException(Exception):
     pass
 
 
+class ErrataToolUnauthenticatedException(Exception):
+    """You were not authenticated when accessing the Errata Tool API"""
+    pass
+
+
 class ErrataToolUnauthorizedException(Exception):
-    """You were not authorized to hit the Errata Tool API"""
+    """You were not authorized to make a request to the Errata Tool API"""
     pass
 
 
