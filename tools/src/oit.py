@@ -52,6 +52,8 @@ context_settings = dict(help_option_names=['-h', '--help'])
               help="Associate a path with a given source alias.  [multiple]")
 @click.option("--sources", metavar="YAML_PATH",
               help="YAML dict associating sources with their alias. Same as using --source multiple times.")
+@click.option('--odcs-mode', default=False, is_flag=True,
+              help='Process Dockerfiles in ODCS mode. HACK for the time being.')
 @click.pass_context
 def cli(ctx, **kwargs):
     # @pass_runtime
@@ -178,7 +180,7 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
     - If '+', the current release will be bumped.
     - Else, the literal value will be set in the Dockerfile.
     """
-    runtime.initialize()
+    runtime.initialize(validate_content_sets=True)
 
     # If not pushing, do not clean up our work
     runtime.remove_tmp_working_dir = push
@@ -336,7 +338,7 @@ def images_rebase(runtime, stream, version, release, repo_type, message, push):
     distgit), the Dockerfile in distgit will not be rebased, but other aspects of the
     metadata may be applied (base image, tags, etc) along with the version and release.
     """
-    runtime.initialize()
+    runtime.initialize(validate_content_sets=True)
 
     # If not pushing, do not clean up our work
     runtime.remove_tmp_working_dir = push
@@ -530,7 +532,7 @@ def print_build_metrics(runtime):
                 _taskinfo_has_timestamp(info, 'create_ts') and
                 _taskinfo_has_timestamp(info, 'start_ts') and
                 _taskinfo_has_timestamp(info, 'completion_ts')
-        ):
+                ):
             runtime.logger.error(
                 "Discarding incomplete/error task info: {}".format(info))
             del watch_task_info[task_id]
@@ -606,6 +608,8 @@ def print_build_metrics(runtime):
 
 
 @cli.command("images:build", short_help="Build images for the group.")
+@click.option("--odcs", default=None, metavar="ODCS",
+              help="ODCS signing intent (e.g. signed, unsigned).")
 @click.option("--repo-type", default=None, metavar="REPO_TYPE",
               help="Repo type (e.g. signed, unsigned).")
 @click.option("--repo", default=[], metavar="REPO_URL",
@@ -616,7 +620,7 @@ def print_build_metrics(runtime):
               help="Specific registries to push to when image build completes.  [multiple]")
 @click.option('--scratch', default=False, is_flag=True, help='Perform a scratch build.')
 @pass_runtime
-def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scratch):
+def images_build_image(runtime, odcs, repo_type, repo, push_to_defaults, push_to, scratch):
     """
     Attempts to build container images for all of the distgit repositories
     in a group. If an image has already been built, it will be treated as
@@ -651,7 +655,7 @@ def images_build_image(runtime, repo_type, repo, push_to_defaults, push_to, scra
 
     results = runtime.parallel_exec(
         lambda (dgr, terminate_event): dgr.build_container(
-            repo_type, repo, push_to_defaults, additional_registries=push_to,
+            odcs, repo_type, repo, push_to_defaults, additional_registries=push_to,
             terminate_event=terminate_event, scratch=scratch),
         items)
     results = results.get()
@@ -727,9 +731,9 @@ def images_push(runtime, tag, version_release, to_defaults, late_only, to, dry_r
             lambda (img, terminate_event):
                 img.distgit_repo().push_image(tag, to_defaults, additional_registries,
                                               version_release_tuple=version_release_tuple, dry_run=dry_run),
-                items,
-                n_threads=4
-            )
+                    items,
+                    n_threads=4
+                )
         results = results.get()
 
         failed = [m.distgit_key for m, r in zip(items, results) if not r]

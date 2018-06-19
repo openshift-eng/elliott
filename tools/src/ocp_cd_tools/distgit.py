@@ -16,12 +16,12 @@ import assertion
 import constants
 import exectools
 from pushd import Dir
-from brew import watch_task
+from brew import watch_task, check_rpm_buildroot
 from model import Model, Missing
 
 OIT_COMMENT_PREFIX = '#oit##'
 
-COMPOSE = """
+CONTAINER_YAML_HEADER = """
 # This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images,
 # by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).
 # Any manual changes will be overwritten by OIT on the next build.
@@ -191,18 +191,86 @@ class ImageDistGitRepo(DistGitRepo):
         self.build_lock.acquire()
         self.logger = metadata.logger
 
-    def _generate_compose_conf(self):
+    def _generate_odcs_config(self):
         """
-        Generates a compose conf file in container.yml
+        Generates a compose conf file in container.yaml
+        Example in image yml file:
+        odcs:
+            packages:
+                mode: auto | manual (default)
+                # auto - detect packages in Dockerfile and merge with list below
+                # manual - only use list below. Ignore Dockerfile
+                list:
+                  - package1
+                  - package2
+            platforms:
+                mode: auto | manual
+            config: ... # verbatim container.yaml content (see https://mojo.redhat.com/docs/DOC-1159997)
         """
         self.logger.debug("Generating compose file for Dockerfile {}".format(self.metadata.name))
 
-        if self.config.compose is not Missing:
-            # generate yaml data with header
-            compose_yml_str = safe_dump(self.config.compose.primitive(), default_flow_style=False)
-            compose_yml = COMPOSE + compose_yml_str
-            with open('containers.yml', 'w') as rc:
-                rc.write(compose_yml)
+        odcs = self.config.odcs
+        if odcs is Missing:
+            if self.runtime.odcs_mode:
+                odcs = Model()  # always on if --odcs-mod
+            else:
+                return  # not specified, ODCS disabled
+        package_mode = odcs.packages.get('mode', 'auto').lower()
+        valid_package_modes = ['auto', 'manual']
+        if package_mode not in valid_package_modes:
+            raise ValueError('odcs.packages.mode must be one of {}'.format(str(valid_package_modes)))
+        platform_mode = odcs.platforms.get('mode', 'auto').lower()
+        valid_platform_modes = ['auto', 'manual']
+        if platform_mode not in valid_platform_modes:
+            raise ValueError('odcs.platforms.mode must be one of {}'.format(str(valid_platform_modes)))
+
+        config = odcs.get('config', {})
+        if 'compose' not in config:
+            config['compose'] = {}
+        compose_content = {
+            'packages': [],
+            'pulp_repos': True
+        }
+
+        # ensure defaults
+        for k, v in compose_content.iteritems():
+            if k not in config['compose']:
+                config['compose'][k] = v
+
+        if 'platforms' not in config:
+            config['platforms'] = {'only': self.metadata.runtime.arches}
+
+        config = Model(config)
+
+        if package_mode == 'auto':
+            packages = []
+            for rpm in self.metadata.get_rpm_install_list():
+                res = check_rpm_buildroot(rpm, self.branch)
+                if res:
+                    if isinstance(res, list):
+                        packages.extend(res)
+                    else:
+                        packages.append(res)
+            if odcs.packages.list:
+                config.compose.packages.extend(odcs.packages.list)
+            config.compose.packages.extend(packages)
+            config.compose.packages = list(set(config.compose.packages))  # ensure unique list
+        else:  # manual
+            if not odcs.packages.list:
+                raise ValueError('odcs.packages.mode == manual but none specified in odcs.packages.list')
+            config.compose.packages = odcs.packages.list
+
+        if platform_mode == 'auto':
+            config.platforms.only = ['x86_64']  # this is really just a stub for now. Need to add arch logic later
+        else:  # manual
+            if not config.platforms:
+                raise ValueError('odcs.platforms.mode == manual but none specified in odcs.config.platforms')
+
+        # generate yaml data with header
+        content_yml_str = safe_dump(config.primitive(), default_flow_style=False)
+        content_yml = CONTAINER_YAML_HEADER + content_yml_str
+        with open('container.yaml', 'w') as rc:
+            rc.write(content_yml)
 
     def _generate_repo_conf(self):
         """
@@ -263,8 +331,11 @@ class ImageDistGitRepo(DistGitRepo):
         enabled_repos = self.config.get('enabled_repos', [])
         for t in repos.repotypes:
             with open('.oit/{}.repo'.format(t), 'w') as rc:
-                content = repos.repo_file(t, enabled_repos=enabled_repos, empty_repos=df_repos)
+                content = repos.repo_file(t, enabled_repos=enabled_repos)
                 rc.write(content)
+
+        with open('.oit/empty.repo', 'w') as empty:
+            empty.write(repos.empty_repo_file_from_list(df_repos, odcs=self.runtime.odcs_mode))
 
         with open('content_sets.yml', 'w') as rc:
             rc.write(repos.content_sets(enabled_repos=enabled_repos))
@@ -453,7 +524,7 @@ class ImageDistGitRepo(DistGitRepo):
                 self.logger.info("Member successfully waited for me to build: %s" % who_is_waiting)
 
     def build_container(
-            self, repo_type, repo, push_to_defaults, additional_registries, terminate_event,
+            self, odcs, repo_type, repo, push_to_defaults, additional_registries, terminate_event,
             scratch=False, retries=3):
         """
         This method is designed to be thread-safe. Multiple builds should take place in brew
@@ -537,7 +608,7 @@ class ImageDistGitRepo(DistGitRepo):
                 exectools.retry(
                     retries=3, wait_f=wait,
                     task_f=lambda: self._build_container(
-                        target_image, repo_type, repo, terminate_event,
+                        target_image, odcs, repo_type, repo, terminate_event,
                         scratch, record))
 
             # Just in case someone else is building an image, go ahead and find what was just
@@ -581,7 +652,7 @@ class ImageDistGitRepo(DistGitRepo):
         return self.build_status and self.push_status
 
     def _build_container(
-            self, target_image, repo_type, repo_list, terminate_event,
+            self, target_image, odcs, repo_type, repo_list, terminate_event,
             scratch, record):
         """
         The part of `build_container` which actually starts the build,
@@ -598,14 +669,18 @@ class ImageDistGitRepo(DistGitRepo):
             "--nowait",
         )
 
-        if repo_type:
-            repo_list = list(repo_list)  # In case we get a tuple
-            repo_list.append(self.metadata.cgit_url(".oit/" + repo_type + ".repo"))
+        if odcs:
+            cmd_list.append('--signing-intent')
+            cmd_list.append(odcs)
+        else:
+            if repo_type:
+                repo_list = list(repo_list)  # In case we get a tuple
+                repo_list.append(self.metadata.cgit_url(".oit/" + repo_type + ".repo"))
 
-        if repo_list:
-            # rhpkg supports --repo-url [URL [URL ...]]
-            cmd_list.append("--repo-url")
-            cmd_list.extend(repo_list)
+            if repo_list:
+                # rhpkg supports --repo-url [URL [URL ...]]
+                cmd_list.append("--repo-url")
+                cmd_list.extend(repo_list)
 
         if scratch:
             cmd_list.append("--scratch")
@@ -699,7 +774,8 @@ class ImageDistGitRepo(DistGitRepo):
             assertion.isfile("Dockerfile", "Unable to find Dockerfile in distgit root")
 
             self._generate_repo_conf()
-            self._generate_compose_conf()
+
+            self._generate_odcs_config()
 
             dfp = DockerfileParser(path="Dockerfile")
 
@@ -813,7 +889,32 @@ class ImageDistGitRepo(DistGitRepo):
             df_lines = dfp.content.splitlines(False)
             df_lines = [line for line in df_lines if not line.strip().startswith(OIT_COMMENT_PREFIX)]
 
-            df_content = "\n".join(df_lines)
+            from_idx = -1
+            ADD_LINE = 'ADD ./.oit/empty.repo /etc/yum.repos.d/'
+            add_empty = True
+            for i in range(len(df_lines)):
+                line = df_lines[i]
+                if line.startswith('FROM'):
+                    from_idx = i
+                if ADD_LINE in line:
+                    add_empty = False
+                    break  # already exists, abort
+
+            if add_empty and from_idx >= 0:
+                df_lines.insert(from_idx + 1, OIT_COMMENT_PREFIX + ' Added automatically. empty.repo disables all below specified yum repos, so that OSBS/ODCS can manage repos instead.')
+                df_lines.insert(from_idx + 2, ADD_LINE)
+
+            rm_empty = 'RUN rm -f /etc/yum.repos.d/empty.repo'
+
+            # doing it this way may be temporary, but it ensures it removes old, bad versions, before adding new version
+            result = []
+            for line in df_lines:
+                if rm_empty not in line:
+                    result.append(line)
+
+            result.append(rm_empty + '  || true')
+
+            df_content = "\n".join(result)
 
             with open('Dockerfile', 'w') as df:
                 for comment in oit_comments:

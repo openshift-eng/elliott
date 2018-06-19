@@ -268,6 +268,86 @@ def get_tagged_rpm_builds(tag, arch='src', latest=True):
 # ============================================================================
 
 
+# lifted from https://github.com/rpm-software-management/yum/blob/master/rpmUtils/miscutils.py
+# Usually available in rpmUtils when yum installed, but not available always on
+# newer Fedora. So, for testing, extracted to here
+def splitRPMFilename(filename):
+    """
+    Pass in a standard style rpm fullname
+
+    Return a name, version, release, epoch, arch, e.g.::
+        foo-1.0-1.i386.rpm returns foo, 1.0, 1, i386
+        1:bar-9-123a.ia64.rpm returns bar, 9, 123a, 1, ia64
+    """
+
+    if filename[-4:] == '.rpm':
+        filename = filename[:-4]
+
+    archIndex = filename.rfind('.')
+    arch = filename[archIndex + 1:]
+
+    relIndex = filename[:archIndex].rfind('-')
+    rel = filename[relIndex + 1:archIndex]
+
+    verIndex = filename[:relIndex].rfind('-')
+    ver = filename[verIndex + 1:relIndex]
+
+    epochIndex = filename.find(':')
+    if epochIndex == -1:
+        epoch = ''
+    else:
+        epoch = filename[:epochIndex]
+
+    name = filename[epochIndex + 1:verIndex]
+    return name, ver, rel, epoch, arch
+
+
+def get_tagged_rpm_names(branch, arch='x86_64'):
+    query_string = "brew list-tagged --inherit --latest --rpms --arch {arch} {branch}-container-build"
+    # --latest - Only the last build for that package
+    # --rpm - Only show RPM builds
+    # --quiet - Omit field headers in output
+    # --arch {arch} - Only show builds of this architecture
+
+    rpms = []
+
+    arches = ['noarch', arch]  # always gather noarch
+    for a in arches:
+        rc, stdout, stderr = exectools.cmd_gather(shlex.split(query_string.format(branch=branch, arch=a)))
+        if rc == 0:
+            rpms.extend(stdout.splitlines())
+        else:
+            raise ValueError(stderr)
+
+    result = set([splitRPMFilename(line.strip())[0] for line in rpms])
+
+    return result
+
+
+def check_rpm_buildroot(name, branch, arch='x86_64'):
+    """
+    Query the buildroot used by ODCS to determine if a given RPM name
+    is provided by ODCS for the given arch.
+    :param str name: RPM name
+    :param str branch: Current building branch, such as rhaos-3.10-rhel-7
+    :param str arch: CPU architecture to search
+    """
+    args = locals()
+    query = 'repoquery --repofrompath foo,"https://download-node-02.eng.bos.redhat.com/brewroot/repos/{branch}-container-build/latest/{arch}" --repoid=foo --arch {arch},noarch --whatprovides {name}'
+    rc, stdout, stderr = exectools.cmd_gather(query.format(**args))
+    if rc == 0:
+        result = []
+        stdout = stdout.strip()
+        for rpm in stdout.strip().splitlines():
+            n = rpm.split(':')[0]
+            n = '-'.join(n.split('-')[0:-1])
+            result.append(n)
+
+        return result
+    else:
+        raise ValueError(stderr)
+
+
 class BrewTaggedImageBuilds(object):
     """
     Abstraction around working with lists of brew tagged image

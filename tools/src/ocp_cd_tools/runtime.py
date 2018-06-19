@@ -25,6 +25,9 @@ from rpmcfg import RPMMetadata
 from model import Model, Missing
 from multiprocessing import Lock
 from repos import Repos
+import brew
+import search
+
 
 # Registered atexit to close out debug/record logs
 def close_file(f):
@@ -137,6 +140,10 @@ class Runtime(object):
         # Create a "uuid" which will be used in FROM fields during updates
         self.uuid = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
+        # Optionally available if self.fetch_rpms_for_tag() is called
+        self.rpm_list = None
+        self.rpm_search_tree = None
+
     def get_group_config(self, group_dir):
         with Dir(group_dir):
 
@@ -160,7 +167,7 @@ class Runtime(object):
                     raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
             return tmp_config
 
-    def initialize(self, mode='images', clone_distgits=True):
+    def initialize(self, mode='images', clone_distgits=True, validate_content_sets=False):
 
         if self.initialized:
             return
@@ -235,14 +242,13 @@ class Runtime(object):
                 for key, val in source_dict.items():
                     self.register_source_alias(key, val)
 
-        self.logger.info("Searching group directory: %s" % group_dir)
-        with Dir(group_dir):
-            with open("group.yml", "r") as f:
-                group_yml = f.read()
-
         with Dir(group_dir):
             self.group_config = self.get_group_config(group_dir)
-            self.repos = Repos(self.group_config.repos, self.group_config.get('arches', ['x86_64']))
+            self.arches = self.group_config.get('arches', ['x86_64'])
+            self.repos = Repos(self.group_config.repos, self.arches)
+
+            if validate_content_sets:
+                self.repos.validate_content_sets()
 
             if self.group_config.name != self.group:
                 raise IOError(
@@ -330,7 +336,7 @@ class Runtime(object):
                 raise IOError('Unable to find the following images or rpms configs: {}'.format(', '.join(missed_include)))
 
             def gen_ImageMetadata(config_filename):
-                metadata =ImageMetadata(self, config_filename)
+                metadata = ImageMetadata(self, config_filename)
                 self.image_map[metadata.distgit_key] = metadata
 
             def gen_RPMMetadata(config_filename):
@@ -600,7 +606,7 @@ class Runtime(object):
         source_dir = os.path.join(self.sources_dir, alias)
         self.logger.debug("checking for source directory in source_dir: {}".
                           format(source_dir))
-        
+
         # If this source has already been extracted for this working directory
         if os.path.isdir(source_dir):
             # Store so that the next attempt to resolve the source hits the map

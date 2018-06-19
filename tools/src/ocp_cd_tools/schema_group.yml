@@ -19,7 +19,7 @@ mapping:
     type: seq
     sequence:
       - type: enum
-        enum: [x86_64]
+        enum: [x86_64, s390x, ppc64le]
 
   "push":
     required: true
@@ -85,6 +85,8 @@ mapping:
           "content_set":
             type: map
             mapping:
+              "optional":
+                type: bool
               "default":
                 type: str
                 required: true
