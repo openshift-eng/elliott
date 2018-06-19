@@ -26,7 +26,6 @@ from model import Model, Missing
 from multiprocessing import Lock
 from repos import Repos
 import brew
-import search
 
 
 # Registered atexit to close out debug/record logs
