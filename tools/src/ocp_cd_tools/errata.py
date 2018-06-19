@@ -29,7 +29,7 @@ def get_erratum(id):
 
     :return SUCCESS: An Erratum object
     :return FAILURE: :bool:False
-    :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+    :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
     """
     res = requests.get(constants.errata_get_erratum_url.format(id=id),
                        auth=HTTPKerberosAuth())
@@ -37,7 +37,7 @@ def get_erratum(id):
     if res.status_code == 200:
         return Erratum(body=res.json())
     elif res.status_code == 401:
-        raise exceptions.ErrataToolUnauthorizedException(res.text)
+        raise exceptions.ErrataToolUnauthenticatedException(res.text)
     else:
         return False
 
@@ -61,7 +61,7 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
         release, you would provide '9' as the value for 'minor'
 
     :return: An Erratum object
-    :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+    :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
     """
     if release_date is None:
         release_date = datetime.datetime.now() + datetime.timedelta(days=21)
@@ -88,7 +88,7 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
         if res.status_code == 201:
             return Erratum(body=res.json())
         elif res.status_code == 401:
-            raise exceptions.ErrataToolUnauthorizedException(res.text)
+            raise exceptions.ErrataToolUnauthenticatedException(res.text)
         else:
             raise exceptions.ErraraToolError("Other error (status_code={code}): {msg}".format(
                 code=res.status_code,
@@ -106,7 +106,7 @@ filter_id
     :param int limit: How many erratum to list
     :return: A list of Erratum objects
 
-    :raises exceptions.ErrataToolUnauthorizedException: If the user is not authenticated to make the request
+    :raises exceptions.ErrataToolUnauthenticatedException: If the user is not authenticated to make the request
     :raises exceptions.ErrataToolError: If the given filter does not exist, and, any other unexpected error
 
     Note: Errata filters are defined in the ET web interface
@@ -128,7 +128,7 @@ filter_id
             raise exceptions.ErrataToolError("Could not locate the given advisory filter: {fid}".format(
                 fid=filter_id))
     elif res.status_code == 401:
-        raise exceptions.ErrataToolUnauthorizedException(res.text)
+        raise exceptions.ErrataToolUnauthenticatedException(res.text)
     else:
         raise exceptions.ErrataToolError("Other error (status_code={code}): {msg}".format(
             code=res.status_code,
@@ -267,7 +267,7 @@ class Erratum(object):
         :return: True if builds were added successfully
 
         :raises: exceptions.BrewBuildException if the builds could not be attached
-        :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+        :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
         """
         data = [b.to_json() for b in builds]
 
@@ -284,13 +284,12 @@ class Erratum(object):
             print(res.text)
             raise exceptions.BrewBuildException(str(res.json()))
         elif res.status_code == 401:
-            raise exceptions.ErrataToolUnauthorizedException(res.text)
+            raise exceptions.ErrataToolUnauthenticatedException(res.text)
         # TODO: Find the success return code
         else:
             return True
 
-    # We're not actually using the comment code yet
-    def add_comment(self, comment='default'):  # pragma: no cover
+    def add_comment(self, comment):  # pragma: no cover
         """5.2.1.8. POST /api/v1/erratum/{id}/add_comment
 
         Add a comment to an advisory.
@@ -302,16 +301,12 @@ class Erratum(object):
 
         https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidadd_comment
 
-        :param str comment: The ID of one of the pre-defined
-        comment strings in constants.errata_comments
+        :param dict comment: The metadata object to add as a comment
         """
-        if comment not in constants.errata_comments:
-            raise Exception("Invalid comment selected. See constants.errata_comments for legal values")
-        else:
-            data = {"comment": constants.errata_comments[comment]}
-            return requests.post(constants.errata_add_comment_url.format(id=self.advisory_id),
-                                 auth=HTTPKerberosAuth(),
-                                 data=data)
+        data = {"comment": json.dumps(comment)}
+        return requests.post(constants.errata_add_comment_url.format(id=self.advisory_id),
+                             auth=HTTPKerberosAuth(),
+                             data=data)
 
     def change_state(self, state):
         """5.2.1.14. POST /api/v1/erratum/{id}/change_state
@@ -327,7 +322,7 @@ class Erratum(object):
 
         :param str state: The state to change the advisory to
         :return: True on successful state change
-        :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+        :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
 
         https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidchange_state
         """
@@ -343,7 +338,7 @@ class Erratum(object):
             raise exceptions.ErraraToolError("Can not change erratum state, preconditions not yet met. Error message: {msg}".format(
                 msg=res.text))
         elif res.status_code == 401:
-            raise exceptions.ErrataToolUnauthorizedException(res.text)
+            raise exceptions.ErrataToolUnauthenticatedException(res.text)
         elif res.status_code == 201:
             # POST processed successfully
             self.refresh()
