@@ -70,6 +70,8 @@ class DistGitRepo(object):
 
         self.branch = self.runtime.branch
 
+        self.source_sha = None
+
         # Allow the config yaml to override branch
         # This is primarily useful for a sync only group.
         if self.config.distgit.branch is not Missing:
@@ -164,6 +166,9 @@ class DistGitRepo(object):
                 rc, out, err = exectools.cmd_gather(["git", "diff", "Dockerfile"])
                 assertion.success(rc, 'Failed fetching distgit diff')
                 self.runtime.add_distgits_diff(self.metadata.name, out)
+            if self.source_sha:
+                # add short sha of source for audit trail
+                commit_message += " - {}".format(self.source_sha)
             exectools.cmd_assert(["git", "add", "-A", "."])
             exectools.cmd_assert(["git", "commit", "--allow-empty", "-m", commit_message])
             rc, sha, err = exectools.cmd_gather(["git", "rev-parse", "HEAD"])
@@ -959,6 +964,11 @@ class ImageDistGitRepo(DistGitRepo):
         Pulls source defined in content.source and overwrites most things in the distgit
         clone with content from that source.
         """
+
+        with Dir(self.source_path()):
+            # gather source repo short sha for audit trail
+            rc, out, err = exectools.cmd_gather(["git", "rev-parse", "--short", "HEAD"])
+            self.source_sha = out.strip()
 
         # See if the config is telling us a file other than "Dockerfile" defines the
         # distgit image content.
