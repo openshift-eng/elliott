@@ -42,6 +42,116 @@ def get_erratum(id):
         return False
 
 
+def find_mutable_erratum(kind, minor, major=3):
+    """Find the latest mutable (may be updated/changed) erratum for a
+    release series using a combination of search parameters.
+
+    :param string kind: One of 'rpm' or 'image'
+    :param str/int minor: The minor release to search against (i.e.,
+        3.10, minor=10)
+    :param str/int major: [Default 3] The major release to search
+        against (i.e., 3.10, major=3)
+
+    Example:
+
+    To find a 3.10 erratum that you could attach new image builds to:
+    * kind='image', minor=10
+
+    Return Values:
+
+    If an open AND mutable erratum exists matching your search:
+    :return: An `Erratum` object of the discovered erratum
+
+    If no open OR mutable erratum exists matching your search:
+    :return: `None`
+
+    DEV NOTE: If this function returns `None` then you can use the
+    other find_*_erratum function to find the latest erratum of kind
+    `kind` in the given release series. That is to say, if there are
+    no open erratum for your release series you can still find the
+    most recent erratum, even if it has passed the `QA` state or has
+    even already been released.
+
+    :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
+
+    """
+    pass
+
+
+def find_latest_erratum(kind, minor, major=3):
+    """Find an erratum in a given release series, in ANY state.
+
+    Put simply, this tells you the erratum that has the most recent,
+    or furthest in the future, release date set.
+
+    This is useful for determining the release date of a new
+    erratum. This combines the functionality provided by
+    find_mutable_erratum and extends it by including searching closed
+    or immutable erratum. These two functions can work well in tandem.
+
+    Contrast this with find_mutable_erratum (best suited for elliott
+    actions explicitly designed to UPDATE an erratum), this function
+    promises to tell you the freshest release date of erratum in any
+    state in a given release series.
+
+    Example:
+
+    You are creating a new erratum. The latest erratum in that series
+    MAY or MAY NOT have gone to SHIPPED_LIVE state yet. Regardless of
+    that, this function will tell you what the latest ship date is for
+    an erratum in that series.
+
+    If erratum exists matching your search:
+    :return: An `Erratum` object of the erratum
+
+    If no erratum can be found matching your search:
+    :return: `None`
+    """
+    release = "{}.{}".format(major, minor)
+    found_advisory = None
+
+    # List of hashes because we will scan the Mutable advisories first
+    filters = [
+        {'Mutable Advisories': constants.errata_default_filter},
+        {'Immutable Advisories': constants.errata_immutable_advisory_filter}
+    ]
+
+    # Fetch initial lists of advisories in each pre-defined filter
+    advisory_list = []
+    print("Running initial advisory fetching")
+    for f in filters:
+        state_desc, filter_id = f.items()[0]
+        print("Fetching {state}".format(state=state_desc))
+        advisories = get_filtered_list(filter_id, limit=50)
+        # Filter out advisories that aren't for this release
+        advisory_list.extend([advs for advs in advisories if " {} ".format(release) in advs.synopsis])
+        print("Advisory list has {n} items after this fetch".format(
+            n=len(advisory_list)))
+
+    print("Looking for elliott metadata in comments:")
+
+    for advisory in advisory_list:
+        print("Scanning advisory {}".format(str(advisory)))
+
+        for c in advisory.get_comments():
+            try:
+                metadata = json.loads(c['attributes']['text'])
+            except Exception as e:
+                pass
+            else:
+                if str(metadata['release']) == str(release) and metadata['kind'] == kind and metadata['impetus'] == 'standard':
+                    found_advisory = advisory
+                    break
+
+        if found_advisory is not None:
+            break
+
+    if found_advisory is None:
+        return None
+    else:
+        return get_erratum(found_advisory.advisory_id)
+
+
 def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
     """5.2.1.1. POST /api/v1/erratum
 
@@ -160,6 +270,7 @@ class Erratum(object):
             self.synopsis = ''
             self.url = ''
             self.created_at = datetime.datetime.now()
+            self.release_date = None
 
     ######################################################################
     # Basic utility/setup methods
@@ -194,6 +305,7 @@ class Erratum(object):
             self.topic = content['topic']
             self.status = rha['status']
             self.created_at = datetime.datetime.strptime(rha['created_at'], self.date_format)
+            self.release_date = datetime.datetime.strptime(rha['publish_date_override'], self.date_format)
             self.url = "{et}/advisory/{id}".format(
                 et=constants.errata_url,
                 id=self.advisory_id)
@@ -343,3 +455,43 @@ class Erratum(object):
             # POST processed successfully
             self.refresh()
             return True
+
+    def get_comments(self):
+        """5.2.10.2. GET /api/v1/comments?filter[key]=value
+
+        Retrieve all advisory comments
+        Example request body:
+
+            {"filter": {"errata_id": 11112, "type": "AutomatedComment"}}
+
+        Returns an array of comments ordered in descending order
+        (newest first). The array may be empty depending on the filters
+        used. The meaning of each attribute is documented under GET
+        /api/v1/comments/{id} (see Erratum.get_comment())
+
+        Included for reference:
+        5.2.10.2.1. Filtering
+
+        The list of comments can be filtered by applying
+        filter[key]=value as a query parameter. All attributes of a
+        comment - except advisory_state - can be used as a filter.
+
+        This is a paginated API. Reference documentation:
+        https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-pagination
+        """
+        body = {
+            "filter": {
+                "errata_id": self.advisory_id,
+                "type": "Comment"
+                }
+            }
+        res = requests.get(constants.errata_get_comments_url,
+                           auth=HTTPKerberosAuth(),
+                           json=body)
+
+        if res.status_code == 200:
+            return res.json().get('data', [])
+        elif res.status_code == 401:
+            raise exceptions.ErrataToolUnauthorizedException(res.text)
+        else:
+            return False
