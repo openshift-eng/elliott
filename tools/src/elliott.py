@@ -354,7 +354,7 @@ advisory.
         click.echo("{}".format(str(release_date)))
     else:
         # User entered a valid value for --date, set the release date
-        release_date = default_release_date
+        release_date = datetime.datetime.strptime(date, YMD)
 
     ######################################################################
 
