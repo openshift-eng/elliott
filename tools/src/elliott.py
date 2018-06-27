@@ -31,7 +31,7 @@ import requests
 # -----------------------------------------------------------------------------
 # Constants and defaults
 # -----------------------------------------------------------------------------
-release_date = datetime.datetime.now() + datetime.timedelta(days=21)
+default_release_date = datetime.datetime(1970, 1, 1, 0, 0)
 now = datetime.datetime.now()
 YMD = '%Y-%m-%d'
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -105,7 +105,15 @@ def exit_unauthorized():
 def validate_release_date(ctx, param, value):
     """Ensures dates are provided in the correct format"""
     try:
-        datetime.datetime.strptime(value, YMD)
+        release_date = datetime.datetime.strptime(value, YMD)
+        if release_date == default_release_date:
+            # Default date, nothing special to note
+            pass
+        else:
+            # User provided date passed validation, they deserve a
+            # hearty thumbs-up!
+            green_prefix("User provided release date: ")
+            click.echo("{} - Validated".format(release_date.strftime(YMD)))
         return value
     except ValueError:
         raise click.BadParameter('Release date (--date) must be in YYYY-MM-DD format')
@@ -274,7 +282,7 @@ Bugzilla Bugs.
               type=click.Choice(ocp_cd_tools.constants.errata_valid_impetus),
               help="Impetus for the advisory creation [standard, cve, ga, test]")
 @click.option("--date", required=False,
-              default=release_date.strftime(YMD),
+              default=default_release_date.strftime(YMD),
               callback=validate_release_date,
               help="Release date for the advisory. Optional. Format: YYYY-MM-DD. Defaults to 3 weeks after the release with the highest date for that series")
 @click.option('--yes', '-y', is_flag=True,
@@ -317,30 +325,38 @@ advisory.
     runtime.initialize(clone_distgits=False)
     minor = minor_from_branch(runtime.group_config.branch)
 
-    try:
-        latest_advisory = ocp_cd_tools.errata.find_latest_erratum(kind, minor)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
-        exit_unauthenticated()
-    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
-        exit_unauthorized()
-    except ocp_cd_tools.exceptions.ErrataToolError as err:
-        red_prefix("Error searching advisories: ")
-        click.echo(str(err))
-        exit(1)
-    else:
-        if latest_advisory is None:
-            red_prefix("No metadata discovered: ")
-            click.echo("No advisory for 3.{y} has been released in recent history, can not auto determine next release date".format(
-                y=minor))
+    if date == default_release_date.strftime(YMD):
+        # User did not enter a value for --date, default is determined
+        # by looking up the latest erratum in a series
+        try:
+            latest_advisory = ocp_cd_tools.errata.find_latest_erratum(kind, minor)
+        except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+            exit_unauthenticated()
+        except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+            exit_unauthorized()
+        except ocp_cd_tools.exceptions.ErrataToolError as err:
+            red_prefix("Error searching advisories: ")
+            click.echo(str(err))
             exit(1)
+        else:
+            if latest_advisory is None:
+                red_prefix("No metadata discovered: ")
+                click.echo("No advisory for 3.{y} has been released in recent history, can not auto determine next release date".format(
+                    y=minor))
+                exit(1)
 
-    green_prefix("Found an advisory to calculate new release date from: ")
-    click.echo("{synopsis} - {rel_date}".format(
-        synopsis=latest_advisory.synopsis,
-        rel_date=str(latest_advisory.release_date)))
-    release_date = latest_advisory.release_date + datetime.timedelta(days=21)
-    green_prefix("Calculated release date: ")
-    click.echo("{}".format(str(release_date)))
+        green_prefix("Found an advisory to calculate new release date from: ")
+        click.echo("{synopsis} - {rel_date}".format(
+            synopsis=latest_advisory.synopsis,
+            rel_date=str(latest_advisory.release_date)))
+        release_date = latest_advisory.release_date + datetime.timedelta(days=21)
+        green_prefix("Calculated release date: ")
+        click.echo("{}".format(str(release_date)))
+    else:
+        # User entered a valid value for --date, set the release date
+        release_date = default_release_date
+
+    ######################################################################
 
     try:
         erratum = ocp_cd_tools.errata.new_erratum(kind=kind,
