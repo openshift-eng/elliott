@@ -477,7 +477,11 @@ manually. Provide one or more --id's for manual bug addition.
             click.echo("Could not locate advisory {advs}".format(advs=advisory))
             exit(1)
 
-        click.echo("Adding bugs to {advs} for target releases: {tr}".format(advs=advisory, tr=", ".join(target_releases)))
+        if auto:
+            click.echo("Adding bugs to {advs} for target releases: {tr}".format(advs=advisory, tr=", ".join(target_releases)))
+        else:
+            click.echo("Adding {count} bugs to {advs}".format(count=bug_count, advs=advisory))
+
         if len(flag) > 0:
             for bug in bug_ids:
                 bug.add_flags(flag)
