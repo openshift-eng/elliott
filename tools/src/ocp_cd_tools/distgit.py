@@ -317,16 +317,26 @@ class ImageDistGitRepo(DistGitRepo):
 
                         arg = kvs.pop(0).strip()
 
+                        repo_names = []
+                        for rn in kvs:
+                            # AMH - I wish there was a better way to parse these invocations
+                            # but even bashlex is a nightmare. The current method works mostly
+                            # but picks up things like `>/dev/null` and `-y` as repo names
+                            # this will filter them out. Not happy about it, but the only
+                            # other option is a rewrite of this and retesting all builds
+                            if rn[0].isalnum():
+                                repo_names.append(rn)
+
                         if arg != "enable" and arg != "enablerepo" and arg != "disable" and arg != "disablerepo":
                             continue
 
                         if cmd == 'yum-config-manager':
                             # Must be a loop because:  yum-config-manager --enable repo1 repo2 repo3
-                            for repo_name in kvs:
+                            for repo_name in repo_names:
                                 df_repos.append(repo_name)
                         else:
                             # No loop because yum --enablerepo allows only one
-                            df_repos.append(kvs[0])
+                            df_repos.append(repo_names[0])
 
         # Make our metadata directory if it does not exist
         if not os.path.isdir(".oit"):
@@ -913,11 +923,17 @@ class ImageDistGitRepo(DistGitRepo):
 
             # doing it this way may be temporary, but it ensures it removes old, bad versions, before adding new version
             result = []
+            rm_added = False
             for line in df_lines:
                 if rm_empty not in line:
                     result.append(line)
+                else:
+                    rm_added = True
+                    # only done this way to fix older versions without the || true
+                    result.append(rm_empty + '  || true')
 
-            result.append(rm_empty + '  || true')
+            if not rm_added:
+                result.append(rm_empty + '  || true')
 
             df_content = "\n".join(result)
 
