@@ -20,6 +20,8 @@ from brew import watch_task, check_rpm_buildroot
 from model import Model, Missing
 
 OIT_COMMENT_PREFIX = '#oit##'
+OIT_BEGIN = '##OIT_BEGIN'
+OIT_END = '##OIT_END'
 
 CONTAINER_YAML_HEADER = """
 # This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images,
@@ -348,9 +350,11 @@ class ImageDistGitRepo(DistGitRepo):
             with open('.oit/{}.repo'.format(t), 'w') as rc:
                 content = repos.repo_file(t, enabled_repos=enabled_repos)
                 rc.write(content)
+                rc.write(repos.empty_repo_file_from_list(df_repos, odcs=self.runtime.odcs_mode))
 
-        with open('.oit/empty.repo', 'w') as empty:
-            empty.write(repos.empty_repo_file_from_list(df_repos, odcs=self.runtime.odcs_mode))
+        ## AMH - Disabling empty.repo logic entirely for now
+        # with open('.oit/empty.repo', 'w') as empty:
+        #     empty.write(repos.empty_repo_file_from_list(df_repos, odcs=self.runtime.odcs_mode))
 
         with open('content_sets.yml', 'w') as rc:
             rc.write(repos.content_sets(enabled_repos=enabled_repos))
@@ -904,38 +908,49 @@ class ImageDistGitRepo(DistGitRepo):
             df_lines = dfp.content.splitlines(False)
             df_lines = [line for line in df_lines if not line.strip().startswith(OIT_COMMENT_PREFIX)]
 
-            from_idx = -1
-            ADD_LINE = 'ADD ./.oit/empty.repo /etc/yum.repos.d/'
-            add_empty = True
-            for i in range(len(df_lines)):
-                line = df_lines[i]
-                if line.startswith('FROM'):
-                    from_idx = i
-                if ADD_LINE in line:
-                    add_empty = False
-                    break  # already exists, abort
-
-            if add_empty and from_idx >= 0:
-                df_lines.insert(from_idx + 1, OIT_COMMENT_PREFIX + ' Added automatically. empty.repo disables all below specified yum repos, so that OSBS/ODCS can manage repos instead.')
-                df_lines.insert(from_idx + 2, ADD_LINE)
-
-            rm_empty = 'RUN rm -f /etc/yum.repos.d/empty.repo'
-
-            # doing it this way may be temporary, but it ensures it removes old, bad versions, before adding new version
-            result = []
-            rm_added = False
+            filtered_content = []
+            in_mod_block = False
             for line in df_lines:
-                if rm_empty not in line:
-                    result.append(line)
-                else:
-                    rm_added = True
-                    # only done this way to fix older versions without the || true
-                    result.append(rm_empty + '  || true')
 
-            if not rm_added:
-                result.append(rm_empty + '  || true')
+                # Check for begin/end of mod block, skip any lines inside
+                if OIT_BEGIN in line:
+                    in_mod_block = True
+                    continue
+                elif OIT_END in line:
+                    in_mod_block = False
+                    continue
 
-            df_content = "\n".join(result)
+                # if in mod, skip all
+                if in_mod_block:
+                    continue
+
+                # remove any old instances of empty.repo mods that aren't in mod block
+                if 'empty.repo' not in line:
+                    if line.endswith('\n'):
+                        line = line[0:-1]  # remove trailing newline, if exists
+                    filtered_content.append(line)
+
+            df_lines = filtered_content
+
+
+            ## AMH being removed for now. Really for ODCS, but completely breaking things right now. Asses later and re-add.
+            # from_idx = -1
+            # auto_add = OIT_COMMENT_PREFIX + ' Added automatically. empty.repo disables all below specified yum repos, so that OSBS/ODCS can manage repos instead.'
+            # ADD_LINE = '{}\n{}\nADD ./.oit/empty.repo /etc/yum.repos.d/\nRUN chmod 777 /etc/yum.repos.d/empty.repo && ls -al /etc/yum.repos.d/empty.repo\n{}'.format(OIT_BEGIN, auto_add, OIT_END)
+            # for i in range(len(df_lines)):
+            #     line = df_lines[i]
+            #     if line.startswith('FROM'):
+            #         from_idx = i
+
+            # if from_idx >= 0:
+            #     df_lines.insert(from_idx + 1, ADD_LINE)
+
+            # rm_empty = '{}\nRUN ls -al /etc/yum.repos.d/empty.repo && rm -f /etc/yum.repos.d/empty.repo\n{}'.format(OIT_BEGIN, OIT_END)
+
+            # df_lines.append(rm_empty)
+            ## AMH End removed block
+
+            df_content = "\n".join(df_lines)
 
             with open('Dockerfile', 'w') as df:
                 for comment in oit_comments:
