@@ -13,7 +13,7 @@ then running a subset of operations in the new container."""
     def __init__(self, image, autostart=False):
         self.image = image
         self.name_tag = image.split('/')[-1]
-        self.logger = logutil.EntityLoggingAdapter(logger, {'entity', '{}'.format(self.name_tag)})
+        self.logger = logutil.EntityLoggingAdapter(logger, {'entity': '{}'.format(self.name_tag)})
         self.cid = None
         if autostart:
             self.start()
