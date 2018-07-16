@@ -33,7 +33,6 @@ def search_for_bugs(target_release, verbose=False):
     query_url.addFilter("component", "notequals", "RFE")
     query_url.addFilter("component", "notequals", "Documentation")
     query_url.addFilter("component", "notequals", "Security")
-    query_url.addFilter("cf_verified", "notequals", "FailedQA")
 
     for v in constants.DEFAULT_VERSIONS:
         query_url.addVersion(v)
