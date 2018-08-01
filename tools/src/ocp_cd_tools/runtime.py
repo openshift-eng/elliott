@@ -14,6 +14,7 @@ import click
 import logging
 import functools
 import traceback
+import urlparse
 
 import logutil
 import assertion
@@ -182,8 +183,6 @@ class Runtime(object):
             click.echo("Group must be specified")
             exit(1)
 
-        assertion.isdir(self.metadata_dir, "Invalid metadata-dir directory")
-
         if self.working_dir is None:
             self.working_dir = tempfile.mkdtemp(".tmp", "oit-")
             # This can be set to False by operations which want the working directory to be left around
@@ -192,6 +191,11 @@ class Runtime(object):
         else:
             self.working_dir = os.path.abspath(self.working_dir)
             assertion.isdir(self.working_dir, "Invalid working directory")
+
+        #
+        # Separate the different metadata location using a pseudoURL
+        #
+        self.resolve_metadata()
 
         self.distgits_dir = os.path.join(self.working_dir, "distgits")
         if not os.path.isdir(self.distgits_dir):
@@ -803,3 +807,42 @@ class Runtime(object):
             terminate_event.set()
         pool.join()
         return ret
+
+    def resolve_metadata(self):
+        """
+        The group control data can be on a local filesystem, in a git
+        repository that can be checked out, or some day in a database
+
+        If the scheme is empty, assume file:///...
+        Allow http, https, ssh and ssh+git (all valid git clone URLs)
+        """
+
+        schemes = ['ssh', 'ssh+git', "http", "https"]
+
+        md_url = urlparse.urlparse(self.metadata_dir)
+        if md_url.scheme in schemes or (md_url.scheme == '' and ':' in md_url.path):
+            # Assume this is a git repo to clone
+            #
+            # An empty scheme with a colon in the path is likely an "scp" style
+            # path: ala username@github.com:owner/path
+            # determine where to put it
+            md_name = os.path.splitext(os.path.basename(md_url.path))[0]
+            md_destination = os.path.join(self.working_dir, md_name)
+            if not os.path.isdir(md_destination):
+                cmd = "git clone {} {}".format(self.metadata_dir, md_destination)
+                exectools.cmd_assert(cmd.split(' '))
+            self.metadata_dir = md_destination
+
+        elif md_url.scheme in ['', 'file']:
+            # no scheme, assume the path is a local file
+            self.metadata_dir = md_url.path
+            if not os.path.isdir(self.metadata_dir):
+                raise ValueError(
+                    "Invalid metadata_dir: {} - Not a directory"
+                    .format(self.metadata_dir))
+
+        else:
+            # invalid scheme: not '' or any of the valid list
+            raise ValueError(
+                "Invalid metadata_dir: {} - invalid scheme: {}"
+                .format(self.metadata_dir, md_url.scheme))
