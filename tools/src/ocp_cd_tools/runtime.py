@@ -224,12 +224,14 @@ class Runtime(object):
         # Try first that the user has given the proper full path to the
         # groups database directory
         group_dir = os.path.join(self.metadata_dir, self.group)
-        try:
-            assertion.isdir(group_dir, "Cannot find group directory")
-        except IOError:
-            # but if not, try adding the 'groups' subdirectory and try again
+        if not os.path.isdir(group_dir):
             group_dir = os.path.join(self.metadata_dir, 'groups', self.group)
-            assertion.isdir(group_dir, "Cannot find group directory")
+
+        assertion.isdir(
+            group_dir,
+            "Cannot find group directory {} in {}"
+            .format(self.group, self.metadata_dir)
+        )
 
         self.images_dir = images_dir = os.path.join(group_dir, 'images')
         self.rpms_dir = rpms_dir = os.path.join(group_dir, 'rpms')
