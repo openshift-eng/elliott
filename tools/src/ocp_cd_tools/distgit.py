@@ -515,7 +515,6 @@ class ImageDistGitRepo(DistGitRepo):
 
                     record["message"] = "Successfully pushed all tags"
                     record["status"] = 0
-                    return True
 
                 except Exception as err:
                     record["message"] = "Exception occurred: %s" % str(err)
@@ -524,6 +523,8 @@ class ImageDistGitRepo(DistGitRepo):
 
                 finally:
                     self.runtime.add_record(action, **record)
+
+            return True
 
     def wait_for_build(self, who_is_waiting):
         """
