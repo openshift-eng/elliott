@@ -333,7 +333,7 @@ def check_rpm_buildroot(name, branch, arch='x86_64'):
     :param str arch: CPU architecture to search
     """
     args = locals()
-    query = 'repoquery --repofrompath foo,"https://download-node-02.eng.bos.redhat.com/brewroot/repos/{branch}-container-build/latest/{arch}" --repoid=foo --arch {arch},noarch --whatprovides {name}'
+    query = 'repoquery --repofrompath foo,"http://download-node-02.eng.bos.redhat.com/brewroot/repos/{branch}-ppc64le-container-build/latest/{arch}" --repoid=foo --arch {arch},noarch --whatprovides {name}'
     rc, stdout, stderr = exectools.cmd_gather(query.format(**args))
     if rc == 0:
         result = []
