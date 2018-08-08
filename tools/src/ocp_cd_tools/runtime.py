@@ -221,8 +221,17 @@ class Runtime(object):
         if not os.path.isdir(self.flags_dir):
             os.mkdir(self.flags_dir)
 
-        group_dir = os.path.join(self.metadata_dir, "groups", self.group)
-        assertion.isdir(group_dir, "Cannot find group directory")
+        # Try first that the user has given the proper full path to the
+        # groups database directory
+        group_dir = os.path.join(self.metadata_dir, self.group)
+        if not os.path.isdir(group_dir):
+            group_dir = os.path.join(self.metadata_dir, 'groups', self.group)
+
+        assertion.isdir(
+            group_dir,
+            "Cannot find group directory {} in {}"
+            .format(self.group, self.metadata_dir)
+        )
 
         self.images_dir = images_dir = os.path.join(group_dir, 'images')
         self.rpms_dir = rpms_dir = os.path.join(group_dir, 'rpms')

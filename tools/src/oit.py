@@ -23,7 +23,7 @@ context_settings = dict(help_option_names=['-h', '--help'])
 
 
 @click.group(context_settings=context_settings)
-@click.option("--metadata-dir", metavar='PATH', default=os.getcwd(),
+@click.option("--metadata-dir", metavar='PATH', default=os.getcwd() + "/groups",
               help="Directory containing groups metadata directory if not current.")
 @click.option("--working-dir", metavar='PATH', default=None,
               help="Existing directory in which file operations should be performed.")
