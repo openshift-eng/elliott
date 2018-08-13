@@ -74,7 +74,7 @@ for section in defaults.keys():
 @click.option("--user", metavar='USERNAME',
               default=defaults['global']['user']['value'],
               help="Username for rhpkg. Env var: OIT_USER")
-@click.option("--group", default=None, metavar='NAME',
+@click.option("-g", "--group", default=None, metavar='NAME',
               help="The group of images on which to operate.")
 @click.option("--branch", default=None, metavar='BRANCH',
               help="Branch to override any default in group.yml.")
