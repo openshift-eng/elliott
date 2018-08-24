@@ -46,10 +46,7 @@ Space precludes documenting all of the bug fixes and enhancements in this adviso
 https://docs.openshift.com/container-platform/3.{Y}/release_notes/ocp_3_{Y}_release_notes.html
 
 All OpenShift Container Platform 3.{Y} users are advised to upgrade to these updated packages and images."""
-errata_manager_email = 'bleanhar@redhat.com'
-errata_package_owner_email = 'smunilla@redhat.com'
-# QE owner email address
-errata_assigned_to_email = 'openshift-qe-errata@redhat.com'
+
 # QE Group name
 errata_quality_responsibility_name = 'OpenShift QE'
 errata_synopsis = {
@@ -116,12 +113,12 @@ errata_new_object = {
     'product': 'RHOSE',
     'release': 'RHOSE ASYNC',
     'advisory': {
-        'assigned_to_email': errata_assigned_to_email,
+        'assigned_to_email': None,  # Provided as input
         'description': errata_description,
         'errata_type': 'RHBA',
         'idsfixed': '',
-        'manager_email': errata_manager_email,
-        'package_owner_email': errata_package_owner_email,
+        'manager_email': None,  # Provided as input
+        'package_owner_email': None,  # Provided as input
         'publish_date_override': None,
         'quality_responsibility_name': errata_quality_responsibility_name,
         'security_impact': 'None',

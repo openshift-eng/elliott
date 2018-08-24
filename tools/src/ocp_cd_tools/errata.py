@@ -152,7 +152,8 @@ def find_latest_erratum(kind, minor, major=3):
         return get_erratum(found_advisory.advisory_id)
 
 
-def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
+def new_erratum(kind=None, release_date=None, create=False, minor='Y',
+                assigned_to=None, manager=None, package_owner=None):
     """5.2.1.1. POST /api/v1/erratum
 
     Create a new advisory.
@@ -169,6 +170,12 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
         errata boilerplate text (see:
         :mod:`constants`). E.g., if this is a '3.9'
         release, you would provide '9' as the value for 'minor'
+    :param string assigned_to: The email address of the group responsible for
+        examining and approving the advisory entries
+    :param string manager: The email address of the manager responsible for
+        managing the contents and status of this advisory
+    :param string package_owner: The email address of the person who is handling
+        the details and status of this advisory
 
     :return: An Erratum object
     :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
@@ -188,6 +195,10 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y'):
     body['advisory']['solution'] = body['advisory']['solution'].format(Y=minor)
     body['advisory']['synopsis'] = body['advisory']['synopsis'].format(Y=minor)
     body['advisory']['topic'] = body['advisory']['topic'].format(Y=minor)
+    
+    body['advisory']['assigned_to_email'] = assigned_to
+    body['advisory']['manager_email'] = manager
+    body['advisory']['package_owner_email'] = package_owner
 
     if create:
         # THIS IS NOT A DRILL

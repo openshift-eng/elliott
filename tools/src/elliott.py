@@ -15,6 +15,7 @@ import datetime
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
 import os
+import re
 
 # ours
 from ocp_cd_tools import Runtime
@@ -39,11 +40,14 @@ context_settings = dict(help_option_names=['-h', '--help'])
 
 
 @click.group(context_settings=context_settings)
-@click.option("--metadata-dir", metavar='PATH', default=os.getcwd(),
+@click.option("--metadata-dir", metavar='PATH', envvar="ELLIOTT_METADATA_DIR",
+              default=os.path.join(os.getcwd(), "groups"),
               help="Directory containing groups metadata directory if not current.")
-@click.option("--working-dir", metavar='PATH', default=None,
+@click.option("--working-dir", metavar='PATH', envvar="ELLIOTT_WORKING_DIR",
+              default=None,
               help="Existing directory in which file operations should be performed.")
-@click.option("--user", metavar='USERNAME', default=None,
+@click.option("--user", metavar='USERNAME', envvar="ELLIOTT_USER",
+              default=None,
               help="Username for rhpkg.")
 @click.option("--group", default=None, metavar='NAME',
               help="The group of images on which to operate.")
@@ -118,6 +122,15 @@ def validate_release_date(ctx, param, value):
     except ValueError:
         raise click.BadParameter('Release date (--date) must be in YYYY-MM-DD format')
 
+def validate_email_address(ctx, param, value):
+    """Ensure that email addresses provided are valid email strings"""
+    # Really just check to match /^[^@]+@[^@]+\.[^@]+$/
+    email_re = re.compile('^[^@ ]+@[^@ ]+\.[^@ ]+$')
+    if not email_re.match(value):
+        raise click.BadParameter(
+            "Invalid email address for {}: {}".format(param, value))
+
+    return value
 
 def release_from_branch(ver):
     """Parse the release version from the provided 'branch'.
@@ -285,12 +298,24 @@ Bugzilla Bugs.
               default=default_release_date.strftime(YMD),
               callback=validate_release_date,
               help="Release date for the advisory. Optional. Format: YYYY-MM-DD. Defaults to 3 weeks after the release with the highest date for that series")
+@click.option('--assigned-to', metavar="EMAIL_ADDR", required=True,
+              envvar="ELLIOTT_ASSIGNED_TO_EMAIL",
+              callback=validate_email_address,
+              help="The email address group to review and approve the advisory.")
+@click.option('--manager', metavar="EMAIL_ADDR", required=True,
+              envvar="ELLIOTT_MANAGER_EMAIL",
+              callback=validate_email_address,
+              help="The email address of the manager monitoring the advisory status.")
+@click.option('--package-owner', metavar="EMAIL_ADDR", required=True,
+              envvar="ELLIOTT_PACKAGE_OWNER_EMAIL",
+              callback=validate_email_address,
+              help="The email address of the person responsible managing the advisory.")
 @click.option('--yes', '-y', is_flag=True,
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
 @pass_runtime
 @click.pass_context
-def create(ctx, runtime, kind, impetus, date, yes):
+def create(ctx, runtime, kind, impetus, date, assigned_to, manager, package_owner, yes):
     """Create a new advisory. The kind of advisory must be specified with
 '--kind'. Valid choices are 'rpm' and 'image'.
 
@@ -309,6 +334,10 @@ API.
 
 The impetus option only effects the metadata added to the new
 advisory.
+
+The --assigned-to, --manager and --package-owner options are required.
+They are the email addresses of the parties responsible for managing and
+approving the advisory.
 
 Provide the '--yes' or '-y' option to confirm creation of the
 advisory.
@@ -359,10 +388,15 @@ advisory.
     ######################################################################
 
     try:
-        erratum = ocp_cd_tools.errata.new_erratum(kind=kind,
-                                                  release_date=release_date.strftime(YMD),
-                                                  create=yes,
-                                                  minor=minor)
+        erratum = ocp_cd_tools.errata.new_erratum(
+            kind=kind,
+            release_date=release_date.strftime(YMD),
+            create=yes,
+            minor=minor,
+            assigned_to=assigned_to,
+            manager=manager,
+            package_owner=package_owner
+        )
     except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
         exit_unauthorized()
     except ocp_cd_tools.exceptions.ErrataToolError as err:
