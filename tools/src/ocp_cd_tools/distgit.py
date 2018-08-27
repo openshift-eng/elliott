@@ -73,6 +73,8 @@ class DistGitRepo(object):
         self.branch = self.runtime.branch
 
         self.source_sha = None
+        self.full_source_sha = None
+        self.source_url = None
 
         # Allow the config yaml to override branch
         # This is primarily useful for a sync only group.
@@ -958,6 +960,22 @@ class ImageDistGitRepo(DistGitRepo):
                     df.write("%s %s\n" % (OIT_COMMENT_PREFIX, comment))
                 df.write(df_content)
 
+            sha_label = 'io.openshift.source-repo-commit'
+            source_label = 'io.openshift.source-repo-url'
+            source_commit_label = 'io.openshift.source-commit-url'
+
+            # just always delete so it's either correct or not available
+            for label in (sha_label, source_label, source_commit_label):
+                if label in dfp.labels:
+                    del dfp.labels[label]
+
+            if self.full_source_sha:
+                dfp.labels[sha_label] = self.full_source_sha
+            if self.source_url:
+                dfp.labels[source_label] = self.source_url
+                if self.full_source_sha:
+                    dfp.labels[source_commit_label] = '{}/commit/{}'.format(self.source_url, self.full_source_sha)
+
             self._reflow_labels()
 
             return (version, release)
@@ -1001,6 +1019,12 @@ class ImageDistGitRepo(DistGitRepo):
             # gather source repo short sha for audit trail
             rc, out, err = exectools.cmd_gather(["git", "rev-parse", "--short", "HEAD"])
             self.source_sha = out.strip()
+            rc, out, err = exectools.cmd_gather(["git", "rev-parse", "HEAD"])
+            self.full_source_sha = out.strip()
+
+            rc, out, err = exectools.cmd_gather(["git", "remote", "get-url", "origin"])
+            out = out.strip()
+            self.source_url = out.replace(':', '/').replace('.git', '').replace('git@', 'https://')
 
         # See if the config is telling us a file other than "Dockerfile" defines the
         # distgit image content.
