@@ -253,7 +253,7 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
     runtime.clone_distgits()
     for image in runtime.image_metas():
         dgr = image.distgit_repo()
-        (real_version, real_release) = dgr.update_dockerfile(version, release)
+        (real_version, real_release) = dgr.update_distgit_dir(version, release)
         dgr.commit(message)
         dgr.tag(real_version, real_release)
 

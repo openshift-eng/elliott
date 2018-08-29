@@ -1,3 +1,5 @@
+# validation schema; rules are per pykwalify
+# https://pykwalify.readthedocs.io/en/master/validation-rules.html
 
 type: map
 
@@ -84,6 +86,22 @@ mapping:
         type: str
       "image":
         type: str
+      "builder":
+        type: seq
+        sequence:
+          - type: map
+            mapping:
+              "stream":
+                type: enum
+                enum: [rhel]
+              "member":
+                type: str
+              "image":
+                type: str
+
+  "image_build_method":
+    type: enum
+    enum: [docker_api, imagebuilder]
 
   "owners":
     type: seq

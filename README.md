@@ -41,8 +41,9 @@ All Red Hat images must be repositories in distgit.
 
 ## Why you may be here...
 
-1. You need the Continuous Delivery team to build a new image as part of OCP.
-Action: Just open an issue and assign Justin Pierce as the owner.
+1. You need the Automated Release Tooling team to build a new image as part of OCP.
+Action: Clone our [template JIRA issue](https://jira.coreos.com/browse/ART-85) under the ART board.
+If you're unable to do that, email us at aos-team-art@redhat.com
 
 2. You need to make a change to an image built for OCP (e.g. changing the name of image built for OCP).
 Action: Feel free to open a PR against the image metadata you want to change. Or just open an issue. In either case,

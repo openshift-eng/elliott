@@ -200,6 +200,31 @@ class ImageDistGitRepo(DistGitRepo):
         self.build_lock.acquire()
         self.logger = metadata.logger
 
+    def _manage_container_config(self):
+
+        # Determine which image build method to use in OSBS.
+        # By default, specify nothing. use the OSBS default.
+        # If the group file config specifies a default, use that.
+        build_method = self.runtime.group_config.default_image_build_method
+        # If the build is multistage, override with 'imagebuilder' as required for multistage.
+        if 'builder' in self.config.get('from'):
+            build_method = 'imagebuilder'
+        # If our config specifies something, override with that.
+        if self.config.image_build_method is not Missing:
+            build_method = self.config.image_build_method 
+
+        container_config = self._generate_odcs_config() or {}
+        if build_method is not Missing:
+            container_config['image_build_method'] = build_method
+
+        if not container_config:
+            return  # no need to write empty file
+
+        # generate yaml data with header
+        content_yml = safe_dump(container_config, default_flow_style=False)
+        with open('container.yaml', 'w') as rc:
+            rc.write(CONTAINER_YAML_HEADER + content_yml)
+
     def _generate_odcs_config(self):
         """
         Generates a compose conf file in container.yaml
@@ -275,11 +300,7 @@ class ImageDistGitRepo(DistGitRepo):
             if not config.platforms:
                 raise ValueError('odcs.platforms.mode == manual but none specified in odcs.config.platforms')
 
-        # generate yaml data with header
-        content_yml_str = safe_dump(config.primitive(), default_flow_style=False)
-        content_yml = CONTAINER_YAML_HEADER + content_yml_str
-        with open('container.yaml', 'w') as rc:
-            rc.write(content_yml)
+        return config.primitive()
 
     def _generate_repo_conf(self):
         """
@@ -545,6 +566,16 @@ class ImageDistGitRepo(DistGitRepo):
             else:
                 self.logger.info("Member successfully waited for me to build: %s" % who_is_waiting)
 
+    def _set_wait_for(self, image_name, terminate_event):
+        image = self.runtime.resolve_image(image_name, False)
+        if image is None:
+            self.logger.info("Skipping image build since it is not included: %s" % image_name)
+            return
+        parent_dgr = image.distgit_repo()
+        parent_dgr.wait_for_build(self.metadata.qualified_name)
+        if terminate_event.is_set():
+            raise KeyboardInterrupt()
+
     def build_container(
             self, odcs, repo_type, repo, push_to_defaults, additional_registries, terminate_event,
             scratch=False, retries=3):
@@ -597,28 +628,15 @@ class ImageDistGitRepo(DistGitRepo):
                 # Use .get('from',None) since from is a reserved word.
                 image_from = Model(self.config.get('from', None))
                 if image_from.member is not Missing:
-                    parent_name = image_from.member
-                    parent_img = self.runtime.resolve_image(parent_name, False)
-                    if parent_img is None:
-                        self.logger.info("Skipping parent image build since it is not included: %s" % parent_name)
-                    else:
-                        parent_dgr = parent_img.distgit_repo()
-                        parent_dgr.wait_for_build(self.metadata.qualified_name)
-                        if terminate_event.is_set():
-                            raise KeyboardInterrupt()
+                    self._set_wait_for(image_from.member, terminate_event)
+                for builder in image_from.get('builder', []):
+                    if 'member' in builder:
+                        self._set_wait_for(builder['member'], terminate_event)
 
                 # Allow an image to wait on an arbitrary image in the group. This is presently
                 # just a workaround for: https://projects.engineering.redhat.com/browse/OSBS-5592
                 if self.config.wait_for is not Missing:
-                    wait_on_key = self.config.wait_for
-                    wait_img = self.runtime.resolve_image(wait_on_key, False)
-                    if wait_img is None:
-                        self.logger.info("Skipping wait_for image build since it is not included: %s" % wait_on_key)
-                    else:
-                        wait_dgr = wait_img.distgit_repo()
-                        wait_dgr.wait_for_build(self.metadata.qualified_name)
-                        if terminate_event.is_set():
-                            raise KeyboardInterrupt()
+                    self._set_wait_for(self.config.wait_for, terminate_event)
 
                 def wait(n):
                     self.logger.info("Async error in image build thread [attempt #{}]".format(n + 1))
@@ -764,7 +782,7 @@ class ImageDistGitRepo(DistGitRepo):
             # Not asserting this exec since this is non-fatal if the tag already exists
             exectools.cmd_gather(['git', 'push', '--tags'])
 
-    def update_dockerfile(self, version, release):
+    def update_distgit_dir(self, version, release):
         ignore_missing_base = self.runtime.ignore_missing_base
         # A collection of comment lines that will be included in the generated Dockerfile. They
         # will be prefix by the OIT_COMMENT_PREFIX and followed by newlines in the Dockerfile.
@@ -797,7 +815,7 @@ class ImageDistGitRepo(DistGitRepo):
 
             self._generate_repo_conf()
 
-            self._generate_odcs_config()
+            self._manage_container_config()
 
             dfp = DockerfileParser(path="Dockerfile")
 
@@ -833,33 +851,47 @@ class ImageDistGitRepo(DistGitRepo):
 
             if 'from' in self.config:
                 image_from = Model(self.config.get('from', None))
-                # Does this image inherit from an image defined in a different distgit?
-                if image_from.member is not Missing:
-                    base = image_from.member
-                    from_image_metadata = self.runtime.resolve_image(base, False)
 
-                    if from_image_metadata is None:
-                        if not ignore_missing_base:
-                            raise IOError("Unable to find base image metadata [%s] in included images. Use --ignore-missing-base to ignore." % base)
-                        elif self.runtime.latest_parent_version:
-                            self.logger.info('[{}] parent image {} not included. Looking up FROM tag.'.format(self.config.name, base))
-                            base_meta = self.runtime.late_resolve_image(base)
-                            _, v, r = base_meta.get_latest_build_info()
-                            dfp.baseimage = "{}:{}-{}".format(base_meta.config.name, v, r)
-                        # Otherwise, the user is not expecting the FROM field to be updated in this Dockerfile.
+                # Collect all the parent images we're supposed to use
+                parent_images = image_from.builder if image_from.builder is not Missing else []
+                parent_images.append(image_from)
+                if len(parent_images) != len(dfp.parent_images):
+                    raise IOError("Dockerfile parent images not matched by configured parent images for {}. '{}' vs '{}'".format(self.config.name, dfp.parent_images, parent_images))
+                mapped_images = []
+
+                for image in parent_images:
+                    # Does this image inherit from an image defined in a different distgit?
+                    if image.member is not Missing:
+                        base = image.member
+                        from_image_metadata = self.runtime.resolve_image(base, False)
+
+                        if from_image_metadata is None:
+                            if not ignore_missing_base:
+                                raise IOError("Unable to find base image metadata [%s] in included images. Use --ignore-missing-base to ignore." % base)
+                            elif self.runtime.latest_parent_version:
+                                self.logger.info('[{}] parent image {} not included. Looking up FROM tag.'.format(self.config.name, base))
+                                base_meta = self.runtime.late_resolve_image(base)
+                                _, v, r = base_meta.get_latest_build_info()
+                                mapped_images.append("{}:{}-{}".format(base_meta.config.name, v, r))
+                            # Otherwise, the user is not expecting the FROM field to be updated in this Dockerfile.
+                        else:
+                            # Everything in the group is going to be built with the uuid tag, so we must
+                            # assume that it will exist for our parent.
+                            mapped_images.append("%s:%s" % (from_image_metadata.config.name, uuid_tag))
+
+                    # Is this image FROM another literal image name:tag?
+                    elif image.image is not Missing:
+                        mapped_images.append(image.image)
+
+                    elif image.stream is not Missing:
+                        stream = self.runtime.resolve_stream(image.stream)
+                        # TODO: implement expriring images?
+                        mapped_images.append(stream.image)
+
                     else:
-                        # Everything in the group is going to be built with the uuid tag, so we must
-                        # assume that it will exist for our parent.
-                        dfp.baseimage = "%s:%s" % (from_image_metadata.config.name, uuid_tag)
+                        raise IOError("Image in 'from' for [%s] is missing its definition." % base)
 
-                # Is this image FROM another literal image name:tag?
-                if image_from.image is not Missing:
-                    dfp.baseimage = image_from.image
-
-                if image_from.stream is not Missing:
-                    stream = self.runtime.resolve_stream(image_from.stream)
-                    # TODO: implement expriring images?
-                    dfp.baseimage = stream.image
+                dfp.parent_images = mapped_images
 
             # Set image name in case it has changed
             dfp.labels["name"] = self.config.name
@@ -1187,7 +1219,7 @@ class ImageDistGitRepo(DistGitRepo):
             if self.config.content.source.modifications is not Missing:
                 self._run_modifications()
 
-        (real_version, real_release) = self.update_dockerfile(version, release)
+        (real_version, real_release) = self.update_distgit_dir(version, release)
 
         return (real_version, real_release)
 
