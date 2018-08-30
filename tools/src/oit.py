@@ -22,57 +22,17 @@ pass_runtime = click.make_pass_decorator(Runtime)
 context_settings = dict(help_option_names=['-h', '--help'])
 
 # ============================================================================
-# DEFAULTS: Define and override from environment
-# ============================================================================
-"""
-All environment variables for the OIT tool use the "OIT_" prefix.
-"""
-env_prefix = "OIT_"
-defaults = {
-    "global": {
-        "metadata-dir": {
-            "env_suffix": "METADATA_DIR",
-            "initial_value": os.path.join(os.getcwd(), "groups")
-        },
-        "working-dir": {
-            "env_suffix": "WORKING_DIR",
-            "initial_value": None
-        },
-        "user": {
-            "env_suffix": "USER",
-            "initial_value": None
-        }
-    },
-    "images": {
-        "repo-type": {
-            "env_suffix": "IMAGES_REPO_TYPE",
-            "initial_value": None
-        }
-    }
-}
-
-"""
-For each entry in the global defaults table, look up the variable in the
-environment, and, if found, set the initial value.
-If not, use the value from 'init'.
-"""
-for section in defaults.keys():
-    for v in defaults[section].values():
-        envname = env_prefix + v['env_suffix']
-        v['value'] = os.environ.get(envname, v['initial_value'])
-
-# ============================================================================
 # GLOBAL OPTIONS: parameters for all commands
 # ============================================================================
 @click.group(context_settings=context_settings)
-@click.option("--metadata-dir", metavar='PATH',
-              default=defaults['global']['metadata-dir']['value'],
+@click.option("--metadata-dir", metavar='PATH', envvar="OIT_METADATA_DIR",
+              default=os.path.join(os.getcwd(), "groups"),
               help="Directory containing groups metadata directory if not current.\n Env var: OIT_METADATA_DIR")
-@click.option("--working-dir", metavar='PATH',
-              default=defaults['global']['working-dir']['value'],
+@click.option("--working-dir", metavar='PATH', envvar="OIT_WORKING_DIR",
+              default=None,
               help="Existing directory in which file operations should be performed.\n Env var: OIT_WORKING_DIR")
-@click.option("--user", metavar='USERNAME',
-              default=defaults['global']['user']['value'],
+@click.option("--user", metavar='USERNAME', envvar="OIT_USER",
+              default=None,
               help="Username for rhpkg. Env var: OIT_USER")
 @click.option("-g", "--group", default=None, metavar='NAME',
               help="The group of images on which to operate.")
@@ -211,8 +171,8 @@ def images_push_distgit(runtime):
               help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
 @click.option("--release", metavar='RELEASE', default=None,
               help="Release label to populate in Dockerfiles (or + to bump).")
-@click.option("--repo-type", metavar="REPO_TYPE",
-              default=defaults['images']['repo-type']['value'],
+@click.option("--repo-type", metavar="REPO_TYPE", envvar="OIT_IMAGES_REPO_TYPE",
+              default="unsigned",
               help="Repo group type to use for version autodetection scan (e.g. signed, unsigned).")
 @option_commit_message
 @option_push
@@ -266,8 +226,8 @@ def images_update_dockerfile(runtime, stream, version, release, repo_type, messa
               help="Run a manual scan of one or more specific images [multiple]")
 @click.option("--no-pull", is_flag=True,
               help="Assume image has already been pulled (Just-in-time pulling)")
-@click.option("--repo-type",
-              default=(defaults['images']['repo-type']['value'] or 'signed'),
+@click.option("--repo-type", metavar="REPO_TYPE", envvar="OIT_IMAGE_REPO_TYPE",
+              default='unsigned',
               help="Repo type (e.g. signed, unsigned). Use 'unsigned' for newer releases like 3.9 until they're GA")
 @click.option('--check-orphans', default=None, is_flag=True,
               help="Verify no packages are orphaned (installed without a source repo) [SLOW]")
@@ -369,8 +329,8 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
 @click.option("--version", metavar='VERSION', default=None,
               help="Version string to populate in Dockerfiles. \"auto\" gets version from atomic-openshift RPM")
 @click.option("--release", metavar='RELEASE', default=None, help="Release string to populate in Dockerfiles.")
-@click.option("--repo-type", metavar="REPO_TYPE",
-              default=defaults['images']['repo-type']['value'],
+@click.option("--repo-type", metavar="REPO_TYPE", envvar="OIT_IMAGES_REPO_TYPE",
+              default="unsigned",
               help="Repo group type to use for version autodetection scan (e.g. signed, unsigned).")
 @option_commit_message
 @option_push
@@ -663,8 +623,8 @@ def print_build_metrics(runtime):
 @cli.command("images:build", short_help="Build images for the group.")
 @click.option("--odcs", default=None, metavar="ODCS",
               help="ODCS signing intent (e.g. signed, unsigned).")
-@click.option("--repo-type", metavar="REPO_TYPE",
-              default=defaults['images']['repo-type']['value'],
+@click.option("--repo-type", metavar="REPO_TYPE", envvar="OIT_IMAGES_REPO_TYPE",
+              default=None,
               help="Repo type (e.g. signed, unsigned).")
 @click.option("--repo", default=[], metavar="REPO_URL",
               multiple=True, help="Custom repo URL to supply to brew build.")
@@ -1064,9 +1024,9 @@ complete -F _oit_completion -o default %s
 
 
 @cli.command("images:query-rpm-version", short_help="Find the OCP version from the atomic-openshift RPM")
-@click.option("--repo-type", required=True, metavar="REPO_TYPE",
-              default=defaults['images']['repo-type']['value'],
-              help="Repo group to scan for the RPM (e.g. signed, unsigned).")
+@click.option("--repo-type", metavar="REPO_TYPE", envvar="OIT_IMAGES_REPO_TYPE",
+              default="unsigned",
+              help="Repo group to scan for the RPM (e.g. signed, unsigned). env: OIT_IMAGES_REPO_TYPE")
 @pass_runtime
 def query_rpm_version(runtime, repo_type):
     """
