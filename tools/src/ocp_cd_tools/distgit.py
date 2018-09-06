@@ -211,7 +211,7 @@ class ImageDistGitRepo(DistGitRepo):
             build_method = 'imagebuilder'
         # If our config specifies something, override with that.
         if self.config.image_build_method is not Missing:
-            build_method = self.config.image_build_method 
+            build_method = self.config.image_build_method
 
         container_config = self._generate_odcs_config() or {}
         if build_method is not Missing:
@@ -654,7 +654,9 @@ class ImageDistGitRepo(DistGitRepo):
             # Just in case someone else is building an image, go ahead and find what was just
             # built so that push_image will have a fixed point of reference and not detect any
             # subsequent builds.
-            _, push_version, push_release = self.metadata.get_latest_build_info()
+            push_version, push_release = ('','')
+            if not scratch:
+                _, push_version, push_release = self.metadata.get_latest_build_info()
             record["message"] = "Success"
             record["status"] = 0
             self.build_status = True
