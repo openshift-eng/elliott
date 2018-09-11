@@ -317,8 +317,10 @@ def images_verify(runtime, image, no_pull, repo_type, **kwargs):
         }
 
         with open(fail_log, 'w') as fp:
-            fp.write(yaml.safe_dump(fail_log_data, indent=4, default_flow_style=False))
+            verbose_fail = yaml.safe_dump(fail_log_data, indent=4, default_flow_style=False)
+            fp.write(verbose_fail)
             runtime.logger.info("[Verify] Failed images check details: {fail_log}".format(fail_log=fail_log))
+            runtime.logger.info("[Verify] Verbose failure: {vfail}".format(vfail=verbose_fail))
 
     exit(failed_images_count)
 
