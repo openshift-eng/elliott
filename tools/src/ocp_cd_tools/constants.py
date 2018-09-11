@@ -35,7 +35,7 @@ For OpenShift Container Platform 3.{Y} see the following documentation, which wi
 https://docs.openshift.com/container-platform/3.{Y}/release_notes/ocp_3_{Y}_release_notes.html
 
 This update is available via the Red Hat Network. Details on how to use the Red Hat Network to apply this update are available at https://access.redhat.com/articles/11258."""
-errata_description = """Red Hat OpenShift Container Platform is the company's cloud computing Platform-as-a-Service (PaaS) solution designed for on-premise or private cloud deployments.
+errata_description = """Red Hat OpenShift Container Platform is Red Hat's cloud computing Kubernetes application platform solution designed for on-premise or private cloud deployments.
 
 This advisory contains the RPM packages for Red Hat OpenShift Container Platform 3.{Y}.z. See the following advisory for the container images for this release:
 
