@@ -207,7 +207,7 @@ class ImageDistGitRepo(DistGitRepo):
         # If the group file config specifies a default, use that.
         build_method = self.runtime.group_config.default_image_build_method
         # If the build is multistage, override with 'imagebuilder' as required for multistage.
-        if 'builder' in self.config.get('from'):
+        if 'builder' in self.config.get('from', {}):
             build_method = 'imagebuilder'
         # If our config specifies something, override with that.
         if self.config.image_build_method is not Missing:
