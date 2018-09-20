@@ -379,6 +379,16 @@ advisory.
             synopsis=latest_advisory.synopsis,
             rel_date=str(latest_advisory.release_date)))
         release_date = latest_advisory.release_date + datetime.timedelta(days=21)
+
+        # We want advisories to issue on Tuesdays. Using strftime
+        # Tuesdays are '2' with Sunday indexed as '0'
+        day_of_week = int(release_date.strftime('%w'))
+        if day_of_week != 2:
+            # How far from our target day of the week?
+            delta = day_of_week - 2
+            release_date = release_date - datetime.timedelta(days=delta)
+            click.secho("Adjusted release date to land on a Tuesday", fg='yellow')
+
         green_prefix("Calculated release date: ")
         click.echo("{}".format(str(release_date)))
     else:
