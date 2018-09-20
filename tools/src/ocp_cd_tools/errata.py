@@ -129,7 +129,7 @@ def find_latest_erratum(kind, minor, major=3):
             n=len(advisory_list)))
 
     print("Looking for elliott metadata in comments:")
-
+    matched_advisories = []
     for advisory in advisory_list:
         print("Scanning advisory {}".format(str(advisory)))
 
@@ -140,16 +140,17 @@ def find_latest_erratum(kind, minor, major=3):
                 pass
             else:
                 if str(metadata['release']) == str(release) and metadata['kind'] == kind and metadata['impetus'] == 'standard':
-                    found_advisory = advisory
+                    matched_advisories.append(advisory)
+                    # Don't scan any more comments
                     break
 
-        if found_advisory is not None:
-            break
-
-    if found_advisory is None:
+    if matched_advisories == []:
         return None
     else:
-        return get_erratum(found_advisory.advisory_id)
+        # loop over discovered advisories, select one with max() date
+        real_advisories = [get_erratum(e.advisory_id) for e in matched_advisories]
+        sorted_dates = sorted(real_advisories, key=lambda advs: advs.release_date)
+        return sorted_dates[-1]
 
 
 def new_erratum(kind=None, release_date=None, create=False, minor='Y',
@@ -195,7 +196,7 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y',
     body['advisory']['solution'] = body['advisory']['solution'].format(Y=minor)
     body['advisory']['synopsis'] = body['advisory']['synopsis'].format(Y=minor)
     body['advisory']['topic'] = body['advisory']['topic'].format(Y=minor)
-    
+
     body['advisory']['assigned_to_email'] = assigned_to
     body['advisory']['manager_email'] = manager
     body['advisory']['package_owner_email'] = package_owner
