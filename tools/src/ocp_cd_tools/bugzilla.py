@@ -49,6 +49,19 @@ def search_for_bugs(target_release, verbose=False):
 
     return [Bug(id=i) for i in new_bugs]
 
+def search_for_bug_transitions(current_state, changed_from, changed_to):
+    query_url = SearchURL(constants.BUGZILLA_SERVER, current_state)
+    query_url.addFilterOperator("AND_G")
+    query_url.addFilter("bug_status", "changedfrom", changed_from)
+    query_url.addFilter("bug_status", "changedto", changed_to)
+
+    for v in constants.DEFAULT_VERSIONS:
+        query_url.addVersion(v)
+
+    changed_bugs = check_output(
+        ['bugzilla', 'query', '--ids', '--from-url="{0}"'.format(query_url)]).splitlines()
+
+    return [Bug(id=i) for i in changed_bugs]
 
 class Bug(object):
     """
@@ -64,6 +77,13 @@ class Bug(object):
     def __repr__(self):
         return str(self)
 
+    def add_comment(self, comment, is_private):
+        """Add a comment to a bug"""
+        if is_private:
+            call(['bugzilla', 'modify', self.id, '--comment', comment, '--private'])
+        else:
+            call(['bugzilla', 'modify', self.id, '--comment', comment])
+
     def add_flags(self, flags=[]):  # pragma: no cover
         """Add flags to a bug"""
         for flag in flags:
@@ -72,6 +92,13 @@ class Bug(object):
     def add_flag(self, flag):
         """Add the given flag to the bug"""
         call(['bugzilla', 'modify', '--flag', '{0}+'.format(flag), self.id])
+
+    def add_whiteboard_value(self, value):
+        call(['bugzilla', 'modify', self.id, '--whiteboard', value])
+
+    def has_whiteboard_value(self, value):
+        """Check if the value is in the Whiteboard for the bug"""
+        return check_output(['bugzilla', 'query', '--id', self.id, '--whiteboard', value])
 
 
 class SearchFilter(object):
@@ -107,6 +134,7 @@ class SearchURL(object):
         self.classification = "Red Hat"
         self.product = "OpenShift Container Platform"
         self.filters = []
+        self.filter_operator = ""
         self.versions = []
         self.target_releases = []
 
@@ -117,6 +145,7 @@ class SearchURL(object):
 
         url += "&classification={}".format(urllib.quote(self.classification))
         url += "&product={}".format(urllib.quote(self.product))
+        url += self.filter_operator
         url += self._filter_string()
         url += self._target_releases_string()
         url += self._version_string()
@@ -137,6 +166,12 @@ class SearchURL(object):
 
     def addFilter(self, field, operator, value):
         self.filters.append(SearchFilter(field, operator, value))
+
+    def addFilterOperator(self, operator):
+        # Valid operators:
+        #   AND_G - Match ALL against the same field
+        #   OR - Match separately
+        self.filter_operator += "&j_top={}".format(operator)
 
     def addTargetRelease(self, release_string):
         self.target_releases.append(release_string)

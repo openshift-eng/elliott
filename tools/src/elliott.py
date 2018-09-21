@@ -840,6 +840,71 @@ Example to add standard metadata to a 3.10 images release
         exit(1)
 
 
+#
+# Find transitions
+# bugzilla:find-transitions
+#
+@cli.command("bugzilla:find-transitions", short_help="Find bugs that have gone through the specifed transition")
+@click.option("--currently", 'current_state',
+              required=True,
+              type=click.Choice(ocp_cd_tools.constants.VALID_BUG_STATES),
+              help="State that the bug is in now")
+@click.option("--from", 'changed_from',
+              required=True,
+              type=click.Choice(ocp_cd_tools.constants.VALID_BUG_STATES),
+              help="State that the bug started in")
+@click.option("--to", 'changed_to',
+              required=True,
+              type=click.Choice(ocp_cd_tools.constants.VALID_BUG_STATES),
+              help="State that the bug ended in")
+@click.option("--add-comment", "add_comment", is_flag=True, default=False,
+              help="Add the nag comment to found bugs")
+@pass_runtime
+def find_transitions(runtime, current_state, changed_from, changed_to, add_comment):
+    """Find Red Hat Bugzilla bugs that have gone through a specifed state change. This is mainly useful for 
+    finding "bad" state transitions to catch bugzilla users operating outside of a specified workflow.
+
+\b
+    $ elliott bugzilla:find-transitions --currently VERIFIED --from ASSIGNED --to ON_QA
+"""
+    bug_ids = ocp_cd_tools.bugzilla.search_for_bug_transitions(current_state, changed_from, changed_to)
+
+    click.echo('Found the following bugs matching that transition: {}'.format(bug_ids))
+
+    if(add_comment):
+        # check if we've already commented
+        for bug in bug_ids:
+            if not bug.has_whiteboard_value('ocp_art_invalid_transition'):
+                bug.add_comment(ocp_cd_tools.constants.bugzilla_invalid_transition_comment, is_private=True)
+                click.echo('Added comment to {}'.format(bug.id))
+                bug.add_whiteboard_value('ocp_art_invalid_transition')
+            else:
+                click.echo('Skipping {} because it has already been flagged.'.format(bug))
+
+#
+# Add a comment to a bug
+# bugzilla:add-comment
+#
+@cli.command("bugzilla:add-comment", short_help="Add a comment to a bug")
+@click.option("--id", "bug_ids",
+              multiple=True, required=True,
+              help="Bugzilla ID to add the comment to --auto [MULTIPLE]")
+@click.option("--comment", "-c", "comment",
+              required=True,
+              help="Text of the added comment")
+@click.option("--private", "is_private", is_flag=True, default=False,
+              help="Make the added comment private")
+@pass_runtime
+def add_comment(runtime, bug_ids, comment, is_private):
+    bug_list = [ocp_cd_tools.bugzilla.Bug(id=i) for i in bug_ids]
+    click.echo(bug_list)
+
+    for bug in bug_list:
+        click.echo(bug)
+        bug.add_comment(comment, is_private)
+
+    click.echo('Added comment to {}'.format(bug.id))
+
 # -----------------------------------------------------------------------------
 # CLI Entry point
 # -----------------------------------------------------------------------------
