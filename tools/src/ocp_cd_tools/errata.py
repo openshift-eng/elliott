@@ -212,7 +212,7 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y',
         elif res.status_code == 401:
             raise exceptions.ErrataToolUnauthenticatedException(res.text)
         else:
-            raise exceptions.ErraraToolError("Other error (status_code={code}): {msg}".format(
+            raise exceptions.ErrataToolError("Other error (status_code={code}): {msg}".format(
                 code=res.status_code,
                 msg=res.text))
     else:
@@ -459,7 +459,7 @@ class Erratum(object):
         # bugs or JIRA issues.
         if res.status_code == 422:
             # Conditions not met
-            raise exceptions.ErraraToolError("Can not change erratum state, preconditions not yet met. Error message: {msg}".format(
+            raise exceptions.ErrataToolError("Can not change erratum state, preconditions not yet met. Error message: {msg}".format(
                 msg=res.text))
         elif res.status_code == 401:
             raise exceptions.ErrataToolUnauthenticatedException(res.text)
