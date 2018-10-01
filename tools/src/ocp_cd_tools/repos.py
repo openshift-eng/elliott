@@ -115,7 +115,7 @@ name = {0}
 # Base header for all content_sets.yml output
 CONTENT_SETS = """
 # This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images,
-# by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).
+# by the OpenShift Continuous Delivery team (#aos-art on CoreOS Slack).
 # Any manual changes will be overwritten by OIT on the next build.
 #
 # This is a file defining which content sets (yum repositories) are needed to

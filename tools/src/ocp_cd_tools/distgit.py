@@ -25,7 +25,8 @@ OIT_END = '##OIT_END'
 
 CONTAINER_YAML_HEADER = """
 # This file is managed by the OpenShift Image Tool: https://github.com/openshift/enterprise-images,
-# by the OpenShift Continuous Delivery team (#aos-cd-team on IRC).
+# by the OpenShift Continuous Delivery team (#aos-art on CoreOS Slack).
+
 # Any manual changes will be overwritten by OIT on the next build.
 #
 # See https://mojo.redhat.com/docs/DOC-1159997 for more information on
