@@ -1,0 +1,97 @@
+#!/bin/bash
+# A tool to update the sources in distgit to enable an upstream change
+# to modify the yarn dependencies. Specific to the console build at this time.
+
+# Requirements:
+#
+# docker (to run a container and cp to/from it)
+# rhpkg  (to clone and upload sources)
+# git
+# connection to RH vpn
+# valid kerberos ticket (run kinit)
+# sources already initialized on distgit branch (branch cut requires bootstrapping)
+
+set -eux
+
+# Variables:
+#
+# upstream repo where we get the source from
+src_repo="${SOURCE_REPO:-https://github.com/openshift/console/}"
+src_branch="${SOURCE_BRANCH:-master}"
+#
+# distgit repo where we build the project for OCP
+dg_repo="${DISTGIT_REPO:-containers/openshift-enterprise-console}"
+dg_branch="${DISTGIT_branch:-rhaos-4.0-rhel-7}"
+#
+# set $DRY_RUN to anything else to prevent actually uploading the new sources
+dry_run="${DRY_RUN:-false}"
+#
+# can reuse a working dir, in which case previously obtained contents are preserved
+workdir="${WORKDIR:-$(mktemp -d)}"
+#
+# NodeJS builder image to use (may need local pull/tag since brew-pulp is insecure)
+builder_img="${BUILDER_IMAGE:-brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888/rhscl/nodejs-8-rhel7:1}"
+
+#
+# Execution begins
+#
+# everything happens in the working dir
+pushd "$workdir"
+
+# check out the repos if they don't already exist
+[ -d source_repo ] || git clone --branch "${src_branch}" --single-branch --depth 1 "${src_repo}" source_repo
+if ! [ -d dg_repo ]; then
+  rhpkg clone --branch "${dg_branch}" "${dg_repo}" dg_repo
+  pushd dg_repo
+    rhpkg sources
+  popd
+fi
+
+# start the container
+container="nodejs_deps-$(date +%H%M%S)"
+docker run --name "$container" --rm -du 0 "$builder_img" sleep 3600
+
+# copy the existing yarn sources to the container
+docker cp dg_repo/yarn-offline.tar $container:/opt/app-root/src/
+docker cp dg_repo/node-v8.9.4-headers.tar.gz $container:/opt/app-root/src/
+
+# copy upstream project sources to container
+pushd source_repo
+  docker cp . $container:/opt/app-root/src/
+popd
+
+# run the build inside the container which populates the offline cache
+run="docker exec $container bash -c"
+$run "tar fx yarn-offline.tar"
+$run "npm install ./yarn-1.9.4.tgz"
+$run "rm -rf npm-packages-offline-cache/"
+$run "./build-frontend.sh"
+
+# locally, unpack the sources and update them with what the container got
+mkdir -p yarn-offline
+pushd yarn-offline
+  rm -rf npm-packages-offline-cache.previous
+  tar fx ../dg_repo/yarn-offline.tar
+  mv npm-packages-offline-cache{,.previous}
+  docker cp $container:/opt/app-root/src/npm-packages-offline-cache ./
+  if diff -qr npm-packages-offline-cache{.previous,}; then
+    echo "nothing is changed. not updating sources."
+    docker kill "$container"
+    exit 0
+  fi
+  rm -rf npm-packages-offline-cache.previous
+  tar fc ../dg_repo/yarn-offline.tar .
+popd
+
+# upload latest sources to dist-git lookaside
+if [ "$dry_run" = false ]; then
+  pushd dg_repo
+    sed -i -e '/yarn-offline/ d' sources
+    rhpkg upload yarn-offline.tar
+    echo "Please update sources from $(pwd)/sources:"
+    git diff --cached sources
+  popd
+fi
+
+docker kill "$container"
+popd
