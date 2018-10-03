@@ -174,6 +174,7 @@ class DistGitRepo(object):
             if self.source_sha:
                 # add short sha of source for audit trail
                 commit_message += " - {}".format(self.source_sha)
+            commit_message += "\n- MaxFileSize: 50000000"  # set dist-git size limit to 50MB
             exectools.cmd_assert(["git", "add", "-A", "."])
             exectools.cmd_assert(["git", "commit", "--allow-empty", "-m", commit_message])
             rc, sha, err = exectools.cmd_gather(["git", "rev-parse", "HEAD"])
