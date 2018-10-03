@@ -146,3 +146,5 @@ bugzilla_invalid_transition_comment = """There is a potential issue with this bu
 For more information on proper bug management visit:
 https://mojo.redhat.com/docs/DOC-1178565#jive_content_id_How_do_I_get_my_Bugzilla_Bug_to_VERIFIED
 """
+
+DISTGIT_MAX_FILESIZE = 50000000
