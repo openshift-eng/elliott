@@ -4,9 +4,14 @@ from ocp_cd_tools import Runtime, Dir
 from ocp_cd_tools.image import pull_image, create_image_verify_repo_file, Image
 from ocp_cd_tools.model import Missing
 from ocp_cd_tools.brew import get_watch_task_info_copy
+from ocp_cd_tools import constants
+from ocp_cd_tools import metadata
+from ocp_cd_tools.config import MetaDataConfig as mdc
+from ocp_cd_tools.config import valid_updates
 import datetime
 import click
 import os
+import shutil
 import yaml
 import sys
 import subprocess
@@ -21,13 +26,13 @@ from dockerfile_parse import DockerfileParser
 pass_runtime = click.make_pass_decorator(Runtime)
 context_settings = dict(help_option_names=['-h', '--help'])
 
+
 # ============================================================================
 # GLOBAL OPTIONS: parameters for all commands
 # ============================================================================
 @click.group(context_settings=context_settings)
-@click.option("--metadata-dir", metavar='PATH', envvar="OIT_METADATA_DIR",
-              default=os.path.join(os.getcwd(), "groups"),
-              help="Directory containing groups metadata directory if not current.\n Env var: OIT_METADATA_DIR")
+@click.option("--metadata-dir", metavar='PATH', default=None,
+              help="DEPRECATED. For development use only!. Git repo or directory containing groups metadata directory if not current.")
 @click.option("--working-dir", metavar='PATH', envvar="OIT_WORKING_DIR",
               default=None,
               help="Existing directory in which file operations should be performed.\n Env var: OIT_WORKING_DIR")
@@ -43,6 +48,7 @@ context_settings = dict(help_option_names=['-h', '--help'])
               help="Name of group image member to include in operation (all by default). Can be comma delimited list.")
 @click.option("-r", "--rpms", default=[], metavar='NAME', multiple=True,
               help="Name of group rpm member to include in operation (all by default). Can be comma delimited list.")
+@click.option('--wip', default=False, is_flag=True, help='Load WIP RPMs/Images in addition to those specified, if any')
 @click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
               help="Name of group image or rpm member to exclude in operation (none by default). Can be comma delimited list.")
 @click.option('--ignore-missing-base', default=False, is_flag=True,
@@ -59,6 +65,8 @@ context_settings = dict(help_option_names=['-h', '--help'])
               help="YAML dict associating sources with their alias. Same as using --source multiple times.")
 @click.option('--odcs-mode', default=False, is_flag=True,
               help='Process Dockerfiles in ODCS mode. HACK for the time being.')
+@click.option('--disabled', default=False, is_flag=True,
+              help='Treat disabled images/rpms as if they were enabled')
 @click.pass_context
 def cli(ctx, **kwargs):
     # @pass_runtime
@@ -846,6 +854,9 @@ def images_print(runtime, short, show_non_release, show_base_only, pattern):
         images = list(runtime.image_metas())
 
     for image in images:
+        click.echo(image.in_group_config_path)
+        count += 1
+        continue
 
         # skip base images unless requested
         if image.base_only and not show_base_only:
@@ -1040,6 +1051,191 @@ def query_rpm_version(runtime, repo_type):
 
     version = runtime.auto_version(repo_type)
     click.echo("version: {}".format(version))
+
+
+@cli.command("cleanup", short_help="Cleanup the OIT environment")
+@pass_runtime
+def cleanup(runtime):
+    """
+    Cleanup the OIT working environment.
+    Currently this just clears out the working dir content
+    """
+
+    runtime.initialize(no_group=True)
+
+    runtime.logger.info('Clearing out {}'.format(runtime.working_dir))
+    if os.path.isdir(runtime.working_dir):
+        shutil.rmtree(runtime.working_dir)
+        os.makedirs(runtime.working_dir)  # rmtree deletes the directory itself. recreate
+
+
+option_config_commit_msg = click.option("--message", "-m", metavar='MSG', help="Commit message for config change.", default=None)
+
+
+# config:* commands are a special beast and
+# requires the same non-standard runtime options
+CONFIG_RUNTIME_OPTS = {
+    'mode': 'both',           # config wants it all
+    'clone_distgits': False,  # no need, just doing config
+    'clone_source': False,    # no need, just doing config
+    'disabled': True          # show all, including disabled/wip
+}
+
+
+# Normally runtime only runs in one mode as you never do
+# rpm AND image operations at once. This is not so with config
+# functions. This intelligently chooses modes for these only
+def _fix_runtime_mode(runtime):
+    mode = 'both'
+    if runtime.rpms and not runtime.images:
+        mode = 'rpms'
+    elif runtime.images and not runtime.rpms:
+        mode = 'images'
+
+    CONFIG_RUNTIME_OPTS['mode'] = mode
+
+
+@cli.command("config:commit", help="Commit pending changes from config:new")
+@option_config_commit_msg
+@click.option('--push/--no-push', default=False, is_flag=True,
+              help='Push changes back to config repo')
+@pass_runtime
+def config_commit(runtime, message, push):
+    """
+    Commit outstanding metadata config changes
+    """
+    _fix_runtime_mode(runtime)
+    runtime.initialize(**CONFIG_RUNTIME_OPTS)
+    config = mdc(runtime)
+    config.sanitize_new_config()
+    config.commit(message)
+    if push:
+        config.push()
+
+
+@cli.command("config:push", help="Push all pending changes to config repo")
+@pass_runtime
+def config_push(runtime):
+    """
+    Push changes back to config repo.
+    Will of course fail if user does not have write access.
+    """
+    _fix_runtime_mode(runtime)
+    runtime.initialize(**CONFIG_RUNTIME_OPTS)
+    config = mdc(runtime)
+    config.push()
+
+
+@cli.command("config:mode", short_help="Update config(s) mode. enable|disable|wip")
+@click.argument("mode", nargs=1, metavar="MODE", type=click.Choice(metadata.CONFIG_MODES))  # new mode value
+@click.option('--push/--no-push', default=False, is_flag=True,
+              help='Push changes back to config repo')
+@option_config_commit_msg
+@pass_runtime
+def config_mode(runtime, mode, push, message):
+    """Update [MODE] of given config(s) to one of:
+    - enable: Normal operation
+    - disable: Will not be used unless explicitly specified
+    - wip: Same as `disable` plus affected by --wip flag
+
+    Filtering of configs is based on usage of the following global options:
+    --group, --images/-i, --rpms/-r
+
+    See `oit.py --help` for more.
+
+    Usage:
+
+    $ oit.py --group=openshift-4.0 -i aos3-installation config:mode [MODE]
+
+    Where [MODE] is one of enable, disable, or wip.
+
+    Multiple configs may be specified and updated at once.
+
+    Commit message will default to stating mode change unless --message given.
+    If --push not given must use config:push after.
+    """
+    _fix_runtime_mode(runtime)
+    if not runtime.wip and CONFIG_RUNTIME_OPTS['mode'] == 'both':
+        click.echo('Updating all mode for all configs in group is not allowed! Please specifiy configs directly.')
+        sys.exit(1)
+    runtime.initialize(**CONFIG_RUNTIME_OPTS)
+    config = mdc(runtime)
+    config.update('mode', mode)
+    if not message:
+        message = 'Updating [mode] to "{}"'.format(mode)
+    config.commit(message)
+
+    if push:
+        config.push()
+
+
+@cli.command("config:print", short_help="View config for given images / rpms")
+@click.option("-n", "--name-only", default=False, is_flag=True, multiple=True,
+              help="Just print name of matched configs. Overrides --key")
+@click.option("--key", help="Specific key in config to print", default=None)
+@pass_runtime
+def config_print(runtime, key, name_only):
+    """Print name, sub-key, or entire config
+
+    Filtering of configs is based on usage of the following global options:
+    --group, --images/-i, --rpms/-r
+
+    See `oit.py --help` for more.
+
+    Examples:
+
+    Print all configs in group:
+
+        $ oit.py --group=openshift-4.0 config:print
+
+    Print single config in group:
+
+        $ oit.py --group=openshift-4.0 -i aos3-installation config:print
+
+    Print `owners` key from all configs in group:
+
+        $ oit.py --group=openshift-4.0 config:print --key owners
+
+    Print only names of configs in group:
+
+        $ oit.py --group=openshift-4.0 config:print --name-only
+    """
+    _fix_runtime_mode(runtime)
+    runtime.initialize(**CONFIG_RUNTIME_OPTS)
+    config = mdc(runtime)
+    config.config_print(key, name_only)
+
+
+@cli.command("config:new", short_help="Add new config. Follow up with config:commit")
+@click.argument("new_type", nargs=1, metavar="TYPE", type=click.Choice(['image', 'rpm']))
+@click.argument("name", nargs=1, metavar="NAME")
+@pass_runtime
+def config_new(runtime, new_type, name):
+    """Copy a TYPE kind of template config (one of 'image' or 'rpm') into correct place naming the
+    new component config after NAME. Report that new config file path
+    for later editing.
+
+    Filtering of configs is based on usage of the following global options:
+    --group, --images/-i, --rpms/-r
+
+    See `oit.py --help` for more.
+
+    Examples:
+
+    Add a new 'image' TYPE of config with the NAME 'megafrobber'
+
+        $ oit.py --group=openshift-4.0 config:new image megafrobber
+
+    Commit that new change to git:
+
+        $ oit.py --group=openshift-4.0 config:commit
+    """
+
+    runtime.initialize(**CONFIG_RUNTIME_OPTS)
+    config = mdc(runtime)
+    config.new(new_type, name)
+
+    click.echo('Remember to use config:commit after the new config is complete')
 
 
 if __name__ == '__main__':

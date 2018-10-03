@@ -34,8 +34,17 @@ def tag_exists(registry, name, tag, fetch_f=None):
     return fetch_f("/".join((registry, "v1/repositories", name, "tags", tag)))
 
 
+CONFIG_MODES = [
+    'enable',  # business as usual
+    'disable',  # manually disabled from automatically building
+    'wip',  # Work in Progress, do not build
+]
+
+CONFIG_MODE_DEFAULT = CONFIG_MODES[0]
+
+
 class Metadata(object):
-    def __init__(self, meta_type, runtime, config_filename):
+    def __init__(self, meta_type, runtime, base_dir, config_filename):
         """
         :param: meta_type - a string. Index to the sub-class <'rpm'|'image'>.
         :param: runtime - a Runtime object.
@@ -44,7 +53,11 @@ class Metadata(object):
 
         self.meta_type = meta_type
         self.runtime = runtime
+        self.base_dir = base_dir
         self.config_filename = config_filename
+        self.full_config_path = os.path.join(self.base_dir, self.config_filename)
+        base_dirs = base_dir.split('/')
+        self.in_group_config_path = base_dirs[-1] + '/' + self.config_filename
 
         # Some config filenames have suffixes to avoid name collisions; strip off the suffix to find the real
         # distgit repo name (which must be combined with the distgit namespace).
@@ -60,10 +73,16 @@ class Metadata(object):
         assertion.isfile(os.path.join(os.getcwd(), self.config_filename),
                          "Unable to find configuration file")
 
-        with open(self.config_filename, "r") as f:
+        with open(self.full_config_path, "r") as f:
             config_yml_content = f.read()
 
         self.config = Model(yaml.load(config_yml_content))
+
+        self.mode = self.config.get('mode', CONFIG_MODE_DEFAULT).lower()
+        if self.mode not in CONFIG_MODES:
+            raise ValueError('Invalid mode for {}'.format(self.config_filename))
+
+        self.enabled = (self.mode == CONFIG_MODE_DEFAULT)
 
         # Basic config validation. All images currently required to have a name in the metadata.
         # This is required because from.member uses these data to populate FROM in images.
@@ -88,6 +107,10 @@ class Metadata(object):
         self.logger = logutil.EntityLoggingAdapter(logger=self.runtime.logger, extra={'entity': self.qualified_key})
 
         self._distgit_repo = None
+
+    def save(self):
+        with open(self.full_config_path, "w") as f:
+            yaml.safe_dump(self.config.primitive(), f, default_flow_style=False)
 
     def distgit_repo(self):
         if self._distgit_repo is None:

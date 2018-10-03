@@ -2,6 +2,11 @@
 This file contains constants that are used to manage OCP Image and RPM builds
 """
 
+# config data pulled from here
+OCP_BUILD_DATA_RO = "https://github.com/openshift/ocp-build-data"
+# above is used so that anyone can clone
+OCP_BUILD_DATA_RW = "git@github.com:openshift/ocp-build-data.git"
+
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"

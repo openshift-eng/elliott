@@ -4,6 +4,8 @@
 type: map
 
 mapping:
+  "mode":
+    type: str
 
   "distgit":
     type: map
