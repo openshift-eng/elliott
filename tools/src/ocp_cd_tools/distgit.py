@@ -6,8 +6,9 @@ import time
 import traceback
 import errno
 from multiprocessing import Lock
-from yaml import safe_dump
+import yaml
 import logging
+import bashlex
 
 from dockerfile_parse import DockerfileParser
 
@@ -223,7 +224,7 @@ class ImageDistGitRepo(DistGitRepo):
             return  # no need to write empty file
 
         # generate yaml data with header
-        content_yml = safe_dump(container_config, default_flow_style=False)
+        content_yml = yaml.safe_dump(container_config, default_flow_style=False)
         with open('container.yaml', 'w') as rc:
             rc.write(CONTAINER_YAML_HEADER + content_yml)
 
@@ -236,6 +237,9 @@ class ImageDistGitRepo(DistGitRepo):
                 mode: auto | manual (default)
                 # auto - detect packages in Dockerfile and merge with list below
                 # manual - only use list below. Ignore Dockerfile
+                exclude:  # when using auto mode, exclude these
+                  - package1
+                  - package2
                 list:
                   - package1
                   - package2
@@ -243,26 +247,44 @@ class ImageDistGitRepo(DistGitRepo):
                 mode: auto | manual
             config: ... # verbatim container.yaml content (see https://mojo.redhat.com/docs/DOC-1159997)
         """
-        self.logger.debug("Generating compose file for Dockerfile {}".format(self.metadata.name))
+
+        if not self.runtime.odcs_mode:
+            return  # odcs mode off, don't do anything
+
+        no_source = self.config.content.source.alias is Missing
+        CYAML = 'build_container.yaml' if no_source else 'container.yaml'
+
+        # always delete from distgit
+        if os.path.exists(CYAML):
+            os.remove(CYAML)
+
+        if no_source:
+            source_container_yaml = CYAML
+        else:
+            source_container_yaml = os.path.join(self.source_path(), CYAML)
+        if os.path.isfile(source_container_yaml):
+            with open(source_container_yaml, 'r') as scy:
+                source_container_yaml = yaml.load(scy)
+        else:
+            source_container_yaml = {}
+
+        self.logger.info("Generating compose file for Dockerfile {}".format(self.metadata.name))
 
         odcs = self.config.odcs
         if odcs is Missing:
-            if self.runtime.odcs_mode:
-                odcs = Model()  # always on if --odcs-mod
-            else:
-                return  # not specified, ODCS disabled
+            odcs = Model()
+
         package_mode = odcs.packages.get('mode', 'auto').lower()
         valid_package_modes = ['auto', 'manual']
         if package_mode not in valid_package_modes:
             raise ValueError('odcs.packages.mode must be one of {}'.format(str(valid_package_modes)))
-        platform_mode = odcs.platforms.get('mode', 'auto').lower()
-        valid_platform_modes = ['auto', 'manual']
-        if platform_mode not in valid_platform_modes:
-            raise ValueError('odcs.platforms.mode must be one of {}'.format(str(valid_platform_modes)))
 
-        config = odcs.get('config', {})
+        config = source_container_yaml
         if 'compose' not in config:
             config['compose'] = {}
+
+        if config['compose'].get('packages', []):
+            package_mode = 'pre'  # container.yaml with packages was given
         compose_content = {
             'packages': [],
             'pulp_repos': True
@@ -273,34 +295,44 @@ class ImageDistGitRepo(DistGitRepo):
             if k not in config['compose']:
                 config['compose'][k] = v
 
-        if 'platforms' not in config:
-            config['platforms'] = {'only': self.metadata.runtime.arches}
+        # always overwrite platforms so we control it
+        config['platforms'] = {'only': self.metadata.runtime.arches}
 
         config = Model(config)
 
         if package_mode == 'auto':
             packages = []
             for rpm in self.metadata.get_rpm_install_list():
-                res = check_rpm_buildroot(rpm, self.branch)
+                res = []
+                # ODCS is fine with a mix of packages that are only available in a single arch
+                for arch in self.metadata.runtime.arches:
+                    res_arch = check_rpm_buildroot(rpm, self.branch, arch)
+                    if res_arch:
+                        if isinstance(res_arch, list):
+                            res.extend(res_arch)
+                        else:
+                            res.append(res_arch)
+
+                res = list(set(res))
                 if res:
-                    if isinstance(res, list):
-                        packages.extend(res)
-                    else:
-                        packages.append(res)
+                    packages.extend(res)
+
             if odcs.packages.list:
                 config.compose.packages.extend(odcs.packages.list)
+
+            if odcs.packages.exclude:
+                exclude = set(odcs.packages.exclude)
+            else:
+                exclude = set([])
+
             config.compose.packages.extend(packages)
-            config.compose.packages = list(set(config.compose.packages))  # ensure unique list
-        else:  # manual
+            config.compose.packages = list(set(config.compose.packages) - exclude)  # ensure unique list
+        elif package_mode == 'manual':
             if not odcs.packages.list:
                 raise ValueError('odcs.packages.mode == manual but none specified in odcs.packages.list')
             config.compose.packages = odcs.packages.list
-
-        if platform_mode == 'auto':
-            config.platforms.only = ['x86_64']  # this is really just a stub for now. Need to add arch logic later
-        else:  # manual
-            if not config.platforms:
-                raise ValueError('odcs.platforms.mode == manual but none specified in odcs.config.platforms')
+        elif package_mode == 'pre':
+            pass  # nothing to do, packages were given from source
 
         return config.primitive()
 
@@ -309,61 +341,7 @@ class ImageDistGitRepo(DistGitRepo):
         Generates a repo file in .oit/repo.conf
         """
 
-        dfp = DockerfileParser(path="Dockerfile")
-
         self.logger.debug("Generating repo file for Dockerfile {}".format(self.metadata.name))
-
-        df_repos = []
-        for entry in json.loads(dfp.json):
-            if isinstance(entry, dict) and 'RUN' in entry:
-                run_line = entry['RUN']
-
-                # "cmd1 --o=x && cmd2 --o=y"  ->  [ "cmd1 --o=x ", "cmd2 --o=y" ]
-                invokes = run_line.replace('&', ';').replace('|', ';').split(";")
-
-                for invoke_line in invokes:
-                    parsed_invoke = invoke_line.split("--")  # e.g. ["cmd1", "o=x"]
-
-                    if len(parsed_invoke) < 2:
-                        # This is too short for a yum repo management command
-                        continue
-
-                    cmd = parsed_invoke.pop(0).strip()
-
-                    if not cmd.startswith("yum"):  # allow yum and yum-config-manager
-                        # No repo action here either
-                        continue
-
-                    for comp in parsed_invoke:  # For the remaining elements; e.g. [ "o=x "]
-                        # turn arguments like "o=x" or "o x" into a consistent list ["o", "x"]
-                        kvs = comp.strip().replace('=', ' ').split()
-
-                        if len(kvs) < 2:
-                            # This can't be an enable, so skip it
-                            continue
-
-                        arg = kvs.pop(0).strip()
-
-                        repo_names = []
-                        for rn in kvs:
-                            # AMH - I wish there was a better way to parse these invocations
-                            # but even bashlex is a nightmare. The current method works mostly
-                            # but picks up things like `>/dev/null` and `-y` as repo names
-                            # this will filter them out. Not happy about it, but the only
-                            # other option is a rewrite of this and retesting all builds
-                            if rn[0].isalnum():
-                                repo_names.append(rn)
-
-                        if arg != "enable" and arg != "enablerepo" and arg != "disable" and arg != "disablerepo":
-                            continue
-
-                        if cmd == 'yum-config-manager':
-                            # Must be a loop because:  yum-config-manager --enable repo1 repo2 repo3
-                            for repo_name in repo_names:
-                                df_repos.append(repo_name)
-                        else:
-                            # No loop because yum --enablerepo allows only one
-                            df_repos.append(repo_names[0])
 
         # Make our metadata directory if it does not exist
         if not os.path.isdir(".oit"):
@@ -375,11 +353,6 @@ class ImageDistGitRepo(DistGitRepo):
             with open('.oit/{}.repo'.format(t), 'w') as rc:
                 content = repos.repo_file(t, enabled_repos=enabled_repos)
                 rc.write(content)
-                rc.write(repos.empty_repo_file_from_list(df_repos, odcs=self.runtime.odcs_mode))
-
-        ## AMH - Disabling empty.repo logic entirely for now
-        # with open('.oit/empty.repo', 'w') as empty:
-        #     empty.write(repos.empty_repo_file_from_list(df_repos, odcs=self.runtime.odcs_mode))
 
         with open('content_sets.yml', 'w') as rc:
             rc.write(repos.content_sets(enabled_repos=enabled_repos))
@@ -714,6 +687,8 @@ class ImageDistGitRepo(DistGitRepo):
         )
 
         if odcs:
+            if odcs == 'signed':
+                odcs = 'release'  # convenience option for those used to the old types
             cmd_list.append('--signing-intent')
             cmd_list.append(odcs)
         else:
@@ -786,6 +761,62 @@ class ImageDistGitRepo(DistGitRepo):
             # Not asserting this exec since this is non-fatal if the tag already exists
             exectools.cmd_gather(['git', 'push', '--tags'])
 
+    def __clean_repos(self, dfp):
+        """
+        Remove any calls to yum --enable-repo or
+        yum-config-manager in RUN instructions
+        """
+        runs = []
+        # dfp.structure will give us all instructions and what lines they are on
+        for entry in dfp.structure:
+            if entry['instruction'] == 'RUN':
+                val = entry['value']
+                cmds = []
+                # parse the lines for multi-command or multi-line options
+                for x in val.split("&"):
+                    if x:  # filter out empty values (because of double &&)
+                        cmds.append(x)
+
+                new_val = []
+                for c in cmds:
+                    split = list(bashlex.split(c))
+                    if split and split[0] == 'yum':
+                        res = []
+                        i = 0
+                        while i < len(split):
+                            if not split[i].startswith('--enablerepo') and not split[i].startswith('--disable'):
+                                res.append(split[i])
+                            elif '=' not in split[i]:
+                                i += 1  # no = used, skip extra value
+                            i += 1
+                        new_val.append(' '.join(res))
+                    elif split and split[0] == 'yum-config-manager':
+                        continue  # just skip any yum-config-manager
+                    else:
+                        new_val.append(c.strip())
+
+                entry['value'] = ' \\\n  && '.join(new_val)
+                runs.append(entry)
+
+        lines = dfp.lines
+        for run in runs:
+            if run['value']:
+                lines[run['startline']] = ("RUN " + run['value'] + '\n')
+            else:
+                lines[run['startline']] = '##REMOVE##'
+
+            # overwrite no longer needed lines for easier removal later
+            for i in range(run['startline'] + 1, run['endline'] + 1, 1):
+                lines[i] = '##REMOVE##'
+
+        # Go back and get rid of bogus lines
+        new_lines = []
+        for line in lines:
+            if line != '##REMOVE##':
+                new_lines.append(line)
+
+        dfp.lines = new_lines
+
     def update_distgit_dir(self, version, release):
         ignore_missing_base = self.runtime.ignore_missing_base
         # A collection of comment lines that will be included in the generated Dockerfile. They
@@ -822,6 +853,8 @@ class ImageDistGitRepo(DistGitRepo):
             self._manage_container_config()
 
             dfp = DockerfileParser(path="Dockerfile")
+
+            self.__clean_repos(dfp)
 
             # If no version has been specified, we will leave the version in the Dockerfile. Extract it.
             if version is None:
@@ -970,24 +1003,6 @@ class ImageDistGitRepo(DistGitRepo):
                     filtered_content.append(line)
 
             df_lines = filtered_content
-
-
-            ## AMH being removed for now. Really for ODCS, but completely breaking things right now. Asses later and re-add.
-            # from_idx = -1
-            # auto_add = OIT_COMMENT_PREFIX + ' Added automatically. empty.repo disables all below specified yum repos, so that OSBS/ODCS can manage repos instead.'
-            # ADD_LINE = '{}\n{}\nADD ./.oit/empty.repo /etc/yum.repos.d/\nRUN chmod 777 /etc/yum.repos.d/empty.repo && ls -al /etc/yum.repos.d/empty.repo\n{}'.format(OIT_BEGIN, auto_add, OIT_END)
-            # for i in range(len(df_lines)):
-            #     line = df_lines[i]
-            #     if line.startswith('FROM'):
-            #         from_idx = i
-
-            # if from_idx >= 0:
-            #     df_lines.insert(from_idx + 1, ADD_LINE)
-
-            # rm_empty = '{}\nRUN ls -al /etc/yum.repos.d/empty.repo && rm -f /etc/yum.repos.d/empty.repo\n{}'.format(OIT_BEGIN, OIT_END)
-
-            # df_lines.append(rm_empty)
-            ## AMH End removed block
 
             df_content = "\n".join(df_lines)
 

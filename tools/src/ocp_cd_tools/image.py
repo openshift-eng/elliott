@@ -99,7 +99,7 @@ class ImageMetadata(Metadata):
         for entry in json.loads(dfp.json):
             if isinstance(entry, dict) and 'RUN' in entry:
                 line = entry['RUN']
-                for line in line.replace('|', '&').split("&"):
+                for line in line.split("&"):
                     line = line.strip()
                     if line:
                         line = env_replace(envs, line)

@@ -133,38 +133,6 @@ mapping:
             "list":
               sequence:
                 - type: str
-        "platforms":
-          type: map
-          mapping:
-            "mode":
-              type: str
-        "config":
-          type: map
-          mapping:
-            "platforms":
-              type: map
-              mapping:
-                "only":
-                  type: seq
-                  sequence:
-                    - type: str
-                "not":
-                  type: seq
-                  sequence:
-                    - type: str
-            "compose":
-              type: map
-              mapping:
-                "packages":
-                  type: seq
-                  sequence:
-                    - type: str
-                "pulp_repos":
-                  type: bool
-                "modules":
-                  type: seq
-                  sequence:
-                    - type: str
-                "signing_intent":
-                  type: str
-
+            "exclude":
+              sequence:
+                - type: str
