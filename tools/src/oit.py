@@ -648,9 +648,9 @@ def images_build_image(runtime, odcs, repo_type, repo, push_to_defaults, push_to
     be performed in parallel with other images building.
 
     Tips on using custom --repo.
-    1. Upload a .repo file into a public repository on github.com (it must end in .repo)
-       with your desired yum repos enabled.
-    2. Specify the raw URL for the build.
+    1. Upload a .repo file (it must end in .repo) with your desired yum repos enabled
+       into an internal location OSBS can reach like gerrit.
+    2. Specify the raw URL to this file for the build.
     3. You will probably want to use --scratch since it is unlikely you want your
         custom build tagged.
     """
