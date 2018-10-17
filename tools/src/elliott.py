@@ -600,8 +600,9 @@ PRESENT advisory. Here are some examples:
 """
     runtime.initialize(clone_distgits=False)
     minor = minor_from_branch(runtime.group_config.branch)
-    product_version = 'RHEL-7-OSE-3.{Y}'.format(Y=minor)
-    base_tag = "rhaos-3.{minor}-rhel-7".format(minor=minor)
+    major = major_from_branch(runtime.group_config.branch)
+    product_version = 'RHEL-7-OSE-{X}.{Y}'.format(X=major, Y=minor)
+    base_tag = "rhaos-{major}.{minor}-rhel-7".format(major=major, minor=minor)
 
     # Test authentication
     try:
@@ -871,7 +872,7 @@ Example to add standard metadata to a 3.10 images release
               help="Add the nag comment to found bugs")
 @pass_runtime
 def find_transitions(runtime, current_state, changed_from, changed_to, add_comment):
-    """Find Red Hat Bugzilla bugs that have gone through a specifed state change. This is mainly useful for 
+    """Find Red Hat Bugzilla bugs that have gone through a specifed state change. This is mainly useful for
     finding "bad" state transitions to catch bugzilla users operating outside of a specified workflow.
 
 \b
