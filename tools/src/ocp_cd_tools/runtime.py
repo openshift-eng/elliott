@@ -661,7 +661,11 @@ class Runtime(object):
         url = source_config["url"]
         branches = source_config['branch']
         self.logger.info("Cloning source '%s' from %s as specified by group into: %s" % (alias, url, source_dir))
-        exectools.cmd_assert(["git", "clone", url, source_dir])
+        exectools.cmd_assert(
+            cmd=["git", "clone", url, source_dir],
+            retries=3,
+            on_retry=["rm", "-rf", source_dir],
+        )
         stage_branch = branches.get('stage', None)
         fallback_branch = branches.get("fallback", None)
         found = False
@@ -674,8 +678,7 @@ class Runtime(object):
             self.logger.info("Attempting to checkout source '%s' branch %s in: %s" % (alias, branch, source_dir))
 
             if branch != "master":
-                rc, out, err = exectools.cmd_gather(
-                    ["git", "checkout", "-b", branch, "origin/%s" % branch])
+                rc, out, err = exectools.cmd_gather(["git", "checkout", "-b", branch, "origin/%s" % branch])
             else:
                 rc = 0
 
@@ -688,7 +691,9 @@ class Runtime(object):
                     self.logger.info("Unable to checkout branch %s ; trying fallback %s" % (branch, fallback_branch))
                     self.logger.info("Attempting to checkout source '%s' fallback-branch %s in: %s" % (alias, fallback_branch, source_dir))
                     if fallback_branch != "master":
-                        rc2, out, err = exectools.cmd_gather(["git", "checkout", "-b", fallback_branch, "origin/%s" % fallback_branch])
+                        rc2, out, err = exectools.cmd_gather(
+                            ["git", "checkout", "-b", fallback_branch, "origin/%s" % fallback_branch],
+                        )
                     else:
                         rc2 = 0
 
@@ -768,7 +773,7 @@ class Runtime(object):
                 repo_url)
         )
 
-        # create a randomish repo name to avoid erronious cache hits
+        # create a randomish repo name to avoid erroneous cache hits
         repoid = "oit" + datetime.datetime.now().strftime("%s")
         version_query = ["/usr/bin/repoquery", "--quiet", "--tempcache",
                          "--repoid", repoid,

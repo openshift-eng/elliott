@@ -45,7 +45,7 @@ def retry(retries, task_f, check_f=bool, wait_f=None):
     raise RetryException("Giving up after {} failed attempt(s)".format(retries))
 
 
-def cmd_assert(cmd, retries=1, pollrate=60):
+def cmd_assert(cmd, retries=1, pollrate=60, on_retry=None):
     """
     Run a command, logging (using exec_cmd) and raise an exception if the
     return code of the command indicates failure.
@@ -54,6 +54,7 @@ def cmd_assert(cmd, retries=1, pollrate=60):
     :param cmd <string|list>: A shell command
     :param retries int: The number of times to try before declaring failure
     :param pollrate int: how long to sleep between tries
+    :param on_retry <string|list>: A shell command to run before retrying a failure
     :return: (stdout,stderr) if exit code is zero
     """
 
@@ -63,6 +64,8 @@ def cmd_assert(cmd, retries=1, pollrate=60):
                 "cmd_assert: Failed {} times. Retrying in {} seconds: {}".
                 format(try_num, pollrate, cmd))
             time.sleep(pollrate)
+            if on_retry is not None:
+                cmd_gather(on_retry)  # no real use for the result though
 
         result, stdout, stderr = cmd_gather(cmd)
         if result == SUCCESS:
