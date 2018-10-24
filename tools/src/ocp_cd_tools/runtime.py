@@ -733,7 +733,7 @@ class Runtime(object):
         rpms.  The caller must indicate which to use.
         """
 
-        repo_url = self.repos['rhel-server-ose-rpms'].baseurl(repo_type)
+        repo_url = self.repos['rhel-server-ose-rpms'].baseurl(repo_type, 'x86_64')
         self.logger.info(
             "Getting version from atomic-openshift package in {}".format(
                 repo_url)
