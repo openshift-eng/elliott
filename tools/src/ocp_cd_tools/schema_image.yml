@@ -136,3 +136,9 @@ mapping:
             "exclude":
               sequence:
                 - type: str
+
+  "arches":
+    type: seq
+    sequence:
+      - type: enum
+        enum: ["x86_64", "ppc64le"]

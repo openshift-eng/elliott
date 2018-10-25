@@ -248,8 +248,20 @@ class ImageDistGitRepo(DistGitRepo):
             config: ... # verbatim container.yaml content (see https://mojo.redhat.com/docs/DOC-1159997)
         """
 
+        arches = self.metadata.runtime.arches
+        if 'arches' in self.metadata.config:
+            arches = []
+            # only include arches from metadata that are
+            # valid globally
+            for a in self.metadata.config.arches:
+                if a in self.metadata.runtime.arches:
+                    arches.append(a)
+
         if not self.runtime.odcs_mode:
-            return  # odcs mode off, don't do anything
+            config = {
+                'platforms': {'only': arches}
+            }
+            return config
 
         no_source = self.config.content.source.alias is Missing
         CYAML = 'build_container.yaml' if no_source else 'container.yaml'
@@ -296,7 +308,7 @@ class ImageDistGitRepo(DistGitRepo):
                 config['compose'][k] = v
 
         # always overwrite platforms so we control it
-        config['platforms'] = {'only': self.metadata.runtime.arches}
+        config['platforms'] = {'only': arches}
 
         config = Model(config)
 

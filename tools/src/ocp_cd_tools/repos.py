@@ -30,7 +30,7 @@ class Repo(object):
         self.cs_optional = self._data.content_set.get('optional', False)
 
         self.repotypes = [DEFAULT_REPOTYPE]
-        self.baseurl(DEFAULT_REPOTYPE)  # run once just to populate self.repotypes
+        self.baseurl(DEFAULT_REPOTYPE, self._valid_arches[0])  # run once just to populate self.repotypes
 
     @property
     def enabled(self):
@@ -53,7 +53,7 @@ class Repo(object):
         """For debugging mainly, to display contents as a dict"""
         return str(self._data)
 
-    def baseurl(self, repotype):
+    def baseurl(self, repotype, arch):
         if not repotype:
             repotype = 'unsigned'
         """Get baseurl based on repo type, if one was specified for this repo."""
@@ -61,9 +61,21 @@ class Repo(object):
         if isinstance(bu, str):
             return bu
         elif isinstance(bu, dict):
-            if repotype not in bu:
-                raise ValueError('{} is not a valid repotype option in {}'.format(repotype, bu.keys()))
-            self.repotypes = list(bu.keys())
+            if arch in bu:
+                bu_sub = bu
+            else:
+                if repotype not in bu:
+                    raise ValueError('{} is not a valid repotype option in {}'.format(repotype, bu.keys()))
+                self.repotypes = list(bu.keys())
+                bu_sub = bu[repotype]
+            if isinstance(bu_sub, str):
+                return bu_sub
+            elif isinstance(bu_sub, dict):
+                if arch not in self._valid_arches:
+                    raise ValueError('{} is not a valid arch option!'.format(arch))
+                if arch not in bu_sub:
+                    raise ValueError('No baseurl available for arch {}'.format(arch))
+                return bu_sub[arch]
             return bu[repotype]
         else:
             raise ValueError('baseurl must be str or dict!')
@@ -89,17 +101,22 @@ class Repo(object):
         if not repotype:
             repotype = 'unsigned'
 
-        result = '[{}]\n'.format(self.name)
-        for k, v in self._data.conf.iteritems():
-            line = '{} = {}\n'
-            if k == 'baseurl':
-                line = line.format('baseurl', self.baseurl(repotype))
-            else:
-                if k is 'enabled' and enabled is not None:
-                    v = 1 if enabled else 0
-                line = line.format(k, v)
-            result += line
-        result += '\n'
+        result = ''
+
+        for arch in self._valid_arches:
+            cs = self.content_set(arch)
+            if cs:
+                result += '[{}]\n'.format(cs)
+                for k, v in self._data.conf.iteritems():
+                    line = '{} = {}\n'
+                    if k == 'baseurl':
+                        line = line.format('baseurl', self.baseurl(repotype, arch))
+                    else:
+                        if k is 'enabled' and enabled is not None:
+                            v = 1 if enabled else 0
+                        line = line.format(k, v)
+                    result += line
+                result += '\n'
         return result
 
 
@@ -209,8 +226,12 @@ class Repos(object):
         for a in self._arches:
             result[a] = []
             for r in self._repos.itervalues():
+                if r.name == 'rhel-server-ose-rpms':
+                    print(r)
                 if r.enabled or r.name in enabled_repos:
                     cs = r.content_set(a)
+                    if r.name == 'rhel-server-ose-rpms':
+                        print(cs)
                     if cs:  # possible to be forced off by setting to null
                         result[a].append(cs)
 
