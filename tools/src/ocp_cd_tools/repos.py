@@ -105,6 +105,10 @@ class Repo(object):
 
         for arch in self._valid_arches:
             cs = self.content_set(arch)
+            # This may not be valid yet if not released
+            # but ALWAYS emit this repo
+            if not cs and self.name == 'rhel-server-ose-rpms':
+                cs = 'rhel-server-ose-rpms-{}'.format(arch)
             if cs:
                 result += '[{}]\n'.format(cs)
                 for k, v in self._data.conf.iteritems():
@@ -226,12 +230,8 @@ class Repos(object):
         for a in self._arches:
             result[a] = []
             for r in self._repos.itervalues():
-                if r.name == 'rhel-server-ose-rpms':
-                    print(r)
                 if r.enabled or r.name in enabled_repos:
                     cs = r.content_set(a)
-                    if r.name == 'rhel-server-ose-rpms':
-                        print(cs)
                     if cs:  # possible to be forced off by setting to null
                         result[a].append(cs)
 
