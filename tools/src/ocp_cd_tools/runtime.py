@@ -27,6 +27,7 @@ from model import Model, Missing
 from multiprocessing import Lock
 from repos import Repos
 import brew
+import constants
 
 
 # Registered atexit to close out debug/record logs
@@ -167,7 +168,9 @@ class Runtime(object):
                     raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
             return tmp_config
 
-    def initialize(self, mode='images', clone_distgits=True, validate_content_sets=False):
+    def initialize(self, mode='images', clone_distgits=True,
+                   validate_content_sets=False,
+                   no_group=False, clone_source=True, disabled=None):
 
         if self.initialized:
             return
@@ -179,7 +182,7 @@ class Runtime(object):
         # We could mark these as required and the click library would do this for us,
         # but this seems to prevent getting help from the various commands (unless you
         # specify the required parameters). This can probably be solved more cleanly, but TODO
-        if self.group is None:
+        if not no_group and self.group is None:
             click.echo("Group must be specified")
             exit(1)
 
@@ -190,12 +193,8 @@ class Runtime(object):
             atexit.register(remove_tmp_working_dir, self)
         else:
             self.working_dir = os.path.abspath(self.working_dir)
-            assertion.isdir(self.working_dir, "Invalid working directory")
-
-        #
-        # Separate the different metadata location using a pseudoURL
-        #
-        self.resolve_metadata()
+            if not os.path.isdir(self.working_dir):
+                os.makedirs(self.working_dir)
 
         self.distgits_dir = os.path.join(self.working_dir, "distgits")
         if not os.path.isdir(self.distgits_dir):
@@ -209,7 +208,18 @@ class Runtime(object):
         if not os.path.isdir(self.sources_dir):
             os.mkdir(self.sources_dir)
 
+        if disabled is not None:
+            self.disabled = disabled
+
         self.initialize_logging()
+
+        if no_group:
+            return  # nothing past here should be run without a group
+
+        #
+        # Separate the different metadata location using a pseudoURL
+        #
+        self.resolve_metadata()
 
         self.record_log_path = os.path.join(self.working_dir, "record.log")
         self.record_log = open(self.record_log_path, 'a')
@@ -237,8 +247,10 @@ class Runtime(object):
             .format(self.group, self.metadata_dir)
         )
 
-        self.images_dir = images_dir = os.path.join(group_dir, 'images')
-        self.rpms_dir = rpms_dir = os.path.join(group_dir, 'rpms')
+        self.group_dir = group_dir
+
+        self.images_dir = images_dir = os.path.join(self.group_dir, 'images')
+        self.rpms_dir = rpms_dir = os.path.join(self.group_dir, 'rpms')
 
         # register the sources
         # For each "--source alias path" on the command line, register its existence with
@@ -254,8 +266,8 @@ class Runtime(object):
                 for key, val in source_dict.items():
                     self.register_source_alias(key, val)
 
-        with Dir(group_dir):
-            self.group_config = self.get_group_config(group_dir)
+        with Dir(self.group_dir):
+            self.group_config = self.get_group_config(self.group_dir)
             self.arches = self.group_config.get('arches', ['x86_64'])
             self.repos = Repos(self.group_config.repos, self.arches)
 
@@ -347,47 +359,64 @@ class Runtime(object):
             if len(missed_include) > 0:
                 raise IOError('Unable to find the following images or rpms configs: {}'.format(', '.join(missed_include)))
 
-            def gen_ImageMetadata(config_filename):
-                metadata = ImageMetadata(self, config_filename)
-                self.image_map[metadata.distgit_key] = metadata
+            def gen_ImageMetadata(base_dir, config_filename, force):
+                metadata = ImageMetadata(self, base_dir, config_filename)
+                if force or metadata.enabled:
+                    self.image_map[metadata.distgit_key] = metadata
 
-            def gen_RPMMetadata(config_filename):
-                metadata = RPMMetadata(self, config_filename)
-                self.rpm_map[metadata.distgit_key] = metadata
+            def gen_RPMMetadata(base_dir, config_filename, force):
+                metadata = RPMMetadata(self, base_dir, config_filename, clone_source=clone_source)
+                if force or metadata.enabled:
+                    self.rpm_map[metadata.distgit_key] = metadata
 
             def collect_configs(search_type, search_dir, filename_list, include, gen):
                 if len(filename_list) == 0:
                     return  # no configs of this type found, bail out
 
-                check_include = len(include) > 0
+                check_include = len(include) > 0 or self.wip
                 with Dir(search_dir):
                     for config_filename in filename_list:
-                        if check_include:
+                        is_include = False
+
+                        # loading WIP configs requires a pre-load of the config to check
+                        # removing this requirement would require a massive rework of Metadata()
+                        # deemed not worth it - AMH 10/9/18
+                        is_wip = False
+                        if self.wip:
+                            full_path = os.path.join(search_dir, config_filename)
+                            with open(full_path, 'r') as f:
+                                cfg_data = yaml.load(f)
+                                if cfg_data.get('mode', None) == 'wip':
+                                    is_wip = True
+
+                        if not is_wip and check_include:
                             if check_include and config_filename in include:
+                                is_include = config_filename in include
                                 self.logger.debug("include: " + config_filename)
                                 include.remove(config_filename)
                             else:
                                 self.logger.debug("Skipping {} {} since it is not in the include list".format(search_type, config_filename))
                                 continue
+
                         try:
                             schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_{}.yml".format(search_type))
                             c = Core(source_file=config_filename, schema_files=[schema_path])
                             c.validate(raise_exception=True)
 
-                            gen(config_filename)
+                            gen(search_dir, config_filename, self.disabled or is_include or is_wip)
                         except Exception:
-                            self.logger.error("Configuration file failed to load: {}".format(os.path.join(search_dir,config_filename)))
+                            self.logger.error("Configuration file failed to load: {}".format(os.path.join(search_dir, config_filename)))
                             raise
 
             if mode in ['images', 'both']:
                 collect_configs('image', images_dir, images_filename_list, image_include, gen_ImageMetadata)
                 if not self.image_map:
-                    self.logger.warning("No image metadata directories found within: {}".format(group_dir))
+                    self.logger.warning("No image metadata directories found for given options within: {}".format(self.group_dir))
 
             if mode in ['rpms', 'both']:
                 collect_configs('rpm', rpms_dir, rpms_filename_list, rpm_include, gen_RPMMetadata)
                 if not self.rpm_map:
-                    self.logger.warning("No rpm metadata directories found within: {}".format(group_dir))
+                    self.logger.warning("No rpm metadata directories found for given options within: {}".format(self.group_dir))
 
         # Make sure that the metadata is not asking us to check out the same exact distgit & branch.
         # This would almost always indicate someone has checked in duplicate metadata into a group.
@@ -399,7 +428,7 @@ class Runtime(object):
             no_collide_check[key] = meta
 
         # Read in the streams definite for this group if one exists
-        streams_path = os.path.join(group_dir, "streams.yml")
+        streams_path = os.path.join(self.group_dir, "streams.yml")
         if os.path.isfile(streams_path):
             with open(streams_path, "r") as s:
                 self.streams = Model(yaml.load(s.read()))
@@ -817,7 +846,12 @@ class Runtime(object):
         Allow http, https, ssh and ssh+git (all valid git clone URLs)
         """
 
+        if self.metadata_dir is None:
+            self.metadata_dir = constants.OCP_BUILD_DATA_RW
+
         schemes = ['ssh', 'ssh+git', "http", "https"]
+
+        self.logger.info('Using {} for metadata'.format(self.metadata_dir))
 
         md_url = urlparse.urlparse(self.metadata_dir)
         if md_url.scheme in schemes or (md_url.scheme == '' and ':' in md_url.path):
@@ -828,9 +862,46 @@ class Runtime(object):
             # determine where to put it
             md_name = os.path.splitext(os.path.basename(md_url.path))[0]
             md_destination = os.path.join(self.working_dir, md_name)
-            if not os.path.isdir(md_destination):
-                cmd = "git clone {} {}".format(self.metadata_dir, md_destination)
-                exectools.cmd_assert(cmd.split(' '))
+            clone_data = True
+            if os.path.isdir(md_destination):
+                self.logger.info('Metadata clone directory already exists, checking commit sha')
+                with Dir(md_destination):
+                    rc, out, err = exectools.cmd_gather(["git", "ls-remote", self.metadata_dir, "HEAD"])
+                    if rc:
+                        raise IOError('Unable to check remote sha: {}'.format(err))
+                    remote = out.strip().split('\t')[0]
+
+                    try:
+                        exectools.cmd_assert('git branch --contains {}'.format(remote))
+                        self.logger.info('{} is already cloned and latest'.format(self.metadata_dir))
+                        clone_data = False
+                    except:
+                        rc, out, err = exectools.cmd_gather('git log origin/HEAD..HEAD')
+                        out = out.strip()
+                        if len(out):
+                            msg = """
+                            Local config is out of sync with remote and you have unpushed commits. {}
+                            You must either clear your local config repo with `./oit.py cleanup`
+                            or manually rebase from latest remote to continue
+                            """.format(md_destination)
+                            raise IOError(msg)
+
+            if clone_data:
+                if os.path.isdir(md_destination):  # delete if already there
+                    shutil.rmtree(md_destination)
+                self.logger.info('Cloning config data from {}'.format(self.metadata_dir))
+                if not os.path.isdir(md_destination):
+                    cmd = "git clone --depth 1 {} {}".format(self.metadata_dir, md_destination)
+                    try:
+                        exectools.cmd_assert(cmd.split(' '))
+                    except:
+                        if self.metadata_dir == constants.OCP_BUILD_DATA_RW:
+
+                            self.logger.warn('Failed to clone {}, falling back to {}'.format(constants.OCP_BUILD_DATA_RW, constants.OCP_BUILD_DATA_RO))
+                            self.metadata_dir = constants.OCP_BUILD_DATA_RO
+                            return self.resolve_metadata()
+                        else:
+                            raise
             self.metadata_dir = md_destination
 
         elif md_url.scheme in ['', 'file']:

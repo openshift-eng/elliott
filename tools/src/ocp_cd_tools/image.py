@@ -43,8 +43,8 @@ YUM_NON_FLAGS = [
 
 class ImageMetadata(Metadata):
 
-    def __init__(self, runtime, config_filename):
-        super(ImageMetadata, self).__init__('image', runtime, config_filename)
+    def __init__(self, runtime, base_dir, config_filename):
+        super(ImageMetadata, self).__init__('image', runtime, base_dir, config_filename)
 
     @property
     def base_only(self):
