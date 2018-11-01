@@ -1065,7 +1065,7 @@ def cleanup(runtime):
 
     runtime.logger.info('Clearing out {}'.format(runtime.working_dir))
     if os.path.isdir(runtime.working_dir):
-        shutil.rmtree(runtime.working_dir)
+        shutil.rmtree(runtime.working_dir, ignore_errors=True)
         os.makedirs(runtime.working_dir)  # rmtree deletes the directory itself. recreate
 
 
@@ -1105,7 +1105,7 @@ def config_commit(runtime, message, push):
     Commit outstanding metadata config changes
     """
     _fix_runtime_mode(runtime)
-    runtime.initialize(**CONFIG_RUNTIME_OPTS)
+    runtime.initialize(no_group=True, **CONFIG_RUNTIME_OPTS)
     config = mdc(runtime)
     config.sanitize_new_config()
     config.commit(message)
@@ -1121,7 +1121,7 @@ def config_push(runtime):
     Will of course fail if user does not have write access.
     """
     _fix_runtime_mode(runtime)
-    runtime.initialize(**CONFIG_RUNTIME_OPTS)
+    runtime.initialize(no_group=True, **CONFIG_RUNTIME_OPTS)
     config = mdc(runtime)
     config.push()
 

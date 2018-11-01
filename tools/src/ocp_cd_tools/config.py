@@ -180,7 +180,7 @@ class MetaDataConfig(object):
                     f.seek(0)
                     yaml.safe_dump(data, f, default_flow_style=False)
                     f.truncate()
-        del config_log['new']
+            del config_log['new']
 
         self._save_config_log(config_log)
 

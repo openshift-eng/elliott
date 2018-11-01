@@ -213,13 +213,10 @@ class Runtime(object):
 
         self.initialize_logging()
 
+        self.resolve_metadata()
+
         if no_group:
             return  # nothing past here should be run without a group
-
-        #
-        # Separate the different metadata location using a pseudoURL
-        #
-        self.resolve_metadata()
 
         self.record_log_path = os.path.join(self.working_dir, "record.log")
         self.record_log = open(self.record_log_path, 'a')
