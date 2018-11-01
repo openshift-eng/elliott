@@ -96,6 +96,9 @@ class Runtime(object):
         # initialize defaults in case no value is given
         self.verbose = False
         self.quiet = False
+        self.wip = False
+        self.disabled = False
+        self.metadata_dir = None
 
         for key, val in kwargs.items():
             self.__dict__[key] = val
