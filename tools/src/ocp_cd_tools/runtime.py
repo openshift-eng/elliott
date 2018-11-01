@@ -600,7 +600,7 @@ class Runtime(object):
         Mainly for looking up parent image info."""
 
         with Dir(self.images_dir):
-            meta = ImageMetadata(self, distgit_key + '.yml')
+            meta = ImageMetadata(self, self.images_dir, distgit_key + '.yml')
         return meta
 
     def resolve_stream(self, stream_name):
