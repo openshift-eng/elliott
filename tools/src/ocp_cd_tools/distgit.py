@@ -47,7 +47,7 @@ def recursive_overwrite(src, dest, ignore=set()):
     for i in ignore:
         exclude += ' --exclude="{}" '.format(i)
     cmd = 'rsync -av {} {}/ {}/'.format(exclude, src, dest)
-    exectools.cmd_assert(cmd.split(' '))
+    exectools.cmd_assert(cmd.split(' '), retries=3)
 
 
 def pull_image(url):
@@ -131,20 +131,24 @@ class DistGitRepo(object):
                 # Only switch if we are not already in the branch. This allows us to work in
                 # working directories with uncommited changes.
                 if out != distgit_branch:
-                    # Switch to the target branch
-                    exectools.cmd_assert(["rhpkg", "switch-branch", distgit_branch])
+                    # Switch to the target branch; all git changes should retry for flakes
+                    exectools.cmd_assert(["rhpkg", "switch-branch", distgit_branch], retries=3)
 
             self._read_master_data()
 
     def merge_branch(self, target, allow_overwrite=False):
         self.logger.info('Switching to branch: {}'.format(target))
-        exectools.cmd_assert(["rhpkg", "switch-branch", target])
+        exectools.cmd_assert(["rhpkg", "switch-branch", target], retries=3)
         if not allow_overwrite:
             if os.path.isfile('Dockerfile') or os.path.isdir('.oit'):
                 raise IOError('Unable to continue merge. Dockerfile found in target branch. Use --allow-overwrite to force.')
         self.logger.info('Merging source branch history over current branch')
         msg = 'Merge branch {} into {}'.format(self.branch, target)
-        exectools.cmd_assert(['git', 'merge', '--allow-unrelated-histories', '-m', msg, self.branch])
+        exectools.cmd_assert(
+            cmd=['git', 'merge', '--allow-unrelated-histories', '-m', msg, self.branch],
+            retries=3,
+            on_retry=['git', 'reset', '--hard', target],  # in case merge failed due to storage
+        )
 
     def source_path(self):
         """
@@ -176,6 +180,7 @@ class DistGitRepo(object):
                 # add short sha of source for audit trail
                 commit_message += " - {}".format(self.source_sha)
             commit_message += "\n- MaxFileSize: {}".format(constants.DISTGIT_MAX_FILESIZE)  # set dist-git size limit to 50MB
+            # commit changes; if these flake there is probably not much we can do about it
             exectools.cmd_assert(["git", "add", "-A", "."])
             exectools.cmd_assert(["git", "commit", "--allow-empty", "-m", commit_message])
             rc, sha, err = exectools.cmd_gather(["git", "rev-parse", "HEAD"])
@@ -770,7 +775,8 @@ class ImageDistGitRepo(DistGitRepo):
             self.logger.info("Pushing repository")
             exectools.cmd_assert(["rhpkg", "push"], retries=3)
             # rhpkg will create but not push tags :(
-            # Not asserting this exec since this is non-fatal if the tag already exists
+            # Not asserting this exec since this is non-fatal if a tag already exists,
+            # and tags in dist-git can't be --force overwritten
             exectools.cmd_gather(['git', 'push', '--tags'])
 
     def __clean_repos(self, dfp):

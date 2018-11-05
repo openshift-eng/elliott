@@ -82,7 +82,7 @@ class RPMMetadata(Metadata):
             raise ValueError('Must run set_nvr() before calling!')
 
         with Dir(self.source_path):
-            exectools.cmd_assert('git push origin {}'.format(self.tag))
+            exectools.cmd_assert('git push origin {}'.format(self.tag), retries=3)
 
     def commit_changes(self):
         with Dir(self.source_path):
