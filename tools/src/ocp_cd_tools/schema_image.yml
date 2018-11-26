@@ -67,11 +67,15 @@ mapping:
                 mapping:
                   action:
                     type: enum
-                    enum: [replace]
+                    enum: ["replace", "command"]
                   match:
                     type: str
                   replacement:
                     type: str
+                  command:
+                    type: seq
+                    sequence:
+                      - type: str
 
   "enabled_repos":
     type: seq
