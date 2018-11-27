@@ -9,6 +9,10 @@ dist
 htmlcov
 .eggs
 .cache
+venv
+cover
+*.egg-info
+
 
 # Ignore emacs backup files
 *~

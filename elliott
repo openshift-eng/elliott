@@ -18,12 +18,12 @@ import os
 import re
 
 # ours
-from ocp_cd_tools import Runtime
-import ocp_cd_tools.constants
-import ocp_cd_tools.bugzilla
-import ocp_cd_tools.brew
-import ocp_cd_tools.errata
-import ocp_cd_tools.exceptions
+from elliottlib import Runtime
+import elliottlib.constants
+import elliottlib.bugzilla
+import elliottlib.brew
+import elliottlib.errata
+import elliottlib.exceptions
 
 # 3rd party
 import click
@@ -266,15 +266,15 @@ Bugzilla Bugs.
     $ elliott advisory:change-state -s NEW_FILES 123456
     """
     try:
-        erratum = ocp_cd_tools.errata.get_erratum(advisory)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        erratum = elliottlib.errata.get_erratum(advisory)
+    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
 
     click.echo("Changing state for {id} to {state}".format(id=advisory, state=state))
     click.echo(erratum)
     try:
         erratum.change_state(state)
-    except ocp_cd_tools.exceptions.ErrataToolError as err:
+    except elliottlib.exceptions.ErrataToolError as err:
         click.secho("Error changing state: ", nl=False, bold=True, fg='red')
         click.echo(str(err))
         exit(1)
@@ -292,7 +292,7 @@ Bugzilla Bugs.
               type=click.Choice(['rpm', 'image']),
               help="Kind of Advisory to create. Affects boilerplate text.")
 @click.option("--impetus", default='standard',
-              type=click.Choice(ocp_cd_tools.constants.errata_valid_impetus),
+              type=click.Choice(elliottlib.constants.errata_valid_impetus),
               help="Impetus for the advisory creation [standard, cve, ga, test]")
 @click.option("--date", required=False,
               default=default_release_date.strftime(YMD),
@@ -358,12 +358,12 @@ advisory.
         # User did not enter a value for --date, default is determined
         # by looking up the latest erratum in a series
         try:
-            latest_advisory = ocp_cd_tools.errata.find_latest_erratum(kind, minor)
-        except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+            latest_advisory = elliottlib.errata.find_latest_erratum(kind, minor)
+        except elliottlib.exceptions.ErrataToolUnauthenticatedException:
             exit_unauthenticated()
-        except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+        except elliottlib.exceptions.ErrataToolUnauthorizedException:
             exit_unauthorized()
-        except ocp_cd_tools.exceptions.ErrataToolError as err:
+        except elliottlib.exceptions.ErrataToolError as err:
             red_prefix("Error searching advisories: ")
             click.echo(str(err))
             exit(1)
@@ -398,7 +398,7 @@ advisory.
     ######################################################################
 
     try:
-        erratum = ocp_cd_tools.errata.new_erratum(
+        erratum = elliottlib.errata.new_erratum(
             kind=kind,
             release_date=release_date.strftime(YMD),
             create=yes,
@@ -407,9 +407,9 @@ advisory.
             manager=manager,
             package_owner=package_owner
         )
-    except ocp_cd_tools.exceptions.ErrataToolUnauthorizedException:
+    except elliottlib.exceptions.ErrataToolUnauthorizedException:
         exit_unauthorized()
-    except ocp_cd_tools.exceptions.ErrataToolError as err:
+    except elliottlib.exceptions.ErrataToolError as err:
         red_prefix("Error creating advisory: ")
         click.echo(str(err))
         exit(1)
@@ -504,16 +504,16 @@ manually. Provide one or more --id's for manual bug addition.
         raise click.BadParameter("If not using --auto then one or more --id's must be provided")
 
     if auto:
-        bug_ids = ocp_cd_tools.bugzilla.search_for_bugs(target_releases)
+        bug_ids = elliottlib.bugzilla.search_for_bugs(target_releases)
     else:
-        bug_ids = [ocp_cd_tools.bugzilla.Bug(id=i) for i in id]
+        bug_ids = [elliottlib.bugzilla.Bug(id=i) for i in id]
 
     bug_count = len(bug_ids)
 
     if advisory is not False:
         try:
-            advs = ocp_cd_tools.errata.get_erratum(advisory)
-        except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+            advs = elliottlib.errata.get_erratum(advisory)
+        except elliottlib.exceptions.ErrataToolUnauthenticatedException:
             exit_unauthenticated()
 
         if advs is False:
@@ -606,8 +606,8 @@ PRESENT advisory. Here are some examples:
 
     # Test authentication
     try:
-        ocp_cd_tools.errata.get_filtered_list(ocp_cd_tools.constants.errata_live_advisory_filter)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        elliottlib.errata.get_filtered_list(elliottlib.constants.errata_live_advisory_filter)
+    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
 
     session = requests.Session()
@@ -616,8 +616,8 @@ PRESENT advisory. Here are some examples:
         green_prefix("Build NVRs provided: ")
         click.echo("Manually verifying the builds exist")
         try:
-            unshipped_builds = [ocp_cd_tools.brew.get_brew_build(b, product_version, session=session) for b in builds]
-        except ocp_cd_tools.exceptions.BrewBuildException as e:
+            unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in builds]
+        except elliottlib.exceptions.BrewBuildException as e:
             red_prefix("Error: ")
             click.echo(e)
             exit(1)
@@ -657,7 +657,7 @@ PRESENT advisory. Here are some examples:
             pool = ThreadPool(cpu_count())
             unshipped_builds = pool.map(
                 lambda meta: progress_func(
-                    lambda: ocp_cd_tools.brew.get_brew_build("{}-{}-{}".format(meta[0], meta[1], meta[2]),
+                    lambda: elliottlib.brew.get_brew_build("{}-{}-{}".format(meta[0], meta[1], meta[2]),
                                                              product_version,
                                                              session=session),
                     '*'),
@@ -669,7 +669,7 @@ PRESENT advisory. Here are some examples:
         elif kind == 'rpm':
             green_prefix("Generating list of {kind}s: ".format(kind=kind))
             click.echo("Hold on a moment, fetching Brew builds")
-            unshipped_build_candidates = ocp_cd_tools.brew.find_unshipped_build_candidates(
+            unshipped_build_candidates = elliottlib.brew.find_unshipped_build_candidates(
                 base_tag,
                 product_version,
                 kind=kind)
@@ -682,7 +682,7 @@ PRESENT advisory. Here are some examples:
             pool = ThreadPool(cpu_count())
             results = pool.map(
                 lambda nvr: progress_func(
-                    lambda: ocp_cd_tools.brew.get_brew_build(nvr, product_version, session=session),
+                    lambda: elliottlib.brew.get_brew_build(nvr, product_version, session=session),
                     '*'),
                 unshipped_build_candidates)
             # Wait for results
@@ -698,12 +698,12 @@ PRESENT advisory. Here are some examples:
     if advisory is not False:
         # Search and attach
         try:
-            erratum = ocp_cd_tools.errata.get_erratum(advisory)
+            erratum = elliottlib.errata.get_erratum(advisory)
             erratum.add_builds(unshipped_builds)
             click.secho("Attached build(s) successfully", fg='green', bold=True)
-        except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        except elliottlib.exceptions.ErrataToolUnauthenticatedException:
             exit_unauthenticated()
-        except ocp_cd_tools.exceptions.BrewBuildException as e:
+        except elliottlib.exceptions.BrewBuildException as e:
             red_prefix("Error attaching builds: ")
             click.echo(str(e))
             exit(1)
@@ -750,8 +750,8 @@ Fields for the short format: Release date, State, Synopsys, URL
         ...
 """
     try:
-        advisory = ocp_cd_tools.errata.get_erratum(advisory)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        advisory = elliottlib.errata.get_erratum(advisory)
+    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
 
     if json:
@@ -766,7 +766,7 @@ Fields for the short format: Release date, State, Synopsys, URL
 #
 @cli.command("advisory:list", short_help="List filtered RHOSE advisories")
 @click.option("--filter-id", '-f',
-              default=ocp_cd_tools.constants.errata_default_filter,
+              default=elliottlib.constants.errata_default_filter,
               help="A custom filter id to list from")
 @click.option("-n", default=5,
               help="Return only N latest results (default: 5)")
@@ -791,14 +791,14 @@ yourself online: https://errata.devel.redhat.com/filter/1965
     $ elliott advisory:list -n 10 -f 1337
 """
     try:
-        for erratum in ocp_cd_tools.errata.get_filtered_list(filter_id, limit=n):
+        for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=n):
             if json:
                 click.echo(erratum.to_json())
             else:
                 click.echo(erratum)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
-    except ocp_cd_tools.exceptions.ErrataToolError as err:
+    except elliottlib.exceptions.ErrataToolError as err:
         red_prefix("Error: ")
         click.echo(str(err))
         exit(1)
@@ -814,7 +814,7 @@ yourself online: https://errata.devel.redhat.com/filter/1965
               type=click.Choice(['rpm', 'image']),
               help="KIND of advisory [rpm, image]")
 @click.option('--impetus', default='standard',
-              type=click.Choice(ocp_cd_tools.constants.errata_valid_impetus),
+              type=click.Choice(elliottlib.constants.errata_valid_impetus),
               help="Impetus for the advisory creation [standard, cve, ga, test]")
 @pass_runtime
 def add_metadata(runtime, kind, impetus, advisory):
@@ -833,8 +833,8 @@ Example to add standard metadata to a 3.10 images release
     release = release_from_branch(runtime.group_config.branch)
 
     try:
-        advisory = ocp_cd_tools.errata.get_erratum(advisory)
-    except ocp_cd_tools.exceptions.ErrataToolUnauthenticatedException:
+        advisory = elliottlib.errata.get_erratum(advisory)
+    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
 
     result = advisory.add_comment({'release': release, 'kind': kind, 'impetus': impetus})
@@ -858,15 +858,15 @@ Example to add standard metadata to a 3.10 images release
 @cli.command("bugzilla:find-transitions", short_help="Find bugs that have gone through the specifed transition")
 @click.option("--currently", 'current_state',
               required=True,
-              type=click.Choice(ocp_cd_tools.constants.VALID_BUG_STATES),
+              type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
               help="State that the bug is in now")
 @click.option("--from", 'changed_from',
               required=True,
-              type=click.Choice(ocp_cd_tools.constants.VALID_BUG_STATES),
+              type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
               help="State that the bug started in")
 @click.option("--to", 'changed_to',
               required=True,
-              type=click.Choice(ocp_cd_tools.constants.VALID_BUG_STATES),
+              type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
               help="State that the bug ended in")
 @click.option("--add-comment", "add_comment", is_flag=True, default=False,
               help="Add the nag comment to found bugs")
@@ -878,7 +878,7 @@ def find_transitions(runtime, current_state, changed_from, changed_to, add_comme
 \b
     $ elliott bugzilla:find-transitions --currently VERIFIED --from ASSIGNED --to ON_QA
 """
-    bug_ids = ocp_cd_tools.bugzilla.search_for_bug_transitions(current_state, changed_from, changed_to)
+    bug_ids = elliottlib.bugzilla.search_for_bug_transitions(current_state, changed_from, changed_to)
 
     click.echo('Found the following bugs matching that transition: {}'.format(bug_ids))
 
@@ -886,7 +886,7 @@ def find_transitions(runtime, current_state, changed_from, changed_to, add_comme
         # check if we've already commented
         for bug in bug_ids:
             if not bug.has_whiteboard_value('ocp_art_invalid_transition'):
-                bug.add_comment(ocp_cd_tools.constants.bugzilla_invalid_transition_comment, is_private=True)
+                bug.add_comment(elliottlib.constants.bugzilla_invalid_transition_comment, is_private=True)
                 click.echo('Added comment to {}'.format(bug.id))
                 bug.add_whiteboard_value('ocp_art_invalid_transition')
             else:
@@ -907,7 +907,7 @@ def find_transitions(runtime, current_state, changed_from, changed_to, add_comme
               help="Make the added comment private")
 @pass_runtime
 def add_comment(runtime, bug_ids, comment, is_private):
-    bug_list = [ocp_cd_tools.bugzilla.Bug(id=i) for i in bug_ids]
+    bug_list = [elliottlib.bugzilla.Bug(id=i) for i in bug_ids]
     click.echo(bug_list)
 
     for bug in bug_list:
