@@ -93,12 +93,13 @@ elliott. I suggest the following, it will verify that you can access
 the Errata Tool successfully by attempting to get a list of recently
 created advisory:
 
-    <enterprise-images> $ ./tools/src/elliott.py advisory:list
-    2018-03-02T15:19:08 NEW_FILES TEST OpenShift Container Platform 3.5 bug fix and enhancement update https://errata.devel.redhat.com/advisory/32916
-    2018-01-25T19:19:15 NEW_FILES OpenShift Container Platform 3.3 and 3.4 images update https://errata.devel.redhat.com/advisory/32352
-    2018-01-25T19:15:25 NEW_FILES OpenShift Container Platform 3.3 and 3.4 bug fix and enhancement update https://errata.devel.redhat.com/advisory/32351
-    2018-01-24T15:01:59 NEW_FILES OpenShift Container Platform 3.7, 3.6, 3.5 images update https://errata.devel.redhat.com/advisory/32337
-    2018-01-24T14:56:43 NEW_FILES OpenShift Container Platform 3.7, 3.6, and 3.5 bug fix and enhancement update https://errata.devel.redhat.com/advisory/32336
+    <elliott> $ ./elliott advisory:list
+    2018-11-20T04:23:44 NEW_FILES Red Hat OpenShift Enterprise Container Image Updates https://errata.devel.redhat.com/advisory/38040
+    2018-11-15T14:36:55 QE OpenShift Container Platform 3.5 images update https://errata.devel.redhat.com/advisory/37969
+    2018-11-13T01:17:33 QE OpenShift Container Platform 3.6 images update https://errata.devel.redhat.com/advisory/37911
+    2018-10-31T15:23:47 NEW_FILES Red Hat OpenShift Enterprise Container Image Updates https://errata.devel.redhat.com/advisory/37632
+    2018-10-18T11:11:25 NEW_FILES openshift3/jenkins-agent-nodejs-8-rhel7 Container Image Updates https://errata.devel.redhat.com/advisory/37441
+
 
 # Tests
 
@@ -143,14 +144,14 @@ command, for example `32916`, one of our test advisories from the
 previous example. We'll pass that directly to `advisory:get`. You will
 see the same brief output as you did before.
 
-    <enterprise-images> $ ./tools/src/elliott.py advisory:get 32916
+    <elliott> $ ./elliott advisory:get 32916
     2018-03-02T15:19:08 NEW_FILES TEST OpenShift Container Platform 3.5 bug fix and enhancement update https://errata.devel.redhat.com/advisory/32916
 
 Say you want additional information about this specific advisory. In
 which case you can give the `--json` option to the command (this is
 all documented in the commands `--help` output as well):
 
-    <enterprise-images> $ ./tools/src/elliott.py advisory:get 32916 --json
+    <elliott> $ ./elliott advisory:get 32916 --json
     {
       "diffs": {},
       "jira_issues": {
@@ -173,7 +174,7 @@ scroll through it. For example, to look at just the `content` (basic
 information) returned from the API you could use the `.content` filter
 in `jq`:
 
-    $ ./tools/src/elliott.py advisory:get 32916 --json | jq '.content' | less
+    $ ./elliott advisory:get 32916 --json | jq '.content' | less
     {
       "content": {
         "revision_count": 1,
@@ -202,14 +203,14 @@ for OSE 3.9. The default boilerplate text will be printed to the
 screen in the form of the JSON object that *would* have been submitted
 to the API:
 
-    <enterprise-images> $ ./tools/src/elliott.py --group openshift-3.9 advisory:create --kind rpm
+    <elliott> $ ./elliott --group openshift-3.9 advisory:create --kind rpm
 
 Create an Image Advisory for the 3.5 series on the first Monday in
 March. The date is given in simple `YYYY-MM-DD` format, and finally we
 give explicit confirmation to create the advisory by providing the
 `--yes` option:
 
-    <enterprise-images> $ ./tools/src/elliott.py --group openshift-3.5 advisory:create \
+    <elliott> $ ./elliott --group openshift-3.5 advisory:create \
         --kind image \
         --date 2018-03-05 \
         --yes
@@ -223,7 +224,7 @@ state where the testers are able to take over.
 Here we'll move our example test advisory 32916 from `NEW_FILES` to
 `QE`:
 
-    <enterprise-images> $ ./tools/src/elliott.py advisory:change-state --state QE 32916
+    <elliott> $ ./elliott advisory:change-state --state QE 32916
 
 ## `advisory:find-bugs` - Find Bugzilla Bugs, Add to an Advisory
 
@@ -255,7 +256,7 @@ or ASYNC update).
 Example: Automatically *find* bugs for an OpenShift 3.9 update (but do
 not attach them). Notice how we do not need to provide an advisory:
 
-	<enterprise-images> $ ./tools/src/elliott.py --group openshift-3.9 advisory:find-bugs --auto
+	<elliott> $ ./elliott --group openshift-3.9 advisory:find-bugs --auto
 	2018-03-19T17:49:44.573042 Searching group directory: /home/tbielawa/rhat/cd/enterprise-images/groups/openshift-3.9
 	2018-03-19T17:49:44.584135 Using branch from group.yml: rhaos-3.9-rhel-7
 	Would have added 7 bugs: 1537593, 1510212, 1519365, 1529482, 1550797, 1543647, 1551904
@@ -263,7 +264,7 @@ not attach them). Notice how we do not need to provide an advisory:
 In order to add bugs to an advisory you must provide the ID of an
 advisory as the value to the `--add` option:
 
-    <enterprise-images> $ ./tools/src/elliott.py --group openshift-3.9 advisory:find-bugs --auto --add 32916
+    <elliott> $ ./elliott --group openshift-3.9 advisory:find-bugs --auto --add 32916
 
 Flags may be added to the identified bugs by using the `--flag`
 option.
@@ -296,17 +297,23 @@ advisory (closed advisory are allowed).
 Here is an example of how we could look up image builds that would be
 attached to a 3.6 advisory:
 
-    <enterprise-images> $ ./tools/src/elliott.py --group openshift-3.6 advisory:find-builds -k image
-    2018-03-20T13:57:45.244036 Searching group directory: /home/tbielawa/rhat/cd/enterprise-images/groups/openshift-3.6
-    2018-03-20T13:57:45.253068 Using branch from group.yml: rhaos-3.6-rhel-7
-    Searching Brew for build candidates: Hold on a moment
-	Refreshing for tag: rhaos-3.6-rhel-7
-	Refreshing for tag: rhaos-3.6-rhel-7-candidate
-    The following 67 builds may be attached to an advisory:
-     {'file_types': ['tar'], 'product_version': 'RHEL-7-OSE-3.6', 'build': 'aos-f5-router-docker-v3.6.173.0.110-1'}
-     {'file_types': ['tar'], 'product_version': 'RHEL-7-OSE-3.6', 'build': 'aos3-installation-docker-v3.6.173.0.110-1'}
-     {'file_types': ['tar'], 'product_version': 'RHEL-7-OSE-3.6', 'build': 'container-engine-docker-v3.6.173.0.110-1'}
-     ...
+    <elliott> $ ./elliott --group openshift-3.6 advisory:find-builds -k image
+
+    2018-11-27 10:23:28,117 INFO Using git@github.com:openshift/ocp-build-data.git for metadata
+    2018-11-27 10:23:28,117 INFO Cloning config data from git@github.com:openshift/ocp-build-data.git
+    2018-11-27 10:23:29,146 INFO Using branch from group.yml: rhaos-3.6-rhel-7
+    Generating list of images: Hold on a moment, fetching Brew buildinfo
+    [****************************************]
+    [****************************************]
+    Generating build metadata: Fetching data for 40 builds
+    [****************************************]
+    [****************************************]
+    The following 40 builds may be attached to an advisory:
+    aos-f5-router-container-v3.6.173.0.140-2
+    aos3-installation-container-v3.6.173.0.140-2
+    container-engine-container-v3.6.173.0.140-2
+    jenkins-slave-base-rhel7-container-v3.6.173.0.140-2
+    ...
 
 If we ran that same command again and suppplied the `--attach` option
 with a valid `ADVISORY` number as the argument then the discovered
