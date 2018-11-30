@@ -240,7 +240,7 @@ each function call.
 # Set advisory state
 # advisory:state
 #
-@cli.command("advisory:change-state", short_help="Change ADVISORY state")
+@cli.command("change-state", short_help="Change ADVISORY state")
 @click.option("--state", '-s', type=click.Choice(['NEW_FILES', 'QE', 'REL_PREP']),
               help="New state for the Advisory. NEW_FILES, QE, REL_PREP.")
 @click.argument('advisory', type=int)
@@ -286,7 +286,7 @@ Bugzilla Bugs.
 # Create Advisory (RPM and image)
 # advisory:create
 #
-@cli.command("advisory:create", short_help="Create a new advisory")
+@cli.command("create", short_help="Create a new advisory")
 @click.option("--kind", '-k', required=True,
               type=click.Choice(['rpm', 'image']),
               help="Kind of Advisory to create. Affects boilerplate text.")
@@ -440,7 +440,7 @@ advisory.
 # Collect bugs
 # advisory:find-bugs
 #
-@cli.command("advisory:find-bugs", short_help="Find or add MODIFED bugs to ADVISORY")
+@cli.command("find-bugs", short_help="Find or add MODIFED bugs to ADVISORY")
 @click.option("--add", "-a", 'advisory',
               default=False, metavar='ADVISORY',
               help="Add found bugs to ADVISORY. Applies to bug flags as well (by default only a list of discovered bugs are displayed)")
@@ -548,7 +548,7 @@ manually. Provide one or more --id's for manual bug addition.
 # Attach Builds
 # advisory:find-builds
 #
-@cli.command('advisory:find-builds',
+@cli.command('find-builds',
              short_help='Find or attach builds to ADVISORY')
 @click.option('--attach', '-a', 'advisory',
               default=False, metavar='ADVISORY',
@@ -720,7 +720,7 @@ PRESENT advisory. Here are some examples:
 # Get an Advisory
 # advisory:get
 #
-@cli.command("advisory:get", short_help="Get the ADVISORY")
+@cli.command("get", short_help="Get information for an ADVISORY")
 @click.argument('advisory', type=int)
 @click.option('--json', is_flag=True, default=False,
               help="Print the full JSON object of the advisory")
@@ -765,7 +765,7 @@ Fields for the short format: Release date, State, Synopsys, URL
 # List Advisories (RPM and image)
 # advisory:list
 #
-@cli.command("advisory:list", short_help="List filtered RHOSE advisories")
+@cli.command("list", short_help="List filtered RHOSE advisories")
 @click.option("--filter-id", '-f',
               default=elliottlib.constants.errata_default_filter,
               help="A custom filter id to list from")
@@ -809,7 +809,7 @@ yourself online: https://errata.devel.redhat.com/filter/1965
 # Add metadata comment to an Advisory
 # advisory:add-metadata
 #
-@cli.command("advisory:add-metadata", short_help="Add metadata comment to an advisory")
+@cli.command("add-metadata", short_help="Add metadata comment to an advisory")
 @click.argument('advisory', type=int)
 @click.option('--kind', '-k', required=True,
               type=click.Choice(['rpm', 'image']),
@@ -856,7 +856,7 @@ Example to add standard metadata to a 3.10 images release
 # Find transitions
 # bugzilla:find-transitions
 #
-@cli.command("bugzilla:find-transitions", short_help="Find bugs that have gone through the specifed transition")
+@cli.command("find-bug-transitions", short_help="Find bugs that have gone through the specifed transition")
 @click.option("--currently", 'current_state',
               required=True,
               type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
@@ -897,7 +897,7 @@ def find_transitions(runtime, current_state, changed_from, changed_to, add_comme
 # Add a comment to a bug
 # bugzilla:add-comment
 #
-@cli.command("bugzilla:add-comment", short_help="Add a comment to a bug")
+@cli.command("add-bug-comment", short_help="Add a comment to a bug")
 @click.option("--id", "bug_ids",
               multiple=True, required=True,
               help="Bugzilla ID to add the comment to --auto [MULTIPLE]")
