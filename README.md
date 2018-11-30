@@ -14,11 +14,11 @@ tedious and error prone.
       * [Authenticating](#authenticating)
    * [Tests](#tests)
    * [Usage](#usage)
-      * [`advisory:get` - Viewing an Advisory](#advisoryget---viewing-an-advisory)
-      * [`advisory:create` - Create a New Advisory](#advisorycreate---create-a-new-advisory)
-      * [`advisory:change-state` - Change the State of an Advisory](#advisorychange-state---change-the-state-of-an-advisory)
-      * [`advisory:find-bugs` - Find Bugzilla Bugs, Add to an Advisory](#advisoryfind-bugs---find-bugzilla-bugs-add-to-an-advisory)
-      * [`advisory:find-builds` - Find Brew RPM/Image Builds, Add to an Advisory](#advisoryfind-builds---find-brew-rpmimage-builds-add-to-an-advisory)
+      * [`get` - Viewing an Advisory](#advisoryget---viewing-an-advisory)
+      * [`create` - Create a New Advisory](#advisorycreate---create-a-new-advisory)
+      * [`change-state` - Change the State of an Advisory](#advisorychange-state---change-the-state-of-an-advisory)
+      * [`find-bugs` - Find Bugzilla Bugs, Add to an Advisory](#advisoryfind-bugs---find-bugzilla-bugs-add-to-an-advisory)
+      * [`find-builds` - Find Brew RPM/Image Builds, Add to an Advisory](#advisoryfind-builds---find-brew-rpmimage-builds-add-to-an-advisory)
 
 
 
@@ -91,9 +91,9 @@ assistance with the basics of kerberos at Red Hat:
 Once you have that taken care of you should run a simple command from
 elliott. I suggest the following, it will verify that you can access
 the Errata Tool successfully by attempting to get a list of recently
-created advisory:
+created advisories:
 
-    <elliott> $ ./elliott advisory:list
+    <elliott> $ ./elliott list
     2018-11-20T04:23:44 NEW_FILES Red Hat OpenShift Enterprise Container Image Updates https://errata.devel.redhat.com/advisory/38040
     2018-11-15T14:36:55 QE OpenShift Container Platform 3.5 images update https://errata.devel.redhat.com/advisory/37969
     2018-11-13T01:17:33 QE OpenShift Container Platform 3.6 images update https://errata.devel.redhat.com/advisory/37911
@@ -127,31 +127,31 @@ If that works then you can open the HTML coverage report:
 
 Here we describe how to effectively use elliott.
 
-**NOTE:** Every elliott `advisory:<foo>` command has a thoroughly
+**NOTE:** Every elliott `<foo>` command has a thoroughly
 detailed `--help` page. This includes examples and descriptions of all
 options. We will not be listing each and every single option for every
 command here. This will focus on getting you comfortable with the
 basics.
 
-## `advisory:get` - Viewing an Advisory
+## `get` - Viewing an Advisory
 
 You have [already seen](#authenticating) how to list recently created
-errata with `advisory:list`, now let's look at a single one in more
-detail using the `advisory:get` command.
+errata with `list`, now let's look at a single one in more
+detail using the `get` command.
 
-To get started, copy one of the IDs returned from the `advisory:list`
+To get started, copy one of the IDs returned from the `list`
 command, for example `32916`, one of our test advisories from the
-previous example. We'll pass that directly to `advisory:get`. You will
+previous example. We'll pass that directly to `get`. You will
 see the same brief output as you did before.
 
-    <elliott> $ ./elliott advisory:get 32916
+    <elliott> $ ./elliott get 32916
     2018-03-02T15:19:08 NEW_FILES TEST OpenShift Container Platform 3.5 bug fix and enhancement update https://errata.devel.redhat.com/advisory/32916
 
 Say you want additional information about this specific advisory. In
 which case you can give the `--json` option to the command (this is
 all documented in the commands `--help` output as well):
 
-    <elliott> $ ./elliott advisory:get 32916 --json
+    <elliott> $ ./elliott get 32916 --json
     {
       "diffs": {},
       "jira_issues": {
@@ -174,7 +174,7 @@ scroll through it. For example, to look at just the `content` (basic
 information) returned from the API you could use the `.content` filter
 in `jq`:
 
-    $ ./elliott advisory:get 32916 --json | jq '.content' | less
+    $ ./elliott get 32916 --json | jq '.content' | less
     {
       "content": {
         "revision_count": 1,
@@ -182,7 +182,7 @@ in `jq`:
         "errata_id": 32916,
         "description": "Red Hat OpenShift Container Platform is the company's cloud ...
 
-## `advisory:create` - Create a New Advisory
+## `create` - Create a New Advisory
 
 Creating an advisory with elliott requires very little input as far as
 errata details are concerned. You MUST provide:
@@ -203,19 +203,19 @@ for OSE 3.9. The default boilerplate text will be printed to the
 screen in the form of the JSON object that *would* have been submitted
 to the API:
 
-    <elliott> $ ./elliott --group openshift-3.9 advisory:create --kind rpm
+    <elliott> $ ./elliott --group openshift-3.9 create --kind rpm
 
 Create an Image Advisory for the 3.5 series on the first Monday in
 March. The date is given in simple `YYYY-MM-DD` format, and finally we
 give explicit confirmation to create the advisory by providing the
 `--yes` option:
 
-    <elliott> $ ./elliott --group openshift-3.5 advisory:create \
+    <elliott> $ ./elliott --group openshift-3.5 create \
         --kind image \
         --date 2018-03-05 \
         --yes
 
-## `advisory:change-state` - Change the State of an Advisory
+## `change-state` - Change the State of an Advisory
 
 Change the state of an advisory. For example, move an advisory from
 `NEW_FILES` where bugs and builds are still being added, to `QE`
@@ -224,9 +224,9 @@ state where the testers are able to take over.
 Here we'll move our example test advisory 32916 from `NEW_FILES` to
 `QE`:
 
-    <elliott> $ ./elliott advisory:change-state --state QE 32916
+    <elliott> $ ./elliott change-state --state QE 32916
 
-## `advisory:find-bugs` - Find Bugzilla Bugs, Add to an Advisory
+## `find-bugs` - Find Bugzilla Bugs, Add to an Advisory
 
 Bugzilla bugs can be attached automatically to an advisory. This keeps
 track of which documented issues/enhancements are included in an
@@ -247,16 +247,16 @@ Technically speaking, candidate bugs are bugs in the `MODIFIED` state
 which have a `TARGET RELEASE` set to the supplied product version (GA
 or ASYNC update).
 
-`advisory:find-bugs` has two modes of operation:
+`find-bugs` has two modes of operation:
 
 1. Query Bugzilla automatically and attach all discovered bugs (as
    described above)
 1. Provide bug IDs manually on the command line
 
 Example: Automatically *find* bugs for an OpenShift 3.9 update (but do
-not attach them). Notice how we do not need to provide an advisory:
+not attach them). Notice how we do not need to provide an 
 
-	<elliott> $ ./elliott --group openshift-3.9 advisory:find-bugs --auto
+	<elliott> $ ./elliott --group openshift-3.9 find-bugs --auto
 	2018-03-19T17:49:44.573042 Searching group directory: /home/tbielawa/rhat/cd/enterprise-images/groups/openshift-3.9
 	2018-03-19T17:49:44.584135 Using branch from group.yml: rhaos-3.9-rhel-7
 	Would have added 7 bugs: 1537593, 1510212, 1519365, 1529482, 1550797, 1543647, 1551904
@@ -264,7 +264,7 @@ not attach them). Notice how we do not need to provide an advisory:
 In order to add bugs to an advisory you must provide the ID of an
 advisory as the value to the `--add` option:
 
-    <elliott> $ ./elliott --group openshift-3.9 advisory:find-bugs --auto --add 32916
+    <elliott> $ ./elliott --group openshift-3.9 find-bugs --auto --add 32916
 
 Flags may be added to the identified bugs by using the `--flag`
 option.
@@ -273,11 +273,10 @@ Provide one or more bugs manually by using the `--id` option.
 
 See the `--help` output for additional examples and descriptions.
 
-
-## `advisory:find-builds` - Find Brew RPM/Image Builds, Add to an Advisory
+`find-builds` - Find Brew RPM/Image Builds, Add to an Advisory
 
 Brew RPM and Image builds can be attached to advisory. As we noted
-already in the `advisory:create` command, we deal with two different
+already in the `create` command, we deal with two different
 types of advisory, RPM and Image. When you're attaching builds ensure
 you are attaching the right build to the matching advisory.
 
@@ -295,9 +294,9 @@ received the "shipped" tag yet, and is NOT attached to any *OPEN*
 advisory (closed advisory are allowed).
 
 Here is an example of how we could look up image builds that would be
-attached to a 3.6 advisory:
+attached to a 3.6 
 
-    <elliott> $ ./elliott --group openshift-3.6 advisory:find-builds -k image
+    <elliott> $ ./elliott --group openshift-3.6 find-builds -k image
 
     2018-11-27 10:23:28,117 INFO Using git@github.com:openshift/ocp-build-data.git for metadata
     2018-11-27 10:23:28,117 INFO Cloning config data from git@github.com:openshift/ocp-build-data.git
