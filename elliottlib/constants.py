@@ -29,10 +29,9 @@ DEFAULT_VERSIONS = (
     "4.0", "4.0.1",
     "unspecified"
 )
-VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
+VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
 
 errata_url = "https://errata.devel.redhat.com"
-bugzilla_query_url = 'https://bugzilla.redhat.com/buglist.cgi?bug_status=MODIFIED&classification=Red%20Hat&f1=component&f2=component&f3=component&f4=cf_verified&keywords=UpcomingRelease&keywords_type=nowords&known_name=All%203.x%20MODIFIED%20Bugs&list_id=8111122&o1=notequals&o2=notequals&o3=notequals&o4=notequals&product=OpenShift%20Container%20Platform&query_format=advanced&short_desc=%5C%5Bfork%5C%5D&short_desc_type=notregexp&{0}&v1=RFE&v2=Documentation&v3=Security&v4=FailedQA&version=3.0.0&version=3.1.0&version=3.1.1&version=3.2.0&version=3.2.1&version=3.3.0&version=3.3.1&version=3.4.0&version=3.4.1&version=3.5.0&version=3.5.1&version=3.6.0&version=3.6.1&version=3.7.0&version=3.7.1&version=3.8.0&version=3.8.1&version=3.9.0&version=3.9.1&version=3.10.0&version=3.10.1&version=3.11.0&version=3.11.1&version=unspecified'
 
 # For new errata
 errata_solution = """Before applying this update, make sure all previously released errata relevant to your system have been applied.

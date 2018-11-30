@@ -448,6 +448,12 @@ advisory.
               required=False,
               default=False, is_flag=True,
               help="AUTO mode, adds bugs based on --group")
+@click.option("--status", 'status',
+              multiple=True,
+              required=False,
+              default=['MODIFIED','VERIFIED'],
+              type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
+              help="Status of the bugs")
 @click.option("--id", type=int, metavar='BUGID',
               multiple=True, required=False,
               help="Bugzilla IDs to add, conflicts with --auto [MULTIPLE]")
@@ -455,7 +461,7 @@ advisory.
               required=False, multiple=True,
               help="Optional flag to apply to found bugs [MULTIPLE]")
 @pass_runtime
-def find_bugs(runtime, advisory, auto, id, flag):
+def find_bugs(runtime, advisory, auto, status, id, flag):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--auto), or by
 manually specifying one or more bugs using the --id option. Mixing
@@ -505,7 +511,7 @@ manually. Provide one or more --id's for manual bug addition.
         raise click.BadParameter("If not using --auto then one or more --id's must be provided")
 
     if auto:
-        bug_ids = elliottlib.bugzilla.search_for_bugs(target_releases)
+        bug_ids = elliottlib.bugzilla.search_for_bugs(target_releases, status)
     else:
         bug_ids = [elliottlib.bugzilla.Bug(id=i) for i in id]
 

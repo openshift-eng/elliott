@@ -17,8 +17,8 @@ import click
 logger = logutil.getLogger(__name__)
 
 
-def search_for_bugs(target_release, verbose=False):
-    """Search the provided target_release's for bugs in the MODIFIED state
+def search_for_bugs(target_release, status, verbose=False):
+    """Search the provided target_release's for bugs in the specified states
 
     :return: A list of Bug objects
     """
@@ -27,15 +27,16 @@ def search_for_bugs(target_release, verbose=False):
     for release in target_release:
         target_releases_str += 'target_release={0}&'.format(release)
 
-    # query_url = BUGZILLA_QUERY_URL.format(target_releases_str)
-
-    query_url = SearchURL(constants.BUGZILLA_SERVER, "MODIFIED")
+    query_url = SearchURL(constants.BUGZILLA_SERVER)
     query_url.addFilter("component", "notequals", "RFE")
     query_url.addFilter("component", "notequals", "Documentation")
     query_url.addFilter("component", "notequals", "Security")
 
     for v in constants.DEFAULT_VERSIONS:
         query_url.addVersion(v)
+
+    for s in status:
+        query_url.addBugStatus(s)
 
     for r in target_release:
         query_url.addTargetRelease(r)
@@ -50,7 +51,8 @@ def search_for_bugs(target_release, verbose=False):
     return [Bug(id=i) for i in new_bugs]
 
 def search_for_bug_transitions(current_state, changed_from, changed_to):
-    query_url = SearchURL(constants.BUGZILLA_SERVER, current_state)
+    query_url = SearchURL(constants.BUGZILLA_SERVER)
+    query_url.addBugStatus(current_state)
     query_url.addFilterOperator("AND_G")
     query_url.addFilter("bug_status", "changedfrom", changed_from)
     query_url.addFilter("bug_status", "changedto", changed_to)
@@ -125,14 +127,14 @@ class SearchFilter(object):
 
 class SearchURL(object):
 
-    url_format = "https://{}/buglist.cgi"
+    url_format = "https://{}/buglist.cgi?"
 
-    def __init__(self, bz_host="bugzilla.redhat.com", bug_status="MODIFIED"):
+    def __init__(self, bz_host="bugzilla.redhat.com"):
         self.bz_host = bz_host
-        self.bug_status = bug_status
 
         self.classification = "Red Hat"
         self.product = "OpenShift Container Platform"
+        self.bug_status = []
         self.filters = []
         self.filter_operator = ""
         self.versions = []
@@ -153,7 +155,7 @@ class SearchURL(object):
         return url
 
     def _status_string(self):
-        return "?bug_status={}".format(self.bug_status)
+        return "".join(["&bug_status={}".format(i) for i in self.bug_status])
 
     def _version_string(self):
         return "".join(["&version={}".format(i) for i in self.versions])
@@ -178,3 +180,6 @@ class SearchURL(object):
 
     def addVersion(self, version):
         self.versions.append(version)
+
+    def addBugStatus(self, status):
+        self.bug_status.append(status)
