@@ -496,9 +496,11 @@ manually. Provide one or more --id's for manual bug addition.
     if auto:
         # Initialization ensures a valid group was provided
         runtime.initialize(clone_distgits=False)
+        # Parse the X component from the group version
+        major = major_from_branch(runtime.group_config.branch)
         # Parse the Y component from the group version
         minor = minor_from_branch(runtime.group_config.branch)
-        target_releases = ["3.{y}.z".format(y=minor), "3.{y}.0".format(y=minor)]
+        target_releases = ["{x}.{y}.z".format(x=major, y=minor), "{x}.{y}.0".format(x=major, y=minor)]
     elif len(id) == 0:
         # No bugs were provided
         raise click.BadParameter("If not using --auto then one or more --id's must be provided")

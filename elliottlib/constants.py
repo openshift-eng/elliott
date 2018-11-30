@@ -26,6 +26,7 @@ DEFAULT_VERSIONS = (
     "3.9.0", "3.9.1",
     "3.10.0", "3.10.1",
     "3.11.0", "3.11.1",
+    "4.0", "4.0.1",
     "unspecified"
 )
 VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
