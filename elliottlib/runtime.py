@@ -20,12 +20,10 @@ import logutil
 import assertion
 import exectools
 from pushd import Dir
-
 from image import ImageMetadata
 from rpmcfg import RPMMetadata
 from model import Model, Missing
 from multiprocessing import Lock
-from repos import Repos
 import brew
 import constants
 from exceptions import ElliottFatalError
@@ -103,16 +101,9 @@ class Runtime(object):
         for key, val in kwargs.items():
             self.__dict__[key] = val
 
-        if self.latest_parent_version:
-            self.ignore_missing_base = True
-
         self._remove_tmp_working_dir = False
         self.group_config = None
 
-        # If source needs to be cloned by oit directly, the directory in which it will be placed.
-        self.sources_dir = None
-
-        self.distgits_dir = None
 
         self.record_log = None
         self.record_log_path = None
@@ -129,20 +120,10 @@ class Runtime(object):
         # Map of dist-git repo name -> RPMMetadata object. Populated when group is set.
         self.rpm_map = {}
 
-        # Map of source code repo aliases (e.g. "ose") to a path on the filesystem where it has been cloned.
-        # See registry_repo.
-        self.source_paths = {}
-
         # Map of stream alias to image name.
         self.stream_alias_overrides = {}
 
         self.initialized = False
-
-        # Will be loaded with the streams.yml Model
-        self.streams = {}
-
-        # Create a "uuid" which will be used in FROM fields during updates
-        self.uuid = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
 
         # Optionally available if self.fetch_rpms_for_tag() is called
         self.rpm_list = None
@@ -171,7 +152,7 @@ class Runtime(object):
                     raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
             return tmp_config
 
-    def initialize(self, mode='images', clone_distgits=True,
+    def initialize(self, mode='images',
                    validate_content_sets=False,
                    no_group=False, clone_source=True, disabled=None):
 
@@ -198,18 +179,6 @@ class Runtime(object):
             self.working_dir = os.path.abspath(self.working_dir)
             if not os.path.isdir(self.working_dir):
                 os.makedirs(self.working_dir)
-
-        self.distgits_dir = os.path.join(self.working_dir, "distgits")
-        if not os.path.isdir(self.distgits_dir):
-            os.mkdir(self.distgits_dir)
-
-        self.distgits_diff_dir = os.path.join(self.working_dir, "distgits-diffs")
-        if not os.path.isdir(self.distgits_diff_dir):
-            os.mkdir(self.distgits_diff_dir)
-
-        self.sources_dir = os.path.join(self.working_dir, "sources")
-        if not os.path.isdir(self.sources_dir):
-            os.mkdir(self.sources_dir)
 
         if disabled is not None:
             self.load_disabled = disabled
@@ -252,27 +221,9 @@ class Runtime(object):
         self.images_dir = images_dir = os.path.join(self.group_dir, 'images')
         self.rpms_dir = rpms_dir = os.path.join(self.group_dir, 'rpms')
 
-        # register the sources
-        # For each "--source alias path" on the command line, register its existence with
-        # the runtime.
-        for r in self.source:
-            self.register_source_alias(r[0], r[1])
-
-        if self.sources:
-            with open(self.sources, 'r') as sf:
-                source_dict = yaml.load(sf)
-                if not isinstance(source_dict, dict):
-                    raise ValueError('--sources param must be a yaml file containing a single dict.')
-                for key, val in source_dict.items():
-                    self.register_source_alias(key, val)
-
         with Dir(self.group_dir):
             self.group_config = self.get_group_config(self.group_dir)
             self.arches = self.group_config.get('arches', ['x86_64'])
-            self.repos = Repos(self.group_config.repos, self.arches)
-
-            if validate_content_sets:
-                self.repos.validate_content_sets()
 
             if self.group_config.name != self.group:
                 raise IOError(
@@ -432,8 +383,7 @@ class Runtime(object):
         if os.path.isfile(streams_path):
             with open(streams_path, "r") as s:
                 self.streams = Model(yaml.load(s.read()))
-        if clone_distgits:
-            self.clone_distgits()
+
 
     def initialize_logging(self):
 
@@ -580,14 +530,6 @@ class Runtime(object):
             self.record_log.write("%s\n" % record)
             self.record_log.flush()
 
-    def add_distgits_diff(self, distgit, diff):
-        """
-        Records the diff of changes applied to a distgit repo.
-        """
-
-        with open(os.path.join(self.distgits_diff_dir, distgit + '.patch'), 'w') as f:
-            f.write(diff)
-
     def resolve_image(self, distgit_name, required=True):
         if distgit_name not in self.image_map:
             if not required:
@@ -613,135 +555,6 @@ class Runtime(object):
             raise IOError("Unable to find definition for stream: %s" % stream_name)
 
         return self.streams[stream_name]
-
-    def resolve_source(self, alias, required=True):
-        """
-        Looks up a source alias and returns a path to the directory containing
-        that source. Sources can be specified on the command line, or, failing
-        that, in group.yml.
-        If a source specified in group.yaml has not be resolved before,
-        this method will clone that source to checkout the group's desired
-        branch before returning a path to the cloned repo.
-        :param alias: The source alias to resolve
-        :param required: If True, thrown an exception if not found
-        :return: Returns the source path or None (if required=False)
-        """
-
-        self.logger.debug("Resolving local source directory for alias {}".
-                          format(alias))
-        if alias in self.source_paths:
-            self.logger.debug(
-                "returning previously resolved path for alias {}: {}".
-                format(alias, self.source_paths[alias]))
-            return self.source_paths[alias]
-
-        # Check if the group config specs the "alias" for the source location
-        if (self.group_config.sources is Missing or
-            alias not in self.group_config.sources):
-            if required:
-                raise IOError("Source alias not found in specified sources or in the current group: %s" % alias)
-            else:
-                return None
-
-        # Where the source will land
-        source_dir = os.path.join(self.sources_dir, alias)
-        self.logger.debug("checking for source directory in source_dir: {}".
-                          format(source_dir))
-
-        # If this source has already been extracted for this working directory
-        if os.path.isdir(source_dir):
-            # Store so that the next attempt to resolve the source hits the map
-            self.source_paths[alias] = source_dir
-            self.logger.info(
-                "Source '{}' already exists in (skipping clone): {}".
-                format(alias, source_dir))
-            return source_dir
-
-        source_config = self.group_config.sources[alias]
-        url = source_config["url"]
-        branches = source_config['branch']
-        self.logger.info("Cloning source '%s' from %s as specified by group into: %s" % (alias, url, source_dir))
-        exectools.cmd_assert(
-            cmd=["git", "clone", url, source_dir],
-            retries=3,
-            on_retry=["rm", "-rf", source_dir],
-        )
-        stage_branch = branches.get('stage', None)
-        fallback_branch = branches.get("fallback", None)
-        found = False
-        with Dir(source_dir):
-            if self.stage and stage_branch:
-                self.logger.info('Normal branch overridden by --stage option, using "{}"'.format(stage_branch))
-                branch = stage_branch
-            else:
-                branch = branches["target"]
-            self.logger.info("Attempting to checkout source '%s' branch %s in: %s" % (alias, branch, source_dir))
-
-            if branch != "master":
-                rc, out, err = exectools.cmd_gather(["git", "checkout", "-b", branch, "origin/%s" % branch])
-            else:
-                rc = 0
-
-            if rc == 0:
-                found = True
-            else:
-                if self.stage and stage_branch:
-                    raise IOError('--stage option specified and no stage branch named "{}" exists for {}|{}'.format(stage_branch, alias, url))
-                elif fallback_branch is not None:
-                    self.logger.info("Unable to checkout branch %s ; trying fallback %s" % (branch, fallback_branch))
-                    self.logger.info("Attempting to checkout source '%s' fallback-branch %s in: %s" % (alias, fallback_branch, source_dir))
-                    if fallback_branch != "master":
-                        rc2, out, err = exectools.cmd_gather(
-                            ["git", "checkout", "-b", fallback_branch, "origin/%s" % fallback_branch],
-                        )
-                    else:
-                        rc2 = 0
-
-                    if rc2 == 0:
-                        found = True
-                    else:
-                        self.logger.error("Failed checking out fallback-branch %s: %s" % (branch, err))
-                else:
-                    self.logger.error("Failed checking out branch %s: %s" % (branch, err))
-
-            if found:
-                # Store so that the next attempt to resolve the source hits the map
-                self.register_source_alias(alias, source_dir)
-                return source_dir
-            else:
-                if required:
-                    raise IOError("Error checking out target branch of source '%s' in: %s" % (alias, source_dir))
-                else:
-                    return None
-
-    def resolve_source_head(self, alias, required=True):
-        """
-        Attempts to resolve the branch a given source alias has checked out. If not on a branch
-        returns SHA of head.
-        :param alias: The source alias to analyze
-        :param required: Whether an error should be thrown or None returned if it cannot be determined
-        :return: The name of the checked out branch or None (if required=False)
-        """
-        source_dir = self.resolve_source(alias, required)
-
-        if not source_dir:
-            return None
-
-        with open(os.path.join(source_dir, '.git/HEAD')) as f:
-            head_content = f.read().strip()
-            # This will either be:
-            # a SHA like: "52edbcd8945af0dc728ad20f53dcd78c7478e8c2"
-            # a local branch name like: "ref: refs/heads/master"
-            if head_content.startswith("ref:"):
-                return head_content.split('/', 2)[2]  # limit split in case branch name contains /
-
-            # Otherwise, just return SHA
-            return head_content
-
-    def export_sources(self, output):
-        self.logger.info('Writing sources to {}'.format(output))
-        with open(output, 'w') as sources_file:
-            yaml.dump(self.source_paths, sources_file, default_flow_style=False)
 
     def _flag_file(self, flag_name):
         return os.path.join(self.flags_dir, flag_name)
@@ -811,18 +624,6 @@ class Runtime(object):
         pool.close()
         pool.join()
         return ret
-
-    def clone_distgits(self, n_threads=20):
-        return self._parallel_exec(
-            lambda m: m.distgit_repo(),
-            self.all_metas(),
-            n_threads=n_threads).get()
-
-    def push_distgits(self, n_threads=20):
-        return self._parallel_exec(
-            lambda m: m.distgit_repo().push(),
-            self.all_metas(),
-            n_threads=n_threads).get()
 
     def parallel_exec(self, f, args, n_threads=None):
         n_threads = n_threads if n_threads is not None else len(args)

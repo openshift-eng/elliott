@@ -62,17 +62,8 @@ context_settings = dict(help_option_names=['-h', '--help'])
               help="Name of group rpm member to include in operation (all by default). Can be comma delimited list.")
 @click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
               help="Name of group image or rpm member to exclude in operation (none by default). Can be comma delimited list.")
-@click.option('--ignore-missing-base', default=False, is_flag=True, help='If a base image is not included, proceed and do not update FROM.')
-@click.option('--latest-parent-version', default=False, is_flag=True,
-              help='If a base image is not included, lookup latest FROM tag for parent. Implies --ignore-missing-base')
 @click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
 @click.option('--debug', default=False, is_flag=True, help='Show debug output on console.')
-@click.option('--no_oit_comment', default=False, is_flag=True,
-              help='Do not place OIT comment in Dockerfile. Can also be set in each config yaml')
-@click.option("--source", metavar="ALIAS PATH", nargs=2, multiple=True,
-              help="Associate a path with a given source alias.  [multiple]")
-@click.option("--sources", metavar="YAML_PATH",
-              help="YAML dict associating sources with their alias. Same as using --source multiple times.")
 @click.pass_context
 def cli(ctx, **kwargs):
     cfg = dotconfig.Config('doozer', 'settings',
@@ -199,7 +190,7 @@ advisory.
 \b
     $ elliott --group openshift-3.5 advisory:create --yes -k image --date 2018-03-05
 """
-    runtime.initialize(clone_distgits=False)
+    runtime.initialize()
     minor = minor_from_branch(runtime.group_config.branch)
 
     if date == default_release_date.strftime(YMD):
@@ -343,7 +334,7 @@ manually. Provide one or more --id's for manual bug addition.
 
     if auto:
         # Initialization ensures a valid group was provided
-        runtime.initialize(clone_distgits=False)
+        runtime.initialize()
         # Parse the X component from the group version
         major = major_from_branch(runtime.group_config.branch)
         # Parse the Y component from the group version
@@ -448,7 +439,7 @@ PRESENT advisory. Here are some examples:
 \b
     $ elliott --group openshift-3.6 advisory:find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
 """
-    runtime.initialize(clone_distgits=False)
+    runtime.initialize()
     minor = minor_from_branch(runtime.group_config.branch)
     major = major_from_branch(runtime.group_config.branch)
     product_version = 'RHEL-7-OSE-{X}.{Y}'.format(X=major, Y=minor)
@@ -679,7 +670,7 @@ Example to add standard metadata to a 3.10 images release
 \b
     $ elliott --group=openshift-3.10 advisory:add-metadata --impetus standard --kind image
 """
-    runtime.initialize(clone_distgits=False)
+    runtime.initialize()
     release = release_from_branch(runtime.group_config.branch)
 
     try:
