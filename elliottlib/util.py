@@ -1,5 +1,6 @@
 import click
 import datetime
+import re
 
 # -----------------------------------------------------------------------------
 # Constants and defaults

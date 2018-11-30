@@ -15,7 +15,6 @@ import datetime
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
 import os
-import re
 
 # ours
 from elliottlib import Runtime
@@ -37,9 +36,6 @@ import dotconfig
 # -----------------------------------------------------------------------------
 # Constants and defaults
 # -----------------------------------------------------------------------------
-default_release_date = datetime.datetime(1970, 1, 1, 0, 0)
-now = datetime.datetime.now()
-YMD = '%Y-%m-%d'
 pass_runtime = click.make_pass_decorator(Runtime)
 context_settings = dict(help_option_names=['-h', '--help'])
 
