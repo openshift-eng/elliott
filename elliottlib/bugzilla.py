@@ -155,7 +155,7 @@ class SearchURL(object):
         return url
 
     def _status_string(self):
-        return "".join(["&bug_status={}".format(i) for i in self.bug_status])
+        return "&".join(["bug_status={}".format(i) for i in self.bug_status])
 
     def _version_string(self):
         return "".join(["&version={}".format(i) for i in self.versions])
