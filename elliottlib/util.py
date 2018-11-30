@@ -1,5 +1,12 @@
 import click
+import datetime
 
+# -----------------------------------------------------------------------------
+# Constants and defaults
+# -----------------------------------------------------------------------------
+default_release_date = datetime.datetime(1970, 1, 1, 0, 0)
+now = datetime.datetime.now()
+YMD = '%Y-%m-%d'
 
 def red_prefix(msg):
     """Print out a message prefix in bold red letters, like for "Error: "
