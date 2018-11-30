@@ -24,10 +24,14 @@ import elliottlib.bugzilla
 import elliottlib.brew
 import elliottlib.errata
 import elliottlib.exceptions
+from elliottlib import cli_opts
+from elliottlib.exceptions import ElliottFatalError
+from elliottlib.util import green_prefix, red_prefix, green_print, red_print
 
 # 3rd party
 import click
 import requests
+import dotconfig
 
 # -----------------------------------------------------------------------------
 # Constants and defaults
@@ -70,8 +74,11 @@ context_settings = dict(help_option_names=['-h', '--help'])
               help="YAML dict associating sources with their alias. Same as using --source multiple times.")
 @click.pass_context
 def cli(ctx, **kwargs):
-    # @pass_runtime
-    ctx.obj = Runtime(**kwargs)
+    cfg = dotconfig.Config('doozer', 'settings',
+                           template=cli_opts.CLI_CONFIG_TEMPLATE,
+                           envvars=cli_opts.CLI_ENV_VARS,
+                           cli_args=kwargs)
+    ctx.obj = Runtime(cfg_obj=cfg, **cfg.to_dict())
 
 
 # -----------------------------------------------------------------------------
@@ -918,6 +925,17 @@ def add_comment(runtime, bug_ids, comment, is_private):
 # -----------------------------------------------------------------------------
 # CLI Entry point
 # -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    # Invoke the Click CLI wrapper function
-    cli(obj={})
+def main():
+    try:
+        cli(obj={})
+    except ElliottFatalError as ex:
+        # Allow capturing actual tool errors and print them
+        # nicely instead of a gross stack-trace.
+        # All internal errors that should simply cause the app
+        # to exit with an error code should use ElliottFatalError
+        red_print(ex.message)
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

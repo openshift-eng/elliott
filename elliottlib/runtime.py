@@ -852,7 +852,7 @@ class Runtime(object):
         """
 
         if self.data_path is None:
-            raise t(
+            raise ElliottFatalError(
                 ("No metadata path provided. Must be set via one of:\n"
                  "* data_path key in {}\n"
                  "* elliott --datapath [PATH|URL]\n"
