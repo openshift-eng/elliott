@@ -6,3 +6,4 @@ requests
 requests_kerberos
 koji
 bashlex
+pydotconfig

@@ -28,6 +28,7 @@ from multiprocessing import Lock
 from repos import Repos
 import brew
 import constants
+from exceptions import ElliottFatalError
 
 
 # Registered atexit to close out debug/record logs
@@ -90,15 +91,14 @@ class Runtime(object):
     log_lock = Lock()
 
     def __init__(self, **kwargs):
-
         self.include = []
 
         # initialize defaults in case no value is given
         self.verbose = False
         self.quiet = False
-        self.wip = False
-        self.disabled = False
-        self.metadata_dir = None
+        self.load_wip = False
+        self.load_disabled = False
+        self.data_path = None
 
         for key, val in kwargs.items():
             self.__dict__[key] = val
@@ -212,7 +212,7 @@ class Runtime(object):
             os.mkdir(self.sources_dir)
 
         if disabled is not None:
-            self.disabled = disabled
+            self.load_disabled = disabled
 
         self.initialize_logging()
 
@@ -237,14 +237,14 @@ class Runtime(object):
 
         # Try first that the user has given the proper full path to the
         # groups database directory
-        group_dir = os.path.join(self.metadata_dir, self.group)
+        group_dir = os.path.join(self.data_path, self.group)
         if not os.path.isdir(group_dir):
-            group_dir = os.path.join(self.metadata_dir, 'groups', self.group)
+            group_dir = os.path.join(self.data_path, 'groups', self.group)
 
         assertion.isdir(
             group_dir,
             "Cannot find group directory {} in {}"
-            .format(self.group, self.metadata_dir)
+            .format(self.group, self.data_path)
         )
 
         self.group_dir = group_dir
@@ -373,7 +373,7 @@ class Runtime(object):
                 if len(filename_list) == 0:
                     return  # no configs of this type found, bail out
 
-                check_include = len(include) > 0 or self.wip
+                check_include = len(include) > 0 or self.load_wip
                 with Dir(search_dir):
                     for config_filename in filename_list:
                         is_include = False
@@ -382,7 +382,7 @@ class Runtime(object):
                         # removing this requirement would require a massive rework of Metadata()
                         # deemed not worth it - AMH 10/9/18
                         is_wip = False
-                        if self.wip:
+                        if self.load_wip:
                             full_path = os.path.join(search_dir, config_filename)
                             with open(full_path, 'r') as f:
                                 cfg_data = yaml.load(f)
@@ -403,7 +403,7 @@ class Runtime(object):
                             c = Core(source_file=config_filename, schema_files=[schema_path])
                             c.validate(raise_exception=True)
 
-                            gen(search_dir, config_filename, self.disabled or is_include or is_wip)
+                            gen(search_dir, config_filename, self.load_disabled or is_include or is_wip)
                         except Exception:
                             self.logger.error("Configuration file failed to load: {}".format(os.path.join(search_dir, config_filename)))
                             raise
@@ -465,7 +465,7 @@ class Runtime(object):
             # Otherwise, only allow children of ocp to log
             root_logger.addFilter(logging.Filter("ocp"))
 
-        # Get a reference to the logger for ocp_cd_tools
+        # Get a reference to the logger for elliott
         self.logger = logutil.getLogger()
         self.logger.propagate = False
 
@@ -851,14 +851,19 @@ class Runtime(object):
         Allow http, https, ssh and ssh+git (all valid git clone URLs)
         """
 
-        if self.metadata_dir is None:
-            self.metadata_dir = constants.OCP_BUILD_DATA_RW
+        if self.data_path is None:
+            raise t(
+                ("No metadata path provided. Must be set via one of:\n"
+                 "* data_path key in {}\n"
+                 "* elliott --datapath [PATH|URL]\n"
+                 "* Environment variable ELLIOTT_DATA_PATH\n"
+                 ).format(self.cfg_obj.full_path))
 
         schemes = ['ssh', 'ssh+git', "http", "https"]
 
-        self.logger.info('Using {} for metadata'.format(self.metadata_dir))
+        self.logger.info('Using {} for metadata'.format(self.data_path))
 
-        md_url = urlparse.urlparse(self.metadata_dir)
+        md_url = urlparse.urlparse(self.data_path)
         if md_url.scheme in schemes or (md_url.scheme == '' and ':' in md_url.path):
             # Assume this is a git repo to clone
             #
@@ -871,14 +876,14 @@ class Runtime(object):
             if os.path.isdir(md_destination):
                 self.logger.info('Metadata clone directory already exists, checking commit sha')
                 with Dir(md_destination):
-                    rc, out, err = exectools.cmd_gather(["git", "ls-remote", self.metadata_dir, "HEAD"])
+                    rc, out, err = exectools.cmd_gather(["git", "ls-remote", self.data_path, "HEAD"])
                     if rc:
-                        raise IOError('Unable to check remote sha: {}'.format(err))
+                        raise t('Unable to check remote sha: {}'.format(err))
                     remote = out.strip().split('\t')[0]
 
                     try:
                         exectools.cmd_assert('git branch --contains {}'.format(remote))
-                        self.logger.info('{} is already cloned and latest'.format(self.metadata_dir))
+                        self.logger.info('{} is already cloned and latest'.format(self.data_path))
                         clone_data = False
                     except:
                         rc, out, err = exectools.cmd_gather('git log origin/HEAD..HEAD')
@@ -889,36 +894,27 @@ class Runtime(object):
                             You must either clear your local config repo with `./oit.py cleanup`
                             or manually rebase from latest remote to continue
                             """.format(md_destination)
-                            raise IOError(msg)
+                            raise t(msg)
 
             if clone_data:
                 if os.path.isdir(md_destination):  # delete if already there
                     shutil.rmtree(md_destination)
-                self.logger.info('Cloning config data from {}'.format(self.metadata_dir))
+                self.logger.info('Cloning config data from {}'.format(self.data_path))
                 if not os.path.isdir(md_destination):
-                    cmd = "git clone --depth 1 {} {}".format(self.metadata_dir, md_destination)
-                    try:
-                        exectools.cmd_assert(cmd.split(' '))
-                    except:
-                        if self.metadata_dir == constants.OCP_BUILD_DATA_RW:
-
-                            self.logger.warn('Failed to clone {}, falling back to {}'.format(constants.OCP_BUILD_DATA_RW, constants.OCP_BUILD_DATA_RO))
-                            self.metadata_dir = constants.OCP_BUILD_DATA_RO
-                            return self.resolve_metadata()
-                        else:
-                            raise
-            self.metadata_dir = md_destination
+                    cmd = "git clone --depth 1 {} {}".format(self.data_path, md_destination)
+                    exectools.cmd_assert(cmd.split(' '))
+            self.data_path = md_destination
 
         elif md_url.scheme in ['', 'file']:
             # no scheme, assume the path is a local file
-            self.metadata_dir = md_url.path
-            if not os.path.isdir(self.metadata_dir):
+            self.data_path = md_url.path
+            if not os.path.isdir(self.data_path):
                 raise ValueError(
-                    "Invalid metadata_dir: {} - Not a directory"
-                    .format(self.metadata_dir))
+                    "Invalid data_path: {} - Not a directory"
+                    .format(self.data_path))
 
         else:
             # invalid scheme: not '' or any of the valid list
             raise ValueError(
-                "Invalid metadata_dir: {} - invalid scheme: {}"
-                .format(self.metadata_dir, md_url.scheme))
+                "Invalid data_path: {} - invalid scheme: {}"
+                .format(self.data_path, md_url.scheme))

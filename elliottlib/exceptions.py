@@ -2,6 +2,9 @@
 avoid circular imports
 """
 
+class ElliottFatalError(Exception):
+    """A broad exception for errors during Brew CRUD operations"""
+    pass
 
 class BrewBuildException(Exception):
     """A broad exception for errors during Brew CRUD operations"""
