@@ -11,7 +11,7 @@ Classes representing an ERRATUM (a single errata)
 import copy
 import datetime
 import json
-
+import ssl
 import constants
 import brew
 import exceptions
@@ -32,6 +32,7 @@ def get_erratum(id):
     :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
     """
     res = requests.get(constants.errata_get_erratum_url.format(id=id),
+                       verify=ssl.get_default_verify_paths().openssl_cafile,
                        auth=HTTPKerberosAuth())
 
     if res.status_code == 200:
@@ -236,6 +237,7 @@ filter_id
     filter_endpoint = constants.errata_filter_list_url.format(
         id=filter_id)
     res = requests.get(filter_endpoint,
+                       verify=ssl.get_default_verify_paths().openssl_cafile,
                        auth=HTTPKerberosAuth())
     if res.status_code == 200:
         # When asked for an advisory list which does not exist
@@ -498,6 +500,7 @@ class Erratum(object):
                 }
             }
         res = requests.get(constants.errata_get_comments_url,
+                           verify=ssl.get_default_verify_paths().openssl_cafile,
                            auth=HTTPKerberosAuth(),
                            json=body)
 
