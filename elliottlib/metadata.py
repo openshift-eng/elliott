@@ -4,19 +4,10 @@ import urllib
 
 import assertion
 import constants
-from distgit import ImageDistGitRepo, RPMDistGitRepo
 import exectools
 import logutil
 
 from model import Model, Missing
-
-#
-# These are used as labels to index selection of a subclass.
-#
-DISTGIT_TYPES = {
-    'image': ImageDistGitRepo,
-    'rpm': RPMDistGitRepo
-}
 
 
 def cgit_url(name, filename, rev=None):

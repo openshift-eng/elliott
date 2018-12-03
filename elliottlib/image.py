@@ -2,7 +2,6 @@ import os
 import json
 import bashlex
 from dockerfile_parse import DockerfileParser
-from distgit import pull_image
 from metadata import Metadata
 from model import Missing
 from pushd import Dir
@@ -170,9 +169,6 @@ class ImageMetadata(Metadata):
         _, version, release = self.get_latest_build_info()
         return "{host}/{name}:{version}-{release}".format(
             host=constants.BREW_IMAGE_HOST, name=self.config.name, version=version, release=release)
-
-    def pull_image(self):
-        pull_image(self.pull_url())
 
     def get_default_push_tags(self, version, release):
         push_tags = [
