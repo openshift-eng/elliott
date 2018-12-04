@@ -339,17 +339,15 @@ manually. Provide one or more --id's for manual bug addition.
     if auto:
         # Initialization ensures a valid group was provided
         runtime.initialize()
-        # Parse the X component from the group version
-        major = major_from_branch(runtime.group_config.branch)
-        # Parse the Y component from the group version
-        minor = minor_from_branch(runtime.group_config.branch)
-        target_releases = ["{x}.{y}.z".format(x=major, y=minor), "{x}.{y}.0".format(x=major, y=minor)]
+
+        #TODO: Check if this is null
+        bz_data = runtime.gitdata.load_data(key='bugzilla').data
     elif len(id) == 0:
         # No bugs were provided
         raise click.BadParameter("If not using --auto then one or more --id's must be provided")
 
     if auto:
-        bug_ids = elliottlib.bugzilla.search_for_bugs(target_releases, status)
+        bug_ids = elliottlib.bugzilla.search_for_bugs(bz_data, status)
     else:
         bug_ids = [elliottlib.bugzilla.Bug(id=i) for i in id]
 

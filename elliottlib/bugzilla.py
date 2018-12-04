@@ -17,28 +17,23 @@ import click
 logger = logutil.getLogger(__name__)
 
 
-def search_for_bugs(target_release, status, verbose=False):
+def search_for_bugs(bz_data, status, verbose=False):
     """Search the provided target_release's for bugs in the specified states
 
     :return: A list of Bug objects
     """
-    # Example output: "target_release=3.4.z&target_release=3.5.z&target_release=3.6.z"
-    target_releases_str = ''
-    for release in target_release:
-        target_releases_str += 'target_release={0}&'.format(release)
+    query_url = SearchURL(bz_data)
 
-    query_url = SearchURL(constants.BUGZILLA_SERVER)
-    query_url.addFilter("component", "notequals", "RFE")
-    query_url.addFilter("component", "notequals", "Documentation")
-    query_url.addFilter("component", "notequals", "Security")
+    for f in bz_data.get('filter'):
+        query_url.addFilter(f.get('field'), f.get('operator'), f.get('value'))
 
-    for v in constants.DEFAULT_VERSIONS:
+    for v in bz_data.get('version'):
         query_url.addVersion(v)
 
     for s in status:
         query_url.addBugStatus(s)
 
-    for r in target_release:
+    for r in bz_data.get('target_release'):
         query_url.addTargetRelease(r)
 
     # TODO: Expose this for debugging
@@ -129,11 +124,11 @@ class SearchURL(object):
 
     url_format = "https://{}/buglist.cgi?"
 
-    def __init__(self, bz_host="bugzilla.redhat.com"):
-        self.bz_host = bz_host
+    def __init__(self, bz_data):
+        self.bz_host = bz_data.get('server')
 
-        self.classification = "Red Hat"
-        self.product = "OpenShift Container Platform"
+        self.classification = bz_data.get('classification')
+        self.product = bz_data.get('product')
         self.bug_status = []
         self.filters = []
         self.filter_operator = ""
