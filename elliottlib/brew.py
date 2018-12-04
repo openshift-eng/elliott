@@ -11,6 +11,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
 from multiprocessing import Lock
 import shlex
+import ssl
 import koji
 import koji_cli.lib
 import traceback
@@ -111,9 +112,11 @@ def get_brew_build(nvr, product_version='', session=None):
     """
     if session is not None:
         res = session.get(constants.errata_get_build_url.format(id=nvr),
+                          verify=ssl.get_default_verify_paths().openssl_cafile,
                           auth=HTTPKerberosAuth())
     else:
         res = requests.get(constants.errata_get_build_url.format(id=nvr),
+                           verify=ssl.get_default_verify_paths().openssl_cafile,
                            auth=HTTPKerberosAuth())
     if res.status_code == 200:
         return Build(nvr=nvr, body=res.json(), product_version=product_version)
