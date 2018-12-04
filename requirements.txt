@@ -7,3 +7,4 @@ requests_kerberos
 koji
 bashlex
 pydotconfig
+pygitdata
