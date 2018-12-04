@@ -36,12 +36,17 @@ def cprint(msg):
     """Wrapper for click.echo"""
     click.echo(msg)
 
+def exit_unauthenticated():
+    """Standard response when an API call returns 'unauthenticated' (401)"""
+    red_prefix("Error Unauthenticated: ")
+    click.echo("401 - user is not authenticated, are you sure you have a kerberos ticket?")
+    exit(1)
+
 def exit_unauthorized():
     """Standard response when an API call returns 'unauthorized' (403)"""
     red_prefix("Error Unauthorized: ")
     click.echo("403 - user is authenticated, but unauthorized to perform this action")
     exit(1)
-
 
 def validate_release_date(ctx, param, value):
     """Ensures dates are provided in the correct format"""
