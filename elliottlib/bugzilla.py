@@ -45,14 +45,17 @@ def search_for_bugs(bz_data, status, verbose=False):
 
     return [Bug(id=i) for i in new_bugs]
 
-def search_for_bug_transitions(current_state, changed_from, changed_to):
-    query_url = SearchURL(constants.BUGZILLA_SERVER)
+def search_for_bug_transitions(bz_data, current_state, changed_from, changed_to):
+    query_url = SearchURL(bz_data)
+
     query_url.addBugStatus(current_state)
+
     query_url.addFilterOperator("AND_G")
+
     query_url.addFilter("bug_status", "changedfrom", changed_from)
     query_url.addFilter("bug_status", "changedto", changed_to)
 
-    for v in constants.DEFAULT_VERSIONS:
+    for v in bz_data.get('version'):
         query_url.addVersion(v)
 
     changed_bugs = check_output(

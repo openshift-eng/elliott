@@ -339,8 +339,6 @@ manually. Provide one or more --id's for manual bug addition.
     if auto:
         # Initialization ensures a valid group was provided
         runtime.initialize()
-
-        #TODO: Check if this is null
         bz_data = runtime.gitdata.load_data(key='bugzilla').data
     elif len(id) == 0:
         # No bugs were provided
@@ -721,7 +719,9 @@ def find_transitions(runtime, current_state, changed_from, changed_to, add_comme
 \b
     $ elliott bugzilla:find-transitions --currently VERIFIED --from ASSIGNED --to ON_QA
 """
-    bug_ids = elliottlib.bugzilla.search_for_bug_transitions(current_state, changed_from, changed_to)
+    bz_data = runtime.gitdata.load_data(key='bugzilla').data
+
+    bug_ids = elliottlib.bugzilla.search_for_bug_transitions(bz_data, current_state, changed_from, changed_to)
 
     click.echo('Found the following bugs matching that transition: {}'.format(bug_ids))
 
