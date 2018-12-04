@@ -44,7 +44,7 @@ context_settings = dict(help_option_names=['-h', '--help'])
 @click.option("--working-dir", metavar='PATH', envvar="ELLIOTT_WORKING_DIR",
               default=None,
               help="Existing directory in which file operations should be performed.")
-click.option("--data-path", metavar='PATH', default=None,
+@click.option("--data-path", metavar='PATH', default=None,
               help="Git repo or directory containing groups metadata")
 @click.option("--user", metavar='USERNAME', envvar="ELLIOTT_USER",
               default=None,
