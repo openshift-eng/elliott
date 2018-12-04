@@ -205,6 +205,7 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y',
     if create:
         # THIS IS NOT A DRILL
         res = requests.post(constants.errata_post_erratum_url,
+                            verify=ssl.get_default_verify_paths().openssl_cafile,
                             auth=HTTPKerberosAuth(),
                             json=body)
 
@@ -369,6 +370,7 @@ class Erratum(object):
         :param Bug bug: A :module:`bugzilla` Bug object
         """
         return requests.post(constants.errata_add_bug_url.format(id=self.advisory_id),
+                             verify=ssl.get_default_verify_paths().openssl_cafile,
                              auth=HTTPKerberosAuth(),
                              json={'bug': bug.id})
 
@@ -398,6 +400,7 @@ class Erratum(object):
         data = [b.to_json() for b in builds]
 
         res = requests.post(constants.errata_add_builds_url.format(id=self.advisory_id),
+                            verify=ssl.get_default_verify_paths().openssl_cafile,
                             auth=HTTPKerberosAuth(),
                             json=data)
 
@@ -431,6 +434,7 @@ class Erratum(object):
         """
         data = {"comment": json.dumps(comment)}
         return requests.post(constants.errata_add_comment_url.format(id=self.advisory_id),
+                             verify=ssl.get_default_verify_paths().openssl_cafile,
                              auth=HTTPKerberosAuth(),
                              data=data)
 
@@ -453,6 +457,7 @@ class Erratum(object):
         https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidchange_state
         """
         res = requests.post(constants.errata_change_state_url.format(id=self.advisory_id),
+                            verify=ssl.get_default_verify_paths().openssl_cafile,
                             auth=HTTPKerberosAuth(),
                             data={"new_state": state})
 
