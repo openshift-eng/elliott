@@ -27,8 +27,8 @@ remote_git_name = {name}
 
 class RPMMetadata(Metadata):
 
-    def __init__(self, runtime, base_dir, config_filename, clone_source=True):
-        super(RPMMetadata, self).__init__('rpm', runtime, base_dir, config_filename)
+    def __init__(self, runtime, data_obj, clone_source=True):
+        super(RPMMetadata, self).__init__('rpm', runtime, data_obj)
 
         self.source = self.config.content.source
         if self.source is Missing:

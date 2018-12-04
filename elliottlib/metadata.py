@@ -35,20 +35,19 @@ CONFIG_MODE_DEFAULT = CONFIG_MODES[0]
 
 
 class Metadata(object):
-    def __init__(self, meta_type, runtime, base_dir, config_filename):
+    def __init__(self, meta_type, runtime, data_obj):
         """
         :param: meta_type - a string. Index to the sub-class <'rpm'|'image'>.
         :param: runtime - a Runtime object.
         :param: name - a filename to load as metadata
         """
-
         self.meta_type = meta_type
         self.runtime = runtime
-        self.base_dir = base_dir
-        self.config_filename = config_filename
-        self.full_config_path = os.path.join(self.base_dir, self.config_filename)
-        base_dirs = base_dir.split('/')
-        self.in_group_config_path = base_dirs[-1] + '/' + self.config_filename
+        self.data_obj = data_obj
+        self.base_dir = data_obj.base_dir
+        self.config_filename = data_obj.filename
+        self.full_config_path = data_obj.path
+
 
         # Some config filenames have suffixes to avoid name collisions; strip off the suffix to find the real
         # distgit repo name (which must be combined with the distgit namespace).
@@ -56,18 +55,12 @@ class Metadata(object):
         #      distgit_key=openshift-enterprise-mediawiki.apb
         #      name (repo name)=openshift-enterprise-mediawiki
 
-        self.distgit_key = config_filename.rsplit('.', 1)[0]  # Split off .yml
+        self.distgit_key = data_obj.key
         self.name = self.distgit_key.split('.')[0]   # Split off any '.apb' style differentiator (if present)
 
-        self.runtime.logger.debug("Loading metadata from {}".format(self.config_filename))
+        self.runtime.logger.debug("Loading metadata from {}".format(self.full_config_path))
 
-        assertion.isfile(os.path.join(os.getcwd(), self.config_filename),
-                         "Unable to find configuration file")
-
-        with open(self.full_config_path, "r") as f:
-            config_yml_content = f.read()
-
-        self.config = Model(yaml.load(config_yml_content))
+        self.config = Model(data_obj.data)
 
         self.mode = self.config.get('mode', CONFIG_MODE_DEFAULT).lower()
         if self.mode not in CONFIG_MODES:

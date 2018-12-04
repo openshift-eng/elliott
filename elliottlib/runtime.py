@@ -15,6 +15,7 @@ import logging
 import functools
 import traceback
 import urlparse
+import gitdata
 
 import logutil
 import assertion
@@ -129,28 +130,21 @@ class Runtime(object):
         self.rpm_list = None
         self.rpm_search_tree = None
 
-    def get_group_config(self, group_dir):
-        with Dir(group_dir):
-
-            group_schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_group.yml")
-            c = Core(source_file="group.yml", schema_files=[group_schema_path])
-            c.validate(raise_exception=True)
-
-            with open("group.yml", "r") as f:
-                group_yml = f.read()
-
-            # group.yml can contain a `vars` section which should be a
-            # single level dict containing keys to str.format(**dict) replace
-            # into the YAML content. If `vars` found, the format will be
-            # preformed and the YAML model will reloaded from that result
-            tmp_config = Model(yaml.load(group_yml))
-            replace_vars = tmp_config.vars
-            if replace_vars is not Missing:
-                try:
-                    tmp_config = Model(yaml.load(group_yml.format(**replace_vars)))
-                except KeyError as e:
-                    raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
-            return tmp_config
+    def get_group_config(self):
+        # group.yml can contain a `vars` section which should be a
+        # single level dict containing keys to str.format(**dict) replace
+        # into the YAML content. If `vars` found, the format will be
+        # preformed and the YAML model will reloaded from that result
+        tmp_config = Model(self.gitdata.load_data(key='group').data)
+        replace_vars = tmp_config.vars
+        if replace_vars is not Missing:
+            try:
+                group_yml = yaml.safe_dump(tmp_config.primitive(), default_flow_style=False)
+                tmp_config = Model(yaml.load(group_yml.format(**replace_vars)))
+            except KeyError as e:
+                raise
+                raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
+        return tmp_config
 
     def initialize(self, mode='images',
                    validate_content_sets=False,
@@ -171,7 +165,7 @@ class Runtime(object):
             exit(1)
 
         if self.working_dir is None:
-            self.working_dir = tempfile.mkdtemp(".tmp", "oit-")
+            self.working_dir = tempfile.mkdtemp(".tmp", "elliott-")
             # This can be set to False by operations which want the working directory to be left around
             self.remove_tmp_working_dir = True
             atexit.register(remove_tmp_working_dir, self)
@@ -204,25 +198,10 @@ class Runtime(object):
         if not os.path.isdir(self.flags_dir):
             os.mkdir(self.flags_dir)
 
-        # Try first that the user has given the proper full path to the
-        # groups database directory
-        group_dir = os.path.join(self.data_path, self.group)
-        if not os.path.isdir(group_dir):
-            group_dir = os.path.join(self.data_path, 'groups', self.group)
-
-        assertion.isdir(
-            group_dir,
-            "Cannot find group directory {} in {}"
-            .format(self.group, self.data_path)
-        )
-
-        self.group_dir = group_dir
-
-        self.images_dir = images_dir = os.path.join(self.group_dir, 'images')
-        self.rpms_dir = rpms_dir = os.path.join(self.group_dir, 'rpms')
+        self.group_dir = self.gitdata.data_dir
 
         with Dir(self.group_dir):
-            self.group_config = self.get_group_config(self.group_dir)
+            self.group_config = self.get_group_config()
             self.arches = self.group_config.get('arches', ['x86_64'])
 
             if self.group_config.name != self.group:
@@ -241,131 +220,70 @@ class Runtime(object):
             else:
                 self.logger.info("Using branch from command line: %s" % self.branch)
 
-            if len(self.include) > 0:
-                self.include = flatten_comma_delimited_entries(self.include)
-                self.logger.info("Include list set to: %s" % str(self.include))
 
-            # Initially populated with all .yml files found in the images directory.
-            images_filename_list = []
-            if os.path.isdir(images_dir):
-                with Dir(images_dir):
-                    images_filename_list = [x for x in os.listdir(".") if os.path.isfile(x)]
-            else:
-                self.logger.debug('{} does not exist. Skipping image processing for group.'.format(images_dir))
-
-            rpms_filename_list = []
-            if os.path.isdir(rpms_dir):
-                with Dir(rpms_dir):
-                    rpms_filename_list = [x for x in os.listdir(".") if os.path.isfile(x)]
-            else:
-                self.logger.debug('{} does not exist. Skipping RPM processing for group.'.format(rpms_dir))
 
             # Flattens a list like like [ 'x', 'y,z' ] into [ 'x.yml', 'y.yml', 'z.yml' ]
             # for later checking we need to remove from the lists, but they are tuples. Clone to list
-            def flatten_into_filenames(names):
+            def flatten_list(names):
                 if not names:
                     return []
                 # split csv values
                 result = []
                 for n in names:
-                    result.append(["{}.yml".format(x) for x in n.replace(' ', ',').split(',') if x != ''])
+                    result.append([x for x in n.replace(' ', ',').split(',') if x != ''])
                 # flatten result and remove dupes
                 return list(set([y for x in result for y in x]))
 
-            # process excludes before images and rpms
-            # to ensure they never get added, -x is global
-            exclude_filenames = flatten_into_filenames(self.exclude)
-            if exclude_filenames:
-                for x in exclude_filenames:
-                    if x in images_filename_list:
-                        images_filename_list.remove(x)
-                    if x in rpms_filename_list:
-                        rpms_filename_list.remove(x)
+            def filter_wip(n, d):
+                return d.get('mode', 'enabled') in ['wip', 'enabled']
 
-            image_include = []
-            image_filenames = flatten_into_filenames(self.images)
-            if image_filenames:
-                also_exclude = set(image_filenames).intersection(set(exclude_filenames))
-                if len(also_exclude):
-                    self.logger.warning(
-                        "The following images were included and excluded but exclusion takes precedence: {}".format(', '.join(also_exclude))
-                    )
-                for image in images_filename_list:
-                    if image in image_filenames:
-                        image_include.append(image)
+            def filter_enabled(n, d):
+                return d.get('mode', 'enabled') == 'enabled'
 
-            rpm_include = []
-            rpms_filenames = flatten_into_filenames(self.rpms)
-            if rpms_filenames:
-                also_exclude = set(rpms_filenames).intersection(set(exclude_filenames))
-                if len(also_exclude):
-                    self.logger.warning(
-                        "The following rpms were included and excluded but exclusion takes precedence: {}".format(', '.join(also_exclude))
-                    )
-                for rpm in rpms_filename_list:
-                    if rpm in rpms_filenames:
-                        rpm_include.append(rpm)
+            def filter_disabled(n, d):
+                return d.get('mode', 'enabled') in ['enabled', 'disabled']
 
-            missed_include = set(image_filenames + rpms_filenames) - set(image_include + rpm_include)
+            exclude_keys = flatten_list(self.exclude)
+            image_keys = flatten_list(self.images)
+            rpm_keys = flatten_list(self.rpms)
+
+            filter_func = None
+            if self.load_wip and self.load_disabled:
+                pass  # use no filter, load all
+            elif self.load_wip:
+                filter_func = filter_wip
+            elif self.load_disabled:
+                filter_func = filter_disabled
+            else:
+                filter_func = filter_enabled
+
+            image_data = self.gitdata.load_data(path='images', keys=image_keys,
+                                                exclude=exclude_keys,
+                                                filter_funcs=None if len(image_keys) else filter_func)
+
+            try:
+                rpm_data = self.gitdata.load_data(path='rpms', keys=rpm_keys,
+                                                  exclude=exclude_keys,
+                                                  filter_funcs=None if len(rpm_keys) else filter_func)
+            except gitdata.GitDataPathException:
+                # some older versions have no RPMs, that's ok.
+                rpm_data = {}
+
+            missed_include = set(image_keys + rpm_keys) - set(image_data.keys() + rpm_data.keys())
             if len(missed_include) > 0:
-                raise IOError('Unable to find the following images or rpms configs: {}'.format(', '.join(missed_include)))
-
-            def gen_ImageMetadata(base_dir, config_filename, force):
-                metadata = ImageMetadata(self, base_dir, config_filename)
-                if force or metadata.enabled:
-                    self.image_map[metadata.distgit_key] = metadata
-
-            def gen_RPMMetadata(base_dir, config_filename, force):
-                metadata = RPMMetadata(self, base_dir, config_filename, clone_source=clone_source)
-                if force or metadata.enabled:
-                    self.rpm_map[metadata.distgit_key] = metadata
-
-            def collect_configs(search_type, search_dir, filename_list, include, gen):
-                if len(filename_list) == 0:
-                    return  # no configs of this type found, bail out
-
-                check_include = len(include) > 0 or self.load_wip
-                with Dir(search_dir):
-                    for config_filename in filename_list:
-                        is_include = False
-
-                        # loading WIP configs requires a pre-load of the config to check
-                        # removing this requirement would require a massive rework of Metadata()
-                        # deemed not worth it - AMH 10/9/18
-                        is_wip = False
-                        if self.load_wip:
-                            full_path = os.path.join(search_dir, config_filename)
-                            with open(full_path, 'r') as f:
-                                cfg_data = yaml.load(f)
-                                if cfg_data.get('mode', None) == 'wip':
-                                    is_wip = True
-
-                        if not is_wip and check_include:
-                            if check_include and config_filename in include:
-                                is_include = config_filename in include
-                                self.logger.debug("include: " + config_filename)
-                                include.remove(config_filename)
-                            else:
-                                self.logger.debug("Skipping {} {} since it is not in the include list".format(search_type, config_filename))
-                                continue
-
-                        try:
-                            schema_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema_{}.yml".format(search_type))
-                            c = Core(source_file=config_filename, schema_files=[schema_path])
-                            c.validate(raise_exception=True)
-
-                            gen(search_dir, config_filename, self.load_disabled or is_include or is_wip)
-                        except Exception:
-                            self.logger.error("Configuration file failed to load: {}".format(os.path.join(search_dir, config_filename)))
-                            raise
+                raise ElliottFatalError('The following images or rpms were either missing or filtered out: {}'.format(', '.join(missed_include)))
 
             if mode in ['images', 'both']:
-                collect_configs('image', images_dir, images_filename_list, image_include, gen_ImageMetadata)
+                for i in image_data.itervalues():
+                    metadata = ImageMetadata(self, i)
+                    self.image_map[metadata.distgit_key] = metadata
                 if not self.image_map:
                     self.logger.warning("No image metadata directories found for given options within: {}".format(self.group_dir))
 
             if mode in ['rpms', 'both']:
-                collect_configs('rpm', rpms_dir, rpms_filename_list, rpm_include, gen_RPMMetadata)
+                for r in rpm_data.itervalues():
+                    metadata = RPMMetadata(self, r, clone_source=clone_source)
+                    self.rpm_map[metadata.distgit_key] = metadata
                 if not self.rpm_map:
                     self.logger.warning("No rpm metadata directories found for given options within: {}".format(self.group_dir))
 
@@ -379,10 +297,9 @@ class Runtime(object):
             no_collide_check[key] = meta
 
         # Read in the streams definite for this group if one exists
-        streams_path = os.path.join(self.group_dir, "streams.yml")
-        if os.path.isfile(streams_path):
-            with open(streams_path, "r") as s:
-                self.streams = Model(yaml.load(s.read()))
+        streams = self.gitdata.load_data(key='streams')
+        if streams:
+            self.streams = Model(self.gitdata.load_data(key='streams').data)
 
 
     def initialize_logging(self):
@@ -656,66 +573,17 @@ class Runtime(object):
             raise ElliottFatalError(
                 ("No metadata path provided. Must be set via one of:\n"
                  "* data_path key in {}\n"
-                 "* elliott --datapath [PATH|URL]\n"
+                 "* elliott --data-path [PATH|URL]\n"
                  "* Environment variable ELLIOTT_DATA_PATH\n"
                  ).format(self.cfg_obj.full_path))
 
-        schemes = ['ssh', 'ssh+git', "http", "https"]
+        try:
+            self.gitdata = gitdata.GitData(data_path=self.data_path, clone_dir=self.working_dir,
+                                           branch='master', sub_dir=self.group, logger=self.logger)
+            self.data_dir = self.gitdata.data_dir
 
-        self.logger.info('Using {} for metadata'.format(self.data_path))
-
-        md_url = urlparse.urlparse(self.data_path)
-        if md_url.scheme in schemes or (md_url.scheme == '' and ':' in md_url.path):
-            # Assume this is a git repo to clone
-            #
-            # An empty scheme with a colon in the path is likely an "scp" style
-            # path: ala username@github.com:owner/path
-            # determine where to put it
-            md_name = os.path.splitext(os.path.basename(md_url.path))[0]
-            md_destination = os.path.join(self.working_dir, md_name)
-            clone_data = True
-            if os.path.isdir(md_destination):
-                self.logger.info('Metadata clone directory already exists, checking commit sha')
-                with Dir(md_destination):
-                    rc, out, err = exectools.cmd_gather(["git", "ls-remote", self.data_path, "HEAD"])
-                    if rc:
-                        raise t('Unable to check remote sha: {}'.format(err))
-                    remote = out.strip().split('\t')[0]
-
-                    try:
-                        exectools.cmd_assert('git branch --contains {}'.format(remote))
-                        self.logger.info('{} is already cloned and latest'.format(self.data_path))
-                        clone_data = False
-                    except:
-                        rc, out, err = exectools.cmd_gather('git log origin/HEAD..HEAD')
-                        out = out.strip()
-                        if len(out):
-                            msg = """
-                            Local config is out of sync with remote and you have unpushed commits. {}
-                            You must either clear your local config repo with `./oit.py cleanup`
-                            or manually rebase from latest remote to continue
-                            """.format(md_destination)
-                            raise t(msg)
-
-            if clone_data:
-                if os.path.isdir(md_destination):  # delete if already there
-                    shutil.rmtree(md_destination)
-                self.logger.info('Cloning config data from {}'.format(self.data_path))
-                if not os.path.isdir(md_destination):
-                    cmd = "git clone --depth 1 {} {}".format(self.data_path, md_destination)
-                    exectools.cmd_assert(cmd.split(' '))
-            self.data_path = md_destination
-
-        elif md_url.scheme in ['', 'file']:
-            # no scheme, assume the path is a local file
-            self.data_path = md_url.path
-            if not os.path.isdir(self.data_path):
-                raise ValueError(
-                    "Invalid data_path: {} - Not a directory"
-                    .format(self.data_path))
-
-        else:
-            # invalid scheme: not '' or any of the valid list
-            raise ValueError(
-                "Invalid data_path: {} - invalid scheme: {}"
-                .format(self.data_path, md_url.scheme))
+            # Use this when switching to branch based data
+            # self.gitdata = gitdata.GitData(data_path=self.data_path, clone_dir=self.working_dir,
+            #                                branch=self.group, logger=self.logger)
+        except gitdata.GitDataException as ex:
+            raise ElliottFatalError(ex.message)
