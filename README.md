@@ -101,28 +101,6 @@ created advisories:
     2018-10-18T11:11:25 NEW_FILES openshift3/jenkins-agent-nodejs-8-rhel7 Container Image Updates https://errata.devel.redhat.com/advisory/37441
 
 
-# Tests
-
-I usually run the unittests with this setup:
-
-* Switch into the `tools` directory if you aren't already
-* Run `. ./hack/env_setup.sh`
-* Switch back to the repository root directory
-
-Then run the unit tests:
-
-    $ nosetests -v --with-cover --cover-package=ocp_cd_tools --cover-html \
-        src/ocp_cd_tools/brew_test.py \
-        src/ocp_cd_tools/errata_test.py \
-        src/ocp_cd_tools/bugzilla_test.py
-
-Add or remove any other `*_test.py` tests you wish.
-
-If that works then you can open the HTML coverage report:
-
-* `xdg-open cover/index.html`
-
-
 # Usage
 
 Here we describe how to effectively use elliott.
@@ -324,3 +302,89 @@ We may also provide build NVRs or numeric build IDs manually with the
 {rpm,image}` option must still be supplied.
 
 See the `--help` output for additional examples and descriptions.
+
+# Data Sources
+
+Elliott relies on external data sources to provide it with boilerplate for advisories and search parameters
+for bugzilla queries. This data takes the form of yaml files store either locally or, ideally, in a separate
+git repository with a branching structure matching the `--group` values you want to use.
+
+In either case, you must point to this data source using the `--data-path` parameter or one of its override settings.
+
+## erratatool.yml
+~~~~
+---
+server: "https://errata.redhat.com"
+
+product: "RHOSE"
+
+release: "RHOSE ASYNC"
+
+synopsis: 
+  rpm: "OpenShift Container Platform 3.10 bug fix and enhancement update"
+  image: "OpenShift Container Platform 3.10 images update"
+
+solution: |
+  Before applying this update, make sure all previously released errata relevant to your system have been applied.
+  For OpenShift Container Platform 3.10 see the following documentation, which will be updated shortly for release 3.10.z, for important instructions on how to upgrade your cluster and fully apply this asynchronous errata update:
+  https://docs.openshift.com/container-platform/3.10/release_notes/ocp_3_10_release_notes.html
+  This update is available via the Red Hat Network. Details on how to use the Red Hat Network to apply this update are available at https://access.redhat.com/articles/11258."""
+description: |
+  Red Hat OpenShift Container Platform is Red Hat's cloud computing Kubernetes application platform solution designed for on-premise or private cloud deployments.
+  This advisory contains the RPM packages for Red Hat OpenShift Container Platform 3.10.z. See the following advisory for the container images for this release:
+  https://access.redhat.com/errata/RHBA-2222:2222
+  Space precludes documenting all of the bug fixes and enhancements in this advisory. See the following Release Notes documentation, which will be updated shortly for this release, for details about these changes:
+  https://docs.openshift.com/container-platform/3.10/release_notes/ocp_3_10_release_notes.html
+  All OpenShift Container Platform 3.10 users are advised to upgrade to these updated packages and images.
+topic: "Red Hat OpenShift Container Platform releases 3.10.z are now available with updates to packages and images that fix several bugs and add enhancements."
+
+quality_responsibility_name: 'OpenShift QE'
+~~~~
+
+## bugzilla.yml
+~~~~
+---
+
+server: "bugzilla.redhat.com"
+
+classification: "Red Hat"
+
+product: "OpenShift Container Platform"
+
+version:
+  - "3.7.0"
+  - "3.7.1"
+  - "3.8.0"
+  - "3.9.0"
+  - "3.10.0"
+
+target_release:
+  - "3.10.0"
+  - "3.10.z"
+
+filter:
+  - field: "component"
+    operator: "notequals"
+    value: "Documentation"
+~~~~
+
+# Tests
+
+I usually run the unittests with this setup:
+
+* Switch into the `tools` directory if you aren't already
+* Run `. ./hack/env_setup.sh`
+* Switch back to the repository root directory
+
+Then run the unit tests:
+
+    $ nosetests -v --with-cover --cover-package=ocp_cd_tools --cover-html \
+        src/ocp_cd_tools/brew_test.py \
+        src/ocp_cd_tools/errata_test.py \
+        src/ocp_cd_tools/bugzilla_test.py
+
+Add or remove any other `*_test.py` tests you wish.
+
+If that works then you can open the HTML coverage report:
+
+* `xdg-open cover/index.html`
