@@ -79,7 +79,7 @@ def find_mutable_erratum(kind, minor, major=3):
     pass
 
 
-def find_latest_erratum(kind, minor, major=3):
+def find_latest_erratum(kind, major, minor):
     """Find an erratum in a given release series, in ANY state.
 
     Put simply, this tells you the erratum that has the most recent,
@@ -154,7 +154,7 @@ def find_latest_erratum(kind, minor, major=3):
         return sorted_dates[-1]
 
 
-def new_erratum(kind=None, release_date=None, create=False, minor='Y',
+def new_erratum(et_data, kind=None, release_date=None, create=False, minor='Y',
                 assigned_to=None, manager=None, package_owner=None):
     """5.2.1.1. POST /api/v1/erratum
 
@@ -188,23 +188,22 @@ def new_erratum(kind=None, release_date=None, create=False, minor='Y',
     if kind is None:
         kind = 'rpm'
 
+
     body = copy.deepcopy(constants.errata_new_object)
+    body['product'] = et_data['product']
+    body['release'] = et_data['release']
     body['advisory']['publish_date_override'] = release_date
-    body['advisory']['synopsis'] = constants.errata_synopsis[kind].format(Y=minor)
-
-    # Fill in the minor version variables
-    body['advisory']['description'] = body['advisory']['description'].format(Y=minor)
-    body['advisory']['solution'] = body['advisory']['solution'].format(Y=minor)
-    body['advisory']['synopsis'] = body['advisory']['synopsis'].format(Y=minor)
-    body['advisory']['topic'] = body['advisory']['topic'].format(Y=minor)
-
+    body['advisory']['description'] = et_data['description']
+    body['advisory']['solution'] = et_data['solution']
+    body['advisory']['synopsis'] = et_data['synopsis'][kind]
+    body['advisory']['topic'] = et_data['topic']
     body['advisory']['assigned_to_email'] = assigned_to
     body['advisory']['manager_email'] = manager
     body['advisory']['package_owner_email'] = package_owner
 
     if create:
         # THIS IS NOT A DRILL
-        res = requests.post(constants.errata_post_erratum_url,
+        res = requests.post(et_data['server'],
                             verify=ssl.get_default_verify_paths().openssl_cafile,
                             auth=HTTPKerberosAuth(),
                             json=body)

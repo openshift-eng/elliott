@@ -190,13 +190,16 @@ advisory.
     $ elliott --group openshift-3.5 advisory:create --yes -k image --date 2018-03-05
 """
     runtime.initialize()
+    major = major_from_branch(runtime.group_config.branch)
     minor = minor_from_branch(runtime.group_config.branch)
+
+    et_data = runtime.gitdata.load_data(key='erratatool').data
 
     if date == default_release_date.strftime(YMD):
         # User did not enter a value for --date, default is determined
         # by looking up the latest erratum in a series
         try:
-            latest_advisory = elliottlib.errata.find_latest_erratum(kind, minor)
+            latest_advisory = elliottlib.errata.find_latest_erratum(kind, major, minor)
         except elliottlib.exceptions.ErrataToolUnauthenticatedException:
             exit_unauthenticated()
         except elliottlib.exceptions.ErrataToolUnauthorizedException:
@@ -208,8 +211,8 @@ advisory.
         else:
             if latest_advisory is None:
                 red_prefix("No metadata discovered: ")
-                click.echo("No advisory for 3.{y} has been released in recent history, can not auto determine next release date".format(
-                    y=minor))
+                click.echo("No advisory for {x}.{y} has been released in recent history, can not auto determine next release date".format(
+                    x=major, y=minor))
                 exit(1)
 
         green_prefix("Found an advisory to calculate new release date from: ")
@@ -237,6 +240,7 @@ advisory.
 
     try:
         erratum = elliottlib.errata.new_erratum(
+            et_data,
             kind=kind,
             release_date=release_date.strftime(YMD),
             create=yes,

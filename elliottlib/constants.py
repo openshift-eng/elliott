@@ -15,34 +15,6 @@ VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 
 
 errata_url = "https://errata.devel.redhat.com"
 
-# For new errata
-errata_solution = """Before applying this update, make sure all previously released errata relevant to your system have been applied.
-
-For OpenShift Container Platform 3.{Y} see the following documentation, which will be updated shortly for release 3.{Y}.z, for important instructions on how to upgrade your cluster and fully apply this asynchronous errata update:
-
-https://docs.openshift.com/container-platform/3.{Y}/release_notes/ocp_3_{Y}_release_notes.html
-
-This update is available via the Red Hat Network. Details on how to use the Red Hat Network to apply this update are available at https://access.redhat.com/articles/11258."""
-
-errata_description = """Red Hat OpenShift Container Platform is Red Hat's cloud computing Kubernetes application platform solution designed for on-premise or private cloud deployments.
-
-This advisory contains the RPM packages for Red Hat OpenShift Container Platform 3.{Y}.z. See the following advisory for the container images for this release:
-
-https://access.redhat.com/errata/RHBA-2018:0114
-
-Space precludes documenting all of the bug fixes and enhancements in this advisory. See the following Release Notes documentation, which will be updated shortly for this release, for details about these changes:
-
-https://docs.openshift.com/container-platform/3.{Y}/release_notes/ocp_3_{Y}_release_notes.html
-
-All OpenShift Container Platform 3.{Y} users are advised to upgrade to these updated packages and images."""
-
-# QE Group name
-errata_quality_responsibility_name = 'OpenShift QE'
-errata_synopsis = {
-    'rpm': 'OpenShift Container Platform 3.{Y} bug fix and enhancement update',
-    'image': 'OpenShift Container Platform 3.{Y} images update'
-}
-errata_topic = 'Red Hat OpenShift Container Platform releases 3.{Y}.z are now available with updates to packages and images that fix several bugs and add enhancements.'
 # 1965 => (RHBA; Active; Product: RHOSE; Devel Group: ENG OpenShift
 #          Enterprise; sorted by newest)
 # https://errata.devel.redhat.com/filter/1965
@@ -56,6 +28,7 @@ errata_live_advisory_filter = '1991'
 #          sorted by newest)
 # https://errata.devel.redhat.com/filter/2051
 errata_immutable_advisory_filter = '2051'
+
 errata_active_advisory_labels = [
     "NEW_FILES",
     "QE",
@@ -63,16 +36,19 @@ errata_active_advisory_labels = [
     "PUSH_READY",
     "IN_PUSH"
 ]
+
 errata_inactive_advisory_labels = [
     "SHIPPED_LIVE",
     "DROPPED_NO_SHIP"
 ]
+
 errata_valid_impetus = [
     'standard',
     'cve',
     'ga',
     'test'
 ]
+
 ######################################################################
 # API endpoints with string formatting placeholders as
 # necessary. Index of all available endpoints is available in the
@@ -92,6 +68,7 @@ errata_get_comment_url = errata_url + "/api/v1/comments/{id}"
 errata_get_comments_url = errata_url + "/api/v1/comments"
 errata_get_erratum_url = errata_url + "/api/v1/erratum/{id}"
 errata_post_erratum_url = errata_url + "/api/v1/erratum"
+
 ######################################################################
 # Scaffolding for creating a new advisory. See the online
 # documentation for a description of all allowed fields, including
@@ -99,35 +76,23 @@ errata_post_erratum_url = errata_url + "/api/v1/erratum"
 #
 # https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratum
 errata_new_object = {
-    'product': 'RHOSE',
-    'release': 'RHOSE ASYNC',
+    'product': None,
+    'release': None,
     'advisory': {
         'assigned_to_email': None,  # Provided as input
-        'description': errata_description,
+        'description': None,
         'errata_type': 'RHBA',
         'idsfixed': '',
         'manager_email': None,  # Provided as input
         'package_owner_email': None,  # Provided as input
         'publish_date_override': None,
-        'quality_responsibility_name': errata_quality_responsibility_name,
+        'quality_responsibility_name': None,
         'security_impact': 'None',
-        'solution': errata_solution,
+        'solution': None,
         'synopsis': None,
-        'topic': errata_topic,
+        'topic': None,
     }
 }
-######################################################################
-# We ship updates for various architectures. Images are
-# architecture-agnostic
-errata_shipped_arches = {
-    'rpm': ['--arch=x86_64', '--arch=noarch'],
-    'image': [''],
-}
-# Do not include these in tag results (carried over legacy behavior
-# from update-errata-with-diffs.sh
-errata_package_excludes = ["cockpit", "atomic-openshift-clients-redistributable",
-                           "python-jsonschema", "python-ruamel-yaml", "python-wheel",
-                           "python-typing", "python-ruamel-ordereddict", "ansible"]
 
 bugzilla_invalid_transition_comment = """There is a potential issue with this bug that may prevent it from being processed by our automation.
 
