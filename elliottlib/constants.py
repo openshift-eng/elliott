@@ -2,11 +2,6 @@
 This file contains constants that are used to manage OCP Image and RPM builds
 """
 
-# config data pulled from here
-OCP_BUILD_DATA_RO = "https://github.com/openshift/ocp-build-data"
-# above is used so that anyone can clone
-OCP_BUILD_DATA_RW = "git@github.com:openshift/ocp-build-data.git"
-
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
@@ -68,31 +63,6 @@ errata_get_comment_url = errata_url + "/api/v1/comments/{id}"
 errata_get_comments_url = errata_url + "/api/v1/comments"
 errata_get_erratum_url = errata_url + "/api/v1/erratum/{id}"
 errata_post_erratum_url = errata_url + "/api/v1/erratum"
-
-######################################################################
-# Scaffolding for creating a new advisory. See the online
-# documentation for a description of all allowed fields, including
-# which are required and which are optional
-#
-# https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratum
-errata_new_object = {
-    'product': None,
-    'release': None,
-    'advisory': {
-        'assigned_to_email': None,  # Provided as input
-        'description': None,
-        'errata_type': 'RHBA',
-        'idsfixed': '',
-        'manager_email': None,  # Provided as input
-        'package_owner_email': None,  # Provided as input
-        'publish_date_override': None,
-        'quality_responsibility_name': None,
-        'security_impact': 'None',
-        'solution': None,
-        'synopsis': None,
-        'topic': None,
-    }
-}
 
 bugzilla_invalid_transition_comment = """There is a potential issue with this bug that may prevent it from being processed by our automation.
 

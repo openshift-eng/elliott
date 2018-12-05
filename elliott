@@ -33,6 +33,7 @@ from elliottlib.util import *
 import click
 import requests
 import dotconfig
+from errata_tool import Erratum
 
 # -----------------------------------------------------------------------------
 # Constants and defaults
@@ -103,22 +104,15 @@ Bugzilla Bugs.
 
     $ elliott advisory:change-state -s NEW_FILES 123456
     """
-    try:
-        erratum = elliottlib.errata.get_erratum(advisory)
-    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
-        exit_unauthenticated()
-
+    
     click.echo("Changing state for {id} to {state}".format(id=advisory, state=state))
-    click.echo(erratum)
-    try:
-        erratum.change_state(state)
-    except elliottlib.exceptions.ErrataToolError as err:
-        click.secho("Error changing state: ", nl=False, bold=True, fg='red')
-        click.echo(str(err))
-        exit(1)
+    
+    e = Erratum(errata_id=id)
+    e.setState(state)
+    e.commit()
 
-    click.secho("Changed advisory state:", fg='green', bold=True)
-    click.echo(erratum)
+    green_prefix("Changed advisory state:")
+    click.echo(e)
 
 
 #
@@ -244,7 +238,6 @@ advisory.
             kind=kind,
             release_date=release_date.strftime(YMD),
             create=yes,
-            minor=minor,
             assigned_to=assigned_to,
             manager=manager,
             package_owner=package_owner
@@ -271,11 +264,11 @@ advisory.
         # 'invoke' method to call the _command_ (remember, it's wrapped
         # with click to create a 'command'). 'invoke' ensures the correct
         # options/arguments are mapped to the right parameters.
-        ctx.invoke(add_metadata, kind=kind, impetus=impetus, advisory=erratum.advisory_id)
+        ctx.invoke(add_metadata, kind=kind, impetus=impetus, advisory=erratum.errata_id)
         click.echo(str(erratum))
     else:
         green_prefix("Would have created advisory: ")
-        click.echo("JSON body displayed in full below")
+        click.echo("")
         click.echo(erratum)
 
 
@@ -358,7 +351,7 @@ manually. Provide one or more --id's for manual bug addition.
 
     if advisory is not False:
         try:
-            advs = elliottlib.errata.get_erratum(advisory)
+            advs = Erratum(errata_id=advisory)
         except elliottlib.exceptions.ErrataToolUnauthenticatedException:
             exit_unauthenticated()
 
@@ -368,7 +361,7 @@ manually. Provide one or more --id's for manual bug addition.
             exit(1)
 
         if auto:
-            click.echo("Adding bugs to {advs} for target releases: {tr}".format(advs=advisory, tr=", ".join(target_releases)))
+            click.echo("Adding bugs to {advs} for target releases: {tr}".format(advs=advisory, tr=", ".join(bz_data['target_release'])))
         else:
             click.echo("Adding {count} bugs to {advs}".format(count=bug_count, advs=advisory))
 
@@ -376,15 +369,9 @@ manually. Provide one or more --id's for manual bug addition.
             for bug in bug_ids:
                 bug.add_flags(flag)
 
-        for res, bug in advs.add_bugs(bug_ids):
-            if res.status_code == 201:
-                green_prefix("Added bug: ")
-                click.secho("  {id}".format(id=bug))
-            else:
-                red_prefix("Failed to add bug: ")
-                click.echo("  {id} (rc={rc}, err={err})".format(id=bug, rc=res.status_code, err=res.text))
-    # Add bug is false (noop)
-    else:
+        advs.addBugs([bug.id for bug in bug_ids])
+        advs.commit()
+    else: # Add bug is false (noop)
         green_prefix("Would have added {n} bugs: ".format(n=bug_count))
         click.echo(", ".join([str(b) for b in bug_ids]))
 
@@ -544,8 +531,9 @@ PRESENT advisory. Here are some examples:
     if advisory is not False:
         # Search and attach
         try:
-            erratum = elliottlib.errata.get_erratum(advisory)
-            erratum.add_builds(unshipped_builds)
+            erratum = Erratum(errata_id=advisory)
+            erratum.addBuilds(unshipped_builds)
+            erratum.commit()
             click.secho("Attached build(s) successfully", fg='green', bold=True)
         except elliottlib.exceptions.ErrataToolUnauthenticatedException:
             exit_unauthenticated()
@@ -567,13 +555,13 @@ PRESENT advisory. Here are some examples:
 #
 @cli.command("get", short_help="Get information for an ADVISORY")
 @click.argument('advisory', type=int)
-@click.option('--json', is_flag=True, default=False,
-              help="Print the full JSON object of the advisory")
+@click.option('--details', is_flag=True, default=False,
+              help="Print the full object of the advisory")
 @click.pass_context
-def get(ctx, json, advisory):
+def get(ctx, details, advisory):
     """Get details about a specific advisory from the Errata Tool. By
 default a brief one-line informational string is printed. Use the
---json option to fetch and print the full details of the advisory.
+--details option to fetch and print the full details of the advisory.
 
 Fields for the short format: Release date, State, Synopsys, URL
 
@@ -596,14 +584,19 @@ Fields for the short format: Release date, State, Synopsys, URL
         ...
 """
     try:
-        advisory = elliottlib.errata.get_erratum(advisory)
+        advisory = Erratum(errata_id=advisory)
     except elliottlib.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
 
-    if json:
-        click.echo(advisory.to_json())
-    else:
+    if details:
         click.echo(advisory)
+    else:
+        advisory_string = "{date} {state} {synopsis} {url}".format(
+            date = advisory.publish_date_override,
+            state = advisory.errata_state,
+            synopsis = advisory.synopsis,
+            url = advisory.url())
+        click.echo(advisory_string)
 
 
 #
@@ -649,7 +642,6 @@ yourself online: https://errata.devel.redhat.com/filter/1965
         click.echo(str(err))
         exit(1)
 
-
 #
 # Add metadata comment to an Advisory
 # advisory:add-metadata
@@ -679,11 +671,11 @@ Example to add standard metadata to a 3.10 images release
     release = release_from_branch(runtime.group_config.branch)
 
     try:
-        advisory = elliottlib.errata.get_erratum(advisory)
+        advisory = Erratum(errata_id=advisory)
     except elliottlib.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
 
-    result = advisory.add_comment({'release': release, 'kind': kind, 'impetus': impetus})
+    result = elliottlib.errata.add_comment(advisory.errata_id, {'release': release, 'kind': kind, 'impetus': impetus})
 
     if result.status_code == 201:
         green_prefix("Added metadata successfully")
@@ -769,6 +761,9 @@ def add_comment(runtime, bug_ids, comment, is_private):
 # -----------------------------------------------------------------------------
 def main():
     try:
+        if 'REQUESTS_CA_BUNDLE' not in os.environ:
+            os.environ['REQUESTS_CA_BUNDLE'] = '/etc/pki/tls/certs/ca-bundle.crt'
+
         cli(obj={})
     except ElliottFatalError as ex:
         # Allow capturing actual tool errors and print them

@@ -579,7 +579,7 @@ class Runtime(object):
 
         try:
             self.gitdata = gitdata.GitData(data_path=self.data_path, clone_dir=self.working_dir,
-                                           branch='master', sub_dir=self.group, logger=self.logger)
+                                           branch=self.group, logger=self.logger)
             self.data_dir = self.gitdata.data_dir
 
             # Use this when switching to branch based data
