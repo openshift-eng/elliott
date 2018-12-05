@@ -11,24 +11,6 @@ BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
 
-# For Bugzilla searches
-BUGZILLA_SERVER = "bugzilla.redhat.com"
-DEFAULT_VERSIONS = (
-    "3.0.0",
-    "3.1.0", "3.1.1",
-    "3.2.0", "3.2.1",
-    "3.3.0", "3.3.1",
-    "3.4.0", "3.4.1",
-    "3.5.0", "3.5.1",
-    "3.6.0", "3.6.1",
-    "3.7.0", "3.7.1",
-    "3.8.0", "3.8.1",
-    "3.9.0", "3.9.1",
-    "3.10.0", "3.10.1",
-    "3.11.0", "3.11.1",
-    "4.0", "4.0.1",
-    "unspecified"
-)
 VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
 
 errata_url = "https://errata.devel.redhat.com"
