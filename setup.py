@@ -19,6 +19,7 @@ setup(
     author_email="aos-team-art@redhat.com",
     version=_get_version(),
     description="CLI tool for managing and automating Red Hat software releases",
+    long_description=open('README.md').read(),
     url="https://github.com/openshift/elliott",
     license="Red Hat Internal",
     packages=["elliottlib"],
