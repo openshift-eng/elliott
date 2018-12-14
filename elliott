@@ -18,6 +18,7 @@ import os
 import sys
 
 # ours
+from elliottlib import version
 from elliottlib import Runtime
 import elliottlib.constants
 import elliottlib.bugzilla
@@ -41,7 +42,16 @@ pass_runtime = click.make_pass_decorator(Runtime)
 context_settings = dict(help_option_names=['-h', '--help'])
 
 
+def print_version(ctx, param, value):
+    if not value or ctx.resilient_parsing:
+        return
+    click.echo('Elliott v{}'.format(version()))
+    ctx.exit()
+
+
 @click.group(context_settings=context_settings)
+@click.option('--version', is_flag=True, callback=print_version,
+              expose_value=False, is_eager=True)
 @click.option("--working-dir", metavar='PATH', envvar="ELLIOTT_WORKING_DIR",
               default=None,
               help="Existing directory in which file operations should be performed.")
