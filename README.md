@@ -68,6 +68,8 @@ software and bug fixes
 
 # Setup and Installation
 
+`pip install rh-elliott`
+
 ## Additional Softwares
 
 Elliott requires additional command line tools to fully function:
@@ -232,7 +234,7 @@ or ASYNC update).
 1. Provide bug IDs manually on the command line
 
 Example: Automatically *find* bugs for an OpenShift 3.9 update (but do
-not attach them). Notice how we do not need to provide an 
+not attach them). Notice how we do not need to provide an
 
 	<elliott> $ ./elliott --group openshift-3.9 find-bugs --auto
 	2018-03-19T17:49:44.573042 Searching group directory: /home/tbielawa/rhat/cd/enterprise-images/groups/openshift-3.9
@@ -272,7 +274,7 @@ received the "shipped" tag yet, and is NOT attached to any *OPEN*
 advisory (closed advisory are allowed).
 
 Here is an example of how we could look up image builds that would be
-attached to a 3.6 
+attached to a 3.6
 
     <elliott> $ ./elliott --group openshift-3.6 find-builds -k image
 
@@ -320,7 +322,7 @@ product: "RHOSE"
 
 release: "RHOSE ASYNC"
 
-synopsis: 
+synopsis:
   rpm: "OpenShift Container Platform 3.10 bug fix and enhancement update"
   image: "OpenShift Container Platform 3.10 images update"
 

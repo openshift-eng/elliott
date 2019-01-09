@@ -99,3 +99,18 @@ mapping:
               "=":
                 type: str
 
+  "image_build_log_scanner":
+    type: map
+    mapping:
+      "matches":
+        # regexen to detect problems in log lines
+        required: true
+        type: seq
+        sequence:
+          - type: str
+      "files":
+        # names of log files to examine
+        required: true
+        type: seq
+        sequence:
+          - type: str
