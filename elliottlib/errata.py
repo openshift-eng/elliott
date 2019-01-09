@@ -18,29 +18,7 @@ import exceptions
 
 import requests
 from requests_kerberos import HTTPKerberosAuth
-
-
-def get_erratum(id):
-    """5.2.1.2. GET /api/v1/erratum/{id}
-
-    Retrieve the advisory data.
-
-    https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-get-apiv1erratumid
-
-    :return SUCCESS: An Erratum object
-    :return FAILURE: :bool:False
-    :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
-    """
-    res = requests.get(constants.errata_get_erratum_url.format(id=id),
-                       verify=ssl.get_default_verify_paths().openssl_cafile,
-                       auth=HTTPKerberosAuth())
-
-    if res.status_code == 200:
-        return Erratum(body=res.json())
-    elif res.status_code == 401:
-        raise exceptions.ErrataToolUnauthenticatedException(res.text)
-    else:
-        return False
+from errata_tool import Erratum
 
 
 def find_mutable_erratum(kind, minor, major=3):
@@ -134,7 +112,7 @@ def find_latest_erratum(kind, major, minor):
     for advisory in advisory_list:
         print("Scanning advisory {}".format(str(advisory)))
 
-        for c in advisory.get_comments():
+        for c in get_comments(advisory.errata_id):
             try:
                 metadata = json.loads(c['attributes']['text'])
             except Exception as e:
@@ -149,12 +127,12 @@ def find_latest_erratum(kind, major, minor):
         return None
     else:
         # loop over discovered advisories, select one with max() date
-        real_advisories = [get_erratum(e.advisory_id) for e in matched_advisories]
+        real_advisories = [Erratum(errata_id=e.advisory_id) for e in matched_advisories]
         sorted_dates = sorted(real_advisories, key=lambda advs: advs.release_date)
         return sorted_dates[-1]
 
 
-def new_erratum(et_data, kind=None, release_date=None, create=False, minor='Y',
+def new_erratum(et_data, kind=None, release_date=None, create=False,
                 assigned_to=None, manager=None, package_owner=None):
     """5.2.1.1. POST /api/v1/erratum
 
@@ -188,37 +166,27 @@ def new_erratum(et_data, kind=None, release_date=None, create=False, minor='Y',
     if kind is None:
         kind = 'rpm'
 
-
-    body = copy.deepcopy(constants.errata_new_object)
-    body['product'] = et_data['product']
-    body['release'] = et_data['release']
-    body['advisory']['publish_date_override'] = release_date
-    body['advisory']['description'] = et_data['description']
-    body['advisory']['solution'] = et_data['solution']
-    body['advisory']['synopsis'] = et_data['synopsis'][kind]
-    body['advisory']['topic'] = et_data['topic']
-    body['advisory']['assigned_to_email'] = assigned_to
-    body['advisory']['manager_email'] = manager
-    body['advisory']['package_owner_email'] = package_owner
+    e = Erratum(
+            product = et_data['product'],
+            release = et_data['release'],
+            errata_type = et_data.get('errata_type', 'RHBA'),
+            synopsis = et_data['synopsis'][kind],
+            topic = et_data['topic'],
+            description = et_data['description'],
+            solution = et_data['solution'],
+            qe_email = assigned_to,
+            qe_group = et_data['quality_responsibility_name'],
+            owner_email = package_owner,
+            manager_email = manager,
+            date = release_date
+        )
 
     if create:
         # THIS IS NOT A DRILL
-        res = requests.post(et_data['server'],
-                            verify=ssl.get_default_verify_paths().openssl_cafile,
-                            auth=HTTPKerberosAuth(),
-                            json=body)
-
-        if res.status_code == 201:
-            return Erratum(body=res.json())
-        elif res.status_code == 401:
-            raise exceptions.ErrataToolUnauthenticatedException(res.text)
-        else:
-            raise exceptions.ErrataToolError("Other error (status_code={code}): {msg}".format(
-                code=res.status_code,
-                msg=res.text))
+        e.commit()
+        return e
     else:
-        # This is a noop
-        return json.dumps(body, indent=2)
+        return e
 
 
 def get_filtered_list(filter_id=constants.errata_default_filter, limit=5):
@@ -247,7 +215,7 @@ filter_id
         # successfully parsing the response as a JSONinfo object indicates
         # a successful API call.
         try:
-            return [Erratum(body=advs) for advs in res.json()][:limit]
+            return [Erratum(**advs) for advs in res.json()][:limit]
         except Exception:
             raise exceptions.ErrataToolError("Could not locate the given advisory filter: {fid}".format(
                 fid=filter_id))
@@ -258,167 +226,8 @@ filter_id
             code=res.status_code,
             msg=res.text))
 
-
-class Erratum(object):
-    """
-    Model for interacting with individual Erratum. Erratum instances
-    can be created from the brief info provided in a filtered list, as
-    well as from the full erratum body returned by the Errata Tool
-    API. See also: get_erratum(id) for creating a filled in Erratum
-    object automatically.
-    """
-
-    date_format = '%Y-%m-%dT%H:%M:%SZ'
-
-    def __init__(self, body=None):
-        """If a `body` is provided then this is an EXISTING advisory and we
-        are filling in all the  at the time of object creation.
-        """
-        self.body = body
-
-        if body is not None:
-            self._parse_body()
-        else:
-            # Attributes used in str() representation
-            self.adv_name = ''
-            self.synopsis = ''
-            self.url = ''
-            self.created_at = datetime.datetime.now()
-            self.release_date = None
-
-    ######################################################################
-    # Basic utility/setup methods
-
-    def __str__(self):
-        return "{date} {state} {synopsis} {url}".format(
-            date=self.created_at.isoformat(),
-            state=self.status,
-            synopsis=self.synopsis,
-            url=self.url)
-
-    def _parse_body(self):
-        """The `body` content is different based on where it came from."""
-        # Erratum from the direct erratum GET method
-        if 'params' in self.body:
-            # An advisory will come back as one of the following
-            # kinda, we're just not sure which until we read the
-            # object body
-            for kind in ['rhba', 'rhsa', 'rhea']:
-                if kind in self.body['errata']:
-                    # Call it just a generic "red hat advisory"
-                    rha = self.body['errata'][kind]
-                    break
-
-            content = self.body['content']['content']
-
-            self.advisory_id = rha['id']
-            self.advisory_name = rha['fulladvisory']
-            self.synopsis = rha['synopsis']
-            self.description = content['description']
-            self.solution = content['solution']
-            self.topic = content['topic']
-            self.status = rha['status']
-            self.created_at = datetime.datetime.strptime(rha['created_at'], self.date_format)
-            self.release_date = datetime.datetime.strptime(rha['publish_date_override'], self.date_format)
-            self.url = "{et}/advisory/{id}".format(
-                et=constants.errata_url,
-                id=self.advisory_id)
-        else:
-            # Erratum returned from an advisory filtered list
-            self.advisory_id = self.body.get('id', 0)
-            self.advisory_name = self.body.get('advisory_name', '')
-            self.synopsis = self.body['synopsis']
-            self.description = self.body['content']['description']
-            self.solution = self.body['content']['solution']
-            self.topic = self.body['content']['topic']
-            self.status = self.body.get('status', 'NEW_FILES')
-            self.created_at = datetime.datetime.strptime(self.body['timestamps']['created_at'], self.date_format)
-            self.url = "{et}/advisory/{id}".format(
-                et=constants.errata_url,
-                id=self.advisory_id)
-
-    def refresh(self):
-        """Refreshes this object by pulling down a fresh copy from the API"""
-        self.body = get_erratum(self.advisory_id).body
-        self._parse_body()
-
-    def to_json(self):
-        return json.dumps(self.body, indent=2)
-
-    ######################################################################
-    # The following methods are related to REST API interactions
-
-    def add_bugs(self, bugs=[]):  # pragma: no cover
-        """Shortcut for several calls to self.add_bug()
-
-        :param Bug bugs: A list of :module:`bugzilla` Bug objects
-        """
-        for bug in bugs:
-            yield (self.add_bug(bug), bug.id)
-
-    def add_bug(self, bug):
-        """5.2.1.5. POST /api/v1/erratum/{id}/add_bug
-
-        Add a bug to an advisory.
-
-        Example request body:
-            {"bug": "884202"}
-
-        https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidadd_bug
-
-        :param Bug bug: A :module:`bugzilla` Bug object
-        """
-        return requests.post(constants.errata_add_bug_url.format(id=self.advisory_id),
-                             verify=ssl.get_default_verify_paths().openssl_cafile,
-                             auth=HTTPKerberosAuth(),
-                             json={'bug': bug.id})
-
-    def add_builds(self, builds=[]):
-        """5.2.2.7. POST /api/v1/erratum/{id}/add_builds
-
-        Add one or more brew builds to an advisory.
-
-        Example request body:
-            {"product_version": "RHEL-7", "build": "rhel-server-docker-7.0-23", "file_types": ["ks","tar"]}
-
-        The request body is a single object or an array of objects
-        specifying builds to add, along with the desired product
-        version (or pdc release) and file type(s). Builds may be
-        specified by ID or NVR.
-
-        https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidadd_builds
-
-        :param list[Build] builds: List of Build objects to attach to
-        an advisory
-
-        :return: True if builds were added successfully
-
-        :raises: exceptions.BrewBuildException if the builds could not be attached
-        :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
-        """
-        data = [b.to_json() for b in builds]
-
-        res = requests.post(constants.errata_add_builds_url.format(id=self.advisory_id),
-                            verify=ssl.get_default_verify_paths().openssl_cafile,
-                            auth=HTTPKerberosAuth(),
-                            json=data)
-
-        print(res.status_code)
-        print(res.text)
-
-        if res.status_code == 422:
-            # "Something" bad happened
-            print(res.status_code)
-            print(res.text)
-            raise exceptions.BrewBuildException(str(res.json()))
-        elif res.status_code == 401:
-            raise exceptions.ErrataToolUnauthenticatedException(res.text)
-        # TODO: Find the success return code
-        else:
-            return True
-
-    def add_comment(self, comment):  # pragma: no cover
-        """5.2.1.8. POST /api/v1/erratum/{id}/add_comment
+def add_comment(advisory_id, comment):
+    """5.2.1.8. POST /api/v1/erratum/{id}/add_comment
 
         Add a comment to an advisory.
         Example request body:
@@ -431,86 +240,49 @@ class Erratum(object):
 
         :param dict comment: The metadata object to add as a comment
         """
-        data = {"comment": json.dumps(comment)}
-        return requests.post(constants.errata_add_comment_url.format(id=self.advisory_id),
-                             verify=ssl.get_default_verify_paths().openssl_cafile,
-                             auth=HTTPKerberosAuth(),
-                             data=data)
-
-    def change_state(self, state):
-        """5.2.1.14. POST /api/v1/erratum/{id}/change_state
-
-        Change the state of an advisory.
-        Example request body:
-
-            {"new_state": "QE"}
-
-        Request body may contain:
-            new_state: e.g. 'QE' (required)
-            comment: a comment to post on the advisory (optional)
-
-        :param str state: The state to change the advisory to
-        :return: True on successful state change
-        :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
-
-        https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratumidchange_state
-        """
-        res = requests.post(constants.errata_change_state_url.format(id=self.advisory_id),
+    data = {"comment": json.dumps(comment)}
+    return requests.post(constants.errata_add_comment_url.format(id=advisory_id),
                             verify=ssl.get_default_verify_paths().openssl_cafile,
                             auth=HTTPKerberosAuth(),
-                            data={"new_state": state})
+                            data=data)
 
-        # You may receive this response when: Erratum isn't ready to
-        # move to QE, no builds in erratum, erratum has no Bugzilla
-        # bugs or JIRA issues.
-        if res.status_code == 422:
-            # Conditions not met
-            raise exceptions.ErrataToolError("Can not change erratum state, preconditions not yet met. Error message: {msg}".format(
-                msg=res.text))
-        elif res.status_code == 401:
-            raise exceptions.ErrataToolUnauthenticatedException(res.text)
-        elif res.status_code == 201:
-            # POST processed successfully
-            self.refresh()
-            return True
+def get_comments(advisory_id):
+    """5.2.10.2. GET /api/v1/comments?filter[key]=value
 
-    def get_comments(self):
-        """5.2.10.2. GET /api/v1/comments?filter[key]=value
+    Retrieve all advisory comments
+    Example request body:
 
-        Retrieve all advisory comments
-        Example request body:
+        {"filter": {"errata_id": 11112, "type": "AutomatedComment"}}
 
-            {"filter": {"errata_id": 11112, "type": "AutomatedComment"}}
+    Returns an array of comments ordered in descending order
+    (newest first). The array may be empty depending on the filters
+    used. The meaning of each attribute is documented under GET
+    /api/v1/comments/{id} (see Erratum.get_comment())
 
-        Returns an array of comments ordered in descending order
-        (newest first). The array may be empty depending on the filters
-        used. The meaning of each attribute is documented under GET
-        /api/v1/comments/{id} (see Erratum.get_comment())
+    Included for reference:
+    5.2.10.2.1. Filtering
 
-        Included for reference:
-        5.2.10.2.1. Filtering
+    The list of comments can be filtered by applying
+    filter[key]=value as a query parameter. All attributes of a
+    comment - except advisory_state - can be used as a filter.
 
-        The list of comments can be filtered by applying
-        filter[key]=value as a query parameter. All attributes of a
-        comment - except advisory_state - can be used as a filter.
-
-        This is a paginated API. Reference documentation:
-        https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-pagination
-        """
-        body = {
-            "filter": {
-                "errata_id": self.advisory_id,
-                "type": "Comment"
-                }
+    This is a paginated API. Reference documentation:
+    https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-pagination
+    """
+    body = {
+        "filter": {
+            "errata_id": advisory_id,
+            "type": "Comment"
             }
-        res = requests.get(constants.errata_get_comments_url,
-                           verify=ssl.get_default_verify_paths().openssl_cafile,
-                           auth=HTTPKerberosAuth(),
-                           json=body)
+        }
+    res = requests.get(constants.errata_get_comments_url,
+                        verify=ssl.get_default_verify_paths().openssl_cafile,
+                        auth=HTTPKerberosAuth(),
+                        json=body)
 
-        if res.status_code == 200:
-            return res.json().get('data', [])
-        elif res.status_code == 401:
-            raise exceptions.ErrataToolUnauthorizedException(res.text)
-        else:
-            return False
+    if res.status_code == 200:
+        return res.json().get('data', [])
+    elif res.status_code == 401:
+        raise exceptions.ErrataToolUnauthorizedException(res.text)
+    else:
+        return False

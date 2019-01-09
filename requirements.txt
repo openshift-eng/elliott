@@ -1,10 +1,11 @@
-pykwalify
-pyyaml
+bashlex
 click
 dockerfile-parse
-requests
-requests_kerberos
+errata-tool
 koji
-bashlex
 pydotconfig
 pygitdata
+pykwalify
+pyyaml
+requests
+requests_kerberos
