@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import unittest
-import bugzilla
+import bzutil
 
 hostname = "bugzilla.redhat.com"
 
@@ -15,7 +15,7 @@ class TestSearchFilter(unittest.TestCase):
         value = "RFE"
         expected = "&f1=component&o1=notequals&v1=RFE"
 
-        sf = bugzilla.SearchFilter(field_name, operator, value)
+        sf = bzutil.SearchFilter(field_name, operator, value)
         self.assertEqual(sf.tostring(1), expected)
 
 # class TestSearchURL(unittest.TestCase):
