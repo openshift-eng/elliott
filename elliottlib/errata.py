@@ -215,7 +215,7 @@ filter_id
         # successfully parsing the response as a JSONinfo object indicates
         # a successful API call.
         try:
-            return [Erratum(**advs) for advs in res.json()][:limit]
+            return [Erratum(errata_id = advs['id']) for advs in res.json()][:limit]
         except Exception:
             raise exceptions.ErrataToolError("Could not locate the given advisory filter: {fid}".format(
                 fid=filter_id))

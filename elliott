@@ -617,12 +617,10 @@ Fields for the short format: Release date, State, Synopsys, URL
 @click.option("--filter-id", '-f',
               default=elliottlib.constants.errata_default_filter,
               help="A custom filter id to list from")
-@click.option("-n", default=5,
-              help="Return only N latest results (default: 5)")
-@click.option('--json', is_flag=True, default=False,
-              help="Print the full JSON object of the advisory")
+@click.option("-n", default=6,
+              help="Return only N latest results (default: 6)")
 @click.pass_context
-def list(ctx, filter_id, n, json):
+def list(ctx, filter_id, n):
     """Print a list of one-line informational strings of RHOSE
 advisories. By default the 5 most recently created advisories are
 printed. Note, they are NOT sorted by release date.
@@ -634,17 +632,19 @@ Default filter definition: RHBA; Active; Product: RHOSE; Devel Group:
 ENG OpenShift Enterprise; sorted by newest. Browse this filter
 yourself online: https://errata.devel.redhat.com/filter/1965
 
-    List 10 advisories instead of the default 5 with your custom
+    List 10 advisories instead of the default 6 with your custom
     filter #1337:
 
     $ elliott advisory:list -n 10 -f 1337
 """
     try:
         for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=n):
-            if json:
-                click.echo(erratum.to_json())
-            else:
-                click.echo(erratum)
+            click.echo("{release_date:11s} {state:15s} {synopsis:80s} {url}".format(
+                release_date = erratum.publish_date_override,
+                state = erratum.errata_state,
+                synopsis = erratum.synopsis,
+                url = erratum.url()
+                ))
     except elliottlib.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
     except elliottlib.exceptions.ErrataToolError as err:
