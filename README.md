@@ -10,7 +10,6 @@ tedious and error prone.
 
    * [Basics &amp; Terminology](#basics--terminology)
    * [Setup and Installation](#setup-and-installation)
-      * [Additional Softwares](#additional-softwares)
       * [Authenticating](#authenticating)
    * [Tests](#tests)
    * [Usage](#usage)
@@ -69,18 +68,6 @@ software and bug fixes
 # Setup and Installation
 
 `pip install rh-elliott`
-
-## Additional Softwares
-
-Elliott requires additional command line tools to fully function:
-
-1. `brew` - Installation instructions are
-   [available in Mojo](https://mojo.redhat.com/docs/DOC-1071519). Requires
-   an active kerberos ticket to use.
-1. `bugzilla` - Available through DNF repos as the
-   `python-bugzilla-cli` package. **Ensure** that you run `bugzilla
-   login` after installation!
-
 
 ## Authenticating
 

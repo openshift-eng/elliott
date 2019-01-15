@@ -7,5 +7,6 @@ pydotconfig
 pygitdata
 pykwalify
 pyyaml
+python-bugzilla
 requests
 requests_kerberos

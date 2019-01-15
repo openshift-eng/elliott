@@ -13,6 +13,7 @@ import constants
 
 # 3rd party
 import click
+import bugzilla
 
 logger = logutil.getLogger(__name__)
 
@@ -22,6 +23,7 @@ def search_for_bugs(bz_data, status, verbose=False):
 
     :return: A list of Bug objects
     """
+    bzapi = get_bzapi(bz_data)
     query_url = SearchURL(bz_data)
 
     for f in bz_data.get('filter'):
@@ -40,65 +42,13 @@ def search_for_bugs(bz_data, status, verbose=False):
     if verbose:
         click.echo(query_url)
 
-    new_bugs = check_output(
-        ['bugzilla', 'query', '--ids', '--from-url="{0}"'.format(query_url)]).splitlines()
+    query = bzapi.url_to_query(str(query_url))
+    query["include_fields"] = ["id"]
+    
+    return bzapi.query(query)
 
-    return [Bug(id=i) for i in new_bugs]
-
-def search_for_bug_transitions(bz_data, current_state, changed_from, changed_to):
-    query_url = SearchURL(bz_data)
-
-    query_url.addBugStatus(current_state)
-
-    query_url.addFilterOperator("AND_G")
-
-    query_url.addFilter("bug_status", "changedfrom", changed_from)
-    query_url.addFilter("bug_status", "changedto", changed_to)
-
-    for v in bz_data.get('version'):
-        query_url.addVersion(v)
-
-    changed_bugs = check_output(
-        ['bugzilla', 'query', '--ids', '--from-url="{0}"'.format(query_url)]).splitlines()
-
-    return [Bug(id=i) for i in changed_bugs]
-
-class Bug(object):
-    """
-    Abstract interactions with bugzilla bugs
-    """
-    def __init__(self, id):
-        """:param int id: A Bugzilla bug ID"""
-        self.id = id
-
-    def __str__(self):
-        return str(self.id)
-
-    def __repr__(self):
-        return str(self)
-
-    def add_comment(self, comment, is_private):
-        """Add a comment to a bug"""
-        if is_private:
-            call(['bugzilla', 'modify', self.id, '--comment', comment, '--private'])
-        else:
-            call(['bugzilla', 'modify', self.id, '--comment', comment])
-
-    def add_flags(self, flags=[]):  # pragma: no cover
-        """Add flags to a bug"""
-        for flag in flags:
-            self.add_flag(flag)
-
-    def add_flag(self, flag):
-        """Add the given flag to the bug"""
-        call(['bugzilla', 'modify', '--flag', '{0}+'.format(flag), self.id])
-
-    def add_whiteboard_value(self, value):
-        call(['bugzilla', 'modify', self.id, '--whiteboard', value])
-
-    def has_whiteboard_value(self, value):
-        """Check if the value is in the Whiteboard for the bug"""
-        return check_output(['bugzilla', 'query', '--id', self.id, '--whiteboard', value])
+def get_bzapi(bz_data):
+    return bugzilla.Bugzilla(bz_data['server'])
 
 
 class SearchFilter(object):

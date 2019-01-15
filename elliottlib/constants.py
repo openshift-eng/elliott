@@ -64,10 +64,4 @@ errata_get_comments_url = errata_url + "/api/v1/comments"
 errata_get_erratum_url = errata_url + "/api/v1/erratum/{id}"
 errata_post_erratum_url = errata_url + "/api/v1/erratum"
 
-bugzilla_invalid_transition_comment = """There is a potential issue with this bug that may prevent it from being processed by our automation.
-
-For more information on proper bug management visit:
-https://mojo.redhat.com/docs/DOC-1178565#jive_content_id_How_do_I_get_my_Bugzilla_Bug_to_VERIFIED
-"""
-
 DISTGIT_MAX_FILESIZE = 50000000
