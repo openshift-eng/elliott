@@ -444,10 +444,9 @@ PRESENT advisory. Here are some examples:
     $ elliott --group openshift-3.6 advisory:find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
 """
     runtime.initialize()
-    minor = minor_from_branch(runtime.group_config.branch)
-    major = major_from_branch(runtime.group_config.branch)
-    product_version = 'RHEL-7-OSE-{X}.{Y}'.format(X=major, Y=minor)
-    base_tag = "rhaos-{major}.{minor}-rhel-7".format(major=major, minor=minor)
+    et_data = runtime.gitdata.load_data(key='erratatool').data
+    product_version = et_data.get('product_version')
+    base_tag = et_data.get('brew_tag')
 
     # Test authentication
     try:
@@ -544,7 +543,7 @@ PRESENT advisory. Here are some examples:
         # Search and attach
         try:
             erratum = Erratum(errata_id=advisory)
-            erratum.addBuilds(unshipped_builds)
+            erratum.addBuilds([build.nvr for build in unshipped_builds], release=product_version)
             erratum.commit()
             click.secho("Attached build(s) successfully", fg='green', bold=True)
         except elliottlib.exceptions.ErrataToolUnauthenticatedException:

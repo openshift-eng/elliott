@@ -309,6 +309,10 @@ product: "RHOSE"
 
 release: "RHOSE ASYNC"
 
+product_version: "RHEL-7-OSE-3.10"
+
+brew_tag: "rhaos-3.10-rhel-7"
+
 synopsis:
   rpm: "OpenShift Container Platform 3.10 bug fix and enhancement update"
   image: "OpenShift Container Platform 3.10 images update"
