@@ -7,6 +7,9 @@ mapping:
   "mode":
     type: str
 
+  "required":
+    type: bool
+
   "distgit":
     type: map
     mapping:
