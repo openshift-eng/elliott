@@ -35,7 +35,7 @@ import bugzilla
 import click
 import requests
 import dotconfig
-from errata_tool import Erratum
+from errata_tool import Erratum, ErrataException
 
 # -----------------------------------------------------------------------------
 # Constants and defaults
@@ -345,21 +345,26 @@ manually. Provide one or more --id's for manual bug addition.
     if auto and len(id) > 0:
         raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
 
-    if auto:
-        # Initialization ensures a valid group was provided
-        runtime.initialize()
-        bz_data = runtime.gitdata.load_data(key='bugzilla').data
-    elif len(id) == 0:
+    if not auto and len(id) == 0:
         # No bugs were provided
         raise click.BadParameter("If not using --auto then one or more --id's must be provided")
 
+    runtime.initialize()
+    bz_data = runtime.gitdata.load_data(key='bugzilla').data
+
     if auto:
+        click.echo("Searching for bugs with target release(s): {tr}".format(tr=", ".join(bz_data['target_release'])))
+
         bug_ids = elliottlib.bzutil.search_for_bugs(bz_data, status)
+
+        click.echo("Found bugs: {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
     else:
         bzapi = elliottlib.bzutil.get_bzapi(bz_data)
         bug_ids = [bzapi.getbug(i) for i in id]
 
-    bug_count = len(bug_ids)
+    if len(flag) > 0:
+        for bug in bug_ids:
+            bug.update_flags({flag: "+"})
 
     if advisory is not False:
         try:
@@ -372,21 +377,16 @@ manually. Provide one or more --id's for manual bug addition.
             click.echo("Could not locate advisory {advs}".format(advs=advisory))
             exit(1)
 
-        if auto:
-            click.echo("Adding bugs to {advs} for target releases: {tr}".format(advs=advisory, tr=", ".join(bz_data['target_release'])))
-        else:
-            click.echo("Adding {count} bugs to {advs}".format(count=bug_count, advs=advisory))
 
-        if len(flag) > 0:
-            for bug in bug_ids:
-                bug.update_flags({flag: "+"})
 
-        advs.addBugs([bug.id for bug in bug_ids])
-        advs.commit()
-    else: # Add bug is false (noop)
-        green_prefix("Would have added {n} bugs: ".format(n=bug_count))
-        click.echo(", ".join([str(b.bug_id) for b in bug_ids]))
-
+        try:
+            click.echo("Adding {count} bugs to advisory {advs}".format(count=len(bug_ids), advs=advisory))
+            advs.addBugs([bug.id for bug in bug_ids])
+            advs.commit()
+        except ErrataException as err:
+            red_prefix("Error: ")
+            click.echo(err.message)
+            exit(1)
 
 #
 # Attach Builds
