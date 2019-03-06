@@ -132,8 +132,8 @@ def find_latest_erratum(kind, major, minor):
         return sorted_dates[-1]
 
 
-def new_erratum(et_data, kind=None, release_date=None, create=False,
-                assigned_to=None, manager=None, package_owner=None):
+def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=False,
+                assigned_to=None, manager=None, package_owner=None, impact=None, cve=None):
     """5.2.1.1. POST /api/v1/erratum
 
     Create a new advisory.
@@ -169,7 +169,7 @@ def new_erratum(et_data, kind=None, release_date=None, create=False,
     e = Erratum(
             product = et_data['product'],
             release = et_data['release'],
-            errata_type = et_data.get('errata_type', 'RHBA'),
+            errata_type = errata_type,
             synopsis = et_data['synopsis'][kind],
             topic = et_data['topic'],
             description = et_data['description'],
@@ -180,6 +180,10 @@ def new_erratum(et_data, kind=None, release_date=None, create=False,
             manager_email = manager,
             date = release_date
         )
+
+    if errata_type == 'RHSA':
+        e.security_impact = impact
+        e.cve_names = cve
 
     if create:
         # THIS IS NOT A DRILL

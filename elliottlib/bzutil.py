@@ -18,15 +18,45 @@ import bugzilla
 logger = logutil.getLogger(__name__)
 
 
-def search_for_bugs(bz_data, status, verbose=False):
+def search_for_bugs(bz_data, status, search_filter='default', filter_out_security_bugs=True, verbose=False):
     """Search the provided target_release's for bugs in the specified states
 
     :return: A list of Bug objects
     """
     bzapi = get_bzapi(bz_data)
+    query_url = _construct_query_url(bz_data, status, search_filter)
+
+    if filter_out_security_bugs:
+        query_url.addKeyword('SecurityTracking', 'nowords')
+
+    # TODO: Expose this for debugging 
+    if verbose:
+        click.echo(query_url)
+    
+    return _perform_query(bzapi, query_url)
+
+def search_for_security_bugs(bz_data, status, search_filter='security', verbose=False):
+    bzapi = get_bzapi(bz_data)
+    query_url = _construct_query_url(bz_data, status, search_filter)
+    query_url.addKeyword('SecurityTracking')
+
+    if verbose:
+        click.echo(query_url)
+    
+    return _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary'])
+
+def get_bzapi(bz_data):
+    return bugzilla.Bugzilla(bz_data['server'])
+
+def _construct_query_url(bz_data, status, search_filter='default'):
     query_url = SearchURL(bz_data)
 
-    for f in bz_data.get('filter'):
+    if bz_data.get('filter'):
+        filter_list = bz_data.get('filter')
+    elif bz_data.get('filters'):
+        filter_list = bz_data.get('filters').get(search_filter)
+
+    for f in filter_list:
         query_url.addFilter(f.get('field'), f.get('operator'), f.get('value'))
 
     for v in bz_data.get('version'):
@@ -38,17 +68,15 @@ def search_for_bugs(bz_data, status, verbose=False):
     for r in bz_data.get('target_release'):
         query_url.addTargetRelease(r)
 
-    # TODO: Expose this for debugging
-    if verbose:
-        click.echo(query_url)
+    return query_url
+
+def _perform_query(bzapi, query_url, include_fields=['id']):
 
     query = bzapi.url_to_query(str(query_url))
-    query["include_fields"] = ["id"]
-    
+    query["include_fields"] = include_fields
+
     return bzapi.query(query)
 
-def get_bzapi(bz_data):
-    return bugzilla.Bugzilla(bz_data['server'])
 
 
 class SearchFilter(object):
@@ -87,6 +115,8 @@ class SearchURL(object):
         self.filter_operator = ""
         self.versions = []
         self.target_releases = []
+        self.keyword = ""
+        self.keywords_type = ""
 
     def __str__(self):
         root_string = SearchURL.url_format.format(self.bz_host)
@@ -95,6 +125,7 @@ class SearchURL(object):
 
         url += "&classification={}".format(urllib.quote(self.classification))
         url += "&product={}".format(urllib.quote(self.product))
+        url += self._keywords_string()
         url += self.filter_operator
         url += self._filter_string()
         url += self._target_releases_string()
@@ -114,6 +145,9 @@ class SearchURL(object):
     def _target_releases_string(self):
         return "".join(["&target_release={}".format(tr) for tr in self.target_releases])
 
+    def _keywords_string(self):
+        return "&keywords={}&keywords_type={}}".format(self.keyword, self.keywords_type)
+
     def addFilter(self, field, operator, value):
         self.filters.append(SearchFilter(field, operator, value))
 
@@ -131,3 +165,7 @@ class SearchURL(object):
 
     def addBugStatus(self, status):
         self.bug_status.append(status)
+
+    def addKeyword(self, keyword, keyword_type="anywords"):
+        self.keyword = keyword
+        self.keywords_type = keyword_type
