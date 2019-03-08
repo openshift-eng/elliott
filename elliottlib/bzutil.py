@@ -17,6 +17,18 @@ import bugzilla
 
 logger = logutil.getLogger(__name__)
 
+def get_bug_severity(bz_data, bug_id):
+    """Get just the severity of a bug
+
+    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
+    :param bug_id: The ID of the bug you want information about
+
+    :return: The severity of the bug
+    """
+    bzapi = get_bzapi(bz_data)
+    bug = bzapi.getbug(bug_id, include_fields=['severity'])
+
+    return bug.severity
 
 def search_for_bugs(bz_data, status, search_filter='default', filter_out_security_bugs=True, verbose=False):
     """Search the provided target_release's for bugs in the specified states
@@ -40,23 +52,32 @@ def search_for_bugs(bz_data, status, search_filter='default', filter_out_securit
     
     return _perform_query(bzapi, query_url)
 
-def search_for_security_bugs(bz_data, status, search_filter='security', verbose=False):
+def search_for_security_bugs(bz_data, status=None, search_filter='security', cve=None, verbose=False):
     """Search for CVE tracker bugs
 
     :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
     :param status: The status(es) of bugs to search for
     :param search_filter: Which search filter from bz_data to use if multiple are specified
+    :param cve: The CVE number to filter against
 
     :return: A list of CVE trackers
     """
+    if status == None:
+        status = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING']
+
     bzapi = get_bzapi(bz_data)
     query_url = _construct_query_url(bz_data, status, search_filter)
     query_url.addKeyword('SecurityTracking')
 
     if verbose:
         click.echo(query_url)
+
+    bug_list = _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary'])
+
+    if(cve):
+        bug_list = [bug for bug in bug_list if cve in bug.summary]
     
-    return _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary'])
+    return bug_list
 
 def get_bzapi(bz_data):
     return bugzilla.Bugzilla(bz_data['server'])

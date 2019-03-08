@@ -141,9 +141,6 @@ Bugzilla Bugs.
 @click.option("--impetus", default='standard',
               type=click.Choice(elliottlib.constants.errata_valid_impetus),
               help="Impetus for the advisory creation [standard, cve, ga, test]")
-@click.option('--impact', required=False,
-              type=click.Choice(['Critical', 'Important', 'Moderate', 'Low']),
-              help="Impact of the CVE. Required for RHSA.")
 @click.option("--cve", required=False,
               help="CVE to associate with the Advisory. Required for RHSA.")
 @click.option("--date", required=False,
@@ -167,7 +164,7 @@ Bugzilla Bugs.
               help="Create the advisory (by default only a preview is displayed)")
 @pass_runtime
 @click.pass_context
-def create(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, impact, cve, yes):
+def create(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, cve, yes):
     """Create a new advisory. The kind of advisory must be specified with
 '--kind'. Valid choices are 'rpm' and 'image'.
 
@@ -204,14 +201,17 @@ advisory.
     $ elliott --group openshift-3.5 advisory:create --yes -k image --date 2018-03-05
 """
     runtime.initialize()
-    major = major_from_branch(runtime.group_config.branch)
-    minor = minor_from_branch(runtime.group_config.branch)
+
+    if errata_type == 'RHSA' and not cve:
+        red_print("When creating an RHSA, you must provide a --cve value.")
+        exit(1)
 
     et_data = runtime.gitdata.load_data(key='erratatool').data
+    bz_data = runtime.gitdata.load_data(key='bugzilla').data
 
-    if errata_type == 'RHSA' and not (impact and cve):
-        red_print("When creating an RHSA, you must provide --impact and --cve values.")
-        exit(1)
+    major = major_from_branch(runtime.group_config.branch)
+    minor = minor_from_branch(runtime.group_config.branch)
+    impact = None
 
     if date == default_release_date.strftime(YMD):
         # User did not enter a value for --date, default is determined
@@ -256,6 +256,20 @@ advisory.
 
     ######################################################################
 
+    if errata_type == 'RHSA':
+        # grab CVE trackers and set Impact automatically
+        cve_trackers = elliottlib.bzutil.search_for_security_bugs(bz_data, cve=cve)
+        
+        severity_indexes = []
+        for t in cve_trackers:
+            tracker_severity = elliottlib.bzutil.get_bug_severity(t.id)
+            severity_indexes.append(elliottlib.constants.BUG_SEVERITY.index(tracker_severity))
+        
+        impact = elliottlib.constants.SECURITY_IMPACT[max(severity_indexes)]
+        cve_trackers.append(cve) # The parent flaw bug is aliased to the CVE number
+
+    ######################################################################
+
     try:
         erratum = elliottlib.errata.new_erratum(
             et_data,
@@ -295,6 +309,10 @@ advisory.
         click.echo(str(erratum))
 
         if errata_type == 'RHSA':
+            click.echo("Automatically attaching CVE trackers...")
+            erratum.addBugs([bug.id for bug in cve_trackers])
+            erratum.commit()
+
             yellow_print("Remember to manually set the Security Reviewer in the Errata Tool Web UI")
     else:
         green_prefix("Would have created advisory: ")
@@ -776,6 +794,7 @@ Example to look for bugs that have been moved back to MODIFIED
 @cli.command("find-cve-trackers", short_help="Find and list CVE tracker bugs for Security issues.")
 @click.option('--cve',
               required=False,
+              default=None,
               help="CVE number to filter on. (ex. CVE-2011-1000000)")
 @click.option('--status', 'status',
               multiple=True,
@@ -798,15 +817,11 @@ def find_cve_trackers(runtime, cve, status):
 
     click.echo("Searching for bugs with target release(s): {tr}".format(tr=", ".join(bz_data['target_release'])))
 
-    bug_list = elliottlib.bzutil.search_for_security_bugs(bz_data, status)
-
-    if(cve):
-        bug_list = [bug for bug in bug_list if cve in bug.summary]
+    bug_list = elliottlib.bzutil.search_for_security_bugs(bz_data, status, cve=cve)
 
     click.echo("Found {} bugs:".format(len(bug_list)))
     for b in bug_list:
         click.echo("{}\t{:15s}\t{}".format(b.bug_id,b.status,b.summary))
-
 
 
 # -----------------------------------------------------------------------------

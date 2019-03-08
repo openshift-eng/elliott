@@ -141,21 +141,21 @@ def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=
 
     https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-post-apiv1erratum
 
+    :param et_data: The ET data dump we got from our erratatool.yaml file
+    :param errata_type: The type of advisory to create (RHBA, RHSA, or RHEA)
     :param string kind: One of 'rpm' or 'image', effects boilerplate text
     :param string release_date: A date in the form YYYY-MM-DD
     :param bool create: If true, create the erratum in the Errata
         tool, by default just the DATA we would have POSTed is
         returned
-    :param str/int minor: The minor release to substitute into the
-        errata boilerplate text (see:
-        :mod:`constants`). E.g., if this is a '3.9'
-        release, you would provide '9' as the value for 'minor'
     :param string assigned_to: The email address of the group responsible for
         examining and approving the advisory entries
     :param string manager: The email address of the manager responsible for
         managing the contents and status of this advisory
     :param string package_owner: The email address of the person who is handling
         the details and status of this advisory
+    :param impact: The security impact. Only applies to RHSA
+    :param cve: The CVE to attach to the advisory. Only applies to RHSA
 
     :return: An Erratum object
     :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
