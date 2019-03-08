@@ -145,7 +145,7 @@ Bugzilla Bugs.
               type=click.Choice(['Critical', 'Important', 'Moderate', 'Low']),
               help="Impact of the CVE. Required for RHSA.")
 @click.option("--cve", required=False,
-              help="CVE to associtate with the Advisory. Required for RHSA.")
+              help="CVE to associate with the Advisory. Required for RHSA.")
 @click.option("--date", required=False,
               default=default_release_date.strftime(YMD),
               callback=validate_release_date,
@@ -773,7 +773,7 @@ Example to look for bugs that have been moved back to MODIFIED
 #
 # Search for CVE tracker bugs
 #
-@cli.command("find-cve-trackers", short_help="Find and list CVE tracker bugs forSecurity issues.")
+@cli.command("find-cve-trackers", short_help="Find and list CVE tracker bugs for Security issues.")
 @click.option('--cve',
               required=False,
               help="CVE number to filter on. (ex. CVE-2011-1000000)")
