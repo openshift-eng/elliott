@@ -21,6 +21,11 @@ logger = logutil.getLogger(__name__)
 def search_for_bugs(bz_data, status, search_filter='default', filter_out_security_bugs=True, verbose=False):
     """Search the provided target_release's for bugs in the specified states
 
+    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
+    :param status: The status(es) of bugs to search for
+    :param search_filter: Which search filter from bz_data to use if multiple are specified
+    :param filter_out_security_bugs: Boolean on whether to filter out bugs tagged with the SecurityTracking keyword.
+
     :return: A list of Bug objects
     """
     bzapi = get_bzapi(bz_data)
@@ -36,6 +41,14 @@ def search_for_bugs(bz_data, status, search_filter='default', filter_out_securit
     return _perform_query(bzapi, query_url)
 
 def search_for_security_bugs(bz_data, status, search_filter='security', verbose=False):
+    """Search for CVE tracker bugs
+
+    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
+    :param status: The status(es) of bugs to search for
+    :param search_filter: Which search filter from bz_data to use if multiple are specified
+
+    :return: A list of CVE trackers
+    """
     bzapi = get_bzapi(bz_data)
     query_url = _construct_query_url(bz_data, status, search_filter)
     query_url.addKeyword('SecurityTracking')
@@ -70,7 +83,9 @@ def _construct_query_url(bz_data, status, search_filter='default'):
 
     return query_url
 
-def _perform_query(bzapi, query_url, include_fields=['id']):
+def _perform_query(bzapi, query_url, include_fields=None):
+    if include_fields is None:
+        include_fields=['id']
 
     query = bzapi.url_to_query(str(query_url))
     query["include_fields"] = include_fields
@@ -146,7 +161,7 @@ class SearchURL(object):
         return "".join(["&target_release={}".format(tr) for tr in self.target_releases])
 
     def _keywords_string(self):
-        return "&keywords={}&keywords_type={}}".format(self.keyword, self.keywords_type)
+        return "&keywords={}&keywords_type={}".format(self.keyword, self.keywords_type)
 
     def addFilter(self, field, operator, value):
         self.filters.append(SearchFilter(field, operator, value))

@@ -805,7 +805,7 @@ def find_cve_trackers(runtime, cve, status):
 
     click.echo("Found {} bugs:".format(len(bug_list)))
     for b in bug_list:
-        click.echo("{bug_id}\t{bug_status:15s}\t{bug_summary}".format(bug_id=b.bug_id,bug_status=b.status,bug_summary=b.summary))
+        click.echo("{}\t{:15s}\t{}".format(b.bug_id,b.status,b.summary))
 
 
 
