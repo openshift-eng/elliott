@@ -8,6 +8,9 @@ CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
 
 VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
 
+BUG_SEVERITY = ["Low", "Medium", "High", "Urgent"]
+SECURITY_IMPACT = ["Low", "Moderate", "Important", "Critical"]
+
 errata_url = "https://errata.devel.redhat.com"
 
 # 1965 => (RHBA; Active; Product: RHOSE; Devel Group: ENG OpenShift

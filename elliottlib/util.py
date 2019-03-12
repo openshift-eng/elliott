@@ -31,6 +31,9 @@ def green_print(msg):
     """Print out a message in green text"""
     click.secho(msg, nl=True, bold=False, fg='green')
 
+def yellow_print(msg):
+    """Print out a message in yellow text"""
+    click.secho(msg, nl=True, bold=False, fg='yellow')
 
 def cprint(msg):
     """Wrapper for click.echo"""
