@@ -93,13 +93,13 @@ def _construct_query_url(bz_data, status, search_filter='default'):
     for f in filter_list:
         query_url.addFilter(f.get('field'), f.get('operator'), f.get('value'))
 
-    for v in bz_data.get('version'):
+    for v in bz_data.get('version', []):
         query_url.addVersion(v)
 
     for s in status:
         query_url.addBugStatus(s)
 
-    for r in bz_data.get('target_release'):
+    for r in bz_data.get('target_release', []):
         query_url.addTargetRelease(r)
 
     return query_url
