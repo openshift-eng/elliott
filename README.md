@@ -179,7 +179,7 @@ give explicit confirmation to create the advisory by providing the
 
     <elliott> $ ./elliott --group openshift-3.5 create \
         --kind image \
-        --date 2018-03-05 \
+        --date 2018-May-05 \
         --yes
 
 ## `change-state` - Change the State of an Advisory
