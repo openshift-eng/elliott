@@ -65,6 +65,10 @@ mapping:
               "stage":
                 type: str
 
+  "use_source_fallback_branch":
+    type: enum
+    enum: [always, never, fallback]
+
   "default_image_build_method":
     type: enum
     enum: [docker_api, imagebuilder]
