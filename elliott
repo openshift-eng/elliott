@@ -123,12 +123,14 @@ Bugzilla Bugs.
 
     click.echo("Changing state for {id} to {state}".format(id=advisory, state=state))
 
-    e = Erratum(errata_id=advisory)
-    e.setState(state)
-    e.commit()
+    try:
+        e = Erratum(errata_id=advisory)
+        e.setState(state)
+        e.commit()
+    except ErrataException as ex:
+        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
-    green_prefix("Changed advisory state:")
-    click.echo(e)
+    green_print("Successfully changed advisory state")
 
 
 #
@@ -208,8 +210,7 @@ advisory.
     runtime.initialize()
 
     if errata_type == 'RHSA' and not cve:
-        red_print("When creating an RHSA, you must provide a --cve value.")
-        exit(1)
+        raise ElliottFatalError("When creating an RHSA, you must provide a --cve value.")
 
     et_data = runtime.gitdata.load_data(key='erratatool').data
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
@@ -227,16 +228,14 @@ advisory.
             exit_unauthenticated()
         except elliottlib.exceptions.ErrataToolUnauthorizedException:
             exit_unauthorized()
-        except elliottlib.exceptions.ErrataToolError as err:
-            red_prefix("Error searching advisories: ")
-            click.echo(str(err))
-            exit(1)
+        except elliottlib.exceptions.ErrataToolError as ex:
+            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
         else:
             if latest_advisory is None:
-                red_prefix("No metadata discovered: ")
-                click.echo("No advisory for {x}.{y} has been released in recent history, can not auto determine next release date".format(
-                    x=major, y=minor))
-                exit(1)
+                red_print("No metadata discovered")
+                raise ElliottFatalError("No advisory for {x}.{y} has been released in recent history, can not auto determine next release date".format(
+                                        x=major, y=minor))
+
 
         green_prefix("Found an advisory to calculate new release date from: ")
         click.echo("{synopsis} - {rel_date}".format(
@@ -251,7 +250,7 @@ advisory.
             # How far from our target day of the week?
             delta = day_of_week - 2
             release_date = release_date - datetime.timedelta(days=delta)
-            click.secho("Adjusted release date to land on a Tuesday", fg='yellow')
+            yellow_print("Adjusted release date to land on a Tuesday")
 
         green_prefix("Calculated release date: ")
         click.echo("{}".format(str(release_date)))
@@ -291,9 +290,7 @@ advisory.
     except elliottlib.exceptions.ErrataToolUnauthorizedException:
         exit_unauthorized()
     except elliottlib.exceptions.ErrataToolError as err:
-        red_prefix("Error creating advisory: ")
-        click.echo(str(err))
-        exit(1)
+        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
     if yes:
         green_prefix("Created new advisory: ")
@@ -415,18 +412,14 @@ manually. Provide one or more --id's for manual bug addition.
             exit_unauthenticated()
 
         if advs is False:
-            red_prefix("Error: ")
-            click.echo("Could not locate advisory {advs}".format(advs=advisory))
-            exit(1)
+            raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
 
         try:
             click.echo("Adding {count} bugs to advisory {advs}".format(count=len(bug_ids), advs=advisory))
             advs.addBugs([bug.id for bug in bug_ids])
             advs.commit()
-        except ErrataException as err:
-            red_prefix("Error: ")
-            click.echo(err.message)
-            exit(1)
+        except ErrataException as ex:
+            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
 #
 # Attach Builds
@@ -502,9 +495,7 @@ PRESENT advisory. Here are some examples:
         try:
             unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in builds]
         except elliottlib.exceptions.BrewBuildException as e:
-            red_prefix("Error: ")
-            click.echo(e)
-            exit(1)
+            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
     else:
         if kind == 'image':
             initial_builds = runtime.image_metas()
@@ -591,13 +582,11 @@ PRESENT advisory. Here are some examples:
                               release=product_version,
                               file_types={build.nvr: [file_type]})
             erratum.commit()
-            click.secho("Attached build(s) successfully", fg='green', bold=True)
+            green_print("Attached build(s) successfully")
         except elliottlib.exceptions.ErrataToolUnauthenticatedException:
             exit_unauthenticated()
-        except elliottlib.exceptions.BrewBuildException as e:
-            red_prefix("Error attaching builds: ")
-            click.echo(str(e))
-            exit(1)
+        except elliottlib.exceptions.BrewBuildException as ex:
+            raise ElliottFatalError("Error attaching builds: {}".format(getattr(ex, 'message', repr(ex))))
     else:
         click.echo("The following {n} builds ".format(n=build_count), nl=False)
         click.secho("may be attached ", bold=True, nl=False)
@@ -693,10 +682,8 @@ yourself online: https://errata.devel.redhat.com/filter/1965
                        url=erratum.url()))
     except elliottlib.exceptions.ErrataToolUnauthenticatedException:
         exit_unauthenticated()
-    except elliottlib.exceptions.ErrataToolError as err:
-        red_prefix("Error: ")
-        click.echo(str(err))
-        exit(1)
+    except elliottlib.exceptions.ErrataToolError as ex:
+        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
 #
 # Add metadata comment to an Advisory
@@ -739,10 +726,8 @@ Example to add standard metadata to a 3.10 images release
     elif result.status_code == 403:
         exit_unauthorized()
     else:
-        red_prefix("Something weird may have happened: ")
-        click.echo("Unexpected response from ET API: {code}".format(
-            code=result.status_code))
-        exit(1)
+        red_print("Something weird may have happened")
+        raise ElliottFatalError("Unexpected response from ET API: {code}".format(code=result.status_code))
 
 #
 # Repair bugs
@@ -846,7 +831,7 @@ def main():
         # nicely instead of a gross stack-trace.
         # All internal errors that should simply cause the app
         # to exit with an error code should use ElliottFatalError
-        red_print(ex.message)
+        red_print(getattr(ex, 'message', repr(ex)))
         sys.exit(1)
 
 
