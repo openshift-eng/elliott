@@ -28,7 +28,12 @@ import elliottlib.exceptions
 
 from elliottlib import cli_opts
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import *
+from elliottlib.util import exit_unauthenticated, green_prefix, YMD
+from elliottlib.util import default_release_date, validate_release_date
+from elliottlib.util import validate_email_address, red_print, major_from_branch
+from elliottlib.util import green_print, red_prefix, minor_from_branch
+from elliottlib.util import yellow_print, exit_unauthorized, release_from_branch
+from elliottlib.util import progress_func, pbar_header
 
 # 3rd party
 import bugzilla
@@ -578,7 +583,13 @@ PRESENT advisory. Here are some examples:
         # Search and attach
         try:
             erratum = Erratum(errata_id=advisory)
-            erratum.addBuilds([build.nvr for build in unshipped_builds], release=product_version)
+            if kind == 'image':
+                file_type = 'tar'
+            elif kind == 'rpm':
+                file_type = 'rpm'
+            erratum.addBuilds([build.nvr for build in unshipped_builds],
+                              release=product_version,
+                              file_types={build.nvr: [file_type]})
             erratum.commit()
             click.secho("Attached build(s) successfully", fg='green', bold=True)
         except elliottlib.exceptions.ErrataToolUnauthenticatedException:
