@@ -140,9 +140,8 @@ class Runtime(object):
         if replace_vars is not Missing:
             try:
                 group_yml = yaml.safe_dump(tmp_config.primitive(), default_flow_style=False)
-                tmp_config = Model(yaml.load(group_yml.format(**replace_vars)))
+                tmp_config = Model(yaml.safe_load(group_yml.format(**replace_vars)))
             except KeyError as e:
-                raise
                 raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
         return tmp_config
 
