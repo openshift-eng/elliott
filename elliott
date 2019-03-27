@@ -41,6 +41,7 @@ import click
 import requests
 import dotconfig
 from errata_tool import Erratum, ErrataException
+from kerberos import GSSError
 
 # -----------------------------------------------------------------------------
 # Constants and defaults
@@ -224,7 +225,7 @@ advisory.
         # by looking up the latest erratum in a series
         try:
             latest_advisory = elliottlib.errata.find_latest_erratum(kind, major, minor)
-        except elliottlib.exceptions.ErrataToolUnauthenticatedException:
+        except GSSError:
             exit_unauthenticated()
         except elliottlib.exceptions.ErrataToolUnauthorizedException:
             exit_unauthorized()
@@ -289,7 +290,7 @@ advisory.
         )
     except elliottlib.exceptions.ErrataToolUnauthorizedException:
         exit_unauthorized()
-    except elliottlib.exceptions.ErrataToolError as err:
+    except elliottlib.exceptions.ErrataToolError as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
     if yes:
@@ -408,7 +409,7 @@ manually. Provide one or more --id's for manual bug addition.
     if advisory is not False:
         try:
             advs = Erratum(errata_id=advisory)
-        except elliottlib.exceptions.ErrataToolUnauthenticatedException:
+        except GSSError:
             exit_unauthenticated()
 
         if advs is False:
@@ -484,7 +485,7 @@ PRESENT advisory. Here are some examples:
     # Test authentication
     try:
         elliottlib.errata.get_filtered_list(elliottlib.constants.errata_live_advisory_filter)
-    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
+    except GSSError:
         exit_unauthenticated()
 
     session = requests.Session()
@@ -494,7 +495,7 @@ PRESENT advisory. Here are some examples:
         click.echo("Manually verifying the builds exist")
         try:
             unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in builds]
-        except elliottlib.exceptions.BrewBuildException as e:
+        except elliottlib.exceptions.BrewBuildException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
     else:
         if kind == 'image':
@@ -583,7 +584,7 @@ PRESENT advisory. Here are some examples:
                               file_types={build.nvr: [file_type]})
             erratum.commit()
             green_print("Attached build(s) successfully")
-        except elliottlib.exceptions.ErrataToolUnauthenticatedException:
+        except GSSError:
             exit_unauthenticated()
         except elliottlib.exceptions.BrewBuildException as ex:
             raise ElliottFatalError("Error attaching builds: {}".format(getattr(ex, 'message', repr(ex))))
@@ -631,7 +632,7 @@ Fields for the short format: Release date, State, Synopsys, URL
 """
     try:
         advisory = Erratum(errata_id=advisory)
-    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
+    except GSSError:
         exit_unauthenticated()
 
     if details:
@@ -680,7 +681,7 @@ yourself online: https://errata.devel.redhat.com/filter/1965
                        state=erratum.errata_state,
                        synopsis=erratum.synopsis,
                        url=erratum.url()))
-    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
+    except GSSError:
         exit_unauthenticated()
     except elliottlib.exceptions.ErrataToolError as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
@@ -715,7 +716,7 @@ Example to add standard metadata to a 3.10 images release
 
     try:
         advisory = Erratum(errata_id=advisory)
-    except elliottlib.exceptions.ErrataToolUnauthenticatedException:
+    except GSSError:
         exit_unauthenticated()
 
     result = elliottlib.errata.add_comment(advisory.errata_id, {'release': release, 'kind': kind, 'impetus': impetus})
