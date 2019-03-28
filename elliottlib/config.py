@@ -47,7 +47,7 @@ class MetaDataConfig(object):
         if not os.path.isfile(config_path):
             return {}
         with open(config_path, 'r') as f:
-            data = yaml.load(f)
+            data = yaml.safe_load(f)
         return data
 
     def _save_config_log(self, data):
@@ -176,7 +176,7 @@ class MetaDataConfig(object):
         if 'new' in config_log:
             for cfg in config_log['new']:
                 with open(cfg, 'r+') as f:
-                    data = yaml.load(f)
+                    data = yaml.safe_load(f)
                     f.seek(0)
                     yaml.safe_dump(data, f, default_flow_style=False)
                     f.truncate()
