@@ -115,7 +115,7 @@ def find_latest_erratum(kind, major, minor):
         for c in get_comments(advisory.errata_id):
             try:
                 metadata = json.loads(c['attributes']['text'])
-            except Exception as e:
+            except Exception:
                 pass
             else:
                 if str(metadata['release']) == str(release) and metadata['kind'] == kind and metadata['impetus'] == 'standard':
