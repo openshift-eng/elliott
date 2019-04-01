@@ -480,7 +480,7 @@ PRESENT advisory. Here are some examples:
     runtime.initialize()
     et_data = runtime.gitdata.load_data(key='erratatool').data
     product_version = et_data.get('product_version')
-    base_tag = et_data.get('brew_tag')
+    base_tag = runtime.group_config.branch
 
     # Test authentication
     try:
