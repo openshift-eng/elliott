@@ -10,12 +10,40 @@ mapping:
   "content":
     type: map
     mapping:
+      'build':
+        type: map
+        mapping:
+          "use_source_tito_config":
+            type: bool
+          "tito_target":
+            type: str
+          "tito_dist":
+            type: str
+          "push_release_commit":
+            type: bool
       'source':
         type: map
         mapping:
           "alias":
             required: true
             type: str
+          "git":
+            type: map
+            mapping:
+              "url":
+                required: true
+                type: str
+              "branch":
+                required: true
+                type: map
+                mapping:
+                  "target":
+                    required: true
+                    type: str
+                  "fallback":
+                    type: str
+                  "stage":
+                    type: str
           "specfile":
             type: str
           "path":
