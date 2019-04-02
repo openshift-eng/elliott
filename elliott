@@ -581,7 +581,7 @@ PRESENT advisory. Here are some examples:
                 file_type = 'rpm'
             erratum.addBuilds([build.nvr for build in unshipped_builds],
                               release=product_version,
-                              file_types={build.nvr: [file_type]})
+                              file_types={build.nvr: [file_type] for build in unshipped_builds})
             erratum.commit()
             green_print("Attached build(s) successfully")
         except GSSError:
