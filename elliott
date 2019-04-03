@@ -331,10 +331,14 @@ advisory.
 @click.option("--add", "-a", 'advisory',
               default=False, metavar='ADVISORY',
               help="Add found bugs to ADVISORY. Applies to bug flags as well (by default only a list of discovered bugs are displayed)")
+@click.option("--use-default-advisory", 'default_advisory_type',
+              metavar='ADVISORY_TYPE',
+              type=click.Choice(['image', 'rpm', 'security']),
+              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
 @click.option("--auto",
               required=False,
               default=False, is_flag=True,
-              help="AUTO mode, adds bugs based on --group")
+              help="Auto-find mode, adds bugs based on --group")
 @click.option("--status", 'status',
               multiple=True,
               required=False,
@@ -348,7 +352,7 @@ advisory.
               required=False, multiple=True,
               help="Optional flag to apply to found bugs [MULTIPLE]")
 @pass_runtime
-def find_bugs(runtime, advisory, auto, status, id, flag):
+def find_bugs(runtime, advisory, default_advisory_type, auto, status, id, flag):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--auto), or by
 manually specifying one or more bugs using the --id option. Mixing
@@ -359,11 +363,15 @@ described below:
 
 AUTOMATIC: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
-
 for MODIFIED bugs in.
 
 MANUAL: The --group option is not required if you are specifying bugs
 manually. Provide one or more --id's for manual bug addition.
+
+Using --use-default-advisory without a value set for the matching key
+in the build-data will cause an error and elliott will exit in a
+non-zero state. Use of this option silently overrides providing an
+advisory with the --add option.
 
     Automatically add bugs with target-release matching 3.7.Z or 3.7.0
     to advisory 123456:
@@ -371,16 +379,22 @@ manually. Provide one or more --id's for manual bug addition.
 \b
     $ elliott --group openshift-3.7 advisory:find-bugs --auto --add 123456
 
-    List bugs that would be added to advisory 123456 and set the bro_ok flag on the bugs (NOOP):
+    List bugs that WOULD be added to an advisory and have set the bro_ok flag on them (NOOP):
 
 \b
-    $ elliott --group openshift-3.7 advisory:find-bugs --auto --flag bro_ok 123456
+    $ elliott --group openshift-3.7 advisory:find-bugs --auto --flag bro_ok
 
     Add two bugs to advisory 123456. Note that --group is not required
     because we're not auto searching:
 
 \b
     $ elliott advisory:find-bugs --id 8675309 --id 7001337 --add 123456
+
+    Automatically find bugs for openshift-4.1 and attach them to the
+    rpm advisory defined in ocp-build-data:
+
+\b
+    $ elliott --group=openshift-4.1 --auto --use-default-advisory rpm
 """
     if auto and len(id) > 0:
         raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
@@ -392,12 +406,28 @@ manually. Provide one or more --id's for manual bug addition.
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
 
+    # if --use-default-advisory is set we will override a user
+    # provided advisory
+    if default_advisory_type is not None:
+        default_advisory = runtime.group_config.advisories.get(default_advisory_type, None)
+        if default_advisory is not None:
+            advisory = default_advisory
+            green_prefix("Default advisory detected: ")
+            click.echo(advisory)
+        else:
+            red_prefix("No value defined for default advisory:")
+            click.echo(" The key advisories.{} is not defined for group {} in group.yml".format(
+                default_advisory_type, runtime.group))
+            exit(1)
+
     if auto:
-        click.echo("Searching for bugs with target release(s): {tr}".format(tr=", ".join(bz_data['target_release'])))
+        green_prefix("Searching for bugs with target release(s):")
+        click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
 
         bug_ids = elliottlib.bzutil.search_for_bugs(bz_data, status)
 
-        click.echo("Found bugs: {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
+        green_prefix("Found {} bugs:".format(len(bug_ids)))
+        click.echo(" {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
     else:
         bzapi = elliottlib.bzutil.get_bzapi(bz_data)
         bug_ids = [bzapi.getbug(i) for i in id]
@@ -416,7 +446,8 @@ manually. Provide one or more --id's for manual bug addition.
             raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
 
         try:
-            click.echo("Adding {count} bugs to advisory {advs}".format(count=len(bug_ids), advs=advisory))
+            green_prefix("Adding {count} bugs to advisory:".format(count=len(bug_ids)))
+            click.echo(" {advs}".format(advs=advisory))
             advs.addBugs([bug.id for bug in bug_ids])
             advs.commit()
         except ErrataException as ex:

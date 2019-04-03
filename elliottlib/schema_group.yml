@@ -4,6 +4,19 @@
 type: map
 
 mapping:
+  # ID of the advisory we would auto attach bugs/builds to for the
+  # selected --group
+  "advisories":
+    type: map
+    mapping:
+      "image":
+        type: integer
+      "rpm":
+        type: integer
+      # security == 'RHSA'
+      "security":
+        type: integer
+
   "vars":
     type: map
     mapping:
