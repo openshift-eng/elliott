@@ -769,7 +769,14 @@ Example to add standard metadata to a 3.10 images release
 @click.option("--advisory", "-a",
               required=True,
               metavar='ADVISORY',
-              help="Repair bugs attached to to ADVISORY.")
+              help="Repair bugs attached to ADVISORY.")
+@click.option("--auto",
+              required=False,
+              default=False, is_flag=True,
+              help="AUTO mode, check all bugs attached to ADVISORY")
+@click.option("--id", type=int, metavar='BUGID',
+              multiple=True, required=False,
+              help="Bugzilla IDs to modify, conflicts with --auto [MULTIPLE]")
 @click.option("--from", "original_state",
               multiple=True,
               default=['MODIFIED'],
@@ -780,7 +787,7 @@ Example to add standard metadata to a 3.10 images release
               type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
               help="Status of the bugs")
 @pass_runtime
-def repair_bugs(runtime, advisory, original_state, new_state):
+def repair_bugs(runtime, advisory, auto, id, original_state, new_state):
     """Move bugs attached to the advisory from one state to another state. This is useful
 if the bugs have changed states *after* they were attached.
 
@@ -789,28 +796,40 @@ Example to look for bugs that have been moved back to MODIFIED
 \b
     $ elliott --group=openshift-4.0 repair-bugs --from MODIFIED --to ON_QA
 """
+    if auto and len(id) > 0:
+        raise click.BadParameter("Combining the automatic and manual bug modification options is not supported")
+
+    if not auto and len(id) == 0:
+        # No bugs were provided
+        raise click.BadParameter("If not using --auto then one or more --id's must be provided")
+
     # Load bugzilla infomation and get a reference to the api
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     bzapi = elliottlib.bzutil.get_bzapi(bz_data)
 
-    e = Erratum(errata_id=advisory)
-    attached_bugs = [bzapi.getbug(i) for i in e.errata_bugs]
     changed_bug_count = 0
+    attached_bugs = []
+
+    if auto:
+        e = Erratum(errata_id=advisory)
+        attached_bugs = [bzapi.getbug(i) for i in e.errata_bugs]
+    else:
+        attached_bugs = [bzapi.getbug(i) for i in id]
 
     for bug in attached_bugs:
-        if(bug.status == original_state):
+        if(bug.status in original_state):
             changed_bug_count += 1
             click.echo("Changing BZ#{bug_id} from {initial} to {final}".format(
                        bug_id=bug.bug_id,
-                       initial=original_state,
+                       initial=bug.status,
                        final=new_state))
 
             bug.setstatus(status=new_state,
                           comment="Elliott changed bug status from {initial} to {final}.".format(initial=original_state, final=new_state),
                           private=True)
 
-    green_print("{count} bugs successfullly modified".format(changed_bug_count))
+    green_print("{} bugs successfullly modified".format(changed_bug_count))
 
 
 #
