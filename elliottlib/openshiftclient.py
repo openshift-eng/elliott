@@ -1,0 +1,78 @@
+"""
+Utility functions and object abstractions for general interactions
+with oc cli
+"""
+
+# stdlib
+from subprocess import call, check_output, CalledProcessError
+import json
+
+# ours
+from elliottlib.exceptions import ElliottFatalError
+
+def get_changelog(working_dir, old, new):
+    changelog = ""
+    try:
+        changelog = check_output(['oc', 'adm', 'release', 'info',
+                                '--changelog={}/origin'.format(working_dir), # clone origin to working dir
+                                '--changes-from={}'.format(old), 
+                                new], # payloads to compare
+        )
+    except CalledProcessError as e:
+        raise ElliottFatalError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode, e.output))
+
+    return changelog
+
+def get_bug_list(working_dir, old, new):
+    bug_list = []
+    try:
+        bug_list = check_output(['oc', 'adm', 'release', 'info',
+                                '-o', 'name', # only output BZ IDs
+                                '--bugs={}/origin'.format(working_dir), # clone origin to working dir
+                                '--changes-from={}'.format(old), 
+                                new], # payloads to compare
+        ).splitlines()
+    except CalledProcessError as e:
+        raise ElliottFatalError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode, e.output))
+
+    return bug_list
+
+def get_build_list(old, new):
+    build_list = []
+    oc_output = ""
+    try:
+        oc_output = check_output(['oc', 'adm', 'release', 'info',
+                                '--output=json',
+                                '--changes-from={}'.format(old), 
+                                new], # payloads to compare
+        )
+    except CalledProcessError as e:
+        raise ElliottFatalError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode, e.output))
+
+    payload_json = json.loads(oc_output)
+    changed_images = []
+
+    for k,v in payload_json["changedImages"].iteritems():
+        if(v["to"]):
+            changed_images.append(v["to"]["from"]["name"])
+
+    for i in changed_images:
+        build_list.append(get_image_nvr(i))
+
+    return build_list
+
+def get_image_nvr(image):
+    try:
+        oc_output = check_output(['oc', 'image', 'info',
+                                '--output=json',
+                                image]
+        )
+    except CalledProcessError as e:
+        raise ElliottFatalError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode, e.output))
+
+    image_json = json.loads(oc_output)
+    image_name = image_json['config']['config']['Labels']['com.redhat.component']
+    image_version = image_json['config']['config']['Labels']['version']
+    image_release = image_json['config']['config']['Labels']['release']
+
+    return "{}-{}-{}".format(image_name,image_version,image_release)
