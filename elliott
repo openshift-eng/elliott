@@ -325,6 +325,22 @@ advisory.
 
 
 #
+# Look up a default advisory specified for the branch in ocp-build-data
+# Advisory types are in ['rpm', 'image', 'cve']
+#
+def find_default_advisory(runtime, default_advisory_type):
+    default_advisory = runtime.group_config.advisories.get(default_advisory_type, None)
+    if default_advisory is None:
+        red_prefix("No value defined for default advisory:")
+        click.echo(" The key advisories.{} is not defined for group {} in group.yml".format(
+            default_advisory_type, runtime.group))
+        exit(1)
+    green_prefix("Default advisory detected: ")
+    click.echo(default_advisory)
+    return default_advisory
+
+
+#
 # Collect bugs
 # advisory:find-bugs
 #
@@ -410,27 +426,19 @@ advisory with the --add option.
 
     if mode == 'list' and len(id) == 0:
         raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
-    
+
     if mode == 'payload' and not len(from_diff) == 2 :
         raise click.BadParameter("If using mode=payload, you must provide two payloads to compare")
+
+    if advisory and default_advisory_type:
+        raise click.BadParameter("Use only one of --use-default-advisory or --add")
 
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     bzapi = elliottlib.bzutil.get_bzapi(bz_data)
 
-    # if --use-default-advisory is set we will override a user
-    # provided advisory
     if default_advisory_type is not None:
-        default_advisory = runtime.group_config.advisories.get(default_advisory_type, None)
-        if default_advisory is not None:
-            advisory = default_advisory
-            green_prefix("Default advisory detected: ")
-            click.echo(advisory)
-        else:
-            red_prefix("No value defined for default advisory:")
-            click.echo(" The key advisories.{} is not defined for group {} in group.yml".format(
-                default_advisory_type, runtime.group))
-            exit(1)
+        advisory = find_default_advisory(runtime, default_advisory_type)
 
     if mode == 'sweep':
         green_prefix("Searching for bugs with target release(s):")
@@ -467,6 +475,7 @@ advisory with the --add option.
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
+
 #
 # Attach Builds
 # advisory:find-builds
@@ -476,6 +485,10 @@ advisory with the --add option.
 @click.option('--attach', '-a', 'advisory',
               default=False, metavar='ADVISORY',
               help='Attach the builds to ADVISORY (by default only a list of builds are displayed)')
+@click.option("--use-default-advisory", 'default_advisory_type',
+              metavar='ADVISORY_TYPE',
+              type=click.Choice(['image', 'rpm', 'security']),
+              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
 @click.option('--build', '-b', 'builds',
               multiple=True, metavar='NVR_OR_ID',
               help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
@@ -487,7 +500,7 @@ advisory with the --add option.
               nargs=2,
               help="Two payloads to compare against")
 @pass_runtime
-def find_builds(runtime, advisory, builds, kind, from_diff):
+def find_builds(runtime, advisory, default_advisory_type, builds, kind, from_diff):
     """Automatically or manually find or attach viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -526,13 +539,20 @@ PRESENT advisory. Here are some examples:
 \b
     $ elliott --group openshift-3.6 find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
 """
+
     if(from_diff and kind):
         raise ElliottFatalError("Combining brew sweeps and payload diffs is not supported.")
+
+    if advisory and default_advisory_type:
+        raise click.BadParameter("Use only one of --use-default-advisory or --attach")
 
     runtime.initialize()
     et_data = runtime.gitdata.load_data(key='erratatool').data
     product_version = et_data.get('product_version')
     base_tag = runtime.group_config.branch
+
+    if default_advisory_type is not None:
+        advisory = find_default_advisory(runtime, default_advisory_type)
 
     # Test authentication
     try:
@@ -627,7 +647,9 @@ PRESENT advisory. Here are some examples:
 
 
 
-    build_count = len(unshipped_builds)
+    if not unshipped_builds:
+        green_print("No builds needed to be attached.")
+        return
 
     if advisory is not False:
         # Search and attach
@@ -641,13 +663,15 @@ PRESENT advisory. Here are some examples:
                               release=product_version,
                               file_types={build.nvr: [file_type] for build in unshipped_builds})
             erratum.commit()
-            green_print("Attached build(s) successfully")
+            green_print("Attached build(s) successfully:")
+            for b in sorted(unshipped_builds):
+                click.echo(" " + b.nvr)
         except GSSError:
             exit_unauthenticated()
         except elliottlib.exceptions.BrewBuildException as ex:
             raise ElliottFatalError("Error attaching builds: {}".format(getattr(ex, 'message', repr(ex))))
     else:
-        click.echo("The following {n} builds ".format(n=build_count), nl=False)
+        click.echo("The following {n} builds ".format(n=len(unshipped_builds)), nl=False)
         click.secho("may be attached ", bold=True, nl=False)
         click.echo("to an advisory:")
         for b in sorted(unshipped_builds):
@@ -659,11 +683,16 @@ PRESENT advisory. Here are some examples:
 # advisory:get
 #
 @cli.command("get", short_help="Get information for an ADVISORY")
-@click.argument('advisory', type=int)
+@click.argument('advisory', type=int, required=False)
+@click.option("--use-default-advisory", 'default_advisory_type',
+              metavar='ADVISORY_TYPE',
+              type=click.Choice(['image', 'rpm', 'security']),
+              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
 @click.option('--details', is_flag=True, default=False,
               help="Print the full object of the advisory")
+@pass_runtime
 @click.pass_context
-def get(ctx, details, advisory):
+def get(ctx, runtime, default_advisory_type, details, advisory):
     """Get details about a specific advisory from the Errata Tool. By
 default a brief one-line informational string is printed. Use the
 --details option to fetch and print the full details of the advisory.
@@ -688,6 +717,14 @@ Fields for the short format: Release date, State, Synopsys, URL
         "batch_id": null,
         ...
 """
+
+    runtime.initialize()
+
+    if bool(advisory) == bool(default_advisory_type):
+        raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
+    if default_advisory_type is not None:
+        advisory = find_default_advisory(runtime, default_advisory_type)
+
     try:
         advisory = Erratum(errata_id=advisory)
     except GSSError:
@@ -839,8 +876,8 @@ them to the provided --to state.
 Using --use-default-advisory without a value set for the matching key
 in the build-data will cause an error and elliott will exit in a
 non-zero state. Most likely you will only want to use the `rpm` state,
-but that could change in the future. Use of this option silently
-overrides providing an advisory with the -a/--advisory option.
+but that could change in the future. Use of this option conflicts with
+providing an advisory with the -a/--advisory option.
 
     Move bugs on 123456 FROM the MODIFIED state back TO ON_QA state:
 
@@ -869,6 +906,9 @@ overrides providing an advisory with the -a/--advisory option.
         # No bugs were provided
         raise click.BadParameter("If not using --auto then one or more --id's must be provided")
 
+    if advisory and default_advisory_type:
+        raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
+
     if len(id) == 0 and advisory is None and default_advisory_type is None:
         # error, no bugs, advisory, or default selected
         raise click.BadParameter("No input provided: Must use one of --id, --advisory, or --use-default-advisory")
@@ -880,19 +920,8 @@ overrides providing an advisory with the -a/--advisory option.
     changed_bug_count = 0
     attached_bugs = []
 
-    # if --use-default-advisory is set we will override a user
-    # provided advisory
     if default_advisory_type is not None:
-        default_advisory = runtime.group_config.advisories.get(default_advisory_type, None)
-        if default_advisory is not None:
-            advisory = default_advisory
-            green_prefix("Default advisory detected: ")
-            click.echo(advisory)
-        else:
-            red_prefix("No value defined for default advisory:")
-            click.echo(" The key `advisories.{}` is not defined for group {} in group.yml".format(
-                default_advisory_type, runtime.group))
-            exit(1)
+        advisory = find_default_advisory(runtime, default_advisory_type)
 
     raw_bug_list = []
     if auto:
