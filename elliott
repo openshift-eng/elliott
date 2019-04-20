@@ -16,6 +16,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
 import os
 import sys
+import json
 
 # ours
 from elliottlib import version
@@ -690,9 +691,11 @@ PRESENT advisory. Here are some examples:
               help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
 @click.option('--details', is_flag=True, default=False,
               help="Print the full object of the advisory")
+@click.option('--json', 'as_json', metavar="FILE_NAME",
+              help="Dump the advisory as JSON to a file (or '-' for stdout)")
 @pass_runtime
 @click.pass_context
-def get(ctx, runtime, default_advisory_type, details, advisory):
+def get(ctx, runtime, default_advisory_type, details, as_json, advisory):
     """Get details about a specific advisory from the Errata Tool. By
 default a brief one-line informational string is printed. Use the
 --details option to fetch and print the full details of the advisory.
@@ -709,7 +712,7 @@ Fields for the short format: Release date, State, Synopsys, URL
     errata portion of the advisory:
 
 \b
-    $ elliott get --json 123456 | jq '.errata'
+    $ elliott get --json - 123456 | jq '.errata'
     {
       "rhba": {
         "actual_ship_date": null,
@@ -732,13 +735,28 @@ Fields for the short format: Release date, State, Synopsys, URL
 
     if details:
         click.echo(advisory)
-    else:
+        return
+
+    if not as_json:
         advisory_string = "{date} {state} {synopsis} {url}".format(
             date=advisory.publish_date_override,
             state=advisory.errata_state,
             synopsis=advisory.synopsis,
             url=advisory.url())
         click.echo(advisory_string)
+        return
+
+    json_data = advisory.get_erratum_data()
+    json_data['errata_builds'] = advisory.errata_builds
+    json_data['current_flags'] = advisory.current_flags
+    json_data['rpmdiffs'] = advisory.externalTests(test_type='rpmdiff')
+
+    if as_json == "-":
+        click.echo(json.dumps(json_data, indent=4, sort_keys=True))
+        return
+
+    with open(as_json, "w") as json_file:
+        json.dump(json_data, json_file, indent=4, sort_keys=True)
 
 
 #
