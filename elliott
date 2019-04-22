@@ -500,8 +500,10 @@ advisory with the --add option.
               required=False,
               nargs=2,
               help="Two payloads to compare against")
+@click.option('--json', 'as_json', metavar="FILE_NAME",
+              help="Dump new builds as JSON array to a file (or '-' for stdout)")
 @pass_runtime
-def find_builds(runtime, advisory, default_advisory_type, builds, kind, from_diff):
+def find_builds(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json):
     """Automatically or manually find or attach viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -648,6 +650,14 @@ PRESENT advisory. Here are some examples:
 
 
 
+    build_nvrs = sorted(build.nvr for build in unshipped_builds)
+    json_data = dict(builds=build_nvrs, base_tag=base_tag, kind=kind)
+    if as_json == "-":
+        click.echo(json.dumps(json_data, indent=4, sort_keys=True))
+    elif as_json:
+        with open(as_json, "w") as json_file:
+            json.dump(json_data, json_file, indent=4, sort_keys=True)
+
     if not unshipped_builds:
         green_print("No builds needed to be attached.")
         return
@@ -660,7 +670,7 @@ PRESENT advisory. Here are some examples:
                 file_type = 'tar'
             elif kind == 'rpm':
                 file_type = 'rpm'
-            erratum.addBuilds([build.nvr for build in unshipped_builds],
+            erratum.addBuilds(build_nvrs,
                               release=product_version,
                               file_types={build.nvr: [file_type] for build in unshipped_builds})
             erratum.commit()
