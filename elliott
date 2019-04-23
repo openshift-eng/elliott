@@ -552,7 +552,9 @@ PRESENT advisory. Here are some examples:
     runtime.initialize()
     et_data = runtime.gitdata.load_data(key='erratatool').data
     product_version = et_data.get('product_version')
-    base_tag = runtime.group_config.branch
+    if not runtime.branch:
+        raise ElliottFatalError("Need to specify a branch either in group.yml or with --branch option")
+    base_tag = runtime.branch
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
