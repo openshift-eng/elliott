@@ -1,7 +1,7 @@
 bashlex
 click
 dockerfile-parse
-errata-tool
+errata-tool >= 1.19
 koji
 pydotconfig
 pygitdata

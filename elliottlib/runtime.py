@@ -210,14 +210,13 @@ class Runtime(object):
             if self.group_config.includes is not Missing and self.include is None:
                 self.include = self.group_config.includes
 
-            if self.branch is None:
-                if self.group_config.branch is not Missing:
-                    self.branch = self.group_config.branch
-                    self.logger.info("Using branch from group.yml: %s" % self.branch)
-                else:
-                    self.logger.info("No branch specified either in group.yml or on the command line; all included images will need to specify their own.")
-            else:
+            if self.branch is not None:
                 self.logger.info("Using branch from command line: %s" % self.branch)
+            elif self.group_config.branch is not Missing:
+                self.branch = self.group_config.branch
+                self.logger.info("Using branch from group.yml: %s" % self.branch)
+            else:
+                self.logger.info("No branch specified either in group.yml or on the command line; all included images will need to specify their own.")
 
 
 
