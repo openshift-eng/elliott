@@ -202,12 +202,12 @@ advisory.
 
     PREVIEW an RPM Advisory 21 days from now (the default release date) for OSE 3.9:
 
-    $ elliott --group openshift-3.9 advisory:create
+    $ elliott --group openshift-3.9 create
 
     CREATE Image Advisory for the 3.5 series on the first Monday in March:
 
 \b
-    $ elliott --group openshift-3.5 advisory:create --yes -k image --date 2018-03-05
+    $ elliott --group openshift-3.5 create --yes -k image --date 2018-03-05
 """
     runtime.initialize()
 
@@ -386,18 +386,18 @@ advisory with the --add option.
     to advisory 123456:
 
 \b
-    $ elliott --group openshift-3.7 advisory:find-bugs --mode sweep --add 123456
+    $ elliott --group openshift-3.7 find-bugs --mode sweep --add 123456
 
     List bugs that WOULD be added to an advisory and have set the bro_ok flag on them (NOOP):
 
 \b
-    $ elliott --group openshift-3.7 advisory:find-bugs --mode sweep --flag bro_ok
+    $ elliott --group openshift-3.7 find-bugs --mode sweep --flag bro_ok
 
     Add two bugs to advisory 123456. Note that --group is not required
     because we're not auto searching:
 
 \b
-    $ elliott advisory:find-bugs --mode list --id 8675309 --id 7001337 --add 123456
+    $ elliott find-bugs --mode list --id 8675309 --id 7001337 --add 123456
 
     Automatically find bugs for openshift-4.1 and attach them to the
     rpm advisory defined in ocp-build-data:
@@ -513,18 +513,18 @@ PRESENT advisory. Here are some examples:
     SHOW the latest OSE 3.6 image builds that would be attached to a
     3.6 advisory:
 
-    $ elliott --group openshift-3.6 advisory:find-builds -k image
+    $ elliott --group openshift-3.6 find-builds -k image
 
     ATTACH the latest OSE 3.6 rpm builds to advisory 123456:
 
 \b
-    $ elliott --group openshift-3.6 advisory:find-builds -k rpm --attach 123456
+    $ elliott --group openshift-3.6 find-builds -k rpm --attach 123456
 
     VERIFY (no --attach) that the manually provided RPM NVR and build
     ID are viable builds:
 
 \b
-    $ elliott --group openshift-3.6 advisory:find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
+    $ elliott --group openshift-3.6 find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
 """
     if(from_diff and kind):
         raise ElliottFatalError("Combining brew sweeps and payload diffs is not supported.")
@@ -624,6 +624,7 @@ PRESENT advisory. Here are some examples:
         green_print("Fetching changed images between payloads...")
         changed_builds = elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1])
         unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds ]
+
 
 
     build_count = len(unshipped_builds)
@@ -729,7 +730,7 @@ yourself online: https://errata.devel.redhat.com/filter/1965
     List 10 advisories instead of the default 6 with your custom
     filter #1337:
 
-    $ elliott advisory:list -n 10 -f 1337
+    $ elliott list -n 10 -f 1337
 """
     try:
         for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=n):
@@ -758,15 +759,15 @@ yourself online: https://errata.devel.redhat.com/filter/1965
 @pass_runtime
 def add_metadata(runtime, kind, impetus, advisory):
     """Add metadata to an advisory. This is usually called by
-advisory:create immediately after creation. It is only useful to you
-if you are going back and adding metadata to older advisories.
+create immediately after creation. It is only useful to you if
+you are going back and adding metadata to older advisories.
 
     Note: Requires you provide a --group
 
 Example to add standard metadata to a 3.10 images release
 
 \b
-    $ elliott --group=openshift-3.10 advisory:add-metadata --impetus standard --kind image
+    $ elliott --group=openshift-3.10 add-metadata --impetus standard --kind image
 """
     runtime.initialize()
     release = release_from_branch(runtime.group_config.branch)

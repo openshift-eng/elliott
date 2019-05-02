@@ -11,6 +11,18 @@ import json
 from elliottlib.exceptions import ElliottFatalError
 
 def get_changelog(working_dir, old, new):
+    """
+    Get changelog between two payloads. Needs to clone the entire
+    okd repo, so it can be quite slow.
+
+    :param str working_dir: file location to clone okd repo
+    :param str old: URL to the previous payload
+    :param str new: URL to the current payload
+
+    :return: A str with the changelog text
+    :raises exceptions.CalledProcessError: When oc returns a non-zero exit
+
+    """
     changelog = ""
     try:
         changelog = check_output(['oc', 'adm', 'release', 'info',
@@ -24,6 +36,18 @@ def get_changelog(working_dir, old, new):
     return changelog
 
 def get_bug_list(working_dir, old, new):
+    """
+    Get fixed bugzilla IDs between two payloads. Needs to clone
+    the entire okd repo, so it can be quite slow.
+
+    :param str working_dir: file location to clone okd repo
+    :param str old: URL to the previous payload
+    :param str new: URL to the current payload
+
+    :return: A list of BZ IDs
+    :raises exceptions.CalledProcessError: When oc returns a non-zero exit
+
+    """
     bug_list = []
     try:
         bug_list = check_output(['oc', 'adm', 'release', 'info',
@@ -38,6 +62,16 @@ def get_bug_list(working_dir, old, new):
     return bug_list
 
 def get_build_list(old, new):
+    """
+    Get changed container builds between two payloads.
+
+    :param str old: URL to the previous payload
+    :param str new: URL to the current payload
+
+    :return: A list of brew NVRs
+    :raises exceptions.CalledProcessError: When oc returns a non-zero exit
+
+    """
     build_list = []
     oc_output = ""
     try:
@@ -62,6 +96,15 @@ def get_build_list(old, new):
     return build_list
 
 def get_image_nvr(image):
+    """
+    Get brew NVR from a oc output.
+
+    :param str image: reference to an image in the payload
+
+    :return: A brew NVR
+    :raises exceptions.CalledProcessError: When oc returns a non-zero exit
+
+    """
     try:
         oc_output = check_output(['oc', 'image', 'info',
                                 '--output=json',
