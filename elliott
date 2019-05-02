@@ -25,6 +25,7 @@ import elliottlib.bzutil
 import elliottlib.brew
 import elliottlib.errata
 import elliottlib.exceptions
+import elliottlib.openshiftclient
 
 from elliottlib import cli_opts
 from elliottlib.exceptions import ElliottFatalError
@@ -201,12 +202,12 @@ advisory.
 
     PREVIEW an RPM Advisory 21 days from now (the default release date) for OSE 3.9:
 
-    $ elliott --group openshift-3.9 advisory:create
+    $ elliott --group openshift-3.9 create
 
     CREATE Image Advisory for the 3.5 series on the first Monday in March:
 
 \b
-    $ elliott --group openshift-3.5 advisory:create --yes -k image --date 2018-03-05
+    $ elliott --group openshift-3.5 create --yes -k image --date 2018-03-05
 """
     runtime.initialize()
 
@@ -335,10 +336,11 @@ advisory.
               metavar='ADVISORY_TYPE',
               type=click.Choice(['image', 'rpm', 'security']),
               help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
-@click.option("--auto",
-              required=False,
-              default=False, is_flag=True,
-              help="Auto-find mode, adds bugs based on --group")
+@click.option("--mode",
+              required=True,
+              type=click.Choice(['list', 'sweep', 'diff']),
+              default='list',
+              help='Mode to use to find bugs')
 @click.option("--status", 'status',
               multiple=True,
               required=False,
@@ -347,26 +349,33 @@ advisory.
               help="Status of the bugs")
 @click.option("--id", metavar='BUGID', default=None,
               multiple=True, required=False,
-              help="Bugzilla IDs to add, conflicts with --auto [MULTIPLE]")
+              help="Bugzilla IDs to add, required for LIST mode.")
+@click.option("--from-diff", "--between",
+              required=False,
+              nargs=2,
+              help="Two payloads to compare against")
 @click.option("--flag", metavar='FLAG',
               required=False, multiple=True,
               help="Optional flag to apply to found bugs [MULTIPLE]")
 @pass_runtime
-def find_bugs(runtime, advisory, default_advisory_type, auto, status, id, flag):
+def find_bugs(runtime, advisory, default_advisory_type, mode, status, id, from_diff, flag):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
-"swept" into the advisory either automatically (--auto), or by
-manually specifying one or more bugs using the --id option. Mixing
---auto with --id is an invalid use-case. The two use cases are
-described below:
+"swept" into the advisory either automatically (--mode sweep), or by
+manually specifying one or more bugs using --mode list and the --id option.
+Use cases are described below:
 
     Note: Using --id without --add is basically pointless
 
-AUTOMATIC: For this use-case the --group option MUST be provided. The
+SWEEP: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
 for MODIFIED bugs in.
 
-MANUAL: The --group option is not required if you are specifying bugs
-manually. Provide one or more --id's for manual bug addition.
+LIST: The --group option is not required if you are specifying bugs
+manually. Provide one or more --id's for manual bug addition. In LIST
+mode you must provide a list of IDs to attach with the --id option.
+
+DIFF: For this use case, you must provide the --between option using two
+URLs to payloads.
 
 Using --use-default-advisory without a value set for the matching key
 in the build-data will cause an error and elliott will exit in a
@@ -377,34 +386,37 @@ advisory with the --add option.
     to advisory 123456:
 
 \b
-    $ elliott --group openshift-3.7 advisory:find-bugs --auto --add 123456
+    $ elliott --group openshift-3.7 find-bugs --mode sweep --add 123456
 
     List bugs that WOULD be added to an advisory and have set the bro_ok flag on them (NOOP):
 
 \b
-    $ elliott --group openshift-3.7 advisory:find-bugs --auto --flag bro_ok
+    $ elliott --group openshift-3.7 find-bugs --mode sweep --flag bro_ok
 
     Add two bugs to advisory 123456. Note that --group is not required
     because we're not auto searching:
 
 \b
-    $ elliott advisory:find-bugs --id 8675309 --id 7001337 --add 123456
+    $ elliott find-bugs --mode list --id 8675309 --id 7001337 --add 123456
 
     Automatically find bugs for openshift-4.1 and attach them to the
     rpm advisory defined in ocp-build-data:
 
 \b
-    $ elliott --group=openshift-4.1 --auto --use-default-advisory rpm
+    $ elliott --group=openshift-4.1 --mode sweep --use-default-advisory rpm
 """
-    if auto and len(id) > 0:
+    if mode != 'list' and len(id) > 0:
         raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
 
-    if not auto and len(id) == 0:
-        # No bugs were provided
-        raise click.BadParameter("If not using --auto then one or more --id's must be provided")
+    if mode == 'list' and len(id) == 0:
+        raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
+    
+    if mode == 'payload' and not len(from_diff) == 2 :
+        raise click.BadParameter("If using mode=payload, you must provide two payloads to compare")
 
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
+    bzapi = elliottlib.bzutil.get_bzapi(bz_data)
 
     # if --use-default-advisory is set we will override a user
     # provided advisory
@@ -420,17 +432,19 @@ advisory with the --add option.
                 default_advisory_type, runtime.group))
             exit(1)
 
-    if auto:
+    if mode == 'sweep':
         green_prefix("Searching for bugs with target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
-
         bug_ids = elliottlib.bzutil.search_for_bugs(bz_data, status)
-
-        green_prefix("Found {} bugs:".format(len(bug_ids)))
-        click.echo(" {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
-    else:
-        bzapi = elliottlib.bzutil.get_bzapi(bz_data)
+    elif mode == 'list':
         bug_ids = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
+    elif mode == "diff":
+        click.echo(runtime.working_dir)
+        bug_id_strings = elliottlib.openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
+        bug_ids = [bzapi.getbug(i) for i in bug_id_strings]
+
+    green_prefix("Found {} bugs:".format(len(bug_ids)))
+    click.echo(" {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
 
     if len(flag) > 0:
         for bug in bug_ids:
@@ -466,10 +480,14 @@ advisory with the --add option.
               multiple=True, metavar='NVR_OR_ID',
               help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
 @click.option('--kind', '-k', metavar='KIND',
-              required=True, type=click.Choice(['rpm', 'image']),
+              required=False, type=click.Choice(['rpm', 'image']),
               help='Find builds of the given KIND [rpm, image]')
+@click.option("--from-diff", "--between",
+              required=False,
+              nargs=2,
+              help="Two payloads to compare against")
 @pass_runtime
-def find_builds(runtime, advisory, builds, kind):
+def find_builds(runtime, advisory, builds, kind, from_diff):
     """Automatically or manually find or attach viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -495,19 +513,22 @@ PRESENT advisory. Here are some examples:
     SHOW the latest OSE 3.6 image builds that would be attached to a
     3.6 advisory:
 
-    $ elliott --group openshift-3.6 advisory:find-builds -k image
+    $ elliott --group openshift-3.6 find-builds -k image
 
     ATTACH the latest OSE 3.6 rpm builds to advisory 123456:
 
 \b
-    $ elliott --group openshift-3.6 advisory:find-builds -k rpm --attach 123456
+    $ elliott --group openshift-3.6 find-builds -k rpm --attach 123456
 
     VERIFY (no --attach) that the manually provided RPM NVR and build
     ID are viable builds:
 
 \b
-    $ elliott --group openshift-3.6 advisory:find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
+    $ elliott --group openshift-3.6 find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
 """
+    if(from_diff and kind):
+        raise ElliottFatalError("Combining brew sweeps and payload diffs is not supported.")
+
     runtime.initialize()
     et_data = runtime.gitdata.load_data(key='erratatool').data
     product_version = et_data.get('product_version')
@@ -528,7 +549,7 @@ PRESENT advisory. Here are some examples:
             unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in builds]
         except elliottlib.exceptions.BrewBuildException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-    else:
+    elif kind:
         if kind == 'image':
             initial_builds = runtime.image_metas()
             pbar_header("Generating list of {kind}s: ".format(kind=kind),
@@ -599,6 +620,12 @@ PRESENT advisory. Here are some examples:
 
             # We only want builds not attached to an existing open advisory
             unshipped_builds = [b for b in results if not b.attached_to_open_erratum]
+    elif from_diff:
+        green_print("Fetching changed images between payloads...")
+        changed_builds = elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1])
+        unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds ]
+
+
 
     build_count = len(unshipped_builds)
 
@@ -703,7 +730,7 @@ yourself online: https://errata.devel.redhat.com/filter/1965
     List 10 advisories instead of the default 6 with your custom
     filter #1337:
 
-    $ elliott advisory:list -n 10 -f 1337
+    $ elliott list -n 10 -f 1337
 """
     try:
         for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=n):
@@ -732,15 +759,15 @@ yourself online: https://errata.devel.redhat.com/filter/1965
 @pass_runtime
 def add_metadata(runtime, kind, impetus, advisory):
     """Add metadata to an advisory. This is usually called by
-advisory:create immediately after creation. It is only useful to you
-if you are going back and adding metadata to older advisories.
+create immediately after creation. It is only useful to you if
+you are going back and adding metadata to older advisories.
 
     Note: Requires you provide a --group
 
 Example to add standard metadata to a 3.10 images release
 
 \b
-    $ elliott --group=openshift-3.10 advisory:add-metadata --impetus standard --kind image
+    $ elliott --group=openshift-3.10 add-metadata --impetus standard --kind image
 """
     runtime.initialize()
     release = release_from_branch(runtime.group_config.branch)
@@ -950,6 +977,7 @@ def find_cve_trackers(runtime, cve, status):
     click.echo("Found {} bugs:".format(len(bug_list)))
     for b in bug_list:
         click.echo("{}\t{:15s}\t{}".format(b.bug_id, b.status, b.summary))
+
 
 
 # -----------------------------------------------------------------------------
