@@ -69,6 +69,13 @@ software and bug fixes
 
 `pip install rh-elliott`
 
+## Dependencies
+
+* [krb5-devel](https://apps.fedoraproject.org/packages/krb5-devel)
+* [python2-devel](https://apps.fedoraproject.org/packages/python2-devel)
+* [python2-rpm](https://apps.fedoraproject.org/packages/python2-rpm)
+* [redhat-rpm-config](https://apps.fedoraproject.org/packages/redhat-rpm-config)
+
 ## Authenticating
 
 Ensure you have a valid kerberos ticket before proceeding. A valid
