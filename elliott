@@ -457,7 +457,8 @@ advisory with the --add option.
 
     if len(flag) > 0:
         for bug in bug_ids:
-            bug.update_flags({flag: "+"})
+            for f in flag:
+                bug.updateflags({f: "+"})
 
     if advisory is not False:
         try:
