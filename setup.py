@@ -20,6 +20,7 @@ setup(
     version=_get_version(),
     description="CLI tool for managing and automating Red Hat software releases",
     long_description=open('README.md').read(),
+    long_description_content_type="text/markdown",
     url="https://github.com/openshift/elliott",
     license="Red Hat Internal",
     packages=["elliottlib"],
