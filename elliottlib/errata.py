@@ -290,3 +290,25 @@ def get_comments(advisory_id):
         raise exceptions.ErrataToolUnauthorizedException(res.text)
     else:
         return False
+
+def get_builds(advisory_id):
+    """5.2.2.6. GET /api/v1/erratum/{id}/builds
+     Fetch the Brew builds associated with an advisory.
+     Returned builds are organized by product version, variant, arch
+    and include all the build files from the advisory.
+     Returned attributes for the product version include:
+    * name: name of the product version.
+    * description: description of the product version.
+     Returned attributes for each build include:
+    * id: build's ID from Brew, Errata Tool also uses this as an internal ID
+    * nvr: nvr of the build.
+    * variant_arch: the list of files grouped by variant and arch.
+     https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-get-apiv1erratumidbuilds
+    """
+    res = requests.get(constants.errata_get_builds_url.format(id=advisory_id),
+                       verify=ssl.get_default_verify_paths().openssl_cafile,
+                       auth=HTTPKerberosAuth())
+    if res.status_code == 200:
+        return res.json()
+    else:
+        raise exceptions.ErrataToolUnauthorizedException(res.text)

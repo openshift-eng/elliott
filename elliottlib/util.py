@@ -9,6 +9,7 @@ default_release_date = datetime.datetime(1970, 1, 1, 0, 0)
 now = datetime.datetime.now()
 YMD = '%Y-%b-%d'
 
+
 def red_prefix(msg):
     """Print out a message prefix in bold red letters, like for "Error: "
 messages"""
@@ -21,6 +22,12 @@ messages"""
     click.secho(msg, nl=False, bold=True, fg='green')
 
 
+def yellow_prefix(msg):
+    """Print out a message prefix in bold yellow letters, like for "Warning: "
+or Notice: messages"""
+    click.secho(msg, nl=False, bold=True, fg='yellow')
+
+
 def red_print(msg):
     """Print out a message in red text"
 messages"""
@@ -31,13 +38,16 @@ def green_print(msg):
     """Print out a message in green text"""
     click.secho(msg, nl=True, bold=False, fg='green')
 
+
 def yellow_print(msg):
     """Print out a message in yellow text"""
     click.secho(msg, nl=True, bold=False, fg='yellow')
 
+
 def cprint(msg):
     """Wrapper for click.echo"""
     click.echo(msg)
+
 
 def exit_unauthenticated():
     """Standard response when an API call returns 'unauthenticated' (401)"""
@@ -45,11 +55,13 @@ def exit_unauthenticated():
     click.echo("401 - user is not authenticated, are you sure you have a kerberos ticket?")
     exit(1)
 
+
 def exit_unauthorized():
     """Standard response when an API call returns 'unauthorized' (403)"""
     red_prefix("Error Unauthorized: ")
     click.echo("403 - user is authenticated, but unauthorized to perform this action")
     exit(1)
+
 
 def validate_release_date(ctx, param, value):
     """Ensures dates are provided in the correct format"""
@@ -67,6 +79,7 @@ def validate_release_date(ctx, param, value):
     except ValueError:
         raise click.BadParameter('Release date (--date) must be in YYYY-MM-DD format')
 
+
 def validate_email_address(ctx, param, value):
     """Ensure that email addresses provided are valid email strings"""
     # Really just check to match /^[^@]+@[^@]+\.[^@]+$/
@@ -76,6 +89,7 @@ def validate_email_address(ctx, param, value):
             "Invalid email address for {}: {}".format(param, value))
 
     return value
+
 
 def release_from_branch(ver):
     """Parse the release version from the provided 'branch'.
