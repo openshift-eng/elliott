@@ -156,7 +156,7 @@ Bugzilla Bugs.
 @click.option("--date", required=False,
               default=default_release_date.strftime(YMD),
               callback=validate_release_date,
-              help="Release date for the advisory. Optional. Format: YYYY-MM-DD. Defaults to 3 weeks after the release with the highest date for that series")
+              help="Release date for the advisory. Optional. Format: YYYY-Mon-DD. Defaults to 3 weeks after the release with the highest date for that series")
 @click.option('--assigned-to', metavar="EMAIL_ADDR", required=True,
               envvar="ELLIOTT_ASSIGNED_TO_EMAIL",
               callback=validate_email_address,
@@ -183,7 +183,7 @@ def create(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager,
 
 New advisories will be created with a Release Date set to 3 weeks (21
 days) from now. You may customize this (especially if that happens to
-fall on a weekend) by providing a YYYY-MM-DD formatted string to the
+fall on a weekend) by providing a YYYY-Mon-DD formatted string to the
 --date option.
 
 The default behavior for this command is to show what the generated
@@ -208,7 +208,7 @@ advisory.
     CREATE Image Advisory for the 3.5 series on the first Monday in March:
 
 \b
-    $ elliott --group openshift-3.5 create --yes -k image --date 2018-03-05
+    $ elliott --group openshift-3.5 create --yes -k image --date 2018-Mar-05
 """
     runtime.initialize()
 
