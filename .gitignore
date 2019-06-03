@@ -12,6 +12,7 @@ htmlcov
 venv
 cover
 *.egg-info
+.tox
 
 
 # Ignore emacs backup files
