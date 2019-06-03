@@ -14,7 +14,7 @@ import json
 import ssl
 import constants
 import brew
-import exceptions
+from elliottlib import exceptions
 
 import requests
 from requests_kerberos import HTTPKerberosAuth

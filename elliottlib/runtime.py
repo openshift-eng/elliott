@@ -27,7 +27,7 @@ from model import Model, Missing
 from multiprocessing import Lock
 import brew
 import constants
-from exceptions import ElliottFatalError
+from elliottlib.exceptions import ElliottFatalError
 
 
 # Registered atexit to close out debug/record logs
