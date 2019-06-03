@@ -18,9 +18,9 @@ import traceback
 
 # ours
 import constants
-import exceptions
 import exectools
 import logutil
+from elliottlib import exceptions
 
 # 3rd party
 import click
