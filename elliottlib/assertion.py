@@ -59,5 +59,5 @@ def success(exitcode, message):
     :param message: A custom message if the process failed
     :raises: ChildProcessError
     """
-    if exitcode is not 0:
+    if exitcode != 0:
         raise ChildProcessError("Command returned non-zero exit status: %s" % message)

@@ -31,5 +31,6 @@ class TestSearchFilter(unittest.TestCase):
 #         print "url = {}".format(t)
 #         assert False
 
+
 if __name__ == "__main__":
     unittest.main()

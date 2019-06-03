@@ -87,7 +87,6 @@ def find_latest_erratum(kind, major, minor):
     :return: `None`
     """
     release = "{}.{}".format(major, minor)
-    found_advisory = None
 
     # List of hashes because we will scan the Mutable advisories first
     filters = [
@@ -167,19 +166,19 @@ def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=
         kind = 'rpm'
 
     e = Erratum(
-            product = et_data['product'],
-            release = et_data['release'],
-            errata_type = errata_type,
-            synopsis = et_data['synopsis'][kind],
-            topic = et_data['topic'],
-            description = et_data['description'],
-            solution = et_data['solution'],
-            qe_email = assigned_to,
-            qe_group = et_data['quality_responsibility_name'],
-            owner_email = package_owner,
-            manager_email = manager,
-            date = release_date
-        )
+        product=et_data['product'],
+        release=et_data['release'],
+        errata_type=errata_type,
+        synopsis=et_data['synopsis'][kind],
+        topic=et_data['topic'],
+        description=et_data['description'],
+        solution=et_data['solution'],
+        qe_email=assigned_to,
+        qe_group=et_data['quality_responsibility_name'],
+        owner_email=package_owner,
+        manager_email=manager,
+        date=release_date
+    )
 
     if errata_type == 'RHSA':
         e.security_impact = impact
@@ -219,7 +218,7 @@ filter_id
         # successfully parsing the response as a JSONinfo object indicates
         # a successful API call.
         try:
-            return [Erratum(errata_id = advs['id']) for advs in res.json()][:limit]
+            return [Erratum(errata_id=advs['id']) for advs in res.json()][:limit]
         except Exception:
             raise exceptions.ErrataToolError("Could not locate the given advisory filter: {fid}".format(
                 fid=filter_id))
@@ -229,6 +228,7 @@ filter_id
         raise exceptions.ErrataToolError("Other error (status_code={code}): {msg}".format(
             code=res.status_code,
             msg=res.text))
+
 
 def add_comment(advisory_id, comment):
     """5.2.1.8. POST /api/v1/erratum/{id}/add_comment
@@ -246,9 +246,10 @@ def add_comment(advisory_id, comment):
         """
     data = {"comment": json.dumps(comment)}
     return requests.post(constants.errata_add_comment_url.format(id=advisory_id),
-                            verify=ssl.get_default_verify_paths().openssl_cafile,
-                            auth=HTTPKerberosAuth(),
-                            data=data)
+                         verify=ssl.get_default_verify_paths().openssl_cafile,
+                         auth=HTTPKerberosAuth(),
+                         data=data)
+
 
 def get_comments(advisory_id):
     """5.2.10.2. GET /api/v1/comments?filter[key]=value
@@ -277,12 +278,12 @@ def get_comments(advisory_id):
         "filter": {
             "errata_id": advisory_id,
             "type": "Comment"
-            }
         }
+    }
     res = requests.get(constants.errata_get_comments_url,
-                        verify=ssl.get_default_verify_paths().openssl_cafile,
-                        auth=HTTPKerberosAuth(),
-                        json=body)
+                       verify=ssl.get_default_verify_paths().openssl_cafile,
+                       auth=HTTPKerberosAuth(),
+                       json=body)
 
     if res.status_code == 200:
         return res.json().get('data', [])
@@ -290,6 +291,7 @@ def get_comments(advisory_id):
         raise exceptions.ErrataToolUnauthorizedException(res.text)
     else:
         return False
+
 
 def get_builds(advisory_id):
     """5.2.2.6. GET /api/v1/erratum/{id}/builds

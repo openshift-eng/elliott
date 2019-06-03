@@ -47,6 +47,7 @@ class RPMMetadata(Metadata):
             if self.source.specfile:
                 self.specfile = os.path.join(self.source_path, self.source.specfile)
                 if not os.path.isfile(self.specfile):
+                    config_filename = '???'  # F821 undefined name 'config_filename'
                     raise ValueError('{} config specified a spec file that does not exist: {}'.format(
                         config_filename, self.specfile
                     ))

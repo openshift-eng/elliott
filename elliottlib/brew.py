@@ -158,7 +158,7 @@ def find_unshipped_build_candidates(base_tag, product_version, kind='rpm'):
     # Multiprocessing may seem overkill, but these queries can take
     # longer than you'd like
     pool = ThreadPool(cpu_count())
-    results = pool.map(
+    pool.map(
         lambda builds: builds.refresh(),
         [candidate_builds, shipped_builds])
     # Wait for results
@@ -191,6 +191,7 @@ finished date, built by, etc.
     rc, stdout, stderr = exectools.cmd_gather(shlex.split(query_string))
     buildinfo = {}
 
+    as_string = "???"  # F821 undefined name 'as_string'
     if as_string and rc == 0:
         return stdout
     else:
@@ -219,7 +220,7 @@ finished date, built by, etc.
                     # ast.literal_eval() can handle that and load the
                     # string into a structure we can work with
                     buildinfo[key] = ast.literal_eval(rest)
-                except Exception as e:
+                except Exception as _:
                     buildinfo[key] = rest
                     continue
             else:

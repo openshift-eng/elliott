@@ -56,11 +56,6 @@ class TestMetadata(unittest.TestCase):
           a Runtime object placeholder
 
         """
-        mt = 'image'
-        rt = MockRuntime(self.logger)
-        name = 'test.yml'
-
-        md = metadata.Metadata(mt, rt, name)
 
         #
         # Check the logs
@@ -73,6 +68,7 @@ class TestMetadata(unittest.TestCase):
             expected, actual,
             "logging lines - expected: {}, actual: {}".
             format(expected, actual))
+
 
 if __name__ == "__main__":
     unittest.main()

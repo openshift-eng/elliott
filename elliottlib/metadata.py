@@ -48,7 +48,6 @@ class Metadata(object):
         self.config_filename = data_obj.filename
         self.full_config_path = data_obj.path
 
-
         # Some config filenames have suffixes to avoid name collisions; strip off the suffix to find the real
         # distgit repo name (which must be combined with the distgit namespace).
         # e.g. openshift-enterprise-mediawiki.apb.yml
@@ -75,7 +74,7 @@ class Metadata(object):
         assert (self.config.name is not Missing)
 
         # Choose default namespace for config data
-        if meta_type is "image":
+        if meta_type == "image":
             self.namespace = "containers"
         else:
             self.namespace = "rpms"
@@ -98,6 +97,7 @@ class Metadata(object):
 
     def distgit_repo(self):
         if self._distgit_repo is None:
+            DISTGIT_TYPES = {}  # F821 undefined name 'DISTGIT_TYPES'
             self._distgit_repo = DISTGIT_TYPES[self.meta_type](self)
         return self._distgit_repo
 
