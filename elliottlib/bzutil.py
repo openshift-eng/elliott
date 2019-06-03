@@ -17,6 +17,7 @@ import bugzilla
 
 logger = logutil.getLogger(__name__)
 
+
 def get_bug_severity(bz_data, bug_id):
     """Get just the severity of a bug
 
@@ -29,6 +30,7 @@ def get_bug_severity(bz_data, bug_id):
     bug = bzapi.getbug(bug_id, include_fields=['severity'])
 
     return bug.severity
+
 
 def search_for_bugs(bz_data, status, search_filter='default', filter_out_security_bugs=True, verbose=False):
     """Search the provided target_release's for bugs in the specified states
@@ -46,11 +48,12 @@ def search_for_bugs(bz_data, status, search_filter='default', filter_out_securit
     if filter_out_security_bugs:
         query_url.addKeyword('SecurityTracking', 'nowords')
 
-    # TODO: Expose this for debugging 
+    # TODO: Expose this for debugging
     if verbose:
         click.echo(query_url)
-    
+
     return _perform_query(bzapi, query_url)
+
 
 def search_for_security_bugs(bz_data, status=None, search_filter='security', cve=None, verbose=False):
     """Search for CVE tracker bugs
@@ -62,7 +65,7 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
 
     :return: A list of CVE trackers
     """
-    if status == None:
+    if status is None:
         status = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING']
 
     bzapi = get_bzapi(bz_data)
@@ -76,11 +79,13 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
 
     if(cve):
         bug_list = [bug for bug in bug_list if cve in bug.summary]
-    
+
     return bug_list
+
 
 def get_bzapi(bz_data):
     return bugzilla.Bugzilla(bz_data['server'])
+
 
 def _construct_query_url(bz_data, status, search_filter='default'):
     query_url = SearchURL(bz_data)
@@ -104,15 +109,15 @@ def _construct_query_url(bz_data, status, search_filter='default'):
 
     return query_url
 
+
 def _perform_query(bzapi, query_url, include_fields=None):
     if include_fields is None:
-        include_fields=['id']
+        include_fields = ['id']
 
     query = bzapi.url_to_query(str(query_url))
     query["include_fields"] = include_fields
 
     return bzapi.query(query)
-
 
 
 class SearchFilter(object):

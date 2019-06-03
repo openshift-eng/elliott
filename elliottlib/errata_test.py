@@ -33,7 +33,6 @@ class TestBrew(unittest.TestCase):
         d_out = datetime.datetime.strptime(test_structures.example_erratum['errata']['rhba']['created_at'], '%Y-%m-%dT%H:%M:%SZ')
         self.assertEqual(str(d_out), d_expected)
 
-
     def test_get_filtered_list(self):
         """Ensure we can generate an Erratum List"""
         with mock.patch('errata.requests.get') as get:

@@ -47,8 +47,8 @@ class TestDockerContainer(unittest.TestCase):
         # The first two lines are RE patterns because the log entries
         # will contain the CWD path.
         expected = [
-            "INFO:root:Executing:cmd_gather \[[^\]]+\]: \['echo', 'hello'\]",
-            "INFO:root:Process \[[^\]]+\]: \['echo', 'hello'\]: exited with: 0",
+            r"INFO:root:Executing:cmd_gather \[[^\]]+\]: \['echo', 'hello'\]",
+            r"INFO:root:Process \[[^\]]+\]: \['echo', 'hello'\]: exited with: 0",
             "stdout>>hello",
             "<<",
             "stderr>><<",
@@ -77,6 +77,7 @@ class TestDockerContainer(unittest.TestCase):
 
         # The remainder of the output must match verbatim
         self.assertListEqual(lines[2:], expected[2:])
+
 
 if __name__ == "__main__":
     unittest.main()

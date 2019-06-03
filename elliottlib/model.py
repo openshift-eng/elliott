@@ -156,10 +156,10 @@ class ListModel(list):
 
     # Converts the model to a raw list
     def primitive(self):
-        l = []
+        lst = []
         for e in self:
-            l.append(e)
-        return l
+            lst.append(e)
+        return lst
 
 
 class Model(dict):

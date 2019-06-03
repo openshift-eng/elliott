@@ -83,7 +83,7 @@ def validate_release_date(ctx, param, value):
 def validate_email_address(ctx, param, value):
     """Ensure that email addresses provided are valid email strings"""
     # Really just check to match /^[^@]+@[^@]+\.[^@]+$/
-    email_re = re.compile('^[^@ ]+@[^@ ]+\.[^@ ]+$')
+    email_re = re.compile(r'^[^@ ]+@[^@ ]+\.[^@ ]+$')
     if not email_re.match(value):
         raise click.BadParameter(
             "Invalid email address for {}: {}".format(param, value))

@@ -105,7 +105,6 @@ class Runtime(object):
         self._remove_tmp_working_dir = False
         self.group_config = None
 
-
         self.record_log = None
         self.record_log_path = None
 
@@ -218,8 +217,6 @@ class Runtime(object):
             else:
                 self.logger.info("No branch specified either in group.yml or on the command line; all included images will need to specify their own.")
 
-
-
             # Flattens a list like like [ 'x', 'y,z' ] into [ 'x.yml', 'y.yml', 'z.yml' ]
             # for later checking we need to remove from the lists, but they are tuples. Clone to list
             def flatten_list(names):
@@ -298,7 +295,6 @@ class Runtime(object):
         streams = self.gitdata.load_data(key='streams')
         if streams:
             self.streams = Model(self.gitdata.load_data(key='streams').data)
-
 
     def initialize_logging(self):
 
@@ -530,7 +526,7 @@ class Runtime(object):
         Not Valid:
           1, v1..2, av3.4, .v12  .99.12, v13-55
         """
-        return re.match("^v\d+((\.\d+)+)?$", version) is not None
+        return re.match(r"^v\d+((\.\d+)+)?$", version) is not None
 
     @classmethod
     def _parallel_exec(self, f, args, n_threads):

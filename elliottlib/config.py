@@ -183,4 +183,3 @@ class MetaDataConfig(object):
             del config_log['new']
 
         self._save_config_log(config_log)
-

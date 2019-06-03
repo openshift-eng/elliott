@@ -1,3 +1,4 @@
+import string
 import os
 import json
 import bashlex
@@ -381,18 +382,17 @@ class Image(object):
             res['items'].append('Error querying the RPM database for package signatures')
             res['items'].append(str(rpm_sigs) + str(stderr))
 
-        for line in rpm_sigs.split('\n'):
-            l = line.strip()
+        for line in map(string.strip, rpm_sigs.split('\n')):
 
             # Don't worry about it, these aren't always signed
-            if l == 'gpg-pubkey' or l.startswith('gpg-pubkey-'):
+            if line == 'gpg-pubkey' or line.startswith('gpg-pubkey-'):
                 continue
 
-            if l.endswith('(none)'):
+            if line.endswith('(none)'):
                 # These results are coming back with two leading
                 # single-quotes and the trailing string ' (none)'.
                 # Let's normalize that.
-                clean_pkg_name = l[:-7]
+                clean_pkg_name = line[:-7]
                 res['items'].append(clean_pkg_name)
                 self.logger.info("[Verify: {name}] Unsigned package: {pkg}".format(pkg=clean_pkg_name, name=self.name_tag))
 
@@ -433,20 +433,20 @@ class Image(object):
         # is not overlooked.
         _, orphaned_packages, _ = self.container.execute('package-cleanup --orphans')
 
-        for line in orphaned_packages.split('\n'):
-            l = line.strip()
+        for line in map(string.strip, orphaned_packages.split('\n')):
+
             # Line with space separated words, empty length strip()d
             # line, or a line with just a help article in it
-            if l.endswith('HTTP Error 404 - Not Found'):
+            if line.endswith('HTTP Error 404 - Not Found'):
                 res['items'].append("Could not check orphan package status due to invalid repository configuration")
-                res['items'].append(l)
-            elif ' ' in l or '' == l or 'https://access.redhat.com' in l:
+                res['items'].append(line)
+            elif ' ' in line or '' == line or 'https://access.redhat.com' in line:
                 # This line is an informational sentence or a blank
                 # line, not a package name. Skip it.
                 continue
             else:
-                res['items'].append(l)
-                self.logger.info("[Verify: {name}] Orphaned Package: {pkg}".format(name=self.name_tag, pkg=l))
+                res['items'].append(line)
+                self.logger.info("[Verify: {name}] Orphaned Package: {pkg}".format(name=self.name_tag, pkg=line))
 
         if len(res['items']) > 0:
             self.status = 'failed'

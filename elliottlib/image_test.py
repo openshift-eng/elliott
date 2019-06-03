@@ -23,6 +23,7 @@ base_only: true
 distgit:
   namespace: 'hello'"""
 
+
 class MockRuntime(object):
 
     def __init__(self, logger):
@@ -64,10 +65,6 @@ class TestImageMetadata(unittest.TestCase):
           a Runtime object placeholder
 
         """
-        rt = MockRuntime(self.logger)
-        name = 'test.yml'
-
-        md = image.ImageMetadata(rt, name)
 
         #
         # Check the logs
@@ -80,8 +77,6 @@ class TestImageMetadata(unittest.TestCase):
             expected, actual,
             "logging lines - expected: {}, actual: {}".
             format(expected, actual))
-
-
 
     def test_base_only(self):
         """
@@ -108,6 +103,7 @@ class TestImageMetadata(unittest.TestCase):
         # Test the base_only property of the ImageMetadata object
         self.assertFalse(md.base_only)
         self.assertTrue(md_base.base_only)
+
 
 if __name__ == "__main__":
     unittest.main()

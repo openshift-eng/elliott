@@ -71,10 +71,6 @@ class TestRPMMetadata(unittest.TestCase):
           a Runtime object placeholder
 
         """
-        rt = MockRuntime(self.test_dir, self.logger)
-        name = 'test.yml'
-
-        md = rpmcfg.RPMMetadata(rt, name)
 
         #
         # Check the logs
