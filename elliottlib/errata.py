@@ -143,7 +143,7 @@ def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=
     :param et_data: The ET data dump we got from our erratatool.yaml file
     :param errata_type: The type of advisory to create (RHBA, RHSA, or RHEA)
     :param string kind: One of 'rpm' or 'image', effects boilerplate text
-    :param string release_date: A date in the form YYYY-MM-DD
+    :param string release_date: A date in the form YYYY-Mon-DD
     :param bool create: If true, create the erratum in the Errata
         tool, by default just the DATA we would have POSTed is
         returned

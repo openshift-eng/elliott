@@ -77,7 +77,7 @@ def validate_release_date(ctx, param, value):
             click.echo("{} - Validated".format(release_date.strftime(YMD)))
         return value
     except ValueError:
-        raise click.BadParameter('Release date (--date) must be in YYYY-MM-DD format')
+        raise click.BadParameter('Release date (--date) must be in YYYY-Mon-DD format')
 
 
 def validate_email_address(ctx, param, value):
