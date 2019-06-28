@@ -573,6 +573,9 @@ PRESENT advisory. Here are some examples:
         click.echo("Manually verifying the builds exist")
         try:
             unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in builds]
+            print(unshipped_builds)
+            for build in unshipped_builds:
+                print(elliottlib.brew.get_brew_buildinfo(elliottlib.brew.Build(build)))
         except elliottlib.exceptions.BrewBuildException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
     elif kind:
@@ -673,6 +676,7 @@ PRESENT advisory. Here are some examples:
                 file_type = 'tar'
             elif kind == 'rpm':
                 file_type = 'rpm'
+
             erratum.addBuilds(build_nvrs,
                               release=product_version,
                               file_types={build.nvr: [file_type] for build in unshipped_builds})
