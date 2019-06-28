@@ -189,3 +189,11 @@ each function call.
     """
     click.secho(char, fg='green', nl=False)
     return func()
+
+
+def override_product_version(pv, branch):
+    rp = pv.split("-")
+    rb = branch.split("-")
+    if rp[1] != rb[3] or rp[3] != rb[1]:
+        return 'RHEL-{}-OSE-{}'.format(rb[3], rb[1])
+    return pv
