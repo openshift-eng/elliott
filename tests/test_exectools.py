@@ -3,15 +3,9 @@
 Test functions related to controlled command execution
 """
 
-from __future__ import print_function
-
 import unittest
 
-import os
-import tempfile
-import shutil
-
-import logging
+import mock
 
 import exectools
 
@@ -75,70 +69,77 @@ class TestCmdExec(unittest.TestCase):
     """
     """
 
-    def setUp(self):
-        self.test_dir = tempfile.mkdtemp(prefix="ocp-cd-test-logs")
-        self.test_file = os.path.join(self.test_dir, "test_file")
-        logging.basicConfig(filename=self.test_file, level=logging.INFO)
-        self.logger = logging.getLogger()
-
-    def tearDown(self):
-        logging.shutdown()
-        reload(logging)
-        shutil.rmtree(self.test_dir)
-
-    @unittest.skip("assertion failing, check if desired behavior changed")
-    def test_cmd_assert_success(self):
+    @mock.patch("exectools.pushd.Dir.getcwd", return_value="/my/path")
+    @mock.patch("exectools.subprocess.Popen")
+    @mock.patch("exectools.logger.debug")
+    def test_cmd_assert_success(self, logger_debug, popen_mock, *_):
         """
         """
+
+        proc_mock = mock.Mock()
+        proc_mock.communicate.return_value = ("out", "err")
+        proc_mock.returncode = 0
+        popen_mock.return_value = proc_mock
 
         try:
             exectools.cmd_assert("/bin/true")
         except IOError as error:
             self.Fail("/bin/truereturned failure: {}".format(error))
 
-        # check that the log file has all of the tests.
-        log_file = open(self.test_file, 'r')
-        lines = log_file.readlines()
-        log_file.close()
+        expected_log_calls = [
+            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/bin/true']"),
+            mock.call("Process [cwd=/my/path]: ['/bin/true']: exited with: 0\nstdout>>out<<\nstderr>>err<<\n"),
+            mock.call("cmd_assert: Final result = 0 in 0 tries.")
+        ]
 
-        self.assertEquals(len(lines), 4)
+        self.assertEqual(expected_log_calls, logger_debug.mock_calls)
 
-    @unittest.skip("assertion failing, check if desired behavior changed")
-    def test_cmd_assert_fail(self):
+    @mock.patch("exectools.time.sleep", return_value=None)
+    @mock.patch("exectools.pushd.Dir.getcwd", return_value="/my/path")
+    @mock.patch("exectools.subprocess.Popen")
+    @mock.patch("exectools.logger.debug")
+    def test_cmd_assert_fail(self, logger_debug, popen_mock, *_):
         """
         """
+        proc_mock = mock.Mock()
+        proc_mock.communicate.return_value = ("out", "err")
+        proc_mock.returncode = 1
+        popen_mock.return_value = proc_mock
 
         # Try a failing command 3 times, at 1 sec intervals
         with self.assertRaises(IOError):
             exectools.cmd_assert("/usr/bin/false", 3, 1)
 
-        # check that the log file has all of the tests.
-        log_file = open(self.test_file, 'r')
-        lines = log_file.readlines()
-        log_file.close()
+        expected_log_calls = [
+            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']"),
+            mock.call("Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n"),
+            mock.call('cmd_assert: Failed 1 times. Retrying in 1 seconds: /usr/bin/false'),
+            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']"),
+            mock.call("Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n"),
+            mock.call('cmd_assert: Failed 2 times. Retrying in 1 seconds: /usr/bin/false'),
+            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']"),
+            mock.call("Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n"),
+            mock.call('cmd_assert: Final result = 1 in 2 tries.')
+        ]
 
-        self.assertEquals(len(lines), 12)
+        self.assertEqual(expected_log_calls, logger_debug.mock_calls)
 
 
 class TestGather(unittest.TestCase):
     """
     """
 
-    def setUp(self):
-        self.test_dir = tempfile.mkdtemp(prefix="ocp-cd-test-logs")
-        self.test_file = os.path.join(self.test_dir, "test_file")
-        logging.basicConfig(filename=self.test_file, level=logging.INFO)
-        self.logger = logging.getLogger()
-
-    def tearDown(self):
-        logging.shutdown()
-        reload(logging)
-        shutil.rmtree(self.test_dir)
-
-    @unittest.skip("assertion failing, check if desired behavior changed")
-    def test_gather_success(self):
+    @mock.patch("exectools.pushd.Dir.getcwd", return_value="/my/path")
+    @mock.patch("exectools.subprocess.Popen")
+    @mock.patch("exectools.logger.debug")
+    def test_gather_success(self, logger_debug, popen_mock, *_):
         """
         """
+
+        proc_mock = mock.Mock()
+        proc_mock.communicate.return_value = ("hello there\n", "")
+        proc_mock.returncode = 0
+        popen_mock.return_value = proc_mock
 
         (status, stdout, stderr) = exectools.cmd_gather(
             "/usr/bin/echo hello there")
@@ -150,17 +151,25 @@ class TestGather(unittest.TestCase):
         self.assertEquals(stdout, stdout_expected)
         self.assertEquals(stderr, stderr_expected)
 
-        # check that the log file has all of the tests.
+        expected_log_calls = [
+            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/echo', 'hello', 'there']"),
+            mock.call("Process [cwd=/my/path]: ['/usr/bin/echo', 'hello', 'there']: exited with: 0\nstdout>>hello there\n<<\nstderr>><<\n")
+        ]
 
-        log_file = open(self.test_file, 'r')
-        lines = log_file.readlines()
+        self.assertEqual(expected_log_calls, logger_debug.mock_calls)
 
-        self.assertEquals(len(lines), 6)
-
-    @unittest.skip("assertion failing, check if desired behavior changed")
-    def test_gather_fail(self):
+    @mock.patch("exectools.time.sleep", return_value=None)
+    @mock.patch("exectools.pushd.Dir.getcwd", return_value="/my/path")
+    @mock.patch("exectools.subprocess.Popen")
+    @mock.patch("exectools.logger.debug")
+    def test_gather_fail(self, logger_debug, popen_mock, *_):
         """
         """
+
+        proc_mock = mock.Mock()
+        proc_mock.communicate.return_value = ("", "/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n")
+        proc_mock.returncode = 1
+        popen_mock.return_value = proc_mock
 
         (status, stdout, stderr) = exectools.cmd_gather(
             ["/usr/bin/sed", "-e", "f"])
@@ -173,11 +182,12 @@ class TestGather(unittest.TestCase):
         self.assertEquals(stdout, stdout_expected)
         self.assertEquals(stderr, stderr_expected)
 
-        # check that the log file has all of the tests.
-        log_file = open(self.test_file, 'r')
-        lines = log_file.readlines()
+        expected_log_calls = [
+            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/sed', '-e', 'f']"),
+            mock.call("Process [cwd=/my/path]: ['/usr/bin/sed', '-e', 'f']: exited with: 1\nstdout>><<\nstderr>>/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n<<\n")
+        ]
 
-        self.assertEquals(len(lines), 6)
+        self.assertEqual(expected_log_calls, logger_debug.mock_calls)
 
 
 if __name__ == "__main__":

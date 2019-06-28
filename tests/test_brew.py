@@ -165,8 +165,8 @@ class TestBrew(unittest.TestCase):
 
         self.assertEqual(expected_json, b.to_json())
 
-    @unittest.skip("assertion failing, check if desired behavior changed")
-    def test_get_brew_build_success(self):
+    @mock.patch("brew.ssl.get_default_verify_paths", return_value=mock.Mock(openssl_cafile="/my/cert.pem"))
+    def test_get_brew_build_success(self, _):
         """Ensure a 'proper' brew build returns a Build object"""
         with nested(
                 mock.patch('brew.requests.get'),
@@ -187,11 +187,12 @@ class TestBrew(unittest.TestCase):
 
             get.assert_called_once_with(
                 constants.errata_get_build_url.format(id=nvr),
-                auth=kerb()
+                auth=kerb(),
+                verify="/my/cert.pem"
             )
 
-    @unittest.skip("assertion failing, check if desired behavior changed")
-    def test_get_brew_build_success_session(self):
+    @mock.patch("brew.ssl.get_default_verify_paths", return_value=mock.Mock(openssl_cafile="/my/cert.pem"))
+    def test_get_brew_build_success_session(self, _):
         """Ensure a provided requests session is used when getting brew builds"""
         with mock.patch('brew.HTTPKerberosAuth') as kerb:
             nvr = 'coreutils-8.22-21.el7'
@@ -221,11 +222,12 @@ class TestBrew(unittest.TestCase):
             # requests.get (default) method
             session.get.assert_called_once_with(
                 constants.errata_get_build_url.format(id=nvr),
-                auth=kerb()
+                auth=kerb(),
+                verify="/my/cert.pem"
             )
 
-    @unittest.skip("assertion failing, check if desired behavior changed")
-    def test_get_brew_build_failure(self):
+    @mock.patch("brew.ssl.get_default_verify_paths", return_value=mock.Mock(openssl_cafile="/my/cert.pem"))
+    def test_get_brew_build_failure(self, _):
         """Ensure we notice invalid get-build responses from the API"""
         with nested(
                 mock.patch('brew.requests.get'),
@@ -245,10 +247,10 @@ class TestBrew(unittest.TestCase):
 
             get.assert_called_once_with(
                 constants.errata_get_build_url.format(id=nvr),
-                auth=kerb()
+                auth=kerb(),
+                verify="/my/cert.pem"
             )
 
-    @unittest.skip("assertion failing, check if desired behavior changed")
     def test_get_tagged_image_builds_success(self):
         """Ensure the brew list-tagged command is correct for images"""
         # Any value will work for this. Let's use a real one though to
@@ -281,10 +283,8 @@ class TestBrew(unittest.TestCase):
             gexec.assert_called_once_with(
                 # shlex must split our command string into a list
                 ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--type=image', '--quiet'],
-                logger=self.logger
             )
 
-    @unittest.skip("assertion failing, check if desired behavior changed")
     def test_get_tagged_image_builds_failed(self):
         """Ensure the brew list-tagged explodes if the brew subprocess fails"""
         # Any value will work for this. Let's use a real one though to
@@ -308,10 +308,8 @@ class TestBrew(unittest.TestCase):
             gexec.assert_called_once_with(
                 # shlex must split our command string into a list
                 ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--type=image', '--quiet'],
-                logger=self.logger
             )
 
-    @unittest.skip("assertion failing, check if desired behavior changed")
     def test_get_tagged_rpm_builds_success(self):
         """Ensure the brew list-tagged command is correct for rpms"""
         # Any value will work for this. Let's use a real one though to
@@ -344,10 +342,8 @@ class TestBrew(unittest.TestCase):
             gexec.assert_called_once_with(
                 # shlex must split our command string into a list
                 ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--rpm', '--quiet', '--arch', 'src'],
-                logger=self.logger
             )
 
-    @unittest.skip("assertion failing, check if desired behavior changed")
     def test_get_tagged_rpm_builds_failed(self):
         """Ensure the brew list-tagged explodes if the brew subprocess fails"""
         # Any value will work for this. Let's use a real one though to
@@ -371,7 +367,6 @@ class TestBrew(unittest.TestCase):
             gexec.assert_called_once_with(
                 # shlex must split our command string into a list
                 ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate', '--latest', '--rpm', '--quiet', '--arch', 'src'],
-                logger=self.logger
             )
 
 

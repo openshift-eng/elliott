@@ -33,8 +33,8 @@ class TestBrew(unittest.TestCase):
         d_out = datetime.datetime.strptime(test_structures.example_erratum['errata']['rhba']['created_at'], '%Y-%m-%dT%H:%M:%SZ')
         self.assertEqual(str(d_out), d_expected)
 
-    @unittest.skip("raising ErrataToolError: Could not locate the given advisory filter: 1965")
-    def test_get_filtered_list(self):
+    @mock.patch("errata_tool.Erratum.__init__", return_value=None)
+    def test_get_filtered_list(self, _):
         """Ensure we can generate an Erratum List"""
         with mock.patch('errata.requests.get') as get:
             response = mock.MagicMock(status_code=200)
@@ -43,8 +43,8 @@ class TestBrew(unittest.TestCase):
             res = errata.get_filtered_list()
             self.assertEqual(2, len(res))
 
-    @unittest.skip("raising ErrataToolError: Could not locate the given advisory filter: 1965")
-    def test_get_filtered_list_limit(self):
+    @mock.patch("errata_tool.Erratum.__init__", return_value=None)
+    def test_get_filtered_list_limit(self, _):
         """Ensure we can generate a trimmed Erratum List"""
         with mock.patch('errata.requests.get') as get:
             response = mock.MagicMock(status_code=200)
