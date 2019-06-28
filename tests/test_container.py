@@ -5,11 +5,7 @@ Test Objects to manage Docker containers.
 
 import unittest
 
-# Helper modules for testing
-import string
-import StringIO
-import re
-import logging
+import mock
 
 # The test module
 import container
@@ -20,23 +16,10 @@ class TestDockerContainer(unittest.TestCase):
     Test docker container object and methods
     """
 
-    def setUp(self):
-        """
-        Define and provide mock logging for test/response
-        """
-        self.stream = StringIO.StringIO()
-        logging.basicConfig(level=logging.DEBUG, stream=self.stream)
-        self.logger = logging.getLogger()
-
-    def tearDown(self):
-        """
-        Reset logging for each test.
-        """
-        logging.shutdown()
-        reload(logging)
-
-    @unittest.skip("assertion failing, check if desired behavior changed")
-    def test_cmd_logging(self):
+    @mock.patch("container.exectools.pushd.Dir.getcwd", return_value="/my/path")
+    @mock.patch("container.exectools.subprocess.Popen")
+    @mock.patch("container.exectools.logger.debug")
+    def test_cmd_logging(self, logger_debug, popen_mock, *_):
         """
         Test the internal wrapper function for exectools.cmd_gather().
         This method executes a command, logs both the command and stdout
@@ -45,39 +28,20 @@ class TestDockerContainer(unittest.TestCase):
         For testing, just execute an echo and gather the output.
         """
 
-        # The first two lines are RE patterns because the log entries
-        # will contain the CWD path.
-        expected = [
-            r"INFO:root:Executing:cmd_gather \[[^\]]+\]: \['echo', 'hello'\]",
-            r"INFO:root:Process \[[^\]]+\]: \['echo', 'hello'\]: exited with: 0",
-            "stdout>>hello",
-            "<<",
-            "stderr>><<",
-            "",
-            ""
+        proc_mock = mock.Mock()
+        proc_mock.communicate.return_value = ("out", "err")
+        proc_mock.returncode = 999
+        popen_mock.return_value = proc_mock
+
+        expected_log_calls = [
+            mock.call("Executing:cmd_gather [cwd=/my/path]: ['echo', 'hello']"),
+            mock.call("Process [cwd=/my/path]: ['echo', 'hello']: exited with: 999\nstdout>>out<<\nstderr>>err<<\n")
         ]
 
         c0 = container.DockerContainer("test/image")
         c0._cmd("echo hello")
 
-        actual = self.stream.getvalue()
-        lines = string.split(actual, "\n")
-        self.assertEqual(len(lines), 7)
-
-        # check that the first and second lines match the expected patterns.
-        self.assertTrue(
-            re.match(expected[0], lines[0]),
-            "process exit line does not match: \n  actual: {}\n  expected {}".
-            format(expected[1], lines[1])
-        )
-        self.assertTrue(
-            re.match(expected[1], lines[1]),
-            "process exit line does not match: \n  actual: {}\n  expected {}".
-            format(expected[1], lines[1])
-        )
-
-        # The remainder of the output must match verbatim
-        self.assertListEqual(lines[2:], expected[2:])
+        self.assertEqual(expected_log_calls, logger_debug.mock_calls)
 
 
 if __name__ == "__main__":
