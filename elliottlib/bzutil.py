@@ -29,7 +29,7 @@ def get_bug_severity(bz_data, bug_id):
     bzapi = get_bzapi(bz_data)
     bug = bzapi.getbug(bug_id, include_fields=['severity'])
 
-    return bug.severity
+    return bug.severity.lower()
 
 
 def search_for_bugs(bz_data, status, search_filter='default', filter_out_security_bugs=True, verbose=False):
@@ -77,7 +77,7 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
 
     bug_list = _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary'])
 
-    if(cve):
+    if cve:
         bug_list = [bug for bug in bug_list if cve in bug.summary]
 
     return bug_list
