@@ -3,7 +3,11 @@ Test errata models/controllers
 """
 
 import datetime
+import mock
+import json
+from contextlib import nested
 import flexmock
+from errata_tool import ErrataException
 
 # Import the right version for your python
 import platform
@@ -14,6 +18,10 @@ else:
     import unittest
 
 import errata
+import constants
+from elliottlib import errata
+import bugzilla
+import brew
 import test_structures
 from elliottlib import exceptions
 
@@ -57,6 +65,42 @@ class TestErrata(unittest.TestCase):
             .and_return(flexmock(status_code=404, text="_irrelevant_")))
 
         self.assertRaises(exceptions.ErrataToolError, errata.get_filtered_list)
+
+    def test_add_bugs_with_retry(self):
+        advs = testErratum(rt=2, ntt=2)
+        try:
+            errata.add_bugs_with_retry(advs, [1, 2], False)
+        except exceptions.ElliottFatalError:
+            self.fail("raised ElliottFatalError unexpectedly!")
+
+        advs = testErratum(rt=0, ntt=2)
+        with self.assertRaises(exceptions.ElliottFatalError) as cm:
+            errata.add_bugs_with_retry(advs, [1, 2], True)
+        self.assertEqual(str(cm.exception), "this is an exception from testErratum")
+
+    def test_parse_exception_error_message(self):
+        self.assertEqual([1685398], errata.parse_exception_error_message('Bug #1685398 The bug is filed already in RHBA-2019:1589.'))
+
+        self.assertEqual([], errata.parse_exception_error_message('invalid format'))
+
+        self.assertEqual([1685398, 1685399], errata.parse_exception_error_message('''Bug #1685398 The bug is filed already in RHBA-2019:1589.
+        Bug #1685399 The bug is filed already in RHBA-2019:1589.'''))
+
+
+class testErratum:
+    def __init__(self, rt, ntt):
+        self.retry_times = rt
+        self.none_throw_threshold = ntt
+
+    def commit(self):
+        if self.retry_times <= self.none_throw_threshold:
+            self.retry_times = self.retry_times + 1
+            raise ErrataException("this is an exception from testErratum")
+        else:
+            pass
+
+    def addBugs(self, buglist):
+        pass
 
 
 if __name__ == '__main__':
