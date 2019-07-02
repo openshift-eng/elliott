@@ -236,9 +236,8 @@ advisory.
         else:
             if latest_advisory is None:
                 red_print("No metadata discovered")
-                raise ElliottFatalError("No advisory for {x}.{y} has been released in recent history, can not auto determine next release date".format(
-                                        x=major, y=minor))
-
+                raise ElliottFatalError("No advisory for {x}.{y} has been released in recent history, can not auto "
+                                        "determine next release date".format(x=major, y=minor))
 
         green_prefix("Found an advisory to calculate new release date from: ")
         click.echo("{synopsis} - {rel_date}".format(
@@ -269,11 +268,10 @@ advisory.
 
         severity_indexes = []
         for t in cve_trackers:
-            tracker_severity = elliottlib.bzutil.get_bug_severity(t.id)
+            tracker_severity = elliottlib.bzutil.get_bug_severity(bz_data, t.id)
             severity_indexes.append(elliottlib.constants.BUG_SEVERITY.index(tracker_severity))
 
         impact = elliottlib.constants.SECURITY_IMPACT[max(severity_indexes)]
-        cve_trackers.append(cve)  # The parent flaw bug is aliased to the CVE number
 
     ######################################################################
 
@@ -315,7 +313,7 @@ advisory.
 
         if errata_type == 'RHSA':
             click.echo("Automatically attaching CVE trackers...")
-            erratum.addBugs([bug.id for bug in cve_trackers])
+            erratum.addBugs([bug.bug_id for bug in cve_trackers])
             erratum.commit()
 
             yellow_print("Remember to manually set the Security Reviewer in the Errata Tool Web UI")
