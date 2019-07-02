@@ -189,3 +189,16 @@ each function call.
     """
     click.secho(char, fg='green', nl=False)
     return func()
+
+
+def override_product_version(pv, branch):
+    """ if user specify -b branch will override product_version of erratatool.yml"""
+    rp = pv.split("-")
+    rb = branch.split("-")
+    if rp[1] != rb[3] or rp[3] != rb[1]:
+        if rb[3] == '8':
+            # hardcoded differently for RHEL8 since the product version name changed
+            # TODO: it should look up the right product version that can accept content from the brew tag.
+            return 'OSE-{}-RHEL-{}'.format(rb[1], rb[3])
+        return 'RHEL-{}-OSE-{}'.format(rb[3], rb[1])
+    return pv

@@ -30,7 +30,7 @@ import elliottlib.openshiftclient
 
 from elliottlib import cli_opts
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import exit_unauthenticated, green_prefix, YMD
+from elliottlib.util import exit_unauthenticated, green_prefix, YMD, override_product_version
 from elliottlib.util import default_release_date, validate_release_date
 from elliottlib.util import validate_email_address, red_print, major_from_branch
 from elliottlib.util import green_print, red_prefix, minor_from_branch
@@ -551,12 +551,15 @@ PRESENT advisory. Here are some examples:
         raise click.BadParameter("Use only one of --use-default-advisory or --attach")
 
     runtime.initialize()
-    et_data = runtime.gitdata.load_data(key='erratatool').data
-    product_version = et_data.get('product_version')
+
     if not runtime.branch:
         raise ElliottFatalError("Need to specify a branch either in group.yml or with --branch option")
     base_tag = runtime.branch
 
+    et_data = runtime.gitdata.load_data(key='erratatool').data
+    product_version = override_product_version(et_data.get('product_version'), runtime.branch)
+
+    print(product_version)
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
