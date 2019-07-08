@@ -271,6 +271,9 @@ advisory.
             tracker_severity = elliottlib.bzutil.get_bug_severity(bz_data, t.id)
             severity_indexes.append(elliottlib.constants.BUG_SEVERITY.index(tracker_severity))
 
+        if len(severity_indexes) == 0:
+            raise ElliottFatalError("No security bugs found, make sure you run `bugzilla login`.")
+
         impact = elliottlib.constants.SECURITY_IMPACT[max(severity_indexes)]
 
     ######################################################################
