@@ -20,3 +20,6 @@ cover
 
 # Ignore idea backup files
 .idea
+
+# Ignore vscode backup files
+.vscode
