@@ -4,11 +4,7 @@ Test the ImageMetadata class
 """
 import unittest
 
-import os
-import logging
-import tempfile
-import shutil
-import mock
+import flexmock
 
 import image
 
@@ -21,18 +17,24 @@ class TestImageMetadata(unittest.TestCase):
         are not included in a formal release.
         """
 
-        rt = mock.Mock()
+        rt = flexmock(logger=flexmock(debug=lambda *_: None))
 
-        data_obj = mock.Mock(**{"name": "test",
-                                "distgit.namespace": "hello",
-                                "key": "_irrelevant_",
-                                "data": {"name": "_irrelevant_"}})
+        data_obj = flexmock(name="test",
+                            distgit=flexmock(namespace="hello"),
+                            key="_irrelevant_",
+                            data=flexmock(items=lambda: [("name", "_irrelevant")]),
+                            base_dir="_irrelevant_",
+                            filename="_irrelevant_",
+                            path="_irrelevant_")
 
-        base_data_obj = mock.Mock(**{"name": "test_base",
-                                     "distgit.namespace": "hello",
-                                     "key": "_irrelevant_",
-                                     "data": {"name": "_irrelevant_",
-                                              "base_only": True}})
+        base_data_obj = flexmock(name="test",
+                                 distgit=flexmock(namespace="hello"),
+                                 key="_irrelevant_",
+                                 data=flexmock(items=lambda: [("name", "_irrelevant"),
+                                                              ("base_only", True)]),
+                                 base_dir="_irrelevant_",
+                                 filename="_irrelevant_",
+                                 path="_irrelevant_")
 
         md = image.ImageMetadata(rt, data_obj)
         md_base = image.ImageMetadata(rt, base_data_obj)

@@ -5,7 +5,7 @@ Test functions related to controlled command execution
 
 import unittest
 
-import mock
+import flexmock
 
 import exectools
 
@@ -69,77 +69,110 @@ class TestCmdExec(unittest.TestCase):
     """
     """
 
-    @mock.patch("exectools.pushd.Dir.getcwd", return_value="/my/path")
-    @mock.patch("exectools.subprocess.Popen")
-    @mock.patch("exectools.logger.debug")
-    def test_cmd_assert_success(self, logger_debug, popen_mock, *_):
+    def test_cmd_assert_success(self):
         """
         """
+        (flexmock(exectools.pushd.Dir)
+            .should_receive("getcwd")
+            .and_return("/my/path"))
 
-        proc_mock = mock.Mock()
-        proc_mock.communicate.return_value = ("out", "err")
-        proc_mock.returncode = 0
-        popen_mock.return_value = proc_mock
+        proc_mock = flexmock(returncode=0)
+        proc_mock.should_receive("communicate").once().and_return(("out", "err"))
+
+        (flexmock(exectools.subprocess)
+            .should_receive("Popen")
+            .and_return(proc_mock))
+
+        (flexmock(exectools.logger)
+            .should_receive("debug")
+            .with_args("Executing:cmd_gather [cwd=/my/path]: ['/bin/true']")
+            .once()
+            .ordered())
+
+        (flexmock(exectools.logger)
+            .should_receive("debug")
+            .with_args("Process [cwd=/my/path]: ['/bin/true']: exited with: 0\nstdout>>out<<\nstderr>>err<<\n")
+            .once()
+            .ordered())
+
+        (flexmock(exectools.logger)
+            .should_receive("debug")
+            .with_args("cmd_assert: Final result = 0 in 0 tries.")
+            .once()
+            .ordered())
 
         try:
             exectools.cmd_assert("/bin/true")
         except IOError as error:
             self.Fail("/bin/truereturned failure: {}".format(error))
 
-        expected_log_calls = [
-            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/bin/true']"),
-            mock.call("Process [cwd=/my/path]: ['/bin/true']: exited with: 0\nstdout>>out<<\nstderr>>err<<\n"),
-            mock.call("cmd_assert: Final result = 0 in 0 tries.")
-        ]
-
-        self.assertEqual(expected_log_calls, logger_debug.mock_calls)
-
-    @mock.patch("exectools.time.sleep", return_value=None)
-    @mock.patch("exectools.pushd.Dir.getcwd", return_value="/my/path")
-    @mock.patch("exectools.subprocess.Popen")
-    @mock.patch("exectools.logger.debug")
-    def test_cmd_assert_fail(self, logger_debug, popen_mock, *_):
+    def test_cmd_assert_fail(self):
         """
         """
-        proc_mock = mock.Mock()
-        proc_mock.communicate.return_value = ("out", "err")
-        proc_mock.returncode = 1
-        popen_mock.return_value = proc_mock
+        flexmock(exectools.time).should_receive("sleep").replace_with(lambda *_: None)
 
-        # Try a failing command 3 times, at 1 sec intervals
-        with self.assertRaises(IOError):
-            exectools.cmd_assert("/usr/bin/false", 3, 1)
+        (flexmock(exectools.pushd.Dir)
+            .should_receive("getcwd")
+            .and_return("/my/path"))
+
+        proc_mock = flexmock(returncode=1)
+        proc_mock.should_receive("communicate").times(3).and_return(("out", "err"))
+
+        (flexmock(exectools.subprocess)
+            .should_receive("Popen")
+            .and_return(proc_mock))
 
         expected_log_calls = [
-            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']"),
-            mock.call("Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n"),
-            mock.call('cmd_assert: Failed 1 times. Retrying in 1 seconds: /usr/bin/false'),
-            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']"),
-            mock.call("Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n"),
-            mock.call('cmd_assert: Failed 2 times. Retrying in 1 seconds: /usr/bin/false'),
-            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']"),
-            mock.call("Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n"),
-            mock.call('cmd_assert: Final result = 1 in 2 tries.')
+            "Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']",
+            "Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n",
+            'cmd_assert: Failed 1 times. Retrying in 1 seconds: /usr/bin/false',
+            "Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']",
+            "Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n",
+            'cmd_assert: Failed 2 times. Retrying in 1 seconds: /usr/bin/false',
+            "Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']",
+            "Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n",
+            'cmd_assert: Final result = 1 in 2 tries.'
         ]
 
-        self.assertEqual(expected_log_calls, logger_debug.mock_calls)
+        for expected_log_call in expected_log_calls:
+            (flexmock(exectools.logger)
+                .should_receive("debug")
+                .with_args(expected_log_call)
+                .once()
+                .ordered())
+
+        self.assertRaises(IOError, exectools.cmd_assert, "/usr/bin/false", 3, 1)
 
 
 class TestGather(unittest.TestCase):
     """
     """
 
-    @mock.patch("exectools.pushd.Dir.getcwd", return_value="/my/path")
-    @mock.patch("exectools.subprocess.Popen")
-    @mock.patch("exectools.logger.debug")
-    def test_gather_success(self, logger_debug, popen_mock, *_):
+    def test_gather_success(self):
         """
         """
+        (flexmock(exectools.pushd.Dir)
+            .should_receive("getcwd")
+            .and_return("/my/path"))
 
-        proc_mock = mock.Mock()
-        proc_mock.communicate.return_value = ("hello there\n", "")
-        proc_mock.returncode = 0
-        popen_mock.return_value = proc_mock
+        proc_mock = flexmock(returncode=0)
+        proc_mock.should_receive("communicate").once().and_return(("hello there\n", ""))
+
+        (flexmock(exectools.subprocess)
+            .should_receive("Popen")
+            .and_return(proc_mock))
+
+        (flexmock(exectools.logger)
+            .should_receive("debug")
+            .with_args("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/echo', 'hello', 'there']")
+            .once()
+            .ordered())
+
+        (flexmock(exectools.logger)
+            .should_receive("debug")
+            .with_args("Process [cwd=/my/path]: ['/usr/bin/echo', 'hello', 'there']: exited with: 0\nstdout>>hello there\n<<\nstderr>><<\n")
+            .once()
+            .ordered())
 
         (status, stdout, stderr) = exectools.cmd_gather(
             "/usr/bin/echo hello there")
@@ -151,25 +184,36 @@ class TestGather(unittest.TestCase):
         self.assertEquals(stdout, stdout_expected)
         self.assertEquals(stderr, stderr_expected)
 
-        expected_log_calls = [
-            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/echo', 'hello', 'there']"),
-            mock.call("Process [cwd=/my/path]: ['/usr/bin/echo', 'hello', 'there']: exited with: 0\nstdout>>hello there\n<<\nstderr>><<\n")
-        ]
-
-        self.assertEqual(expected_log_calls, logger_debug.mock_calls)
-
-    @mock.patch("exectools.time.sleep", return_value=None)
-    @mock.patch("exectools.pushd.Dir.getcwd", return_value="/my/path")
-    @mock.patch("exectools.subprocess.Popen")
-    @mock.patch("exectools.logger.debug")
-    def test_gather_fail(self, logger_debug, popen_mock, *_):
+    def test_gather_fail(self):
         """
         """
+        flexmock(exectools.time).should_receive("sleep").replace_with(lambda *_: None)
 
-        proc_mock = mock.Mock()
-        proc_mock.communicate.return_value = ("", "/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n")
-        proc_mock.returncode = 1
-        popen_mock.return_value = proc_mock
+        (flexmock(exectools.pushd.Dir)
+            .should_receive("getcwd")
+            .and_return("/my/path"))
+
+        proc_mock = flexmock(returncode=1)
+        (proc_mock
+            .should_receive("communicate")
+            .once()
+            .and_return(("", "/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n")))
+
+        (flexmock(exectools.subprocess)
+            .should_receive("Popen")
+            .and_return(proc_mock))
+
+        (flexmock(exectools.logger)
+            .should_receive("debug")
+            .with_args("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/sed', '-e', 'f']")
+            .once()
+            .ordered())
+
+        (flexmock(exectools.logger)
+            .should_receive("debug")
+            .with_args("Process [cwd=/my/path]: ['/usr/bin/sed', '-e', 'f']: exited with: 1\nstdout>><<\nstderr>>/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n<<\n")
+            .once()
+            .ordered())
 
         (status, stdout, stderr) = exectools.cmd_gather(
             ["/usr/bin/sed", "-e", "f"])
@@ -181,13 +225,6 @@ class TestGather(unittest.TestCase):
         self.assertEquals(status_expected, status)
         self.assertEquals(stdout, stdout_expected)
         self.assertEquals(stderr, stderr_expected)
-
-        expected_log_calls = [
-            mock.call("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/sed', '-e', 'f']"),
-            mock.call("Process [cwd=/my/path]: ['/usr/bin/sed', '-e', 'f']: exited with: 1\nstdout>><<\nstderr>>/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n<<\n")
-        ]
-
-        self.assertEqual(expected_log_calls, logger_debug.mock_calls)
 
 
 if __name__ == "__main__":
