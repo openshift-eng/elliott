@@ -16,11 +16,12 @@ import constants
 import brew
 import re
 from elliottlib import exceptions
-from elliottlib.util import green_prefix
+from elliottlib.util import green_prefix, exit_unauthenticated
 
 import requests
 from requests_kerberos import HTTPKerberosAuth
 from errata_tool import Erratum, ErrataException
+from kerberos import GSSError
 
 
 def find_mutable_erratum(kind, minor, major=3):
@@ -328,7 +329,7 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugs_with_retry(advs, bug_list, retried):
+def add_bugs_with_retry(advisory, bug_list, retried):
     """
     adding specified bug_list into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
@@ -339,6 +340,14 @@ def add_bugs_with_retry(advs, bug_list, retried):
     :param retried: retry 2 times, first attempt fetch failed bugs sift out then attach again
     :return:
     """
+    try:
+        advs = Erratum(errata_id=advisory)
+    except GSSError:
+        exit_unauthenticated()
+
+    if advs is False:
+        raise exceptions.ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
+
     green_prefix("Adding {count} bugs to advisory:".format(count=len(bug_list)))
     print(" {advs} {retry_times} times".format(advs=advs, retry_times=1 if retried is False else 2))
     try:

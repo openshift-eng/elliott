@@ -463,15 +463,7 @@ advisory with the --add option.
                 bug.updateflags({f: "+"})
 
     if advisory is not False:
-        try:
-            advs = Erratum(errata_id=advisory)
-        except GSSError:
-            exit_unauthenticated()
-
-        if advs is False:
-            raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
-
-        elliottlib.errata.add_bugs_with_retry(advs, [bug.id for bug in bug_ids], False)
+        elliottlib.errata.add_bugs_with_retry(advisory, [bug.id for bug in bug_ids], False)
 
 
 #
