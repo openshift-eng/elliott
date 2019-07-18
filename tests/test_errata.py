@@ -66,22 +66,22 @@ class TestErrata(unittest.TestCase):
 
         self.assertRaises(exceptions.ErrataToolError, errata.get_filtered_list)
 
-    def test_add_bugs_with_retry(self):
-        advs = testErratum(rt=2, ntt=2)
-
-        # adding bugs [1,2] but 1 is already attached to another advisory, it will retry 
-        # and add [2] again.
-        flexmock(errata.Erratum).should_receive('addBugs').and_return([1,2]).and_return([2])
-        flexmock(errata.Erratum).should_receive('commit').and_raise(ErrataException).and_return('')
-        try:
-            errata.add_bugs_with_retry(advs, [1, 2], False)
-        except exceptions.ElliottFatalError:
-            self.fail("raised ElliottFatalError unexpectedly!")
-
-        # advs = testErratum(rt=0, ntt=2)
-        # with self.assertRaises(exceptions.ElliottFatalError) as cm:
-        #     errata.add_bugs_with_retry(advs, [1, 2], True)
-        # self.assertEqual(str(cm.exception), "this is an exception from testErratum")
+    # def test_add_bugs_with_retry(self):
+    #     advs = testErratum(rt=2, ntt=2)
+    #
+    #     # adding bugs [1,2] but 1 is already attached to another advisory, it will retry
+    #     # and add [2] again.
+    #     flexmock(errata.Erratum).should_receive('addBugs').and_return([1,2]).and_return([2])
+    #     flexmock(errata.Erratum).should_receive('commit').and_raise(ErrataException).and_return('')
+    #     try:
+    #         errata.add_bugs_with_retry(advs, [1, 2], False)
+    #     except exceptions.ElliottFatalError:
+    #         self.fail("raised ElliottFatalError unexpectedly!")
+    #
+    #     advs = testErratum(rt=0, ntt=2)
+    #     with self.assertRaises(exceptions.ElliottFatalError) as cm:
+    #         errata.add_bugs_with_retry(advs, [1, 2], True)
+    #     self.assertEqual(str(cm.exception), "this is an exception from testErratum")
 
     def test_parse_exception_error_message(self):
         self.assertEqual([1685398], errata.parse_exception_error_message('Bug #1685398 The bug is filed already in RHBA-2019:1589.'))
