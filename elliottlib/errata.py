@@ -14,11 +14,14 @@ import json
 import ssl
 import constants
 import brew
+import re
 from elliottlib import exceptions
+from elliottlib.util import green_prefix, exit_unauthenticated
 
 import requests
 from requests_kerberos import HTTPKerberosAuth
-from errata_tool import Erratum
+from errata_tool import Erratum, ErrataException
+from kerberos import GSSError
 
 
 def find_mutable_erratum(kind, minor, major=3):
@@ -314,3 +317,47 @@ def get_builds(advisory_id):
         return res.json()
     else:
         raise exceptions.ErrataToolUnauthorizedException(res.text)
+
+
+def parse_exception_error_message(e):
+    """
+    :param e: exception messages (format is like 'Bug #1685399 The bug is filed already in RHBA-2019:1589.
+        # Bug #1685398 The bug is filed already in RHBA-2019:1589.' )
+
+    :return: [1685399, 1685398]
+    """
+    return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
+
+
+def add_bugs_with_retry(advisory, bug_list, retried):
+    """
+    adding specified bug_list into advisory, retry 2 times: first time
+    parse the exception message to get failed bug id list, remove from original
+    list then add bug to advisory again, if still has failures raise exceptions
+
+    :param advs: advisory instance
+    :param bug_list: bug id list which suppose to attach to advisory
+    :param retried: retry 2 times, first attempt fetch failed bugs sift out then attach again
+    :return:
+    """
+    try:
+        advs = Erratum(errata_id=advisory)
+    except GSSError:
+        exit_unauthenticated()
+
+    if advs is False:
+        raise exceptions.ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
+
+    green_prefix("Adding {count} bugs to advisory:".format(count=len(bug_list)))
+    print(" {advs} {retry_times} times".format(advs=advs, retry_times=1 if retried is False else 2))
+    try:
+        advs.addBugs(bug_list)
+        advs.commit()
+    except ErrataException as e:
+        if retried is not True:
+            black_list = parse_exception_error_message(e)
+            retry_list = [x for x in bug_list if x not in black_list]
+            if len(retry_list) > 0:
+                add_bugs_with_retry(advs, retry_list, True)
+        else:
+            raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))

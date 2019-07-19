@@ -17,6 +17,7 @@ from multiprocessing import cpu_count
 import os
 import sys
 import json
+import re
 
 # ours
 from elliottlib import version, exectools
@@ -462,21 +463,7 @@ advisory with the --add option.
                 bug.updateflags({f: "+"})
 
     if advisory is not False:
-        try:
-            advs = Erratum(errata_id=advisory)
-        except GSSError:
-            exit_unauthenticated()
-
-        if advs is False:
-            raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
-
-        try:
-            green_prefix("Adding {count} bugs to advisory:".format(count=len(bug_ids)))
-            click.echo(" {advs}".format(advs=advisory))
-            advs.addBugs([bug.id for bug in bug_ids])
-            advs.commit()
-        except ErrataException as ex:
-            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
+        elliottlib.errata.add_bugs_with_retry(advisory, [bug.id for bug in bug_ids], False)
 
 
 #
