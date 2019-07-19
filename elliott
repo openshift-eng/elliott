@@ -519,6 +519,70 @@ advisory with the --add option.
 
 
 #
+# Remove bugs
+#
+@cli.command("remove-bugs", short_help="Remove provided BUGS from ADVISORY")
+@click.option('--advisory', '-a', 'advisory',
+              default=False, metavar='ADVISORY',
+              help='Remove found bugs from ADVISORY')
+@click.option("--use-default-advisory", 'default_advisory_type',
+              metavar='ADVISORY_TYPE',
+              type=click.Choice(['image', 'rpm', 'security']),
+              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@click.option("--id", metavar='BUGID', default=[],
+              multiple=True, required=True,
+              help="Bugzilla IDs to add.")
+@pass_runtime
+def remove_bugs(runtime, advisory, default_advisory_type, id):
+    """Remove given BUGS from ADVISORY.
+
+    Remove bugs that have been attached an advisory:
+
+\b
+    $ elliott --group openshift-3.7 remove-bugs --id 123456 --advisory 1234123
+
+    Remove two bugs from default rpm advisory. Note that --group is required
+    because default advisory is from ocp-build-data:
+
+\b
+    $ elliott --group openshift-3.7 remove-bugs --id 123456 --id 3412311 --use-default-advisory rpm
+
+
+"""
+    if bool(advisory) == bool(default_advisory_type):
+        raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
+
+    runtime.initialize()
+    bz_data = runtime.gitdata.load_data(key='bugzilla').data
+    bzapi = elliottlib.bzutil.get_bzapi(bz_data)
+
+    bug_ids = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
+
+    green_prefix("Found {} bugs:".format(len(bug_ids)))
+    click.echo(" {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
+
+    if default_advisory_type is not None:
+        advisory = find_default_advisory(runtime, default_advisory_type)
+
+    if advisory is not False:
+        try:
+            advs = Erratum(errata_id=advisory)
+        except GSSError:
+            exit_unauthenticated()
+
+        if advs is False:
+            raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
+
+        try:
+            green_prefix("Removing {count} bugs from advisory:".format(count=len(bug_ids)))
+            click.echo(" {advs}".format(advs=advisory))
+            advs.removeBugs([bug.id for bug in bug_ids])
+            advs.commit()
+        except ErrataException as ex:
+            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
+
+
+#
 # Attach Builds
 # advisory:find-builds
 #
