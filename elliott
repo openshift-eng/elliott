@@ -12,13 +12,14 @@ web service.
 # Prepare for Python 3
 # stdlib
 from __future__ import print_function
-import datetime
-from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
-import os
-import sys
+from multiprocessing.dummy import Pool as ThreadPool
+import datetime
 import json
+import os
 import re
+import sys
+import time
 
 # ours
 from elliottlib import version, exectools
@@ -44,6 +45,7 @@ import bugzilla
 import click
 import requests
 import dotconfig
+import errata_tool.build
 from errata_tool import Erratum, ErrataException
 from kerberos import GSSError
 
@@ -1278,6 +1280,118 @@ def create_placeholder(runtime, kind, advisory):
             advs.commit()
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
+
+#
+# Poll for rpm-signed state change
+# poll-signed
+#
+@cli.command("poll-signed", short_help="Poll for RPM build 'signed' status")
+@click.option("--minutes", "-m", required=False,
+              default=15, type=int,
+              help="How long to poll before quitting")
+@click.option("--advisory", "-a",
+              metavar='ADVISORY',
+              help="Advisory to watch")
+@click.option("--use-default-advisory", 'default_advisory_type',
+              metavar='ADVISORY_TYPE',
+              type=click.Choice(['image', 'rpm', 'security']),
+              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@click.option("--noop", "--dry-run",
+              required=False,
+              default=False, is_flag=True,
+              help="Don't actually poll, just print the signed status of each build")
+@pass_runtime
+def poll_signed(runtime, minutes, advisory, default_advisory_type, noop):
+    """Poll for the signed-status of RPM builds attached to
+ADVISORY. Returns rc=0 when all builds have been signed. Returns non-0
+after MINUTES have passed and all builds have not been signed. This
+non-0 return code is the number of unsigned builds remaining. All
+builds must show 'signed' for this command to succeed.
+
+    NOTE: The two advisory options are mutually exclusive.
+
+For testing in pipeline scripts this sub-command accepts a --noop
+option. When --noop is used the value of --minutes is irrelevant. This
+command will print out the signed state of all attached builds and
+then exit with rc=0 if all builds are signed and non-0 if builds are
+still unsigned. In the non-0 case the return code is the number of
+unsigned builds.
+
+    Wait 15 minutes for the default 4.2 advisory to show all RPMS have
+    been signed:
+
+    $ elliott -g openshift-4.2 poll-signed --use-default-advisory rpm
+
+    Wait 5 mintes for the provided 4.2 advisory to show all RPMs have
+    been signed:
+
+    $ elliott -g openshift-4.2 poll-signed -m 5 --advisory 123456
+
+    Print the signed status of all attached builds, exit
+    immediately. Return code is the number of unsigned builds.
+
+\b
+    $ elliott -g openshift-4.2 poll-signed --noop --use-default-advisory rpm
+"""
+    runtime.initialize()
+
+    if advisory and default_advisory_type:
+        raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
+
+    if default_advisory_type is not None:
+        advisory = find_default_advisory(runtime, default_advisory_type)
+
+    if not noop:
+        click.echo("Polling up to {} minutes for all RPMs to be signed".format(minutes))
+
+    try:
+        e = Erratum(errata_id=advisory)
+        all_builds = set([])
+        signed_builds = set([])
+        # `errata_builds` is a dict with brew tags as keys, values are
+        # lists of builds on the advisory with that tag
+        for k, v in e.errata_builds.iteritems():
+            all_builds = all_builds.union(set(v))
+        green_prefix("Fetching initial states: ")
+        click.echo("{} builds to check".format(len(all_builds)))
+        start_time = datetime.datetime.now()
+        all_signed = False
+
+        while datetime.datetime.now() - start_time < datetime.timedelta(minutes=minutes):
+            # Don't modify the loop iterator while IN THE LOOP
+            for build in all_builds - signed_builds:
+                if errata_tool.build.Build(build).signed_rpms:
+                    green_prefix("Build signed: ")
+                    click.echo("{}".format(build))
+                    signed_builds.add(build)
+                else:
+                    red_prefix("Build unsigned: ")
+                    click.echo("{}".format(build))
+            if signed_builds == all_builds:
+                all_signed = True
+                break
+            elif noop:
+                # Escape the time-loop
+                break
+
+        unsigned_builds = all_builds - signed_builds
+
+        if not all_signed:
+            red_prefix("Signing incomplete: ")
+            if noop:
+                click.echo("All builds not signed. ")
+            else:
+                click.echo("All builds not signed in given window ({} minutes). ".format(minutes))
+            click.echo("Those missing signatures are printed below:")
+            for b in unsigned_builds:
+                red_prefix(" * ")
+                click.echo(b)
+            exit(len(unsigned_builds))
+        else:
+            green_prefix("All builds signed: ")
+            click.echo("Enjoy!")
+    except ErrataException as ex:
+        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
 
 
