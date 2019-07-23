@@ -5,6 +5,8 @@ with Red Hat Bugzilla
 
 # stdlib
 from subprocess import call, check_output
+from time import sleep
+
 import urllib
 import logutil
 
@@ -17,6 +19,37 @@ import bugzilla
 
 logger = logutil.getLogger(__name__)
 
+def create_placeholder(bz_data, kind, version):
+    """Create a placeholder bug
+
+    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
+    :param kind: The "kind" of placeholder to create. Generally 'rpm' or 'image'
+    :param version: The target version for the placeholder
+
+    :return: Placeholder Bug object
+    """
+
+    bzapi = get_bzapi(bz_data)
+    boilerplate = "Placeholder bug for OCP {} {} release".format(version, kind)
+
+    createinfo = bzapi.build_createbug(
+        product=bz_data['product'],
+        version="unspecified",
+        component="Release",
+        summary=boilerplate,
+        description=boilerplate)
+
+    newbug = bzapi.createbug(createinfo)
+    
+    # change state to VERIFIED, set target release
+    try:
+        update = bzapi.build_update(status="VERIFIED", target_release=target_release)
+        bzapi.update_bugs([newbug.id], update)
+    except: # figure out the actual bugzilla error. it only happens sometimes
+        sleep(5)
+        bzapi.update_bugs([newbug.id], update)
+
+    return newbug
 
 def get_bug_severity(bz_data, bug_id):
     """Get just the severity of a bug

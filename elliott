@@ -170,12 +170,15 @@ Bugzilla Bugs.
               envvar="ELLIOTT_PACKAGE_OWNER_EMAIL",
               callback=validate_email_address,
               help="The email address of the person responsible managing the advisory.")
+@click.option('--with-placeholder', is_flag=True,
+              default=False, type=bool,
+              help="Create a placeholder bug and attach it to the advisory. Only valid if also using --yes.")
 @click.option('--yes', '-y', is_flag=True,
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
 @pass_runtime
 @click.pass_context
-def create(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, cve, yes):
+def create(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, cve, with_placeholder, yes):
     """Create a new advisory. The kind of advisory must be specified with
 '--kind'. Valid choices are 'rpm' and 'image'.
 
@@ -321,6 +324,11 @@ advisory.
             erratum.commit()
 
             yellow_print("Remember to manually set the Security Reviewer in the Errata Tool Web UI")
+
+        if with_placeholder:
+            click.echo("Creating and attaching placeholder bug...")
+
+            ctx.invoke(create_placeholder, kind=kind, advisory=erratum.errata_id)
     else:
         green_prefix("Would have created advisory: ")
         click.echo("")
@@ -1179,6 +1187,57 @@ written out to summary_results.json.
         json.dump(output, fp, indent=4)
     green_prefix("Wrote out summary results: ")
     click.echo("summary_results.json")
+
+#
+# Create Placeholder BZ
+# bugzilla:create-placeholder
+#
+@cli.command('create-placeholder',
+             short_help='Create a placeholder BZ')
+@click.option('--kind', '-k', metavar='KIND',
+              required=False, type=click.Choice(['rpm', 'image']),
+              help='KIND [rpm, image] of placeholder bug to create. Affects BZ title.')
+@click.option('--attach', '-a', 'advisory',
+              default=False, metavar='ADVISORY',
+              help='Attach the bug to ADVISORY')
+@pass_runtime
+def create_placeholder(runtime, kind, advisory):
+    """Create a placeholder bug for attaching to an advisory.
+
+    KIND - The kind of placeholder to create (rpm/image).
+    ADVISORY - Optional. The advisory to attach the bug to.
+
+    $ elliott --group openshift-4.1 create-placeholder --kind rpm --attach 12345
+"""
+    runtime.initialize()
+    bz_data = runtime.gitdata.load_data(key='bugzilla').data
+    target_release = bz_data['target_release'][0]
+    
+    newbug = create_placeholder(bz_data, kind, target_release)
+
+    click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
+
+    if advisory is not False:
+        click.echo("Attaching to advisory...")
+
+        try:
+            advs = Erratum(errata_id=advisory)
+        except GSSError:
+            exit_unauthenticated()
+
+        if advs is False:
+            raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
+
+        try:
+            green_prefix("Adding placeholder bug to advisory:")
+            click.echo(" {advs}".format(advs=advisory))
+            advs.addBugs([newbug.id])
+            advs.commit()
+        except ErrataException as ex:
+            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
+
+
+
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
