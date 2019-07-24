@@ -1213,7 +1213,7 @@ def create_placeholder(runtime, kind, advisory):
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     target_release = bz_data['target_release'][0]
     
-    newbug = create_placeholder(bz_data, kind, target_release)
+    newbug = elliottlib.bzutil.create_placeholder(bz_data, kind, target_release)
 
     click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
 

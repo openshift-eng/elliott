@@ -43,11 +43,12 @@ def create_placeholder(bz_data, kind, version):
     
     # change state to VERIFIED, set target release
     try:
-        update = bzapi.build_update(status="VERIFIED", target_release=target_release)
+        update = bzapi.build_update(status="VERIFIED", target_release=version)
         bzapi.update_bugs([newbug.id], update)
-    except: # figure out the actual bugzilla error. it only happens sometimes
+    except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
         sleep(5)
         bzapi.update_bugs([newbug.id], update)
+        print(ex)
 
     return newbug
 
