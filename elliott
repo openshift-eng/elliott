@@ -1,4 +1,5 @@
 #!/bin/env python
+# -*- coding: utf-8 -*-
 """
 Elliott is a CLI tool for managing Red Hat release advisories using the Erratatool
 web service.
@@ -101,36 +102,79 @@ def cli(ctx, **kwargs):
 # change-state
 #
 @cli.command("change-state", short_help="Change ADVISORY state")
-@click.option("--state", '-s', type=click.Choice(['NEW_FILES', 'QE', 'REL_PREP']),
-              help="New state for the Advisory. NEW_FILES, QE, REL_PREP.")
-@click.argument('advisory', type=int)
-@click.pass_context
-def change_state(ctx, state, advisory):
-    """Change the state of ADVISORY. Additional permissions may be
+@click.option("--state", '-s', required=True,
+              type=click.Choice(['NEW_FILES', 'QE', 'REL_PREP']),
+              help="New state for the Advisory. NEW_FILES, QE, REL_PREP")
+@click.option("--advisory", "-a", metavar='ADVISORY',
+              help="Change state of ADVISORY")
+@click.option("--use-default-advisory", 'default_advisory_type',
+              metavar='ADVISORY_TYPE',
+              type=click.Choice(['image', 'rpm', 'security']),
+              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@click.option("--noop", "--dry-run",
+              required=False,
+              default=False, is_flag=True,
+              help="Do not actually change anything")
+@pass_runtime
+def change_state(runtime, state, advisory, default_advisory_type, noop):
+    """Change the state of an ADVISORY. Additional permissions may be
 required to change an advisory to certain states.
 
 An advisory may not move between some states until all criteria have
 been met. For example, an advisory can not move from NEW_FILES to QE
 unless Bugzilla Bugs or JIRA Issues have been attached.
 
+    NOTE: The two advisory options are mutually exclusive and can not
+    be used together.
+
 See the find-bugs help for additional information on adding
 Bugzilla Bugs.
 
     Move the advisory 123456 from NEW_FILES to QE state:
 
-    $ elliott change-state --state QE 123456
+    $ elliott change-state --state QE --advisory 123456
 
     Move the advisory 123456 back to NEW_FILES (short option flag):
 
-    $ elliott change-state -s NEW_FILES 123456
-    """
+    $ elliott change-state -s NEW_FILES -a 123456
 
-    click.echo("Changing state for {id} to {state}".format(id=advisory, state=state))
+    Do not actually change state, just check that the command could
+    have ran (for example, when testing out pipelines)
+
+    $ elliott change-state -s NEW_FILES -a 123456 --noop
+"""
+    runtime.initialize()
+
+    if advisory and default_advisory_type:
+        raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
+
+    if default_advisory_type is not None:
+        advisory = find_default_advisory(runtime, default_advisory_type)
+
+    if noop:
+        prefix = "[NOOP] "
+    else:
+        prefix = ""
 
     try:
         e = Erratum(errata_id=advisory)
-        e.setState(state)
-        e.commit()
+
+        if e.errata_state == state:
+            green_prefix("{}No change to make: ".format(prefix))
+            click.echo("Target state is same as current state")
+            return
+        else:
+            if noop:
+                green_prefix("{}Would have changed state: ".format(prefix))
+                click.echo("{} ➔ {}".format(e.errata_state, state))
+                return
+            else:
+                e.setState(state)
+                e.commit()
+                green_prefix("Changed state: ")
+                click.echo("{old_state} ➔ {new_state}".format(
+                    old_state=e.errata_state,
+                    new_state=state))
     except ErrataException as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
@@ -1212,7 +1256,6 @@ def create_placeholder(runtime, kind, advisory):
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     target_release = bz_data['target_release'][0]
-    
     newbug = elliottlib.bzutil.create_placeholder(bz_data, kind, target_release)
 
     click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
