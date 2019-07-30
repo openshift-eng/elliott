@@ -766,7 +766,7 @@ default a brief one-line informational string is printed. Use the
 --details option to fetch and print the full details of the advisory.
 
 Use of --id-only will override all other printing options. Requires
-using --use-default--advisory. Only the ID of the advisory is printed
+using --use-default-advisory. Only the ID of the advisory is printed
 to standard out.
 
 Fields for the short format: Release date, State, Synopsys, URL
