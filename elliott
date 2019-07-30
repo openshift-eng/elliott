@@ -383,15 +383,17 @@ advisory.
 # Look up a default advisory specified for the branch in ocp-build-data
 # Advisory types are in ['rpm', 'image', 'cve']
 #
-def find_default_advisory(runtime, default_advisory_type):
+def find_default_advisory(runtime, default_advisory_type, quiet=False):
+    """The `quiet` parameter will disable printing the informational message"""
     default_advisory = runtime.group_config.advisories.get(default_advisory_type, None)
     if default_advisory is None:
         red_prefix("No value defined for default advisory:")
         click.echo(" The key advisories.{} is not defined for group {} in group.yml".format(
             default_advisory_type, runtime.group))
         exit(1)
-    green_prefix("Default advisory detected: ")
-    click.echo(default_advisory)
+    if not quiet:
+        green_prefix("Default advisory detected: ")
+        click.echo(default_advisory)
     return default_advisory
 
 
@@ -752,14 +754,20 @@ PRESENT advisory. Here are some examples:
               help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
 @click.option('--details', is_flag=True, default=False,
               help="Print the full object of the advisory")
+@click.option('--id-only', is_flag=True, default=False,
+              help="Print only the ID of the default advisory")
 @click.option('--json', 'as_json', metavar="FILE_NAME",
               help="Dump the advisory as JSON to a file (or '-' for stdout)")
 @pass_runtime
 @click.pass_context
-def get(ctx, runtime, default_advisory_type, details, as_json, advisory):
+def get(ctx, runtime, default_advisory_type, details, id_only, as_json, advisory):
     """Get details about a specific advisory from the Errata Tool. By
 default a brief one-line informational string is printed. Use the
 --details option to fetch and print the full details of the advisory.
+
+Use of --id-only will override all other printing options. Requires
+using --use-default--advisory. Only the ID of the advisory is printed
+to standard out.
 
 Fields for the short format: Release date, State, Synopsys, URL
 
@@ -787,7 +795,11 @@ Fields for the short format: Release date, State, Synopsys, URL
     if bool(advisory) == bool(default_advisory_type):
         raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
     if default_advisory_type is not None:
-        advisory = find_default_advisory(runtime, default_advisory_type)
+        advisory = find_default_advisory(runtime, default_advisory_type, quiet=True)
+
+    if id_only:
+        click.echo(advisory)
+        return
 
     try:
         advisory = Erratum(errata_id=advisory)
