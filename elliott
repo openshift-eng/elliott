@@ -1244,8 +1244,12 @@ written out to summary_results.json.
 @click.option('--attach', '-a', 'advisory',
               default=False, metavar='ADVISORY',
               help='Attach the bug to ADVISORY')
+@click.option("--use-default-advisory", 'default_advisory_type',
+              metavar='ADVISORY_TYPE',
+              type=click.Choice(['image', 'rpm', 'security']),
+              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
 @pass_runtime
-def create_placeholder(runtime, kind, advisory):
+def create_placeholder(runtime, kind, advisory, default_advisory_type):
     """Create a placeholder bug for attaching to an advisory.
 
     KIND - The kind of placeholder to create (rpm/image).
@@ -1254,6 +1258,16 @@ def create_placeholder(runtime, kind, advisory):
     $ elliott --group openshift-4.1 create-placeholder --kind rpm --attach 12345
 """
     runtime.initialize()
+    if advisory and default_advisory_type:
+        raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
+
+    if default_advisory_type is not None:
+        advisory = find_default_advisory(runtime, default_advisory_type)
+        kind = default_advisory_type
+
+    if kind is None:
+        raise click.BadParameter("--kind must be specify when not using --use-default-advisory")
+
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     target_release = bz_data['target_release'][0]
     newbug = elliottlib.bzutil.create_placeholder(bz_data, kind, target_release)
