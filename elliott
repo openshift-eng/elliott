@@ -1266,7 +1266,7 @@ def create_placeholder(runtime, kind, advisory, default_advisory_type):
         kind = default_advisory_type
 
     if kind is None:
-        raise click.BadParameter("--kind must be specify when not using --use-default-advisory")
+        raise click.BadParameter("--kind must be specified when not using --use-default-advisory")
 
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     target_release = bz_data['target_release'][0]
