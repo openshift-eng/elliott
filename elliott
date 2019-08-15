@@ -989,7 +989,7 @@ first comment.
 
             if str(metadata['release']) == str(release) \
                and metadata['kind'] == 'rpm' \
-               and metadata['impetus'] == 'standard':
+               and (metadata['impetus'] == 'standard' or metadata['impetus'] == 'ga'):
                 use_in_puddle_conf.append(str(erratum.errata_id))
                 if details:
                     sys.stderr.write(str(erratum))
