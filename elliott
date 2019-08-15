@@ -728,6 +728,10 @@ PRESENT advisory. Here are some examples:
                     '*'),
                 potential_builds)
             # Wait for results
+
+            # filter out 'openshift-enterprise-base-container' since it's not needed in advisory
+            unshipped_builds = [b for b in unshipped_builds
+                                if 'openshift-enterprise-base-container' not in b.nvr]
             pool.close()
             pool.join()
             click.echo(']')
