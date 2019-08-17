@@ -171,11 +171,14 @@ Bugzilla Bugs.
                 click.echo("{} ➔ {}".format(e.errata_state, state))
                 return
             else:
+                # Capture current state because `e.commit()` will
+                # refresh the `e.errata_state` attribute
+                old_state = e.errata_state
                 e.setState(state)
                 e.commit()
                 green_prefix("Changed state: ")
                 click.echo("{old_state} ➔ {new_state}".format(
-                    old_state=e.errata_state,
+                    old_state=old_state,
                     new_state=state))
     except ErrataException as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
