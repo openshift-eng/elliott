@@ -118,7 +118,11 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
 
 
 def get_bzapi(bz_data):
-    return bugzilla.Bugzilla(bz_data['server'])
+    bzapi = bugzilla.Bugzilla(bz_data['server'])
+    if not bzapi.logged_in:
+        print("elliott requires cached login credentials for {}".format(bz_data['server']))
+        bzapi.interactive_login()
+    return bzapi
 
 
 def _construct_query_url(bz_data, status, search_filter='default'):
