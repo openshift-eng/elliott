@@ -102,7 +102,7 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
     if status is None:
         status = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING']
 
-    bzapi = get_bzapi(bz_data)
+    bzapi = get_bzapi(bz_data, True)
     query_url = _construct_query_url(bz_data, status, search_filter)
     query_url.addKeyword('SecurityTracking')
 
@@ -117,8 +117,13 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
     return bug_list
 
 
-def get_bzapi(bz_data):
-    return bugzilla.Bugzilla(bz_data['server'])
+def get_bzapi(bz_data, interactive_login=False):
+    bzapi = bugzilla.Bugzilla(bz_data['server'])
+    if not bzapi.logged_in:
+        print("elliott requires cached login credentials for {}".format(bz_data['server']))
+        if interactive_login:
+            bzapi.interactive_login()
+    return bzapi
 
 
 def _construct_query_url(bz_data, status, search_filter='default'):
