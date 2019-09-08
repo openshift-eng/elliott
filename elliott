@@ -863,7 +863,7 @@ Fields for the short format: Release date, State, Synopsys, URL
         ...
 """
 
-    runtime.initialize()
+    runtime.initialize(no_group=default_advisory_type is None)
 
     if bool(advisory) == bool(default_advisory_type):
         raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
