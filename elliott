@@ -681,6 +681,7 @@ PRESENT advisory. Here are some examples:
         exit_unauthenticated()
 
     session = requests.Session()
+    unshipped_builds = []
 
     if len(builds) > 0:
         green_prefix("Build NVRs provided: ")
@@ -769,8 +770,6 @@ PRESENT advisory. Here are some examples:
         changed_builds = elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1])
         unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds ]
 
-
-
     build_nvrs = sorted(build.nvr for build in unshipped_builds)
     json_data = dict(builds=build_nvrs, base_tag=base_tag, kind=kind)
     if as_json == "-":
@@ -782,6 +781,7 @@ PRESENT advisory. Here are some examples:
     if not unshipped_builds:
         green_print("No builds needed to be attached.")
         return
+
 
     if advisory is not False:
         # Search and attach
