@@ -39,6 +39,7 @@ from elliottlib.util import validate_email_address, red_print, major_from_branch
 from elliottlib.util import green_print, red_prefix, minor_from_branch
 from elliottlib.util import yellow_print, yellow_prefix, exit_unauthorized, release_from_branch
 from elliottlib.util import progress_func, pbar_header
+from elliottlib.cli.tarball_sources_cli import tarball_sources_cli
 
 # 3rd party
 import bugzilla
@@ -1547,8 +1548,8 @@ unsigned builds.
     except ErrataException as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
-
-
+## Register additional command groups
+cli.add_command(tarball_sources_cli)
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
@@ -1566,7 +1567,6 @@ def main():
         # to exit with an error code should use ElliottFatalError
         red_print(getattr(ex, 'message', repr(ex)))
         sys.exit(1)
-
 
 if __name__ == '__main__':
     main()
