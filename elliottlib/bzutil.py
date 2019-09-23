@@ -12,12 +12,133 @@ import logutil
 
 # ours
 import constants
+from elliottlib import exceptions, constants
 
 # 3rd party
 import click
 import bugzilla
+from util import yellow_print
 
 logger = logutil.getLogger(__name__)
+
+def get_flaws(bz_data, bugs):
+    """Get the flaw bugs blocked by tracking bugs. For a definition of these terms see 
+    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
+
+    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
+    :param bugs: The IDs of the bugs you want to create an Erratum for. These can be 
+    security tracking bugs or non-security tracking bugs. This method will determine 
+    if they are security tracking bugs or not
+
+    :returns: 
+        - A map of flaw bugs ids with CVE identifiers as values.
+        - The highest impact of the tracker bugs identified from the bugs param
+    """
+
+    bzapi = get_bzapi(bz_data)
+
+    # grab CVE trackers and set Impact automatically
+    trackers = get_tracker_bugs(bzapi, bugs)
+
+    impact = get_highest_impact(trackers)
+
+    flaw_ids = get_flaw_bugs(trackers)
+
+    return get_flaw_aliases(bzapi, flaw_ids), impact  
+
+def get_tracker_bugs(bzapi, bugs):
+    """Returns a list of tracking bugs from a list of bug ids. For a definition of these terms see 
+    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
+
+    :param bzapi: An instance of the python-bugzilla Bugzilla class
+    :param bugs: The IDs of the bugs you want to create an Erratum for. These can be 
+    security tracking bugs or non-security tracking bugs. This method will determine 
+    if they are security tracking bugs or not
+
+    :returns: A list of tracking bugs
+
+    :raises:
+        BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
+        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login 
+        session has expired.
+    """
+    if len(bugs) == 0:
+        return 
+    bugs = bzapi.getbugs(bugs)
+    tracker_bugs = []
+    for t in bugs:
+        if t is None:
+            raise exceptions.BugzillaFatalError("Couldn't find bug with list of ids provided")
+        if "SecurityTracking" not in t.keywords or "Security" not in t.keywords:
+            yellow_print("Non-SecurityTracking bug to be added: %s" % t.id)
+        else:
+            tracker_bugs.append(t)
+    return tracker_bugs
+
+def get_highest_impact(bugs):
+    """Get the hightest impact of a list of bugs
+
+    :param bugs: The IDs of the bug you want to compare to get the highest severity
+
+    :return: The highest impact of the bugs
+    """
+    severity_index = constants.BUG_SEVERITY.index('low')
+    for b in bugs:
+        next_severity = constants.BUG_SEVERITY.index(b.severity.lower())
+        if next_severity > severity_index:
+            severity_index = next_severity
+    return constants.SECURITY_IMPACT[severity_index]
+
+def get_flaw_bugs(trackers):
+    """Get a list of flaw bugs blocked by a list of tracking bugs. For a definition of these terms see 
+    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
+
+    :param trackers: A list of tracking bug ids
+
+    :return: A list of flaw bug ids
+    """
+    flaw_ids = []
+    for t in trackers:
+        #Tracker bugs can block more than one flaw bug, but must be more than 0
+        if len(t.blocks) == 0:
+            #This should never happen, log a warning here if it does
+            yellow_print("Warning: found tracker bugs which doesn't block any other bugs")
+        for b in t.blocks:
+            flaw_ids.append(b)
+    return flaw_ids
+
+def get_flaw_aliases(bzapi, flaw_ids):
+    """Get a map of flaw bug ids and associated CVE aliases. For a definition of these terms see 
+    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
+
+    :param bzapi: An instance of the python-bugzilla Bugzilla class
+    :param flaw_ids: The IDs of the flaw bugs you want to get the aliases for
+
+    :return: A map of flaw bug ids and associated CVE alisas.
+
+    :raises:
+        BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
+        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login 
+        session has expired.
+    """
+    flaw_cve_map = {}
+    flaws = bzapi.getbugs(flaw_ids)
+    for flaw in flaws:
+        if flaw is None:
+            raise exceptions.BugzillaFatalError("Couldn't find bug with list of ids provided")
+        if flaw.product == "Security Response" and flaw.component == "vulnerability":
+            alias = flaw.alias
+            if len(alias) >= 1:
+                logger.debug("Found flaw bug with more than one alias, only alias which starts with CVE-")
+                for a in alias:
+                    if a.startswith('CVE-'):
+                        flaw_cve_map[flaw.id] = a
+            else:
+                flaw_cve_map[flaw.id] = ""
+    for key in flaw_cve_map.keys():
+        if flaw_cve_map[key] == "":
+            logger.warning("Found flaw bug with no alias, this can happen is a flaw hasn't been assigned a CVE")
+    return flaw_cve_map
 
 
 def create_placeholder(bz_data, kind, version):
@@ -52,20 +173,6 @@ def create_placeholder(bz_data, kind, version):
         print(ex)
 
     return newbug
-
-
-def get_bug_severity(bz_data, bug_id):
-    """Get just the severity of a bug
-
-    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
-    :param bug_id: The ID of the bug you want information about
-
-    :return: The severity of the bug
-    """
-    bzapi = get_bzapi(bz_data)
-    bug = bzapi.getbug(bug_id, include_fields=['severity'])
-
-    return bug.severity.lower()
 
 
 def search_for_bugs(bz_data, status, search_filter='default', filter_out_security_bugs=True, verbose=False):
@@ -111,7 +218,7 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
     if verbose:
         click.echo(query_url)
 
-    bug_list = _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary'])
+    bug_list = _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary', 'blocks'])
 
     if cve:
         bug_list = [bug for bug in bug_list if cve in bug.summary]

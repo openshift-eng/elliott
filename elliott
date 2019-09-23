@@ -161,8 +161,6 @@ Bugzilla Bugs.
               type=click.Choice(elliottlib.constants.errata_valid_impetus),
               help="Impetus for the advisory creation [{}]".format(
                 ', '.join(elliottlib.constants.errata_valid_impetus)))
-@click.option("--cve", required=False,
-              help="CVE to associate with the Advisory. Required for RHSA.")
 @click.option("--date", required=False,
               default=default_release_date.strftime(YMD),
               callback=validate_release_date,
@@ -185,9 +183,10 @@ Bugzilla Bugs.
 @click.option('--yes', '-y', is_flag=True,
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
+@click.option("--bugs", "-b", 'bugs', multiple=True)
 @pass_runtime
 @click.pass_context
-def create(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, cve, with_placeholder, yes):
+def create(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, with_placeholder, yes, bugs):
     """Create a new advisory. The kind of advisory must be specified with
 '--kind'. Valid choices are 'rpm' and 'image'.
 
@@ -211,6 +210,11 @@ The --assigned-to, --manager and --package-owner options are required.
 They are the email addresses of the parties responsible for managing and
 approving the advisory.
 
+Adding a list of bug ids with one or more --bugs arguments attaches those bugs to the 
+advisory on creation. The list of bugs will also be checked for any CVE flaw
+bugs which they are blocking, and those will be added as well. Any CVE flaw bugs
+being added will also calculate the Impact for the release if it's type is RHSA.
+
 Provide the '--yes' or '-y' option to confirm creation of the
 advisory.
 
@@ -225,8 +229,8 @@ advisory.
 """
     runtime.initialize()
 
-    if errata_type == 'RHSA' and not cve:
-        raise ElliottFatalError("When creating an RHSA, you must provide a --cve value.")
+    if errata_type == 'RHSA' and not bugs:
+        raise ElliottFatalError("When creating an RHSA, you must provide a list of bug id(s)")
 
     et_data = runtime.gitdata.load_data(key='erratatool').data
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
@@ -275,19 +279,11 @@ advisory.
 
     ######################################################################
 
+    flaw_cve_map = {}
+    impact = None
+    unique_bugs = set(bugs)
     if errata_type == 'RHSA':
-        # grab CVE trackers and set Impact automatically
-        cve_trackers = elliottlib.bzutil.search_for_security_bugs(bz_data, cve=cve)
-
-        severity_indexes = []
-        for t in cve_trackers:
-            tracker_severity = elliottlib.bzutil.get_bug_severity(bz_data, t.id)
-            severity_indexes.append(elliottlib.constants.BUG_SEVERITY.index(tracker_severity))
-
-        if len(severity_indexes) == 0:
-            raise ElliottFatalError("No security bugs found, make sure you run `bugzilla login`.")
-
-        impact = elliottlib.constants.SECURITY_IMPACT[max(severity_indexes)]
+        flaw_cve_map, impact = elliottlib.bzutil.get_flaws(bz_data, unique_bugs)
 
     ######################################################################
 
@@ -302,7 +298,7 @@ advisory.
             manager=manager,
             package_owner=package_owner,
             impact=impact,
-            cve=cve
+            cves=' '.join((alias) for alias in flaw_cve_map.values())
         )
     except elliottlib.exceptions.ErrataToolUnauthorizedException:
         exit_unauthorized()
@@ -327,16 +323,18 @@ advisory.
         ctx.invoke(add_metadata, kind=kind, impetus=impetus, advisory=erratum.errata_id)
         click.echo(str(erratum))
 
+        erratum.addBugs(unique_bugs)
+
         if errata_type == 'RHSA':
-            click.echo("Automatically attaching CVE trackers...")
-            erratum.addBugs([bug.bug_id for bug in cve_trackers])
-            erratum.commit()
+            click.echo("Automatically attaching CVE flaw bugs ...")
+            erratum.addBugs(flaw_cve_map.keys())
 
             yellow_print("Remember to manually set the Security Reviewer in the Errata Tool Web UI")
+        
+        erratum.commit()
 
         if with_placeholder:
             click.echo("Creating and attaching placeholder bug...")
-
             ctx.invoke(create_placeholder, kind=kind, advisory=erratum.errata_id)
     else:
         green_prefix("Would have created advisory: ")

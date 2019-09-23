@@ -135,7 +135,7 @@ def find_latest_erratum(kind, major, minor):
 
 
 def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=False,
-                assigned_to=None, manager=None, package_owner=None, impact=None, cve=None):
+                assigned_to=None, manager=None, package_owner=None, impact=None, cves=None):
     """5.2.1.1. POST /api/v1/erratum
 
     Create a new advisory.
@@ -157,7 +157,7 @@ def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=
     :param string package_owner: The email address of the person who is handling
         the details and status of this advisory
     :param impact: The security impact. Only applies to RHSA
-    :param cve: The CVE to attach to the advisory. Only applies to RHSA
+    :param cves: The CVE(s) to attach to the advisory. Separate multiple CVEs with a space. Only applies to RHSA
 
     :return: An Erratum object
     :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
@@ -185,7 +185,7 @@ def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=
 
     if errata_type == 'RHSA':
         e.security_impact = impact
-        e.cve_names = cve
+        e.cve_names = cves
 
     if create:
         # THIS IS NOT A DRILL

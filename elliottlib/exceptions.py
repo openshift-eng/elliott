@@ -26,3 +26,7 @@ class ErrataToolUnauthorizedException(Exception):
 class ErrataToolError(Exception):
     """General problem interacting with the Errata Tool"""
     pass
+
+class BugzillaFatalError(Exception):
+    """A broad exception for errors during Bugzilla API call"""
+    pass
