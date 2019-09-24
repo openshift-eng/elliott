@@ -270,8 +270,7 @@ class Runtime(object):
 
             if mode in ['images', 'both']:
                 for i in image_data.itervalues():
-                    metadata = ImageMetadata(self, i)
-                    self.image_map[metadata.distgit_key] = metadata
+                    self.late_resolve_image(i.key, True)
                 if not self.image_map:
                     self.logger.warning("No image metadata directories found for given options within: {}".format(self.group_dir))
 
@@ -448,12 +447,22 @@ class Runtime(object):
             raise IOError("Unable to find image metadata in group / included images: %s" % distgit_name)
         return self.image_map[distgit_name]
 
-    def late_resolve_image(self, distgit_key):
-        """Resolve image and retrive meta without adding to image_map.
-        Mainly for looking up parent image info."""
+    def late_resolve_image(self, distgit_name, add=False):
+        """Resolve image and retrieve meta, optionally adding to image_map.
+        If image not found, error will be thrown"""
 
-        with Dir(self.images_dir):
-            meta = ImageMetadata(self, self.images_dir, distgit_key + '.yml')
+        if distgit_name in self.image_map:
+            return self.image_map[distgit_name]
+        replace_vars = {}
+        if self.group_config.vars:
+            replace_vars = self.group_config.vars.primitive()
+        data_obj = self.gitdata.load_data(path='images', key=distgit_name, replace_vars=replace_vars)
+        if not data_obj:
+            raise ElliottFatalError('Unable to resovle image metadata for {}'.format(distgit_name))
+
+        meta = ImageMetadata(self, data_obj)
+        if add:
+            self.image_map[distgit_name] = meta
         return meta
 
     def resolve_stream(self, stream_name):
