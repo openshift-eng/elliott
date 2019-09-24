@@ -655,8 +655,11 @@ PRESENT advisory. Here are some examples:
     $ elliott --group openshift-3.6 find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
 """
 
-    if(from_diff and kind):
-        raise ElliottFatalError("Combining brew sweeps and payload diffs is not supported.")
+    if (from_diff and kind) or (from_diff and builds) or (builds and kind):
+        raise ElliottFatalError("Use only one of --kind or --build or --from-diff.")
+
+    if not builds and not from_diff and not kind:
+        raise ElliottFatalError("Must use one of --kind or --build or --from-diff.")
 
     if advisory and default_advisory_type:
         raise click.BadParameter("Use only one of --use-default-advisory or --attach")
@@ -670,7 +673,6 @@ PRESENT advisory. Here are some examples:
     et_data = runtime.gitdata.load_data(key='erratatool').data
     product_version = override_product_version(et_data.get('product_version'), runtime.branch)
 
-    print(product_version)
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
@@ -768,7 +770,7 @@ PRESENT advisory. Here are some examples:
     elif from_diff:
         green_print("Fetching changed images between payloads...")
         changed_builds = elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1])
-        unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds ]
+        unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds]
 
     build_nvrs = sorted(build.nvr for build in unshipped_builds)
     json_data = dict(builds=build_nvrs, base_tag=base_tag, kind=kind)
@@ -781,7 +783,6 @@ PRESENT advisory. Here are some examples:
     if not unshipped_builds:
         green_print("No builds needed to be attached.")
         return
-
 
     if advisory is not False:
         # Search and attach
