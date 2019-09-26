@@ -2,11 +2,14 @@ bashlex
 click
 dockerfile-parse
 errata-tool >= 1.19
-koji
+future
+koji >= 1.18
 pydotconfig
+pygit2
 pygitdata
 pykwalify
-pyyaml
 python-bugzilla
+pyyaml
 requests
 requests_kerberos
+typing
