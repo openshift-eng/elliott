@@ -201,7 +201,8 @@ Bugzilla Bugs.
               help="Kind of artifacts that will be attached to Advisory. Affects boilerplate text.")
 @click.option("--impetus", default='standard',
               type=click.Choice(elliottlib.constants.errata_valid_impetus),
-              help="Impetus for the advisory creation [standard, cve, ga, test]")
+              help="Impetus for the advisory creation [{}]".format(
+                ', '.join(elliottlib.constants.errata_valid_impetus)))
 @click.option("--cve", required=False,
               help="CVE to associate with the Advisory. Required for RHSA.")
 @click.option("--date", required=False,
@@ -246,7 +247,7 @@ will be printed to the screen instead of posted to the Errata Tool
 API.
 
 The impetus option only effects the metadata added to the new
-advisory.
+advisory and its synopsis.
 
 The --assigned-to, --manager and --package-owner options are required.
 They are the email addresses of the parties responsible for managing and
@@ -336,7 +337,7 @@ advisory.
         erratum = elliottlib.errata.new_erratum(
             et_data,
             errata_type=errata_type,
-            kind=kind,
+            kind=(impetus if impetus in ['extras', 'metadata'] else kind),
             release_date=release_date.strftime(YMD),
             create=yes,
             assigned_to=assigned_to,
@@ -1383,24 +1384,27 @@ written out to summary_results.json.
 @cli.command('create-placeholder',
              short_help='Create a placeholder BZ')
 @click.option('--kind', '-k', metavar='KIND',
-              required=False, type=click.Choice(['rpm', 'image']),
-              help='KIND [rpm, image] of placeholder bug to create. Affects BZ title.')
+              required=False, type=click.Choice(elliottlib.constants.placeholder_valid_types),
+              help='KIND [{}] of placeholder bug to create. Affects BZ title.'.format(
+                  ', '.join(elliottlib.constants.placeholder_valid_types)))
 @click.option('--attach', '-a', 'advisory',
               default=False, metavar='ADVISORY',
               help='Attach the bug to ADVISORY')
 @click.option("--use-default-advisory", 'default_advisory_type',
               metavar='ADVISORY_TYPE',
-              type=click.Choice(['image', 'rpm', 'security']),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+              type=click.Choice(elliottlib.constants.placeholder_valid_types),
+              help="Use the default value from ocp-build-data for ADVISORY_TYPE [{}]".format(
+                  ', '.join(elliottlib.constants.placeholder_valid_types)))
 @pass_runtime
 def create_placeholder(runtime, kind, advisory, default_advisory_type):
     """Create a placeholder bug for attaching to an advisory.
 
-    KIND - The kind of placeholder to create (rpm/image).
+    KIND - The kind of placeholder to create ({}).
     ADVISORY - Optional. The advisory to attach the bug to.
 
     $ elliott --group openshift-4.1 create-placeholder --kind rpm --attach 12345
-"""
+""".format('/'.join(elliottlib.constants.placeholder_valid_types))
+
     runtime.initialize()
     if advisory and default_advisory_type:
         raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
