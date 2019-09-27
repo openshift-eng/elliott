@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 with open('./requirements.txt') as f:
     INSTALL_REQUIRES = f.read().splitlines()
@@ -23,7 +23,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/openshift/elliott",
     license="Red Hat Internal",
-    packages=["elliottlib"],
+    packages=find_packages(),
     include_package_data=True,
     scripts=[
         'elliott'
