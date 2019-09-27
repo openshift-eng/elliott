@@ -44,7 +44,16 @@ errata_valid_impetus = [
     'standard',
     'cve',
     'ga',
-    'test'
+    'test',
+    'extras',
+    'metadata',
+]
+
+placeholder_valid_types = [
+    'rpm',
+    'image',
+    'extras',
+    'metadata',
 ]
 
 ######################################################################
