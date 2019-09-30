@@ -194,6 +194,26 @@ def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=
     else:
         return e
 
+def build_signed(build):
+    """return boolean: is the build signed or not
+
+    :param string build: The build nvr or id
+"""
+    filter_endpoint = constants.errata_get_build_url.format(
+        id=build)
+    res = requests.get(filter_endpoint,
+                       verify=ssl.get_default_verify_paths().openssl_cafile,
+                       auth=HTTPKerberosAuth())
+    if res.status_code == 200:
+        return res.json()['rpms_signed']
+    elif res.status_code == 401:
+        raise exceptions.ErrataToolUnauthenticatedException(res.text)
+    else:
+        raise exceptions.ErrataToolError("Other error (status_code={code}): {msg}".format(
+            code=res.status_code,
+            msg=res.text))
+
+
 
 def get_filtered_list(filter_id=constants.errata_default_filter, limit=5):
     """return a list of Erratum() objects from results using the provided

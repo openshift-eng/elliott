@@ -1507,7 +1507,7 @@ unsigned builds.
     try:
         e = Erratum(errata_id=advisory)
         all_builds = set([])
-        signed_builds = set([])
+        all_signed = False
         # `errata_builds` is a dict with brew tags as keys, values are
         # lists of builds on the advisory with that tag
         for k, v in e.errata_builds.iteritems():
@@ -1515,26 +1515,34 @@ unsigned builds.
         green_prefix("Fetching initial states: ")
         click.echo("{} builds to check".format(len(all_builds)))
         start_time = datetime.datetime.now()
-        all_signed = False
-
         while datetime.datetime.now() - start_time < datetime.timedelta(minutes=minutes):
-            # Don't modify the loop iterator while IN THE LOOP
-            for build in all_builds - signed_builds:
-                if errata_tool.build.Build(build).signed_rpms:
-                    green_prefix("Build signed: ")
-                    click.echo("{}".format(build))
-                    signed_builds.add(build)
-                else:
-                    red_prefix("Build unsigned: ")
-                    click.echo("{}".format(build))
-            if signed_builds == all_builds:
+            pbar_header("Getting build signatures: ",
+                        "Should be pretty quick",
+                        all_builds)
+            pool = ThreadPool(cpu_count())
+            # Look up builds concurrently
+            click.secho("[", nl=False)
+
+            build_sigs = pool.map(
+                lambda build: progress_func(
+                    lambda: elliottlib.errata.build_signed(build),
+                    '*'),
+                all_builds)
+            # Wait for results
+            pool.close()
+            pool.join()
+            click.echo(']')
+
+            if all(build_sigs):
                 all_signed = True
                 break
             elif noop:
                 # Escape the time-loop
                 break
-
-        unsigned_builds = all_builds - signed_builds
+            else:
+                yellow_prefix("Not all builds signed: ")
+                click.echo("re-checking")
+                continue
 
         if not all_signed:
             red_prefix("Signing incomplete: ")
@@ -1542,11 +1550,7 @@ unsigned builds.
                 click.echo("All builds not signed. ")
             else:
                 click.echo("All builds not signed in given window ({} minutes). ".format(minutes))
-            click.echo("Those missing signatures are printed below:")
-            for b in unsigned_builds:
-                red_prefix(" * ")
-                click.echo(b)
-            exit(len(unsigned_builds))
+                exit(1)
         else:
             green_prefix("All builds signed: ")
             click.echo("Enjoy!")
