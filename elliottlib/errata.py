@@ -316,6 +316,21 @@ def get_comments(advisory_id):
         return False
 
 
+def get_metadata_comments_json(advisory_id):
+    comments = get_comments(advisory_id)
+    metadata_json_list = []
+    # they come out in (mostly) reverse order, start at the beginning
+    for c in reversed(comments):
+        try:
+            metadata = json.loads(c['attributes']['text'])
+        except Exception:
+            pass
+        else:
+            if 'release' in metadata and 'kind' in metadata and 'impetus' in metadata:
+                metadata_json_list.append(metadata)
+    return metadata_json_list
+
+
 def get_builds(advisory_id):
     """5.2.2.6. GET /api/v1/erratum/{id}/builds
      Fetch the Brew builds associated with an advisory.

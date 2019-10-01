@@ -454,14 +454,13 @@ first comment.
 
     try:
         for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=20):
-            try:
-                c = elliottlib.errata.get_comments(erratum.errata_id)[-1]
-                metadata = json.loads(c['attributes']['text'])
-            except ValueError:
+            metadata_comments_json = elliottlib.errata.get_metadata_comments_json(erratum.errata_id)
+            if not metadata_comments_json:
                 # Does not contain ART metadata, skip it
                 sys.stderr.write("Does not contain ART metadata: {}\n".format(erratum.errata_id))
                 continue
 
+            metadata = metadata_comments_json[0]
             if str(metadata['release']) == str(release) and (metadata['impetus'] != 'test'):
                 use_in_puddle_conf.append(str(erratum.errata_id))
                 if details:
