@@ -50,5 +50,6 @@ class TarballSourcesTestCase(unittest.TestCase):
             actual = tarball_sources.get_builds_from_brew(session, build_nvrs)
             self.assertListEqual(list(actual), expected)
 
+
 if __name__ == "__main__":
     unittest.main()

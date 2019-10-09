@@ -194,6 +194,7 @@ def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=
     else:
         return e
 
+
 def build_signed(build):
     """return boolean: is the build signed or not
 
@@ -212,7 +213,6 @@ def build_signed(build):
         raise exceptions.ErrataToolError("Other error (status_code={code}): {msg}".format(
             code=res.status_code,
             msg=res.text))
-
 
 
 def get_filtered_list(filter_id=constants.errata_default_filter, limit=5):
