@@ -1,5 +1,0 @@
-test:
-  tags:
-    - elliott
-  script:
-    - tox

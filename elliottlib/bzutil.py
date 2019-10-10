@@ -19,6 +19,7 @@ import bugzilla
 
 logger = logutil.getLogger(__name__)
 
+
 def create_placeholder(bz_data, kind, version):
     """Create a placeholder bug
 
@@ -40,7 +41,7 @@ def create_placeholder(bz_data, kind, version):
         description=boilerplate)
 
     newbug = bzapi.createbug(createinfo)
-    
+
     # change state to VERIFIED, set target release
     try:
         update = bzapi.build_update(status="VERIFIED", target_release=version)
@@ -51,6 +52,7 @@ def create_placeholder(bz_data, kind, version):
         print(ex)
 
     return newbug
+
 
 def get_bug_severity(bz_data, bug_id):
     """Get just the severity of a bug
