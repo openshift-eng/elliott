@@ -20,7 +20,14 @@
 		// You may want to add a non-root user to your Dockerfile. On Linux, this will prevent
 		// new files getting created as root. See https://aka.ms/vscode-remote/containers/non-root-user
 		// for the needed Dockerfile updates and then uncomment the next line.
-		"-u", "dev"
+		"-u", "dev",
+
+		// Mount config files and SSH keys into dev container
+		"-v", "${localWorkspaceFolder}/.devcontainer/settings.yaml:/home/dev/.config/elliott/settings.yaml:ro",
+		"-v", "${localWorkspaceFolder}/.devcontainer/krb5-redhat.conf:/etc/krb5.conf.d/krb5-redhat.conf:ro",
+		"-v", "${localWorkspaceFolder}/.devcontainer/brewkoji.conf:/etc/koji.conf.d/brewkoji.conf:ro",
+		"-v", "${env:HOME}${env:USERPROFILE}/.ssh:/home/dev/.ssh:ro",
+		"-v", "dev-elliott-working-dir:/workspaces/elliott-working-dir"
 	],
 
 	// Use 'settings' to set *default* container specific settings.json values on container create.
@@ -40,7 +47,7 @@
 	// "appPort": [],
 
 	// Uncomment the next line to run commands after the container is created - for example installing git.
-	"postCreateCommand": "pip install --user -r requirements.txt",
+	"postCreateCommand": "sudo chown -R dev: /workspaces/elliott-working-dir && pip install --user -r requirements.txt",
 
 	// Add the IDs of extensions you want installed when the container is created in the array below.
 	"extensions": [
