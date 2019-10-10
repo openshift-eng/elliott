@@ -66,7 +66,7 @@ pipeline {
         }
         stage("Publish to PyPI") {
             when {
-                branch "master"
+                buildingTag()
             }
             steps {
                 sh "python3 setup.py bdist_wheel --universal"
