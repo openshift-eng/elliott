@@ -22,7 +22,7 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
     url="https://github.com/openshift/elliott",
-    license="Red Hat Internal",
+    license="Apache License, Version 2.0",
     packages=find_packages(),
     include_package_data=True,
     scripts=[
