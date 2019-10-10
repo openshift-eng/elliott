@@ -58,7 +58,9 @@ pipeline {
                     }
                     results = readFile("results.txt").trim()
                     echo results
-                    commentOnPullRequest("### Build <span>#</span>${env.BUILD_NUMBER}\n```\n${results}\n```")
+                    if (env.CHANGE_ID) {
+                        commentOnPullRequest("### Build <span>#</span>${env.BUILD_NUMBER}\n```\n${results}\n```")
+                    }
                 }
             }
         }
