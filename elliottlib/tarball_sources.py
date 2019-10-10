@@ -91,7 +91,7 @@ def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, f
     LOGGER.debug("Source is from repo {}, commit {}".format(
         source_repo_url, source_commit_hash))
 
-    git_commit = None # type: pygit2.Commit
+    git_commit = None  # type: pygit2.Commit
 
     if os.path.isdir(local_repo_path) and os.listdir(local_repo_path):
         LOGGER.debug(
