@@ -1,5 +1,7 @@
 # Elliott - Errata Tool Automation
 
+[![PyPI version](https://badge.fury.io/py/rh-elliott.svg)](https://badge.fury.io/py/rh-elliott)
+
 *Elliott* is a tool for automating several aspects of the errata
 lifecycle. This exists because the Errata/Advisory process has hooks
 into several other systems, and coordinating all of that manually is
