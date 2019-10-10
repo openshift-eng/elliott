@@ -54,7 +54,9 @@ pipeline {
             steps {
                 script {
                     catchError(stageResult: 'FAILURE') {
-                        sh "tox > results.txt 2>&1"
+                        withCredentials([string(credentialsId: "elliott-codecov-token", variable: "CODECOV_TOKEN")]) {
+                            sh "tox > results.txt 2>&1"
+                        }
                     }
                     results = readFile("results.txt").trim()
                     echo results
