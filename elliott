@@ -728,7 +728,7 @@ PRESENT advisory. Here are some examples:
             # TODO: Update the ImageMetaData class to include the NVR as
             # an object attribute.
             pool = ThreadPool(cpu_count())
-            unshipped_builds = pool.map(
+            results = pool.map(
                 lambda meta: progress_func(
                     lambda: elliottlib.brew.get_brew_build("{}-{}-{}".format(meta[0], meta[1], meta[2]),
                                                            product_version,
@@ -738,7 +738,8 @@ PRESENT advisory. Here are some examples:
             # Wait for results
 
             # filter out 'openshift-enterprise-base-container' since it's not needed in advisory
-            unshipped_builds = [b for b in unshipped_builds
+            unshipped_builds = [b for b in results
+                                if not b.attached_to_open_erratum
                                 if 'openshift-enterprise-base-container' not in b.nvr]
             pool.close()
             pool.join()
