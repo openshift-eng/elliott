@@ -334,7 +334,6 @@ def remove_bugs(runtime, advisory, default_advisory_type, id):
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
 
-#
 # Get an Advisory
 # advisory:get
 #
