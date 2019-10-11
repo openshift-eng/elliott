@@ -1,8 +1,10 @@
 FROM fedora:30
-
+LABEL name="elliott-dev" \
+  description="Elliott development container image" \
+  maintainer="OpenShift Automated Release Tooling (ART) Team <aos-team-art@redhat.com>"
 RUN dnf install -y \
     # runtime dependencies
-    krb5-workstation python-bugzilla-cli \
+    krb5-workstation python-bugzilla-cli rsync \
     python2 python2-certifi python2-click python2-dockerfile-parse python2-koji \
     python2-pykwalify python2-pyyaml python2-bugzilla python2-requests \
     python2-requests-kerberos python2-pygit2 python2-future \
@@ -21,6 +23,12 @@ RUN dnf install -y \
   # clean up
   && dnf clean all
 
+# install brewkoji
+RUN wget -O /etc/yum.repos.d/rcm-tools-fedora.repo https://download.devel.redhat.com/rel-eng/RCMTOOLS/rcm-tools-fedora.repo \
+  && dnf install -y koji brewkoji \
+  && dnf install -y rhpkg \
+  && dnf clean all
+
 # Create a non-root user - see https://aka.ms/vscode-remote/containers/non-root-user.
 ARG USERNAME=dev
 # On Linux, replace with your actual UID, GID if not the default 1000
@@ -30,21 +38,16 @@ ARG USER_GID=$USER_UID
 # Create the "dev" user
 RUN groupadd --gid "$USER_GID" "$USERNAME" \
     && useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME" \
-    && mkdir -p /home/"$USERNAME"/.vscode-server /home/"$USERNAME"/.vscode-server-insiders \
-    && chown -R "${USER_UID}:${USER_GID}" /home/"$USERNAME" \
+    && mkdir -p /workspaces/elliott \
+    && chown -R "${USER_UID}:${USER_GID}" /home/"$USERNAME" /workspaces/elliott \
     && chmod 0755 /home/"$USERNAME" \
     && echo "$USERNAME" ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/"$USERNAME" \
     && chmod 0440 /etc/sudoers.d/"$USERNAME"
 
-# Configure Kerberos
-COPY .devcontainer/krb5-redhat.conf /etc/krb5.conf.d/
 # Workaround for running `kinit` in an unprivileged container
 # by storing krb5 credential cache into a file rather than kernel keyring.
 # See https://blog.tomecek.net/post/kerberos-in-a-container/
 ENV KRB5CCNAME=FILE:/tmp/krb5cache
 
-# Configure elliott
-ENV ELLIOTT_DATA_PATH=https://gitlab.cee.redhat.com/openshift-art/ocp-build-data.git \
-  ELLIOTT_WORKING_DIR=/home/"$USERNAME"/elliott-working-dir
-
 USER "$USER_UID"
+WORKDIR /workspaces/elliott
