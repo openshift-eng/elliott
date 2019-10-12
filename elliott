@@ -40,12 +40,13 @@ from elliottlib.util import green_print, red_prefix, minor_from_branch
 from elliottlib.util import yellow_print, yellow_prefix, exit_unauthorized, release_from_branch
 from elliottlib.util import progress_func, pbar_header
 from elliottlib.cli.tarball_sources_cli import tarball_sources_cli
+from elliottlib.cli.find_builds_cli import find_builds_cli
+from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 
 # 3rd party
 import bugzilla
 import click
 import requests
-import dotconfig
 import errata_tool.build
 from errata_tool import Erratum, ErrataException
 from kerberos import GSSError
@@ -54,53 +55,7 @@ from kerberos import GSSError
 # Constants and defaults
 # -----------------------------------------------------------------------------
 pass_runtime = click.make_pass_decorator(Runtime)
-context_settings = dict(help_option_names=['-h', '--help'])
 
-use_default_advisory_option = click.option(
-    "--use-default-advisory", 'default_advisory_type',
-    metavar='ADVISORY_TYPE',
-    type=click.Choice(elliottlib.constants.standard_advisory_types),
-    help="Use the default value from ocp-build-data for ADVISORY_TYPE [{}]".format(
-        ', '.join(elliottlib.constants.standard_advisory_types)))
-
-def print_version(ctx, param, value):
-    if not value or ctx.resilient_parsing:
-        return
-    click.echo('Elliott v{}'.format(version()))
-    ctx.exit()
-
-
-@click.group(context_settings=context_settings)
-@click.option('--version', is_flag=True, callback=print_version,
-              expose_value=False, is_eager=True)
-@click.option("--working-dir", metavar='PATH', envvar="ELLIOTT_WORKING_DIR",
-              default=None,
-              help="Existing directory in which file operations should be performed.")
-@click.option("--data-path", metavar='PATH', default=None,
-              help="Git repo or directory containing groups metadata")
-@click.option("--user", metavar='USERNAME', envvar="ELLIOTT_USER",
-              default=None,
-              help="Username for rhpkg.")
-@click.option("--group", "-g", default=None, metavar='NAME',
-              help="The group of images on which to operate.")
-@click.option("--branch", default=None, metavar='BRANCH',
-              help="Branch to override any default in group.yml.")
-@click.option('--stage', default=False, is_flag=True, help='Force checkout stage branch for sources in group.yml.')
-@click.option("-i", "--images", default=[], metavar='NAME', multiple=True,
-              help="Name of group image member to include in operation (all by default). Can be comma delimited list.")
-@click.option("-r", "--rpms", default=[], metavar='NAME', multiple=True,
-              help="Name of group rpm member to include in operation (all by default). Can be comma delimited list.")
-@click.option("-x", "--exclude", default=[], metavar='NAME', multiple=True,
-              help="Name of group image or rpm member to exclude in operation (none by default). Can be comma delimited list.")
-@click.option("--quiet", "-q", default=False, is_flag=True, help="Suppress non-critical output")
-@click.option('--debug', default=False, is_flag=True, help='Show debug output on console.')
-@click.pass_context
-def cli(ctx, **kwargs):
-    cfg = dotconfig.Config('elliott', 'settings',
-                           template=cli_opts.CLI_CONFIG_TEMPLATE,
-                           envvars=cli_opts.CLI_ENV_VARS,
-                           cli_args=kwargs)
-    ctx.obj = Runtime(cfg_obj=cfg, **cfg.to_dict())
 
 # -----------------------------------------------------------------------------
 # CLI Commands - Please keep these in alphabetical order
@@ -389,24 +344,6 @@ advisory.
         click.echo(erratum)
 
 
-#
-# Look up a default advisory specified for the branch in ocp-build-data
-# Advisory types are in elliottlib.constants.standard_advisory_types
-# but this doesn't validate against that.
-#
-def find_default_advisory(runtime, default_advisory_type, quiet=False):
-    """The `quiet` parameter will disable printing the informational message"""
-    default_advisory = runtime.group_config.advisories.get(default_advisory_type, None)
-    if default_advisory is None:
-        red_prefix("No value defined for default advisory:")
-        click.echo(" The key advisories.{} is not defined for group {} in group.yml".format(
-            default_advisory_type, runtime.group))
-        exit(1)
-    if not quiet:
-        green_prefix("Default advisory detected: ")
-        click.echo(default_advisory)
-    return default_advisory
-
 
 #
 # Collect bugs
@@ -587,231 +524,6 @@ def remove_bugs(runtime, advisory, default_advisory_type, id):
             advs.commit()
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-
-
-#
-# Attach Builds
-# advisory:find-builds
-#
-@cli.command('find-builds',
-             short_help='Find or attach builds to ADVISORY')
-@click.option('--attach', '-a', 'advisory',
-              default=False, metavar='ADVISORY',
-              help='Attach the builds to ADVISORY (by default only a list of builds are displayed)')
-@use_default_advisory_option
-@click.option('--build', '-b', 'builds',
-              multiple=True, metavar='NVR_OR_ID',
-              help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
-@click.option('--kind', '-k', metavar='KIND',
-              required=False, type=click.Choice(['rpm', 'image']),
-              help='Find builds of the given KIND [rpm, image]')
-@click.option("--from-diff", "--between",
-              required=False,
-              nargs=2,
-              help="Two payloads to compare against")
-@click.option('--json', 'as_json', metavar="FILE_NAME",
-              help="Dump new builds as JSON array to a file (or '-' for stdout)")
-@pass_runtime
-def find_builds(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json):
-    """Automatically or manually find or attach viable rpm or image builds
-to ADVISORY. Default behavior searches Brew for viable builds in the
-given group. Provide builds manually by giving one or more --build
-(-b) options. Manually provided builds are verified against the Errata
-Tool API.
-
-\b
-  * Attach the builds to ADVISORY by giving --attach
-  * Specify the build type using --kind KIND
-
-Example: Assuming --group=openshift-3.7, then a build is a VIABLE
-BUILD IFF it meets ALL of the following criteria:
-
-\b
-  * HAS the tag in brew: rhaos-3.7-rhel7-candidate
-  * DOES NOT have the tag in brew: rhaos-3.7-rhel7
-  * IS NOT attached to ANY existing RHBA, RHSA, or RHEA
-
-That is to say, a viable build is tagged as a "candidate", has NOT
-received the "shipped" tag yet, and is NOT attached to any PAST or
-PRESENT advisory. Here are some examples:
-
-    SHOW the latest OSE 3.6 image builds that would be attached to a
-    3.6 advisory:
-
-    $ elliott --group openshift-3.6 find-builds -k image
-
-    ATTACH the latest OSE 3.6 rpm builds to advisory 123456:
-
-\b
-    $ elliott --group openshift-3.6 find-builds -k rpm --attach 123456
-
-    VERIFY (no --attach) that the manually provided RPM NVR and build
-    ID are viable builds:
-
-\b
-    $ elliott --group openshift-3.6 find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
-"""
-
-    if (from_diff and kind) or (from_diff and builds) or (builds and kind):
-        raise ElliottFatalError("Use only one of --kind or --build or --from-diff.")
-
-    if not builds and not from_diff and not kind:
-        raise ElliottFatalError("Must use one of --kind or --build or --from-diff.")
-
-    if advisory and default_advisory_type:
-        raise click.BadParameter("Use only one of --use-default-advisory or --attach")
-
-    runtime.initialize()
-
-    if not runtime.branch:
-        raise ElliottFatalError("Need to specify a branch either in group.yml or with --branch option")
-    base_tag = runtime.branch
-
-    et_data = runtime.gitdata.load_data(key='erratatool').data
-    product_version = override_product_version(et_data.get('product_version'), runtime.branch)
-
-    if default_advisory_type is not None:
-        advisory = find_default_advisory(runtime, default_advisory_type)
-
-    # Test authentication
-    try:
-        elliottlib.errata.get_filtered_list(elliottlib.constants.errata_live_advisory_filter)
-    except GSSError:
-        exit_unauthenticated()
-
-    session = requests.Session()
-    unshipped_builds = []
-
-    if len(builds) > 0:
-        green_prefix("Build NVRs provided: ")
-        click.echo("Manually verifying the builds exist")
-        try:
-            unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in builds]
-        except elliottlib.exceptions.BrewBuildException as ex:
-            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-    elif kind:
-        if kind == 'image':
-            initial_builds = runtime.image_metas()
-            pbar_header("Generating list of {kind}s: ".format(kind=kind),
-                        "Hold on a moment, fetching Brew buildinfo",
-                        initial_builds)
-            pool = ThreadPool(cpu_count())
-            # Look up builds concurrently
-            click.secho("[", nl=False)
-
-            # Returns a list of (n, v, r) tuples of each build
-            potential_builds = pool.map(
-                lambda build: progress_func(lambda: build.get_latest_build_info(), '*'),
-                initial_builds)
-            # Wait for results
-            pool.close()
-            pool.join()
-            click.echo(']')
-
-            pbar_header("Generating build metadata: ",
-                        "Fetching data for {n} builds ".format(n=len(potential_builds)),
-                        potential_builds)
-            click.secho("[", nl=False)
-
-            # Reassign variable contents, filter out remove non_release builds
-            potential_builds = [i for i in potential_builds
-                                if i[0] not in runtime.group_config.get('non_release', [])]
-
-            # By 'meta' I mean the lil bits of meta data given back from
-            # get_latest_build_info
-            #
-            # TODO: Update the ImageMetaData class to include the NVR as
-            # an object attribute.
-            pool = ThreadPool(cpu_count())
-            results = pool.map(
-                lambda meta: progress_func(
-                    lambda: elliottlib.brew.get_brew_build("{}-{}-{}".format(meta[0], meta[1], meta[2]),
-                                                           product_version,
-                                                           session=session),
-                    '*'),
-                potential_builds)
-            # Wait for results
-
-            # filter out 'openshift-enterprise-base-container' since it's not needed in advisory
-            unshipped_builds = [b for b in results
-                                if not b.attached_to_open_erratum
-                                if 'openshift-enterprise-base-container' not in b.nvr]
-            pool.close()
-            pool.join()
-            click.echo(']')
-        elif kind == 'rpm':
-            green_prefix("Generating list of {kind}s: ".format(kind=kind))
-            click.echo("Hold on a moment, fetching Brew builds")
-            unshipped_build_candidates = elliottlib.brew.find_unshipped_build_candidates(
-                base_tag,
-                product_version,
-                kind=kind)
-
-            pbar_header("Gathering additional information: ", "Brew buildinfo is required to continue", unshipped_build_candidates)
-            click.secho("[", nl=False)
-
-            # We could easily be making scores of requests, one for each build
-            # we need information about. May as well do it in parallel.
-            pool = ThreadPool(cpu_count())
-            results = pool.map(
-                lambda nvr: progress_func(
-                    lambda: elliottlib.brew.get_brew_build(nvr, product_version, session=session),
-                    '*'),
-                unshipped_build_candidates)
-            # Wait for results
-            pool.close()
-            pool.join()
-            click.echo(']')
-
-            # We only want builds not attached to an existing open advisory
-            unshipped_builds = [b for b in results if not b.attached_to_open_erratum]
-    elif from_diff:
-        green_print("Fetching changed images between payloads...")
-        changed_builds = elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1])
-        unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds]
-
-    build_nvrs = sorted(build.nvr for build in unshipped_builds)
-    json_data = dict(builds=build_nvrs, base_tag=base_tag, kind=kind)
-    if as_json == "-":
-        click.echo(json.dumps(json_data, indent=4, sort_keys=True))
-    elif as_json:
-        with open(as_json, "w") as json_file:
-            json.dump(json_data, json_file, indent=4, sort_keys=True)
-
-    if not unshipped_builds:
-        green_print("No builds needed to be attached.")
-        return
-
-    if advisory is not False:
-        # Search and attach
-        file_type = None
-        try:
-            erratum = Erratum(errata_id=advisory)
-            if kind == 'image':
-                file_type = 'tar'
-            elif kind == 'rpm':
-                file_type = 'rpm'
-
-            if file_type is None:
-                raise ElliottFatalError("Need to specify with --kind=image or --kind=rpm with packages: {}".format(unshipped_builds))
-
-            erratum.addBuilds(build_nvrs,
-                              release=product_version,
-                              file_types={build.nvr: [file_type] for build in unshipped_builds})
-            erratum.commit()
-            green_print("Attached build(s) successfully:")
-            for b in sorted(unshipped_builds):
-                click.echo(" " + b.nvr)
-        except GSSError:
-            exit_unauthenticated()
-        except elliottlib.exceptions.BrewBuildException as ex:
-            raise ElliottFatalError("Error attaching builds: {}".format(getattr(ex, 'message', repr(ex))))
-    else:
-        click.echo("The following {n} builds ".format(n=len(unshipped_builds)), nl=False)
-        click.secho("may be attached ", bold=True, nl=False)
-        click.echo("to an advisory:")
-        for b in sorted(unshipped_builds):
-            click.echo(" " + b.nvr)
 
 
 #
@@ -1540,8 +1252,9 @@ unsigned builds.
     except ErrataException as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
-## Register additional command groups
+## Register additional commands / groups
 cli.add_command(tarball_sources_cli)
+cli.add_command(find_builds_cli)
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
