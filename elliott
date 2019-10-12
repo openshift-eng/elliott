@@ -56,6 +56,12 @@ from kerberos import GSSError
 pass_runtime = click.make_pass_decorator(Runtime)
 context_settings = dict(help_option_names=['-h', '--help'])
 
+use_default_advisory_option = click.option(
+    "--use-default-advisory", 'default_advisory_type',
+    metavar='ADVISORY_TYPE',
+    type=click.Choice(elliottlib.constants.standard_advisory_types),
+    help="Use the default value from ocp-build-data for ADVISORY_TYPE [{}]".format(
+        ', '.join(elliottlib.constants.standard_advisory_types)))
 
 def print_version(ctx, param, value):
     if not value or ctx.resilient_parsing:
@@ -110,10 +116,7 @@ def cli(ctx, **kwargs):
               help="New state for the Advisory. NEW_FILES, QE, REL_PREP")
 @click.option("--advisory", "-a", metavar='ADVISORY',
               help="Change state of ADVISORY")
-@click.option("--use-default-advisory", 'default_advisory_type',
-              metavar='ADVISORY_TYPE',
-              type=click.Choice(['image', 'rpm', 'security']),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@use_default_advisory_option
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
@@ -388,7 +391,8 @@ advisory.
 
 #
 # Look up a default advisory specified for the branch in ocp-build-data
-# Advisory types are in ['rpm', 'image', 'cve']
+# Advisory types are in elliottlib.constants.standard_advisory_types
+# but this doesn't validate against that.
 #
 def find_default_advisory(runtime, default_advisory_type, quiet=False):
     """The `quiet` parameter will disable printing the informational message"""
@@ -412,10 +416,7 @@ def find_default_advisory(runtime, default_advisory_type, quiet=False):
 @click.option("--add", "-a", 'advisory',
               default=False, metavar='ADVISORY',
               help="Add found bugs to ADVISORY. Applies to bug flags as well (by default only a list of discovered bugs are displayed)")
-@click.option("--use-default-advisory", 'default_advisory_type',
-              metavar='ADVISORY_TYPE',
-              type=click.Choice(['image', 'rpm', 'security']),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@use_default_advisory_option
 @click.option("--mode",
               required=True,
               type=click.Choice(['list', 'sweep', 'diff']),
@@ -534,10 +535,7 @@ advisory with the --add option.
 @click.option('--advisory', '-a', 'advisory',
               default=False, metavar='ADVISORY',
               help='Remove found bugs from ADVISORY')
-@click.option("--use-default-advisory", 'default_advisory_type',
-              metavar='ADVISORY_TYPE',
-              type=click.Choice(['image', 'rpm', 'security']),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@use_default_advisory_option
 @click.option("--id", metavar='BUGID', default=[],
               multiple=True, required=True,
               help="Bugzilla IDs to add.")
@@ -600,10 +598,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id):
 @click.option('--attach', '-a', 'advisory',
               default=False, metavar='ADVISORY',
               help='Attach the builds to ADVISORY (by default only a list of builds are displayed)')
-@click.option("--use-default-advisory", 'default_advisory_type',
-              metavar='ADVISORY_TYPE',
-              type=click.Choice(['image', 'rpm', 'security']),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@use_default_advisory_option
 @click.option('--build', '-b', 'builds',
               multiple=True, metavar='NVR_OR_ID',
               help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
@@ -825,10 +820,7 @@ PRESENT advisory. Here are some examples:
 #
 @cli.command("get", short_help="Get information for an ADVISORY")
 @click.argument('advisory', type=int, required=False)
-@click.option("--use-default-advisory", 'default_advisory_type',
-              metavar='ADVISORY_TYPE',
-              type=click.Choice(['image', 'rpm', 'security']),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@use_default_advisory_option
 @click.option('--details', is_flag=True, default=False,
               help="Print the full object of the advisory")
 @click.option('--id-only', is_flag=True, default=False,
@@ -1078,10 +1070,7 @@ Example to add standard metadata to a 3.10 images release
               required=False,
               default=False, is_flag=True,
               help="Check bugs attached, print what would change, but don't change anything")
-@click.option("--use-default-advisory", 'default_advisory_type',
-              metavar='ADVISORY_TYPE',
-              type=click.Choice(['image', 'rpm', 'security']),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@use_default_advisory_option
 @pass_runtime
 def repair_bugs(runtime, advisory, auto, id, original_state, new_state, noop, default_advisory_type):
     """Move bugs attached to the advisory from one state to another
@@ -1385,17 +1374,13 @@ written out to summary_results.json.
 @cli.command('create-placeholder',
              short_help='Create a placeholder BZ')
 @click.option('--kind', '-k', metavar='KIND',
-              required=False, type=click.Choice(elliottlib.constants.placeholder_valid_types),
+              required=False, type=click.Choice(elliottlib.constants.standard_advisory_types),
               help='KIND [{}] of placeholder bug to create. Affects BZ title.'.format(
-                  ', '.join(elliottlib.constants.placeholder_valid_types)))
+                  ', '.join(elliottlib.constants.standard_advisory_types)))
 @click.option('--attach', '-a', 'advisory',
               default=False, metavar='ADVISORY',
               help='Attach the bug to ADVISORY')
-@click.option("--use-default-advisory", 'default_advisory_type',
-              metavar='ADVISORY_TYPE',
-              type=click.Choice(elliottlib.constants.placeholder_valid_types),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [{}]".format(
-                  ', '.join(elliottlib.constants.placeholder_valid_types)))
+@use_default_advisory_option
 @pass_runtime
 def create_placeholder(runtime, kind, advisory, default_advisory_type):
     """Create a placeholder bug for attaching to an advisory.
@@ -1404,7 +1389,7 @@ def create_placeholder(runtime, kind, advisory, default_advisory_type):
     ADVISORY - Optional. The advisory to attach the bug to.
 
     $ elliott --group openshift-4.1 create-placeholder --kind rpm --attach 12345
-""".format('/'.join(elliottlib.constants.placeholder_valid_types))
+""".format('/'.join(elliottlib.constants.standard_advisory_types))
 
     runtime.initialize()
     if advisory and default_advisory_type:
@@ -1453,10 +1438,7 @@ def create_placeholder(runtime, kind, advisory, default_advisory_type):
 @click.option("--advisory", "-a",
               metavar='ADVISORY',
               help="Advisory to watch")
-@click.option("--use-default-advisory", 'default_advisory_type',
-              metavar='ADVISORY_TYPE',
-              type=click.Choice(['image', 'rpm', 'security']),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [image, rpm, security]")
+@use_default_advisory_option
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
