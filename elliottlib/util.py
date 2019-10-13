@@ -1,6 +1,11 @@
 import click
 import datetime
+from multiprocessing import cpu_count
+from multiprocessing.dummy import Pool as ThreadPool
 import re
+
+from errata_tool import Erratum
+from kerberos import GSSError
 
 # -----------------------------------------------------------------------------
 # Constants and defaults
@@ -61,6 +66,14 @@ def exit_unauthorized():
     red_prefix("Error Unauthorized: ")
     click.echo("403 - user is authenticated, but unauthorized to perform this action")
     exit(1)
+
+
+def ensure_erratatool_auth():
+    """Test (cheaply) that we at least have authentication to erratatool"""
+    try:
+        Erratum(errata_id=1)
+    except GSSError:
+        exit_unauthenticated()
 
 
 def validate_release_date(ctx, param, value):
@@ -185,10 +198,42 @@ each function call.
     really wanted to) to print before calling `func`
 
     Usage examples:
-      * See advisory:find-builds
+      * See find-builds command
     """
     click.secho(char, fg='green', nl=False)
     return func()
+
+
+def parallel_results_with_progress(inputs, func):
+    """Run a function against a list of inputs with a progress bar
+
+    :param sequence inputs : A sequence of items to iterate over in parallel
+    :param lambda-function func: A lambda function to call with one arg to process
+
+    Usage examples:
+      * See find-builds command
+
+        candidate_build_infos = parallel_results_with_progress(
+            candidate_builds,
+            lambda build: build.get_latest_build_info()
+        )
+
+    Example output:
+    [****************]
+
+    """
+    click.secho('[', nl=False)
+    pool = ThreadPool(cpu_count())
+    results = pool.map(
+        lambda it: progress_func(lambda: func(it)),
+        inputs)
+
+    # Wait for results
+    pool.close()
+    pool.join()
+    click.echo(']')
+
+    return results
 
 
 def override_product_version(pv, branch):

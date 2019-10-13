@@ -1,14 +1,12 @@
 from __future__ import unicode_literals, print_function, with_statement
-from multiprocessing import cpu_count
-from multiprocessing.dummy import Pool as ThreadPool
 import json
 
 import elliottlib
 from elliottlib import constants, logutil, Runtime
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import exit_unauthenticated, green_prefix, override_product_version
-from elliottlib.util import green_print, progress_func, pbar_header
+from elliottlib.util import exit_unauthenticated, override_product_version, ensure_erratatool_auth
+from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header
 
 from errata_tool import Erratum
 from kerberos import GSSError
@@ -91,31 +89,20 @@ PRESENT advisory. Here are some examples:
 
     if from_diff and builds:
         raise ElliottFatalError('Use only one of --build or --from-diff.')
-
     if advisory and default_advisory_type:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
 
     runtime.initialize()
-
-    if not runtime.branch:
-        raise ElliottFatalError('Need to specify a branch either in group.yml or with --branch option')
-    base_tag = runtime.branch
-
-    et_data = runtime.gitdata.load_data(key='erratatool').data
-    product_version = override_product_version(et_data.get('product_version'), runtime.branch)
+    base_tag, product_version = _determine_errata_info(runtime)
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    # Test authentication
-    try:
-        Erratum(errata_id=1)
-    except GSSError:
-        exit_unauthenticated()
+    ensure_erratatool_auth()  # before we waste time looking up builds we can't process
 
-    session = requests.Session()
+    # get the builds we want to add
     unshipped_builds = []
-
+    session = requests.Session()
     if builds:
         unshipped_builds = _fetch_builds_by_id(builds, product_version, session)
     elif from_diff:
@@ -126,6 +113,7 @@ PRESENT advisory. Here are some examples:
         elif kind == 'rpm':
             unshipped_builds = _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session)
 
+    # always output json if requested
     build_nvrs = sorted(build.nvr for build in unshipped_builds)
     json_data = dict(builds=build_nvrs, base_tag=base_tag, kind=kind)
     if as_json == '-':
@@ -139,35 +127,23 @@ PRESENT advisory. Here are some examples:
         return
 
     if advisory is not False:
-        # Search and attach
-        file_type = None
-        try:
-            erratum = Erratum(errata_id=advisory)
-            if kind == 'image':
-                file_type = 'tar'
-            elif kind == 'rpm':
-                file_type = 'rpm'
-
-            if file_type is None:
-                raise ElliottFatalError('Need to specify with --kind=image or --kind=rpm with packages: {}'.format(unshipped_builds))
-
-            erratum.addBuilds(build_nvrs,
-                              release=product_version,
-                              file_types={build.nvr: [file_type] for build in unshipped_builds})
-            erratum.commit()
-            green_print('Attached build(s) successfully:')
-            for b in sorted(unshipped_builds):
-                click.echo(' ' + b.nvr)
-        except GSSError:
-            exit_unauthenticated()
-        except elliottlib.exceptions.BrewBuildException as ex:
-            raise ElliottFatalError('Error attaching builds: {}'.format(getattr(ex, 'message', repr(ex))))
+        _attach_to_advisory(unshipped_builds, kind, product_version, advisory)
     else:
         click.echo('The following {n} builds '.format(n=len(unshipped_builds)), nl=False)
         click.secho('may be attached ', bold=True, nl=False)
         click.echo('to an advisory:')
         for b in sorted(unshipped_builds):
             click.echo(' ' + b.nvr)
+
+
+def _determine_errata_info(runtime):
+    if not runtime.branch:
+        raise ElliottFatalError('Need to specify a branch either in group.yml or with --branch option')
+    base_tag = runtime.branch
+
+    et_data = runtime.gitdata.load_data(key='erratatool').data
+    product_version = override_product_version(et_data.get('product_version'), base_tag)
+    return base_tag, product_version
 
 
 def _fetch_builds_by_id(builds, product_version, session):
@@ -193,7 +169,7 @@ def _fetch_builds_by_kind_image(runtime, product_version, session):
         initial_builds)
 
     # Returns a list of (n, v, r) tuples of each build
-    potential_builds = _parallel_results(
+    potential_builds = parallel_results_with_progress(
         initial_builds,
         lambda build: build.get_latest_build_info()
     )
@@ -214,7 +190,7 @@ def _fetch_builds_by_kind_image(runtime, product_version, session):
     #
     # TODO: Update the ImageMetaData class to include the NVR as
     # an object attribute.
-    results = _parallel_results(
+    results = parallel_results_with_progress(
         potential_builds,
         lambda meta: elliottlib.brew.get_brew_build(
             '{}-{}-{}'.format(meta[0], meta[1], meta[2]),
@@ -241,7 +217,7 @@ def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
     pbar_header('Gathering additional information: ', 'Brew buildinfo is required to continue', candidates)
     # We could easily be making scores of requests, one for each build
     # we need information about. May as well do it in parallel.
-    results = _parallel_results(
+    results = parallel_results_with_progress(
         candidates,
         lambda nvr: elliottlib.brew.get_brew_build(nvr, product_version, session=session)
     )
@@ -250,16 +226,27 @@ def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
     return [b for b in results if not b.attached_to_open_erratum]
 
 
-def _parallel_results(inputs, func):
-    click.secho('[', nl=False)
-    pool = ThreadPool(cpu_count())
-    results = pool.map(
-        lambda it: progress_func(lambda: func(it)),
-        inputs)
+def _attach_to_advisory(builds, kind, product_version, advisory):
+    if kind is None:
+        raise ElliottFatalError('Need to specify with --kind=image or --kind=rpm with packages: {}'.format(builds))
 
-    # Wait for results
-    pool.close()
-    pool.join()
-    click.echo(']')
+    try:
+        erratum = Erratum(errata_id=advisory)
+        file_type = 'tar' if kind == 'image' else 'rpm'
 
-    return results
+        build_nvrs = sorted(build.nvr for build in builds)
+        erratum.addBuilds(
+            build_nvrs,
+            release=product_version,
+            file_types={build.nvr: [file_type] for build in builds}
+        )
+        erratum.commit()
+
+        green_print('Attached build(s) successfully:')
+        for b in build_nvrs:
+            click.echo(' ' + b)
+
+    except GSSError:
+        exit_unauthenticated()
+    except elliottlib.exceptions.BrewBuildException as ex:
+        raise ElliottFatalError('Error attaching builds: {}'.format(getattr(ex, 'message', repr(ex))))
