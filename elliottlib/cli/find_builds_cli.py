@@ -112,7 +112,7 @@ PRESENT advisory. Here are some examples:
 
     # Test authentication
     try:
-        elliottlib.errata.get_filtered_list(elliottlib.constants.errata_live_advisory_filter)
+        Erratum(errata_id=1)
     except GSSError:
         exit_unauthenticated()
 
