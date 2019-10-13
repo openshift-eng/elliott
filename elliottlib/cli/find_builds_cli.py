@@ -38,7 +38,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
     help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
 @click.option(
     '--kind', '-k', metavar='KIND',
-    required=False, type=click.Choice(['rpm', 'image']),
+    type=click.Choice(['rpm', 'image']),
     help='Find builds of the given KIND [rpm, image]')
 @click.option(
     '--from-diff', '--between',
@@ -89,11 +89,8 @@ PRESENT advisory. Here are some examples:
     $ elliott --group openshift-3.6 find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
 '''
 
-    if (from_diff and kind) or (from_diff and builds) or (builds and kind):
-        raise ElliottFatalError('Use only one of --kind or --build or --from-diff.')
-
-    if not builds and not from_diff and not kind:
-        raise ElliottFatalError('Must use one of --kind or --build or --from-diff.')
+    if from_diff and builds:
+        raise ElliottFatalError('Use only one of --build or --from-diff.')
 
     if advisory and default_advisory_type:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
@@ -119,93 +116,15 @@ PRESENT advisory. Here are some examples:
     session = requests.Session()
     unshipped_builds = []
 
-    if len(builds) > 0:
-        green_prefix('Build NVRs provided: ')
-        click.echo('Manually verifying the builds exist')
-        try:
-            unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in builds]
-        except elliottlib.exceptions.BrewBuildException as ex:
-            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-    elif kind:
-        if kind == 'image':
-            initial_builds = runtime.image_metas()
-            pbar_header('Generating list of {kind}s: '.format(kind=kind),
-                        'Hold on a moment, fetching Brew buildinfo',
-                        initial_builds)
-            pool = ThreadPool(cpu_count())
-            # Look up builds concurrently
-            click.secho('[', nl=False)
-
-            # Returns a list of (n, v, r) tuples of each build
-            potential_builds = pool.map(
-                lambda build: progress_func(lambda: build.get_latest_build_info(), '*'),
-                initial_builds)
-            # Wait for results
-            pool.close()
-            pool.join()
-            click.echo(']')
-
-            pbar_header('Generating build metadata: ',
-                        'Fetching data for {n} builds '.format(n=len(potential_builds)),
-                        potential_builds)
-            click.secho('[', nl=False)
-
-            # Reassign variable contents, filter out remove non_release builds
-            potential_builds = [i for i in potential_builds
-                                if i[0] not in runtime.group_config.get('non_release', [])]
-
-            # By 'meta' I mean the lil bits of meta data given back from
-            # get_latest_build_info
-            #
-            # TODO: Update the ImageMetaData class to include the NVR as
-            # an object attribute.
-            pool = ThreadPool(cpu_count())
-            results = pool.map(
-                lambda meta: progress_func(
-                    lambda: elliottlib.brew.get_brew_build('{}-{}-{}'.format(meta[0], meta[1], meta[2]),
-                                                           product_version,
-                                                           session=session),
-                    '*'),
-                potential_builds)
-            # Wait for results
-
-            # filter out 'openshift-enterprise-base-container' since it's not needed in advisory
-            unshipped_builds = [b for b in results
-                                if not b.attached_to_open_erratum
-                                if 'openshift-enterprise-base-container' not in b.nvr]
-            pool.close()
-            pool.join()
-            click.echo(']')
-        elif kind == 'rpm':
-            green_prefix('Generating list of {kind}s: '.format(kind=kind))
-            click.echo('Hold on a moment, fetching Brew builds')
-            unshipped_build_candidates = elliottlib.brew.find_unshipped_build_candidates(
-                base_tag,
-                product_version,
-                kind=kind)
-
-            pbar_header('Gathering additional information: ', 'Brew buildinfo is required to continue', unshipped_build_candidates)
-            click.secho('[', nl=False)
-
-            # We could easily be making scores of requests, one for each build
-            # we need information about. May as well do it in parallel.
-            pool = ThreadPool(cpu_count())
-            results = pool.map(
-                lambda nvr: progress_func(
-                    lambda: elliottlib.brew.get_brew_build(nvr, product_version, session=session),
-                    '*'),
-                unshipped_build_candidates)
-            # Wait for results
-            pool.close()
-            pool.join()
-            click.echo(']')
-
-            # We only want builds not attached to an existing open advisory
-            unshipped_builds = [b for b in results if not b.attached_to_open_erratum]
+    if builds:
+        unshipped_builds = _fetch_builds_by_id(builds, product_version, session)
     elif from_diff:
-        green_print('Fetching changed images between payloads...')
-        changed_builds = elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1])
-        unshipped_builds = [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds]
+        unshipped_builds = _fetch_builds_from_diff(from_diff[0], from_diff[1], product_version, session)
+    else:
+        if kind == 'image':
+            unshipped_builds = _fetch_builds_by_kind_image(runtime, product_version, session)
+        elif kind == 'rpm':
+            unshipped_builds = _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session)
 
     build_nvrs = sorted(build.nvr for build in unshipped_builds)
     json_data = dict(builds=build_nvrs, base_tag=base_tag, kind=kind)
@@ -249,3 +168,98 @@ PRESENT advisory. Here are some examples:
         click.echo('to an advisory:')
         for b in sorted(unshipped_builds):
             click.echo(' ' + b.nvr)
+
+
+def _fetch_builds_by_id(builds, product_version, session):
+    green_prefix('Build NVRs provided: ')
+    click.echo('Manually verifying the builds exist')
+    try:
+        return [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in builds]
+    except elliottlib.exceptions.BrewBuildException as ex:
+        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
+
+
+def _fetch_builds_from_diff(from_payload, to_payload, product_version, session):
+    green_print('Fetching changed images between payloads...')
+    changed_builds = elliottlib.openshiftclient.get_build_list(from_payload, to_payload)
+    return [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds]
+
+
+def _fetch_builds_by_kind_image(runtime, product_version, session):
+    initial_builds = runtime.image_metas()
+    pbar_header(
+        'Generating list of images: ',
+        'Hold on a moment, fetching Brew buildinfo',
+        initial_builds)
+
+    # Returns a list of (n, v, r) tuples of each build
+    potential_builds = _parallel_results(
+        initial_builds,
+        lambda build: build.get_latest_build_info()
+    )
+
+    pbar_header(
+        'Generating build metadata: ',
+        'Fetching data for {n} builds '.format(n=len(potential_builds)),
+        potential_builds)
+
+    # Reassign variable contents, filter out non_release builds
+    potential_builds = [
+        i for i in potential_builds
+        if i[0] not in runtime.group_config.get('non_release', [])
+    ]
+
+    # By 'meta' I mean the lil bits of meta data given back from
+    # get_latest_build_info
+    #
+    # TODO: Update the ImageMetaData class to include the NVR as
+    # an object attribute.
+    results = _parallel_results(
+        potential_builds,
+        lambda meta: elliottlib.brew.get_brew_build(
+            '{}-{}-{}'.format(meta[0], meta[1], meta[2]),
+            product_version,
+            session=session)
+    )
+
+    return [
+        b for b in results
+        if not b.attached_to_open_erratum
+        # filter out 'openshift-enterprise-base-container' since it's not needed in advisory
+        if 'openshift-enterprise-base-container' not in b.nvr
+    ]
+
+
+def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
+    green_prefix('Generating list of rpms: ')
+    click.echo('Hold on a moment, fetching Brew builds')
+    candidates = elliottlib.brew.find_unshipped_build_candidates(
+        base_tag,
+        product_version,
+        kind='rpm')
+
+    pbar_header('Gathering additional information: ', 'Brew buildinfo is required to continue', candidates)
+    # We could easily be making scores of requests, one for each build
+    # we need information about. May as well do it in parallel.
+    results = _parallel_results(
+        candidates,
+        lambda nvr: elliottlib.brew.get_brew_build(nvr, product_version, session=session)
+    )
+
+    # We only want builds not attached to an existing open advisory
+    return [b for b in results if not b.attached_to_open_erratum]
+
+
+def _parallel_results(inputs, func):
+    click.secho('[', nl=False)
+    pool = ThreadPool(cpu_count())
+    results = pool.map(
+        lambda it: progress_func(lambda: func(it)),
+        inputs)
+
+    # Wait for results
+    pool.close()
+    pool.join()
+    click.echo(']')
+
+    return results
