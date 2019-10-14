@@ -45,6 +45,7 @@ from elliottlib.cli.create_cli import create_cli
 from elliottlib.cli.add_metadata_cli import add_metadata_cli
 from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
+from elliottlib.cli.list_cli import list_cli
 
 # 3rd party
 import bugzilla
@@ -417,46 +418,6 @@ Fields for the short format: Release date, State, Synopsys, URL
 
 
 #
-# List Advisories (RPM and image)
-# advisory:list
-#
-@cli.command("list", short_help="List filtered RHOSE advisories")
-@click.option("--filter-id", '-f',
-              default=elliottlib.constants.errata_default_filter,
-              help="A custom filter id to list from")
-@click.option("-n", default=6,
-              help="Return only N latest results (default: 6)")
-@click.pass_context
-def list(ctx, filter_id, n):
-    """Print a list of one-line informational strings of RHOSE
-advisories. By default the 5 most recently created advisories are
-printed. Note, they are NOT sorted by release date.
-
-    NOTE: new filters must be created in the Errata Tool web
-    interface.
-
-Default filter definition: RHBA; Active; Product: RHOSE; Devel Group:
-ENG OpenShift Enterprise; sorted by newest. Browse this filter
-yourself online: https://errata.devel.redhat.com/filter/1965
-
-    List 10 advisories instead of the default 6 with your custom
-    filter #1337:
-
-    $ elliott list -n 10 -f 1337
-"""
-    try:
-        for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=n):
-            click.echo("{release_date:11s} {state:15s} {synopsis:80s} {url}".format(
-                       release_date=erratum.publish_date_override,
-                       state=erratum.errata_state,
-                       synopsis=erratum.synopsis,
-                       url=erratum.url()))
-    except GSSError:
-        exit_unauthenticated()
-    except elliottlib.exceptions.ErrataToolError as ex:
-        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-
-#
 # Get advisory numbers for making puddles
 #
 @cli.command("puddle-advisories", short_help="Get advisory numbers for making puddles")
@@ -637,7 +598,7 @@ providing an advisory with the -a/--advisory option.
 
     green_print("Got bugs for advisory")
     for bug in attached_bugs:
-        if(bug.status in original_state):
+        if bug.status in original_state:
             changed_bug_count += 1
             if noop:
                 click.echo("Would have changed BZ#{bug_id} from {initial} to {final}".format(
@@ -652,7 +613,6 @@ providing an advisory with the -a/--advisory option.
                 bug.setstatus(status=new_state,
                               comment="Elliott changed bug status from {initial} to {final}.".format(initial=original_state, final=new_state),
                               private=True)
-
 
     green_print("{} bugs successfullly modified (or would have been)".format(changed_bug_count))
 
@@ -951,12 +911,14 @@ unsigned builds.
     except ErrataException as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
-## Register additional commands / groups
+# Register additional command groups
 cli.add_command(tarball_sources_cli)
+cli.add_command(create_placeholder)
 cli.add_command(find_builds_cli)
 cli.add_command(add_metadata_cli)
 cli.add_command(create_placeholder_cli)
 cli.add_command(create_cli)
+cli.add_command(list_cli)
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
