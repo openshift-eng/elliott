@@ -1,51 +1,9 @@
-def commentOnPullRequest(msg) {
-    withCredentials([string(
-        credentialsId: "openshift-bot-token",
-        variable: "GITHUB_TOKEN"
-    )]) {
-        script {
-            writeFile(
-                file: "msg.txt",
-                text: msg
-            )
-            requestBody = sh(
-                returnStdout: true,
-                script: "jq --rawfile msg msg.txt -nr '{\"body\": \$msg}'"
-            )
-            repositoryName = env.GIT_URL
-                .replace("https://github.com/", "")
-                .replace(".git", "")
-
-            httpRequest(
-                contentType: 'APPLICATION_JSON',
-                customHeaders: [[
-                    maskValue: true,
-                    name: 'Authorization',
-                    value: "token ${env.GITHUB_TOKEN}"
-                ]],
-                httpMode: 'POST',
-                requestBody: requestBody,
-                responseHandle: 'NONE',
-                url: "https://api.github.com/repos/${repositoryName}/issues/${env.CHANGE_ID}/comments"
-            )
-        }
-    }
-}
-
-def publishToPyPI() {
-    withCredentials([usernamePassword(
-        credentialsId: "OpenShiftART_PyPI",
-        usernameVariable: "TWINE_USERNAME",
-        passwordVariable: "TWINE_PASSWORD"
-    )]) {
-        sh "python3 -m twine upload dist/*"
-    }
-}
+@Library('art-ci-toolkit@master') _
 
 pipeline {
     agent {
         docker {
-            image "redhat/art-tools-ci:latest"
+            image "redhat/art-ci-toolkit:latest"
             args "--entrypoint=''"
         }
     }
@@ -54,14 +12,21 @@ pipeline {
             steps {
                 script {
                     catchError(stageResult: 'FAILURE') {
-                        withCredentials([string(credentialsId: "elliott-codecov-token", variable: "CODECOV_TOKEN")]) {
-                            sh "tox > results.txt 2>&1"
-                        }
+                        sh "tox > results.txt 2>&1"
                     }
                     results = readFile("results.txt").trim()
                     echo results
                     if (env.CHANGE_ID) {
-                        commentOnPullRequest("### Build <span>#</span>${env.BUILD_NUMBER}\n```\n${results}\n```")
+                        commentOnPullRequest(msg: "### Build <span>#</span>${env.BUILD_NUMBER}\n```\n${results}\n```")
+                    }
+                }
+            }
+        }
+        stage("Publish Coverage Report") {
+            steps {
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    withCredentials([string(credentialsId: "elliott-codecov-token", variable: "CODECOV_TOKEN")]) {
+                        sh "codecov --token ${env.CODECOV_TOKEN}"
                     }
                 }
             }
