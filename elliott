@@ -36,10 +36,12 @@ from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated, green_prefix, YMD, override_product_version
 from elliottlib.util import default_release_date, validate_release_date
 from elliottlib.util import validate_email_address, red_print, major_from_branch
-from elliottlib.util import green_print, red_prefix, minor_from_branch
+from elliottlib.util import green_print, red_prefix, minor_from_branch, find_default_advisory
 from elliottlib.util import yellow_print, yellow_prefix, exit_unauthorized, release_from_branch
 from elliottlib.util import progress_func, pbar_header
 from elliottlib.cli.tarball_sources_cli import tarball_sources_cli
+from elliottlib.cli.create_placeholder_cli import create_placeholder
+from elliottlib.cli.list_cli import list_cli
 
 # 3rd party
 import bugzilla
@@ -384,24 +386,6 @@ advisory.
         green_prefix("Would have created advisory: ")
         click.echo("")
         click.echo(erratum)
-
-
-#
-# Look up a default advisory specified for the branch in ocp-build-data
-# Advisory types are in ['rpm', 'image', 'cve']
-#
-def find_default_advisory(runtime, default_advisory_type, quiet=False):
-    """The `quiet` parameter will disable printing the informational message"""
-    default_advisory = runtime.group_config.advisories.get(default_advisory_type, None)
-    if default_advisory is None:
-        red_prefix("No value defined for default advisory:")
-        click.echo(" The key advisories.{} is not defined for group {} in group.yml".format(
-            default_advisory_type, runtime.group))
-        exit(1)
-    if not quiet:
-        green_prefix("Default advisory detected: ")
-        click.echo(default_advisory)
-    return default_advisory
 
 
 #
@@ -910,46 +894,6 @@ Fields for the short format: Release date, State, Synopsys, URL
 
 
 #
-# List Advisories (RPM and image)
-# advisory:list
-#
-@cli.command("list", short_help="List filtered RHOSE advisories")
-@click.option("--filter-id", '-f',
-              default=elliottlib.constants.errata_default_filter,
-              help="A custom filter id to list from")
-@click.option("-n", default=6,
-              help="Return only N latest results (default: 6)")
-@click.pass_context
-def list(ctx, filter_id, n):
-    """Print a list of one-line informational strings of RHOSE
-advisories. By default the 5 most recently created advisories are
-printed. Note, they are NOT sorted by release date.
-
-    NOTE: new filters must be created in the Errata Tool web
-    interface.
-
-Default filter definition: RHBA; Active; Product: RHOSE; Devel Group:
-ENG OpenShift Enterprise; sorted by newest. Browse this filter
-yourself online: https://errata.devel.redhat.com/filter/1965
-
-    List 10 advisories instead of the default 6 with your custom
-    filter #1337:
-
-    $ elliott list -n 10 -f 1337
-"""
-    try:
-        for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=n):
-            click.echo("{release_date:11s} {state:15s} {synopsis:80s} {url}".format(
-                       release_date=erratum.publish_date_override,
-                       state=erratum.errata_state,
-                       synopsis=erratum.synopsis,
-                       url=erratum.url()))
-    except GSSError:
-        exit_unauthenticated()
-    except elliottlib.exceptions.ErrataToolError as ex:
-        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-
-#
 # Get advisory numbers for making puddles
 #
 @cli.command("puddle-advisories", short_help="Get advisory numbers for making puddles")
@@ -1006,6 +950,7 @@ first comment.
     except elliottlib.exceptions.ErrataToolError as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
+
 #
 # Add metadata comment to an Advisory
 # advisory:add-metadata
@@ -1049,6 +994,7 @@ Example to add standard metadata to a 3.10 images release
     else:
         red_print("Something weird may have happened")
         raise ElliottFatalError("Unexpected response from ET API: {code}".format(code=result.status_code))
+
 
 #
 # Repair bugs
@@ -1177,7 +1123,7 @@ providing an advisory with the -a/--advisory option.
 
     green_print("Got bugs for advisory")
     for bug in attached_bugs:
-        if(bug.status in original_state):
+        if bug.status in original_state:
             changed_bug_count += 1
             if noop:
                 click.echo("Would have changed BZ#{bug_id} from {initial} to {final}".format(
@@ -1192,7 +1138,6 @@ providing an advisory with the -a/--advisory option.
                 bug.setstatus(status=new_state,
                               comment="Elliott changed bug status from {initial} to {final}.".format(initial=original_state, final=new_state),
                               private=True)
-
 
     green_print("{} bugs successfullly modified (or would have been)".format(changed_bug_count))
 
@@ -1231,6 +1176,7 @@ def find_cve_trackers(runtime, cve, status):
     click.echo("Found {} bugs:".format(len(bug_list)))
     for b in bug_list:
         click.echo("{}\t{:15s}\t{}".format(b.bug_id, b.status, b.summary))
+
 
 #
 # Verify images in a payload match the corresponding advisory
@@ -1378,69 +1324,6 @@ written out to summary_results.json.
     green_prefix("Wrote out summary results: ")
     click.echo("summary_results.json")
 
-#
-# Create Placeholder BZ
-# bugzilla:create-placeholder
-#
-@cli.command('create-placeholder',
-             short_help='Create a placeholder BZ')
-@click.option('--kind', '-k', metavar='KIND',
-              required=False, type=click.Choice(elliottlib.constants.placeholder_valid_types),
-              help='KIND [{}] of placeholder bug to create. Affects BZ title.'.format(
-                  ', '.join(elliottlib.constants.placeholder_valid_types)))
-@click.option('--attach', '-a', 'advisory',
-              default=False, metavar='ADVISORY',
-              help='Attach the bug to ADVISORY')
-@click.option("--use-default-advisory", 'default_advisory_type',
-              metavar='ADVISORY_TYPE',
-              type=click.Choice(elliottlib.constants.placeholder_valid_types),
-              help="Use the default value from ocp-build-data for ADVISORY_TYPE [{}]".format(
-                  ', '.join(elliottlib.constants.placeholder_valid_types)))
-@pass_runtime
-def create_placeholder(runtime, kind, advisory, default_advisory_type):
-    """Create a placeholder bug for attaching to an advisory.
-
-    KIND - The kind of placeholder to create ({}).
-    ADVISORY - Optional. The advisory to attach the bug to.
-
-    $ elliott --group openshift-4.1 create-placeholder --kind rpm --attach 12345
-""".format('/'.join(elliottlib.constants.placeholder_valid_types))
-
-    runtime.initialize()
-    if advisory and default_advisory_type:
-        raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
-
-    if default_advisory_type is not None:
-        advisory = find_default_advisory(runtime, default_advisory_type)
-        kind = default_advisory_type
-
-    if kind is None:
-        raise click.BadParameter("--kind must be specified when not using --use-default-advisory")
-
-    bz_data = runtime.gitdata.load_data(key='bugzilla').data
-    target_release = bz_data['target_release'][0]
-    newbug = elliottlib.bzutil.create_placeholder(bz_data, kind, target_release)
-
-    click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
-
-    if advisory is not False:
-        click.echo("Attaching to advisory...")
-
-        try:
-            advs = Erratum(errata_id=advisory)
-        except GSSError:
-            exit_unauthenticated()
-
-        if advs is False:
-            raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
-
-        try:
-            green_prefix("Adding placeholder bug to advisory:")
-            click.echo(" {advs}".format(advs=advisory))
-            advs.addBugs([newbug.id])
-            advs.commit()
-        except ErrataException as ex:
-            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
 #
 # Poll for rpm-signed state change
@@ -1558,8 +1441,12 @@ unsigned builds.
     except ErrataException as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
-## Register additional command groups
+
+# Register additional command groups
 cli.add_command(tarball_sources_cli)
+cli.add_command(create_placeholder)
+cli.add_command(list_cli)
+
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
@@ -1577,6 +1464,7 @@ def main():
         # to exit with an error code should use ElliottFatalError
         red_print(getattr(ex, 'message', repr(ex)))
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()

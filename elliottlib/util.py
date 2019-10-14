@@ -202,3 +202,21 @@ def override_product_version(pv, branch):
             return 'OSE-{}-RHEL-{}'.format(rb[1], rb[3])
         return 'RHEL-{}-OSE-{}'.format(rb[3], rb[1])
     return pv
+
+
+#
+# Look up a default advisory specified for the branch in ocp-build-data
+# Advisory types are in ['rpm', 'image', 'cve']
+#
+def find_default_advisory(runtime, default_advisory_type, quiet=False):
+    """The `quiet` parameter will disable printing the informational message"""
+    default_advisory = runtime.group_config.advisories.get(default_advisory_type, None)
+    if default_advisory is None:
+        red_prefix("No value defined for default advisory:")
+        click.echo(" The key advisories.{} is not defined for group {} in group.yml".format(
+            default_advisory_type, runtime.group))
+        exit(1)
+    if not quiet:
+        green_prefix("Default advisory detected: ")
+        click.echo(default_advisory)
+    return default_advisory
