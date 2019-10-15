@@ -34,9 +34,10 @@ def tarball_sources_cli(ctx):
               default="hierarchical", show_default=True,
               help="Layout of output directory.")
 @click.option("--component", "components", multiple=True, help="Koji/Brew component names or build NVRs to filter on. Can be specified multiple times.")
-@click.option("-f", "--force", is_flag=True, help="Force overwrite existing files.")
+@click.option("-f", "--force", is_flag=True, help="Force overwrite files in non-empty output directory")
+@click.option("--no-lookaside", is_flag=True, help="Do not resolve sources in dist-git lookaside cache.")
 @click.pass_context
-def create(ctx, advisories, out_dir, out_layout, components, force):
+def create(ctx, advisories, out_dir, out_layout, components, force, no_lookaside):
     """ Create tarball sources for advisories.
 
     To create tarball sources for Brew component (package) logging-fluentd-container that was shipped on advisories 45606, 45527, and 46049:
@@ -48,12 +49,12 @@ def create(ctx, advisories, out_dir, out_layout, components, force):
             "Output directory {} is not empty.\n\
 Use --force to add new tarball sources to an existing directory.".format(os.path.abspath(out_dir)))
         exit(1)
-    mkdirs(out_dir)
+    util.mkdirs(out_dir)
 
     working_dir = os.path.join(ctx.obj.working_dir, "tarball-sources")
     LOGGER.debug("Use working directory {}.".format(
         os.path.abspath(working_dir)))
-    mkdirs(working_dir)
+    util.mkdirs(working_dir)
 
     # `nvr_dirs` is a dict with brew build NVRs as keys, values are
     # a set of directories for the generated tarballs,
@@ -125,9 +126,9 @@ Use --force to add new tarball sources to an existing directory.".format(os.path
                 "Temporary tarball file is {}".format(temp_tarball_path))
 
             tarball_sources.generate_tarball_source(temp_tarball, nvr + "/", os.path.join(working_dir, "repos", build_info["name"]),
-                                                    build_info["source"])
+                                                    build_info["source"], False, not no_lookaside)
             for dest_dir in nvr_dirs[nvr]:
-                mkdirs(dest_dir)
+                util.mkdirs(dest_dir)
                 tarball_abspath = os.path.abspath(
                     os.path.join(dest_dir, tarball_filename))
                 if os.path.exists(tarball_abspath):
@@ -142,18 +143,6 @@ Use --force to add new tarball sources to an existing directory.".format(os.path
                     "Created tarball source {}.".format(tarball_abspath))
 
     print_success_message(tarball_sources_list, out_dir)
-
-
-def mkdirs(path):
-    """ Make sure a directory exists. Similar to shell command `mkdir -p`.
-
-    This function will not be necessary when fully migrated to Python 3.
-    """
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        if e.errno != errno.EEXIST:  # ignore if dest_dir exists
-            raise
 
 
 def print_success_message(tarball_sources_list, out_dir):

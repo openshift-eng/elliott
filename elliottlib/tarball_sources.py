@@ -3,10 +3,11 @@ from future.builtins import str
 import logutil
 from typing import List, Set, Dict, Tuple, Text, Optional
 import os
-from io import BytesIO
+from io import BytesIO, SEEK_SET
 import collections
 import tarfile
 import pygit2
+import pyrpkg
 import errata_tool
 import koji
 import logging
@@ -14,6 +15,9 @@ import constants
 from future.standard_library import install_aliases
 install_aliases()
 from urllib.parse import urlparse, urldefrag
+from elliottlib import distgit
+import tempfile
+import time
 
 # Exclude those files from the outputing tarball sources:
 TARBALL_IGNORES = {".gitignore", ".oit", "container.yaml",
@@ -75,7 +79,30 @@ def get_builds_from_brew(session, build_nvrs):
         yield build
 
 
-def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, force_fetch=False):
+def archive_lookaside_sources(repo_url, sources_file, archive, prefix=""):
+    """ Download sources from dist-git lookaside cache and add them to the tarball
+    :param repo_url: Remote source repo url.
+    :param sources_file: `sources` file object.
+    :param archive: A tarball archive that downloaded sources will be added to.
+    :param prefix: Prepend a prefix to filename of each source added to the archive.
+    """
+    repo = distgit.DistGitRepo(repo_url)
+    lookaside_cache = repo.get_lookaside_cache()
+    if not lookaside_cache:
+        LOGGER.warn("No lookaside cache configured for this repo.")
+        return
+    sources = distgit.parse_lookaside_sources(sources_file)
+    for source_entry in sources.entries:
+        info = tarfile.TarInfo(prefix + source_entry.file)
+        info.mtime = time.time()
+        info.uname = info.gname = 'root'  # Git does this!
+        tempfile = BytesIO()
+        info.size = repo.download_lookaside_source(source_entry.file, source_entry.hash, tempfile)
+        tempfile.seek(0, SEEK_SET)
+        archive.addfile(info, tempfile)
+
+
+def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, force_fetch=False, resolve_lookaside_cache=True):
     """ Gereate a tarball source from specified commit of a remote Git repository.
 
     This function uses pygit2 (libgit2) to walkthrough files of a commit.
@@ -85,6 +112,7 @@ def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, f
     :param local_repo_path: Clone the remote repository into this local directory.
     :param source_url: Remote source repo url and commit hash seperated by `#`.
     :param force_fetch: Force download objects and refs from another repository
+    :param resolve_lookaside_cache: If true, resolve lookaside-cache in dist-git.
     """
     source_repo_url, source_commit_hash = urldefrag(source_url)
     assert source_commit_hash
@@ -111,7 +139,8 @@ def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, f
         fetch = force_fetch
         if not force_fetch:
             try:
-                git_commit = repo.revparse_single(source_commit_hash).peel(pygit2.Commit)
+                git_commit = repo.revparse_single(
+                    source_commit_hash).peel(pygit2.Commit)
             except KeyError:
                 fetch = True
         if fetch:
@@ -122,7 +151,8 @@ def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, f
         repo = pygit2.clone_repository(source_repo_url, local_repo_path)
 
     if not git_commit:
-        git_commit = repo.revparse_single(source_commit_hash).peel(pygit2.Commit)
+        git_commit = repo.revparse_single(
+            source_commit_hash).peel(pygit2.Commit)
     LOGGER.info("Generating source from commit {}, author: {} <{}> message:{}".format(
         git_commit.id, git_commit.author.name, git_commit.author.email, git_commit.message))
 
@@ -134,6 +164,12 @@ def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, f
             for _entry in root:
                 entry = _entry  # type: pygit2.TreeEntry
                 full_name = path + entry.name
+                if resolve_lookaside_cache and full_name == "sources" and entry.type == "blob":
+                    LOGGER.info("Try resolving dist-git lookaside sources file...")
+                    blob = repo.get(entry.id)  # type: pygit2.Blob
+                    archive_lookaside_sources(source_repo_url, BytesIO(blob.data), archive, prefix)
+                    resolve_lookaside_cache = False
+                    continue
                 if full_name in TARBALL_IGNORES:
                     LOGGER.info(
                         "Excluded {} from source tarball.".format(full_name))

@@ -3,6 +3,8 @@ import datetime
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
 import re
+import os
+import errno
 
 from errata_tool import Erratum
 from kerberos import GSSError
@@ -247,3 +249,15 @@ def override_product_version(pv, branch):
             return 'OSE-{}-RHEL-{}'.format(rb[1], rb[3])
         return 'RHEL-{}-OSE-{}'.format(rb[3], rb[1])
     return pv
+
+
+def mkdirs(path):
+    """ Make sure a directory exists. Similar to shell command `mkdir -p`.
+
+    This function will not be necessary when fully migrated to Python 3.
+    """
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:  # ignore if dest_dir exists
+            raise

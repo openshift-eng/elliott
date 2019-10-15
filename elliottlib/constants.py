@@ -6,6 +6,16 @@ BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 BREW_IMAGE_HOST = "brew-pulp-docker01.web.prod.ext.phx2.redhat.com:8888"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
 
+DIST_GIT_CONFIG = {
+    "pkgs.devel.redhat.com": {
+        "lookaside_cache": {
+            "hash_type": "md5",
+            "download_url": "http://pkgs.devel.redhat.com/repo",
+            "upload_url": "http://pkgs.devel.redhat.com/lookaside/upload.cgi"
+        }
+    }
+}
+
 VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
 
 BUG_SEVERITY = ["low", "medium", "high", "urgent"]

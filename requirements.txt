@@ -12,4 +12,5 @@ python-bugzilla
 pyyaml
 requests
 requests_kerberos
+rpkg
 typing

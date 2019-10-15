@@ -5,6 +5,8 @@ import json
 import errata_tool
 import koji
 from elliottlib import tarball_sources
+import io
+import tarfile
 
 
 class TarballSourcesTestCase(unittest.TestCase):
@@ -49,6 +51,21 @@ class TarballSourcesTestCase(unittest.TestCase):
             expected = build_infos.values()
             actual = tarball_sources.get_builds_from_brew(session, build_nvrs)
             self.assertListEqual(list(actual), expected)
+
+    def test_archive_lookaside_sources(self):
+        repo_url = "git://pkgs.devel.redhat.com/rpms/openshift-clients"
+        sources_file = io.BytesIO(b"2ba370dd5e06259ec4fa3b22c50ad2f9  openshift-clients-git-1.c8c7aaa.tar.gz")
+        prefix = "openshift-clients-git-1.c8c7aaa/"
+        tarball = tarfile.open(fileobj=io.BytesIO(), mode="w:gz")
+        buffer = b"1234567890abedef"
+
+        def fake_download_lookaside_source(filename, hash, fileobj, session=None):
+            fileobj.write(buffer)
+            fileobj.flush()
+            return len(buffer)
+        with mock.patch("elliottlib.distgit.DistGitRepo.download_lookaside_source", side_effect=fake_download_lookaside_source):
+            tarball_sources.archive_lookaside_sources(repo_url, sources_file, tarball, "openshift-clients-git-1.c8c7aaa/")
+            self.assertEqual(len(buffer), tarball.getmember(prefix + "openshift-clients-git-1.c8c7aaa.tar.gz").size)
 
 
 if __name__ == "__main__":
