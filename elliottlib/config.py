@@ -31,6 +31,7 @@ class MetaDataConfig(object):
     Holds common functions for managing the MetaData configs
     Mostly is a class to hold runtime
     """
+
     def __init__(self, runtime):
         self.runtime = runtime
         if self.runtime.remove_tmp_working_dir:

@@ -358,6 +358,7 @@ class BrewTaggedImageBuilds(object):
     builds. Ensures the result set is formatted correctly for this
     build type.
     """
+
     def __init__(self, tag):
         self.tag = tag
         self.builds = set([])
@@ -389,6 +390,7 @@ class BrewTaggedRPMBuilds(object):
     builds. Ensures the result set is formatted correctly for this
     build type.
     """
+
     def __init__(self, tag):
         self.tag = tag
         self.builds = set([])
@@ -434,6 +436,7 @@ function. Give it an NVR or a build ID and it will give you an
 initialized Build object (provided the build exists).
 
     """
+
     def __init__(self, nvr=None, body={}, product_version=''):
         """Model for a brew build.
 
