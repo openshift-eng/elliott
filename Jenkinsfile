@@ -4,6 +4,7 @@ pipeline {
     agent {
         docker {
             image "redhat/art-ci-toolkit:latest"
+            alwaysPull true
             args "--entrypoint=''"
         }
     }
