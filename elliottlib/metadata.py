@@ -17,14 +17,6 @@ def cgit_url(name, filename, rev=None):
     return ret
 
 
-def tag_exists(registry, name, tag, fetch_f=None):
-    def assert_200(url):
-        return urllib.urlopen(url).code == 200
-    if fetch_f is None:
-        fetch_f = assert_200
-    return fetch_f("/".join((registry, "v1/repositories", name, "tags", tag)))
-
-
 CONFIG_MODES = [
     'enable',  # business as usual
     'disable',  # manually disabled from automatically building
@@ -115,9 +107,6 @@ class Metadata(object):
             3, lambda: urllib.urlopen(url),
             check_f=lambda req: req.code == 200)
         return req.read()
-
-    def tag_exists(self, tag):
-        return tag_exists("http://" + constants.BREW_IMAGE_HOST, self.config.name, tag)
 
     def get_component_name(self):
         # By default, the bugzilla component is the name of the distgit,

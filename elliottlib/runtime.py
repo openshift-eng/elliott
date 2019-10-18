@@ -21,7 +21,7 @@ import logutil
 import assertion
 import exectools
 from pushd import Dir
-from image import ImageMetadata
+from imagecfg import ImageMetadata
 from rpmcfg import RPMMetadata
 from model import Model, Missing
 from multiprocessing import Lock

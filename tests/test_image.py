@@ -6,7 +6,7 @@ import unittest
 
 import flexmock
 
-import image
+import imagecfg
 
 
 class TestImageMetadata(unittest.TestCase):
@@ -36,8 +36,8 @@ class TestImageMetadata(unittest.TestCase):
                                  filename="_irrelevant_",
                                  path="_irrelevant_")
 
-        md = image.ImageMetadata(rt, data_obj)
-        md_base = image.ImageMetadata(rt, base_data_obj)
+        md = imagecfg.ImageMetadata(rt, data_obj)
+        md_base = imagecfg.ImageMetadata(rt, base_data_obj)
 
         # Test the internal config value (will fail if implementation changes)
         # If the flag is absent, default to false
