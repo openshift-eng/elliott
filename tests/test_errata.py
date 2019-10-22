@@ -8,22 +8,11 @@ import json
 from contextlib import nested
 import flexmock
 from errata_tool import ErrataException
-
-# Import the right version for your python
-import platform
-(major, minor, patch) = platform.python_version_tuple()
-if int(major) == 2 and int(minor) < 7:
-    import unittest2 as unittest
-else:
-    import unittest
-
-import errata
-import constants
-from elliottlib import errata
 import bugzilla
-import brew
+
+import unittest
 import test_structures
-from elliottlib import exceptions
+from elliottlib import errata, constants, brew, exceptions
 
 
 class TestErrata(unittest.TestCase):
@@ -66,23 +55,6 @@ class TestErrata(unittest.TestCase):
 
         self.assertRaises(exceptions.ErrataToolError, errata.get_filtered_list)
 
-    # def test_add_bugs_with_retry(self):
-    #     advs = testErratum(rt=2, ntt=2)
-    #
-    #     # adding bugs [1,2] but 1 is already attached to another advisory, it will retry
-    #     # and add [2] again.
-    #     flexmock(errata.Erratum).should_receive('addBugs').and_return([1,2]).and_return([2])
-    #     flexmock(errata.Erratum).should_receive('commit').and_raise(ErrataException).and_return('')
-    #     try:
-    #         errata.add_bugs_with_retry(advs, [1, 2], False)
-    #     except exceptions.ElliottFatalError:
-    #         self.fail("raised ElliottFatalError unexpectedly!")
-    #
-    #     advs = testErratum(rt=0, ntt=2)
-    #     with self.assertRaises(exceptions.ElliottFatalError) as cm:
-    #         errata.add_bugs_with_retry(advs, [1, 2], True)
-    #     self.assertEqual(str(cm.exception), "this is an exception from testErratum")
-
     def test_parse_exception_error_message(self):
         self.assertEqual([1685398], errata.parse_exception_error_message('Bug #1685398 The bug is filed already in RHBA-2019:1589.'))
 
@@ -90,6 +62,16 @@ class TestErrata(unittest.TestCase):
 
         self.assertEqual([1685398, 1685399], errata.parse_exception_error_message('''Bug #1685398 The bug is filed already in RHBA-2019:1589.
         Bug #1685399 The bug is filed already in RHBA-2019:1589.'''))
+
+    def test_get_advisories_for_bug(self):
+        bug = 123456
+        advisories = [{"advisory_name": "RHBA-2019:3151", "status": "NEW_FILES", "type": "RHBA", "id": 47335, "revision": 3}]
+        with mock.patch("requests.Session") as MockSession:
+            session = MockSession()
+            response = session.get.return_value
+            response.json.return_value = advisories
+            actual = errata.get_advisories_for_bug(bug, session)
+            self.assertEqual(actual, advisories)
 
 
 class testErratum:

@@ -8,6 +8,7 @@ Classes representing an ERRATUM (a single errata)
 
 """
 
+from errata_tool import ErrataConnector
 import copy
 import datetime
 import json
@@ -106,7 +107,8 @@ def find_latest_erratum(kind, major, minor):
         print("Fetching {state}".format(state=state_desc))
         advisories = get_filtered_list(filter_id, limit=50)
         # Filter out advisories that aren't for this release
-        advisory_list.extend([advs for advs in advisories if " {} ".format(release) in advs.synopsis])
+        advisory_list.extend(
+            [advs for advs in advisories if " {} ".format(release) in advs.synopsis])
         print("Advisory list has {n} items after this fetch".format(
             n=len(advisory_list)))
 
@@ -135,7 +137,7 @@ def find_latest_erratum(kind, major, minor):
         return sorted_dates[-1]
 
 
-def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=False,
+def new_erratum(et_data, errata_type=None, boilerplate_name=None, kind=None, release_date=None, create=False,
                 assigned_to=None, manager=None, package_owner=None, impact=None, cves=None):
     """5.2.1.1. POST /api/v1/erratum
 
@@ -146,7 +148,10 @@ def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=
 
     :param et_data: The ET data dump we got from our erratatool.yaml file
     :param errata_type: The type of advisory to create (RHBA, RHSA, or RHEA)
-    :param string kind: One of 'rpm' or 'image', effects boilerplate text
+    :param string kind: One of [rpm, image].
+        Only used for backward compatibility.
+    :param string boilerplate_name: One of [rpm, image, extras, metadata, cve].
+        The name of boilerplate for creating this advisory
     :param string release_date: A date in the form YYYY-Mon-DD
     :param bool create: If true, create the erratum in the Errata
         tool, by default just the DATA we would have POSTed is
@@ -163,20 +168,34 @@ def new_erratum(et_data, errata_type=None, kind=None, release_date=None, create=
     :return: An Erratum object
     :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
     """
-    if release_date is None:
+    if not release_date:
         release_date = datetime.datetime.now() + datetime.timedelta(days=21)
 
-    if kind is None:
+    if not kind:
         kind = 'rpm'
+
+    if not boilerplate_name:
+        boilerplate_name = kind
+
+    if "boilerplates" in et_data:
+        boilerplate = et_data['boilerplates'][boilerplate_name]
+    else:  # FIXME: For backward compatibility.
+        boilerplate = {
+            "synopsis": (et_data['synopsis'][boilerplate_name] if boilerplate_name != "cve"
+                         else et_data['synopsis'][kind]),
+            "topic": et_data["topic"],
+            "description": et_data["description"],
+            "solution": et_data["solution"],
+        }
 
     e = Erratum(
         product=et_data['product'],
         release=et_data['release'],
         errata_type=errata_type,
-        synopsis=et_data['synopsis'][kind],
-        topic=et_data['topic'],
-        description=et_data['description'],
-        solution=et_data['solution'],
+        synopsis=boilerplate['synopsis'],
+        topic=boilerplate['topic'],
+        description=boilerplate['description'],
+        solution=boilerplate['solution'],
         qe_email=assigned_to,
         qe_group=et_data['quality_responsibility_name'],
         owner_email=package_owner,
@@ -357,6 +376,25 @@ def get_builds(advisory_id):
         return res.json()
     else:
         raise exceptions.ErrataToolUnauthorizedException(res.text)
+
+# https://errata.devel.redhat.com/bugs/1743872/advisories.json
+
+
+def get_advisories_for_bug(bug_id, session=None):
+    """ Fetch the list of advisories which a specified bug is attached to.
+
+    5.2.26.7 /bugs/{id}/advisories.json
+
+    :param bug_id: Bug ID
+    :param session: Optional requests.Session
+    """
+    if not session:
+        session = requests.session()
+    r = session.get(constants.errata_get_advisories_for_bug_url.format(id=int(bug_id)),
+                    verify=ssl.get_default_verify_paths().openssl_cafile,
+                    auth=HTTPKerberosAuth())
+    r.raise_for_status()
+    return r.json()
 
 
 def parse_exception_error_message(e):
