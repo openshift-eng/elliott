@@ -44,6 +44,21 @@ class TestBZUtil(unittest.TestCase):
             actual = bzutil.get_tracker_flaws_map(None, trackers.values())
             self.assertEqual(expected, actual)
 
+    def test_is_viable_bug(self):
+        bug = mock.MagicMock()
+        bug.status = "MODIFIED"
+        self.assertTrue(bzutil.is_viable_bug(bug))
+        bug.status = "ASSIGNED"
+        self.assertFalse(bzutil.is_viable_bug(bug))
+
+    def test_is_cve_tracker(self):
+        bug = mock.MagicMock(keywords=[])
+        self.assertFalse(bzutil.is_cve_tracker(bug))
+        bug.keywords.append("Security")
+        self.assertFalse(bzutil.is_cve_tracker(bug))
+        bug.keywords.append("SecurityTracking")
+        self.assertTrue(bzutil.is_cve_tracker(bug))
+
 
 class TestSearchFilter(unittest.TestCase):
 

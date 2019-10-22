@@ -27,14 +27,13 @@ LOGGER = elliottlib.logutil.getLogger(__name__)
 @click.option("--kind", '-k', required=True,
               type=click.Choice(['rpm', 'image']),
               help="Kind of artifacts that will be attached to Advisory. Affects boilerplate text.")
-@click.option("--impetus", default='standard',
+@click.option("--impetus",
               type=click.Choice(elliottlib.constants.errata_valid_impetus),
               help="Impetus for the advisory creation [{}]".format(
                   ', '.join(elliottlib.constants.errata_valid_impetus)))
-@click.option("--date", required=False,
-              default=default_release_date.strftime(YMD),
+@click.option("--date", required=True,
               callback=validate_release_date,
-              help="Release date for the advisory. Optional. Format: YYYY-Mon-DD. Defaults to 3 weeks after the release with the highest date for that series")
+              help="Release date for the advisory. Format: YYYY-Mon-DD.")
 @click.option('--assigned-to', metavar="EMAIL_ADDR", required=True,
               envvar="ELLIOTT_ASSIGNED_TO_EMAIL",
               callback=validate_email_address,
@@ -53,7 +52,8 @@ LOGGER = elliottlib.logutil.getLogger(__name__)
 @click.option('--yes', '-y', is_flag=True,
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
-@click.option("--bugs", "-b", 'bugs', multiple=True)
+@click.option("--bug", "--bugs", "-b", 'bugs', type=int, multiple=True,
+              help="Bug IDs for attaching to the advisory on creation. Required for creating a security advisory.")
 @pass_runtime
 @click.pass_context
 def create_cli(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, with_placeholder, yes, bugs):
@@ -63,9 +63,7 @@ def create_cli(ctx, runtime, errata_type, kind, impetus, date, assigned_to, mana
     You MUST specify a group (ex: "openshift-3.9") manually using the
     --group option. See examples below.
 
-New advisories will be created with a Release Date set to 3 weeks (21
-days) from now. You may customize this (especially if that happens to
-fall on a weekend) by providing a YYYY-Mon-DD formatted string to the
+You must set a Release Date by providing a YYYY-Mon-DD formatted string to the
 --date option.
 
 The default behavior for this command is to show what the generated
@@ -81,7 +79,7 @@ They are the email addresses of the parties responsible for managing and
 approving the advisory.
 
 Adding a list of bug ids with one or more --bugs arguments attaches those bugs to the
-advisory on creation. The list of bugs will also be checked for any CVE flaw
+advisory on creation. When creating a security advisory, the list of bugs will also be checked for any CVE flaw
 bugs which they are blocking, and those will be added as well. Any CVE flaw bugs
 being added will also calculate the Impact for the release if it's type is RHSA.
 
@@ -97,55 +95,27 @@ advisory.
 \b
     $ elliott --group openshift-3.5 create --yes -k image --date 2018-Mar-05
 """
-    runtime.initialize()
+    # perform sanity checks and provide default values
+    if errata_type == 'RHSA':
+        if not bugs:
+            raise ElliottFatalError(
+                "When creating an RHSA, you must provide a list of bug id(s) using one or more `--bug` options.")
+        if not impetus:
+            impetus = 'cve'
+        elif impetus != 'cve':
+            raise ElliottFatalError("Invalid impetus")
+    elif not impetus:
+        impetus = 'standard'
 
-    if errata_type == 'RHSA' and not bugs:
-        raise ElliottFatalError("When creating an RHSA, you must provide a list of bug id(s)")
+    runtime.initialize()
 
     et_data = runtime.gitdata.load_data(key='erratatool').data
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
 
-    major = major_from_branch(runtime.group_config.branch)
-    minor = minor_from_branch(runtime.group_config.branch)
     impact = None
 
-    if date == default_release_date.strftime(YMD):
-        # User did not enter a value for --date, default is determined
-        # by looking up the latest erratum in a series
-        try:
-            latest_advisory = elliottlib.errata.find_latest_erratum(kind, major, minor)
-        except GSSError:
-            exit_unauthenticated()
-        except elliottlib.exceptions.ErrataToolUnauthorizedException:
-            exit_unauthorized()
-        except elliottlib.exceptions.ErrataToolError as ex:
-            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-        else:
-            if latest_advisory is None:
-                red_print("No metadata discovered")
-                raise ElliottFatalError("No advisory for {x}.{y} has been released in recent history, can not auto "
-                                        "determine next release date".format(x=major, y=minor))
-
-        green_prefix("Found an advisory to calculate new release date from: ")
-        click.echo("{synopsis} - {rel_date}".format(
-            synopsis=latest_advisory.synopsis,
-            rel_date=str(latest_advisory.release_date)))
-        release_date = latest_advisory.release_date + datetime.timedelta(days=21)
-
-        # We want advisories to issue on Tuesdays. Using strftime
-        # Tuesdays are '2' with Sunday indexed as '0'
-        day_of_week = int(release_date.strftime('%w'))
-        if day_of_week != 2:
-            # How far from our target day of the week?
-            delta = day_of_week - 2
-            release_date = release_date - datetime.timedelta(days=delta)
-            yellow_print("Adjusted release date to land on a Tuesday")
-
-        green_prefix("Calculated release date: ")
-        click.echo("{}".format(str(release_date)))
-    else:
-        # User entered a valid value for --date, set the release date
-        release_date = datetime.datetime.strptime(date, YMD)
+    # User entered a valid value for --date, set the release date
+    release_date = datetime.datetime.strptime(date, YMD)
 
     ######################################################################
 
@@ -155,8 +125,11 @@ advisory.
 
     if bugs:
         bzapi = elliottlib.bzutil.get_bzapi(bz_data)
-        LOGGER.info("Fetching bugs {} from Bugzilla...".format(" ".join(map(str, bugs))))
+        LOGGER.info("Fetching bugs {} from Bugzilla...".format(
+            " ".join(map(str, bugs))))
         bug_objects = bzapi.getbugs(bugs)
+        # assert bugs are viable for a new advisory.
+        _assert_bugs_are_viable(errata_type, bugs, bug_objects)
         if errata_type == 'RHSA':
             LOGGER.info("Fetching flaw bugs for trackers {}...".format(" ".join(map(str, bugs))))
             tracker_flaws_map = elliottlib.bzutil.get_tracker_flaws_map(bzapi, bug_objects)
@@ -171,9 +144,9 @@ advisory.
         erratum = elliottlib.errata.new_erratum(
             et_data,
             errata_type=errata_type,
-            kind=(impetus if impetus in ['extras', 'metadata'] else kind),
+            kind=kind,
+            boilerplate_name=(impetus if impetus != "standard" else kind),
             release_date=release_date.strftime(YMD),
-            create=yes,
             assigned_to=assigned_to,
             manager=manager,
             package_owner=package_owner,
@@ -185,9 +158,14 @@ advisory.
     except elliottlib.exceptions.ErrataToolError as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
+    erratum.addBugs(unique_bugs)
+
     if yes:
+        erratum.commit()
         green_prefix("Created new advisory: ")
-        click.echo(str(erratum.synopsis))
+        click.echo(str(erratum))
+        if errata_type == 'RHSA':
+            yellow_print("Remember to manually set the Security Reviewer in the Errata Tool Web UI")
 
         # This is a little strange, I grant you that. For reference you
         # may wish to review the click docs
@@ -203,16 +181,6 @@ advisory.
         ctx.invoke(add_metadata_cli, kind=kind, impetus=impetus, advisory=erratum.errata_id)
         click.echo(str(erratum))
 
-        erratum.addBugs(unique_bugs)
-
-        if errata_type == 'RHSA':
-            click.echo("Automatically attaching CVE flaw bugs ...")
-            erratum.addBugs(flaw_cve_map.keys())
-
-            yellow_print("Remember to manually set the Security Reviewer in the Errata Tool Web UI")
-
-        erratum.commit()
-
         if with_placeholder:
             click.echo("Creating and attaching placeholder bug...")
             ctx.invoke(create_placeholder_cli, kind=kind, advisory=erratum.errata_id)
@@ -220,3 +188,21 @@ advisory.
         green_prefix("Would have created advisory: ")
         click.echo("")
         click.echo(erratum)
+
+
+def _assert_bugs_are_viable(errata_type, bugs, bug_objects):
+    for index, bug in enumerate(bug_objects):
+        bug_id = bugs[index]
+        if not bug:
+            raise ElliottFatalError("Couldn't find bug {}. Did you log in?".format(bug_id))
+        if not elliottlib.bzutil.is_viable_bug(bug):
+            raise ElliottFatalError("Bug {} is not viable: Status is {}.".format(bug_id, bug.status))
+        if errata_type == 'RHSA' and not elliottlib.bzutil.is_cve_tracker(bug):
+            raise ElliottFatalError("Bug {} is not a CVE tracker: Keywords are {}.".format(bug_id, bug.keywords))
+        LOGGER.info("Checking if bug {} is already attached to an advisory...".format(bug_id))
+        advisories = elliottlib.errata.get_advisories_for_bug(bug_id)
+        if advisories:
+            raise ElliottFatalError(
+                "Bug {} is already attached to advisories: {}"
+                .format(bug_id, " ".join(map(lambda item: str(item["id"]), advisories))))
+        LOGGER.info("Bug {} is viable.".format(bug_id))

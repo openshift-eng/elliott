@@ -22,32 +22,6 @@ import bugzilla
 logger = logutil.getLogger(__name__)
 
 
-def get_flaws(bz_data, bugs):
-    """Get the flaw bugs blocked by tracking bugs. For a definition of these terms see
-    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
-
-    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
-    :param bugs: The IDs of the bugs you want to create an Erratum for. These can be
-    security tracking bugs or non-security tracking bugs. This method will determine
-    if they are security tracking bugs or not
-
-    :returns:
-        - A map of flaw bugs ids with CVE identifiers as values.
-        - The highest impact of the tracker bugs identified from the bugs param
-    """
-
-    bzapi = get_bzapi(bz_data)
-
-    # grab CVE trackers and set Impact automatically
-    trackers = get_tracker_bugs(bzapi, bugs)
-
-    impact = get_highest_impact(trackers)
-
-    flaw_ids = get_flaw_bugs(trackers)
-
-    return get_flaw_aliases(bzapi, flaw_ids), impact
-
-
 def get_tracker_bugs(bzapi, bugs):
     """Returns a list of tracking bugs from a list of bug ids. For a definition of these terms see
     https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
@@ -299,6 +273,28 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
         bug_list = [bug for bug in bug_list if cve in bug.summary]
 
     return bug_list
+
+
+def is_viable_bug(bug_obj):
+    """ Check if a bug is viable to attach to an advisory.
+
+    A viable bug must be in one of MODIFIED and VERIFIED status.
+
+    :param bug_obj: bug object
+    :returns: True if viable
+    """
+    return bug_obj.status in ["MODIFIED", "VERIFIED"]
+
+
+def is_cve_tracker(bug_obj):
+    """ Check if a bug is a CVE tracker.
+
+    A CVE tracker bug must have `SecurityTracking` and `Security` keywords.
+
+    :param bug_obj: bug object
+    :returns: True if the bug is a CVE tracker.
+    """
+    return "SecurityTracking" in bug_obj.keywords and "Security" in bug_obj.keywords
 
 
 def get_bzapi(bz_data, interactive_login=False):
