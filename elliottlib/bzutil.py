@@ -21,16 +21,17 @@ from util import yellow_print
 
 logger = logutil.getLogger(__name__)
 
+
 def get_flaws(bz_data, bugs):
-    """Get the flaw bugs blocked by tracking bugs. For a definition of these terms see 
+    """Get the flaw bugs blocked by tracking bugs. For a definition of these terms see
     https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
 
     :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
-    :param bugs: The IDs of the bugs you want to create an Erratum for. These can be 
-    security tracking bugs or non-security tracking bugs. This method will determine 
+    :param bugs: The IDs of the bugs you want to create an Erratum for. These can be
+    security tracking bugs or non-security tracking bugs. This method will determine
     if they are security tracking bugs or not
 
-    :returns: 
+    :returns:
         - A map of flaw bugs ids with CVE identifiers as values.
         - The highest impact of the tracker bugs identified from the bugs param
     """
@@ -44,26 +45,27 @@ def get_flaws(bz_data, bugs):
 
     flaw_ids = get_flaw_bugs(trackers)
 
-    return get_flaw_aliases(bzapi, flaw_ids), impact  
+    return get_flaw_aliases(bzapi, flaw_ids), impact
+
 
 def get_tracker_bugs(bzapi, bugs):
-    """Returns a list of tracking bugs from a list of bug ids. For a definition of these terms see 
+    """Returns a list of tracking bugs from a list of bug ids. For a definition of these terms see
     https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
 
     :param bzapi: An instance of the python-bugzilla Bugzilla class
-    :param bugs: The IDs of the bugs you want to create an Erratum for. These can be 
-    security tracking bugs or non-security tracking bugs. This method will determine 
+    :param bugs: The IDs of the bugs you want to create an Erratum for. These can be
+    security tracking bugs or non-security tracking bugs. This method will determine
     if they are security tracking bugs or not
 
     :returns: A list of tracking bugs
 
     :raises:
         BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
-        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login 
+        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
         session has expired.
     """
     if len(bugs) == 0:
-        return 
+        return
     bugs = bzapi.getbugs(bugs)
     tracker_bugs = []
     for t in bugs:
@@ -74,6 +76,7 @@ def get_tracker_bugs(bzapi, bugs):
         else:
             tracker_bugs.append(t)
     return tracker_bugs
+
 
 def get_highest_impact(bugs):
     """Get the hightest impact of a list of bugs
@@ -89,8 +92,9 @@ def get_highest_impact(bugs):
             severity_index = next_severity
     return constants.SECURITY_IMPACT[severity_index]
 
+
 def get_flaw_bugs(trackers):
-    """Get a list of flaw bugs blocked by a list of tracking bugs. For a definition of these terms see 
+    """Get a list of flaw bugs blocked by a list of tracking bugs. For a definition of these terms see
     https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
 
     :param trackers: A list of tracking bug ids
@@ -99,16 +103,17 @@ def get_flaw_bugs(trackers):
     """
     flaw_ids = []
     for t in trackers:
-        #Tracker bugs can block more than one flaw bug, but must be more than 0
+        # Tracker bugs can block more than one flaw bug, but must be more than 0
         if len(t.blocks) == 0:
-            #This should never happen, log a warning here if it does
+            # This should never happen, log a warning here if it does
             yellow_print("Warning: found tracker bugs which doesn't block any other bugs")
         for b in t.blocks:
             flaw_ids.append(b)
     return flaw_ids
 
+
 def get_flaw_aliases(bzapi, flaw_ids):
-    """Get a map of flaw bug ids and associated CVE aliases. For a definition of these terms see 
+    """Get a map of flaw bug ids and associated CVE aliases. For a definition of these terms see
     https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
 
     :param bzapi: An instance of the python-bugzilla Bugzilla class
@@ -118,7 +123,7 @@ def get_flaw_aliases(bzapi, flaw_ids):
 
     :raises:
         BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
-        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login 
+        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
         session has expired.
     """
     flaw_cve_map = {}
