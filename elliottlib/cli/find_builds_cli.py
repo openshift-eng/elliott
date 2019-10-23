@@ -251,7 +251,7 @@ def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
                 if errata_version_cache[e] is get_release_version(product_version):
                     same_version_exist = True
                     break
-        if not same_version_exist:
+        if not same_version_exist or not b.attached_to_open_erratum:
             unshipped_builds.append(b)
 
     return unshipped_builds
