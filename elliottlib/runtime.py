@@ -55,6 +55,7 @@ def remove_tmp_working_dir(runtime):
 
 class WrapException(Exception):
     """ https://bugs.python.org/issue13831 """
+
     def __init__(self):
         super(WrapException, self).__init__()
         exc_type, exc_value, exc_tb = sys.exc_info()

@@ -113,27 +113,31 @@ PRESENT advisory. Here are some examples:
         elif kind == 'rpm':
             unshipped_builds = _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session)
 
-    # always output json if requested
-    build_nvrs = sorted(build.nvr for build in unshipped_builds)
-    json_data = dict(builds=build_nvrs, base_tag=base_tag, kind=kind)
-    if as_json == '-':
-        click.echo(json.dumps(json_data, indent=4, sort_keys=True))
-    elif as_json:
-        with open(as_json, 'w') as json_file:
-            json.dump(json_data, json_file, indent=4, sort_keys=True)
+    _json_dump(as_json, unshipped_builds, base_tag, kind)
 
     if not unshipped_builds:
         green_print('No builds needed to be attached.')
         return
 
     if advisory is not False:
-        _attach_to_advisory(unshipped_builds, kind, product_version, advisory)
+        _attach_to_advisory(unshipped_builds, kind, advisory)
     else:
         click.echo('The following {n} builds '.format(n=len(unshipped_builds)), nl=False)
         click.secho('may be attached ', bold=True, nl=False)
         click.echo('to an advisory:')
         for b in sorted(unshipped_builds):
             click.echo(' ' + b.nvr)
+
+
+def _json_dump(as_json, unshipped_builds, base_tag, kind):
+    if as_json:
+        build_nvrs = sorted(build.nvr for build in unshipped_builds)
+        json_data = dict(builds=build_nvrs, base_tag=base_tag, kind=kind)
+        if as_json == '-':
+            click.echo(json.dumps(json_data, indent=4, sort_keys=True))
+        else:
+            with open(as_json, 'w') as json_file:
+                json.dump(json_data, json_file, indent=4, sort_keys=True)
 
 
 def _determine_errata_info(runtime):
@@ -161,29 +165,32 @@ def _fetch_builds_from_diff(from_payload, to_payload, product_version, session):
     return [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds]
 
 
-def _fetch_builds_by_kind_image(runtime, product_version, session):
-    initial_builds = runtime.image_metas()
+def _fetch_builds_by_kind_image(runtime, default_product_version, session):
+    image_metadata = []
+    product_version_overide = {}
+    for b in runtime.image_metas():
+        # filter out non_release builds
+        if b not in runtime.group_config.get('non_release', []):
+            product_version_overide[b.name] = default_product_version
+            if b.branch() != runtime.branch:
+                product_version_overide[b.name] = override_product_version(default_product_version, b.branch())
+            image_metadata.append(b)
+
     pbar_header(
         'Generating list of images: ',
         'Hold on a moment, fetching Brew buildinfo',
-        initial_builds)
+        image_metadata)
 
-    # Returns a list of (n, v, r) tuples of each build
-    potential_builds = parallel_results_with_progress(
-        initial_builds,
-        lambda build: build.get_latest_build_info()
+    # Returns a list of (n, v, r, pv) tuples of each build
+    image_tuples = parallel_results_with_progress(
+        image_metadata,
+        lambda build: build.get_latest_build_info(product_version_overide)
     )
 
     pbar_header(
         'Generating build metadata: ',
-        'Fetching data for {n} builds '.format(n=len(potential_builds)),
-        potential_builds)
-
-    # Reassign variable contents, filter out non_release builds
-    potential_builds = [
-        i for i in potential_builds
-        if i[0] not in runtime.group_config.get('non_release', [])
-    ]
+        'Fetching data for {n} builds '.format(n=len(image_tuples)),
+        image_tuples)
 
     # By 'meta' I mean the lil bits of meta data given back from
     # get_latest_build_info
@@ -191,10 +198,10 @@ def _fetch_builds_by_kind_image(runtime, product_version, session):
     # TODO: Update the ImageMetaData class to include the NVR as
     # an object attribute.
     results = parallel_results_with_progress(
-        potential_builds,
+        image_tuples,
         lambda meta: elliottlib.brew.get_brew_build(
             '{}-{}-{}'.format(meta[0], meta[1], meta[2]),
-            product_version,
+            product_version=meta[3],
             session=session)
     )
 
@@ -226,7 +233,7 @@ def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
     return [b for b in results if not b.attached_to_open_erratum]
 
 
-def _attach_to_advisory(builds, kind, product_version, advisory):
+def _attach_to_advisory(builds, kind, advisory):
     if kind is None:
         raise ElliottFatalError('Need to specify with --kind=image or --kind=rpm with packages: {}'.format(builds))
 
@@ -234,14 +241,16 @@ def _attach_to_advisory(builds, kind, product_version, advisory):
         erratum = Erratum(errata_id=advisory)
         file_type = 'tar' if kind == 'image' else 'rpm'
 
-        build_nvrs = sorted(build.nvr for build in builds)
-        erratum.addBuilds(
-            build_nvrs,
-            release=product_version,
-            file_types={build.nvr: [file_type] for build in builds}
-        )
-        erratum.commit()
+        product_version_set = {build.product_version for build in builds}
+        for pv in product_version_set:
+            erratum.addBuilds(
+                buildlist=[build.nvr for build in builds if build.product_version is pv],
+                release=pv,
+                file_types={build.nvr: [file_type] for build in builds}
+            )
+            erratum.commit()
 
+        build_nvrs = sorted(build.nvr for build in builds)
         green_print('Attached build(s) successfully:')
         for b in build_nvrs:
             click.echo(' ' + b)

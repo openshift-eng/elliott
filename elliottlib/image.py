@@ -135,8 +135,7 @@ class ImageMetadata(Metadata):
 
         return [str(r) for r in rpms]  # strip unicode
 
-    def get_latest_build_info(self):
-
+    def get_latest_build_info(self, product_version):
         """
         Queries brew to determine the most recently built release of the component
         associated with this image. This method does not rely on the "release"
@@ -164,7 +163,7 @@ class ImageMetadata(Metadata):
         # latest example: "registry-console-docker-v3.6.173.0.75-1""
         name, version, release = latest.rsplit("-", 2)  # [ "registry-console-docker", "v3.6.173.0.75", "1"]
 
-        return name, version, release
+        return name, version, release, product_version[self.name]
 
     def pull_url(self):
         # Don't trust what is the Dockerfile for version & release. This field may not even be present.
