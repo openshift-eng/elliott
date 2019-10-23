@@ -93,7 +93,9 @@ def get_build_list(old, new):
     changed_images = []
 
     for k, v in payload_json["changedImages"].iteritems():
-        if(v["to"]):
+        if k == "machine-os-content":
+            continue  # no use in comparing this as it doesn't go in the advisory
+        if v["to"]:
             changed_images.append(v["to"]["from"]["name"])
 
     for i in changed_images:
@@ -117,9 +119,13 @@ def get_image_nvr(image):
     except CalledProcessError as e:
         raise ElliottFatalError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode, e.output))
 
-    image_json = json.loads(oc_output)
-    image_name = image_json['config']['config']['Labels']['com.redhat.component']
-    image_version = image_json['config']['config']['Labels']['version']
-    image_release = image_json['config']['config']['Labels']['release']
+    try:
+        image_json = json.loads(oc_output)
+        image_name = image_json['config']['config']['Labels']['com.redhat.component']
+        image_version = image_json['config']['config']['Labels']['version']
+        image_release = image_json['config']['config']['Labels']['release']
+    except Exception:
+        print "This image json does not have the expected fields:\n" + oc_output
+        raise
 
     return "{}-{}-{}".format(image_name, image_version, image_release)
