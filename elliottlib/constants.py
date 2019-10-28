@@ -30,6 +30,8 @@ errata_default_filter = '1965'
 #          Enterprise; sorted by newest)
 # https://errata.devel.redhat.com/filter/1991
 errata_live_advisory_filter = '1991'
+# https://errata.devel.redhat.com/filter/2507
+errata_puddle_advisory_filter = '2507'
 # 2051 => (RHBA; State REL PREP, PUSH READY, IN PUSH, SHIPPED;
 #          Product: RHOSE; Devel Group: ENG OpenShift Enterprise;
 #          sorted by newest)

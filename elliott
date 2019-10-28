@@ -39,13 +39,17 @@ from elliottlib.util import validate_email_address, red_print, major_from_branch
 from elliottlib.util import green_print, red_prefix, minor_from_branch
 from elliottlib.util import yellow_print, yellow_prefix, exit_unauthorized, release_from_branch
 from elliottlib.util import progress_func, pbar_header
+from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
+
+# cli commands
+from elliottlib.cli.list_cli import list_cli
 from elliottlib.cli.tarball_sources_cli import tarball_sources_cli
 from elliottlib.cli.find_builds_cli import find_builds_cli
 from elliottlib.cli.create_cli import create_cli
 from elliottlib.cli.add_metadata_cli import add_metadata_cli
 from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
-from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
-from elliottlib.cli.list_cli import list_cli
+from elliottlib.cli.puddle_advisories_cli import puddle_advisories_cli
+
 
 # 3rd party
 import bugzilla
@@ -416,63 +420,6 @@ Fields for the short format: Release date, State, Synopsys, URL
     with open(as_json, "w") as json_file:
         json.dump(json_data, json_file, indent=4, sort_keys=True)
 
-
-#
-# Get advisory numbers for making puddles
-#
-@cli.command("puddle-advisories", short_help="Get advisory numbers for making puddles")
-@click.option("--filter-id", '-f',
-              # default=elliottlib.constants.errata_default_filter,
-              default=2507,
-              help="A custom filter id to list from")
-@click.option('--details', '-d', is_flag=True, default=False,
-              help="Print details about the found advisories to STDERR")
-# @click.option("-n", default=6,
-#               help="Return only N latest results (default: 6)")
-@pass_runtime
-def puddle_advisories(runtime, filter_id, details):
-    """Print a comma separated list of advisory numbers which can be used
-when filling in the 'errata_whitelist' parameter in a signed puddle
-config.
-
-Uses an Errata Tool filter to find in-progress and being-released
-advisories for OpenShift. This list is trimmed down to only advisories
-matching the given --group by parsing the ART metadata embedded in the
-first comment.
-
-    List advisories required to create a signed 4.2 puddle:
-
-\b
-    $ elliott --group=openshift-4.1 puddle-advisories
-    44849, 44740
-"""
-    use_in_puddle_conf = []
-    runtime.initialize()
-    major = major_from_branch(runtime.group_config.branch)
-    minor = minor_from_branch(runtime.group_config.branch)
-    release = "{}.{}".format(major, minor)
-
-    try:
-        for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=20):
-            try:
-                c = elliottlib.errata.get_comments(erratum.errata_id)[-1]
-                metadata = json.loads(c['attributes']['text'])
-            except ValueError:
-                # Does not contain ART metadata, skip it
-                sys.stderr.write("Does not contain ART metadata: {}\n".format(erratum.errata_id))
-                continue
-
-            if str(metadata['release']) == str(release) and (metadata['impetus'] != 'test'):
-                use_in_puddle_conf.append(str(erratum.errata_id))
-                if details:
-                    sys.stderr.write(str(erratum))
-                    sys.stderr.flush()
-
-        click.echo(", ".join(use_in_puddle_conf))
-    except GSSError:
-        exit_unauthenticated()
-    except elliottlib.exceptions.ErrataToolError as ex:
-        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
 #
 # Repair bugs
@@ -919,6 +866,7 @@ cli.add_command(add_metadata_cli)
 cli.add_command(create_placeholder_cli)
 cli.add_command(create_cli)
 cli.add_command(list_cli)
+cli.add_command(puddle_advisories_cli)
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
