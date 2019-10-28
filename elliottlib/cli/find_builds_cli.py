@@ -228,6 +228,10 @@ def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
         candidates,
         lambda nvr: elliottlib.brew.get_brew_build(nvr, product_version, session=session)
     )
+    return _attached_to_open_erratum_with_correct_product_version(results, product_version, elliottlib.errata)
+
+
+def _attached_to_open_erratum_with_correct_product_version(results, product_version, errata):
     unshipped_builds = []
     # will probably end up loading the same errata and
     # its comments many times, which is pretty slow
@@ -239,7 +243,7 @@ def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
         if b.attached_to_open_erratum:
             for e in b.open_errata_id:
                 if not errata_version_cache.get(e):
-                    metadata_comments_json = elliottlib.errata.get_metadata_comments_json(e)
+                    metadata_comments_json = errata.get_metadata_comments_json(e)
                     if not metadata_comments_json:
                         # Does not contain ART metadata, skip it
                         red_print("Errata {} Does not contain ART metadata\n".format(e))
@@ -248,12 +252,11 @@ def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
                     # though not very useful (there's a command for adding them,
                     # but not much point in doing it). just looking at the first one is fine.
                     errata_version_cache[e] = metadata_comments_json[0]['release']
-                if errata_version_cache[e] is get_release_version(product_version):
+                if errata_version_cache[e] == get_release_version(product_version):
                     same_version_exist = True
                     break
         if not same_version_exist or not b.attached_to_open_erratum:
             unshipped_builds.append(b)
-
     return unshipped_builds
 
 

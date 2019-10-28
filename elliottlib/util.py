@@ -251,8 +251,4 @@ def override_product_version(pv, branch):
 
 def get_release_version(pv):
     """ there are two kind of format of product_version: OSE-4.1-RHEL-8 RHEL-7-OSE-4.1 """
-    res = pv.split("OSE-", 1)[1]
-    if '-' not in res:
-        return res
-    else:
-        return res.split("-", 1)[0]
+    return re.search(r'OSE-(\d+\.\d+)', pv).groups()[0]
