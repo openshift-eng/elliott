@@ -233,7 +233,7 @@ advisory with the --add option.
     if mode == 'list' and len(id) == 0:
         raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
 
-    if mode == 'payload' and not len(from_diff) == 2 :
+    if mode == 'payload' and not len(from_diff) == 2:
         raise click.BadParameter("If using mode=payload, you must provide two payloads to compare")
 
     if advisory and default_advisory_type:
@@ -911,9 +911,9 @@ unsigned builds.
     except ErrataException as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
-# Register additional command groups
+
+# Register additional commands / groups
 cli.add_command(tarball_sources_cli)
-cli.add_command(create_placeholder)
 cli.add_command(find_builds_cli)
 cli.add_command(add_metadata_cli)
 cli.add_command(create_placeholder_cli)
@@ -923,6 +923,8 @@ cli.add_command(list_cli)
 # -----------------------------------------------------------------------------
 # CLI Entry point
 # -----------------------------------------------------------------------------
+
+
 def main():
     try:
         if 'REQUESTS_CA_BUNDLE' not in os.environ:
@@ -936,6 +938,7 @@ def main():
         # to exit with an error code should use ElliottFatalError
         red_print(getattr(ex, 'message', repr(ex)))
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()
