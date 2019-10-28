@@ -22,8 +22,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 #
 @cli.command("puddle-advisories", short_help="Get advisory numbers for making puddles")
 @click.option("--filter-id", '-f',
-              # default=elliottlib.constants.errata_default_filter,
-              default=2507,
+              default=elliottlib.constants.errata_puddle_advisory_filter,
               help="A custom filter id to list from")
 @click.option('--details', '-d', is_flag=True, default=False,
               help="Print details about the found advisories to STDERR")
@@ -53,7 +52,7 @@ first comment.
     release = "{}.{}".format(major, minor)
 
     try:
-        for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=20):
+        for erratum in elliottlib.errata.get_filtered_list(filter_id, limit=50):
             metadata_comments_json = elliottlib.errata.get_metadata_comments_json(erratum.errata_id)
             if not metadata_comments_json:
                 # Does not contain ART metadata, skip it

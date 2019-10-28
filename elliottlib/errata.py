@@ -317,6 +317,10 @@ def get_comments(advisory_id):
 
 
 def get_metadata_comments_json(advisory_id):
+    """
+    Fetch just the comments that look like our metadata JSON comments from the advisory.
+    Returns a list, oldest first.
+    """
     comments = get_comments(advisory_id)
     metadata_json_list = []
     # they come out in (mostly) reverse order, start at the beginning
