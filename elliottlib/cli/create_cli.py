@@ -152,8 +152,18 @@ advisory.
     flaw_cve_map = {}
     impact = None
     unique_bugs = set(bugs)
-    if errata_type == 'RHSA':
-        flaw_cve_map, impact = elliottlib.bzutil.get_flaws(bz_data, unique_bugs)
+
+    if bugs:
+        bzapi = elliottlib.bzutil.get_bzapi(bz_data)
+        LOGGER.info("Fetching bugs {} from Bugzilla...".format(" ".join(map(str, bugs))))
+        bug_objects = bzapi.getbugs(bugs)
+        if errata_type == 'RHSA':
+            LOGGER.info("Fetching flaw bugs for trackers {}...".format(" ".join(map(str, bugs))))
+            tracker_flaws_map = elliottlib.bzutil.get_tracker_flaws_map(bzapi, bug_objects)
+            impact = elliottlib.bzutil.get_highest_impact(bug_objects, tracker_flaws_map)
+            flaw_bugs = [flaw for tracker, flaws in tracker_flaws_map.items() for flaw in flaws]
+            flaw_cve_map = elliottlib.bzutil.get_flaw_aliases(flaw_bugs)
+            unique_bugs |= set(flaw_cve_map.keys())
 
     ######################################################################
 

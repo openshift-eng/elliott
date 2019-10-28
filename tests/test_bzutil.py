@@ -1,13 +1,48 @@
-#!/usr/bin/env python
-
 import unittest
-import bzutil
-import constants
+import mock
 import flexmock
 import bugzilla
-from elliottlib import exceptions
+from elliottlib import exceptions, constants, bzutil
 
 hostname = "bugzilla.redhat.com"
+
+
+class TestBZUtil(unittest.TestCase):
+    def test_is_flaw_bug(self):
+        bug = mock.MagicMock(product="Security Response", component="vulnerability")
+        self.assertTrue(bzutil.is_flaw_bug(bug))
+        bug = mock.MagicMock(product="foo", component="bar")
+        self.assertFalse(bzutil.is_flaw_bug(bug))
+
+    def test_get_bugs(self):
+        bug_ids = [1, 2]
+        expected = {
+            1: mock.MagicMock(id=1),
+            2: mock.MagicMock(id=2),
+        }
+        bzapi = mock.MagicMock()
+        bzapi.getbugs.return_value = [expected[bug_id] for bug_id in bug_ids]
+        actual = bzutil.get_bugs(bzapi, bug_ids)
+        self.assertEqual(expected, actual)
+
+    def test_get_tracker_flaws_map(self):
+        trackers = {
+            1: mock.MagicMock(id=1, blocks=[11, 12]),
+            2: mock.MagicMock(id=2, blocks=[21, 22]),
+        }
+        flaws_ids = [11, 12, 21, 22]
+        flaws = {
+            flaw_id: mock.MagicMock(id=flaw_id, product="Security Response", component="vulnerability")
+            for flaw_id in flaws_ids
+        }
+        expected = {
+            1: [flaws[11], flaws[12]],
+            2: [flaws[21], flaws[22]],
+        }
+        with mock.patch("elliottlib.bzutil.get_bugs") as mock_get_bugs:
+            mock_get_bugs.return_value = flaws
+            actual = bzutil.get_tracker_flaws_map(None, trackers.values())
+            self.assertEqual(expected, actual)
 
 
 class TestSearchFilter(unittest.TestCase):
@@ -26,17 +61,35 @@ class TestSearchFilter(unittest.TestCase):
 class TestGetHigestImpact(unittest.TestCase):
 
     def test_lowest_to_highest_impact(self):
-        bugs = []
-        for x in xrange(4):
-            bugs.append(flexmock(severity=constants.BUG_SEVERITY[x]))
-        impact = bzutil.get_highest_impact(bugs)
-        self.assertEquals(impact, constants.SECURITY_IMPACT[3])
+        trackers = [flexmock(id=index, severity=severity)
+                    for index, severity in enumerate(constants.BUG_SEVERITY_NUMBER_MAP.keys())]
+        tracker_flaws_map = {
+            tracker.id: [] for tracker in trackers
+        }
+        impact = bzutil.get_highest_impact(trackers, tracker_flaws_map)
+        self.assertEquals(impact, constants.SECURITY_IMPACT[4])
 
     def test_single_impact(self):
         bugs = []
-        bugs.append(flexmock(severity=constants.BUG_SEVERITY[1]))
-        impact = bzutil.get_highest_impact(bugs)
-        self.assertEquals(impact, constants.SECURITY_IMPACT[1])
+        severity = "high"
+        bugs.append(flexmock(severity=severity))
+        impact = bzutil.get_highest_impact(bugs, None)
+        self.assertEquals(impact, constants.SECURITY_IMPACT[constants.BUG_SEVERITY_NUMBER_MAP[severity]])
+
+    def test_impact_for_tracker_with_unspecified_severity(self):
+        bugs = []
+        severity = "unspecified"
+        bugs.append(flexmock(id=123, severity=severity))
+        tracker_flaws_map = {
+            123: [flexmock(id=123, severity="medium")],
+        }
+        impact = bzutil.get_highest_impact(bugs, tracker_flaws_map)
+        self.assertEquals(impact, "Moderate")
+        tracker_flaws_map = {
+            123: [flexmock(id=123, severity="unspecified")],
+        }
+        impact = bzutil.get_highest_impact(bugs, tracker_flaws_map)
+        self.assertEquals(impact, "Low")
 
 
 class TestGetTrackerBugs(unittest.TestCase):
@@ -76,7 +129,7 @@ class TestGetFlawBugs(unittest.TestCase):
 
 
 class TestGetFlawAliases(unittest.TestCase):
-    def test_get_flaw_bugs(self):
+    def test_get_flaw_aliases(self):
         CVE01 = flexmock(
             id='1',
             product='Security Response',
@@ -108,26 +161,9 @@ class TestGetFlawAliases(unittest.TestCase):
             alias=['CVE-0001-0001', 'someOtherAlias']
         )
         flaws = [CVE01, multiAlias, multiAlias2, noAlias, nonFlaw]
-        bz = bugzilla.Bugzilla(None)
-        bzapi = flexmock(bz)
-        bzapi.should_receive('getbugs').once().and_return(flaws)
-        flaw_cve_map = bzutil.get_flaw_aliases(bzapi, [1])
+        flaw_cve_map = bzutil.get_flaw_aliases(flaws)
         self.assertEquals(len(flaw_cve_map.keys()), 4)
         self.assertEquals(flaw_cve_map['4'], "")
-
-
-# class TestSearchURL(unittest.TestCase):
-
-#     def test_searchurl(self):
-#         """Verify SearchURL works as expected"""
-#         t = bugzilla.SearchURL()
-
-#         t.addFilter("component", "notequals", "RFE")
-#         t.addFilter("component", "notequals", "Documentation")
-#         t.addFilter("component", "notequals", "Security")
-#         t.addFilter("cf_verified", "notequals", "FailedQA")
-#         print "url = {}".format(t)
-#         assert False
 
 
 if __name__ == "__main__":
