@@ -12,16 +12,17 @@ import copy
 import datetime
 import json
 import ssl
-import constants
 import brew
 import re
-from elliottlib import exceptions
+from elliottlib import exceptions, constants
 from elliottlib.util import green_prefix, exit_unauthenticated
 
 import requests
 from requests_kerberos import HTTPKerberosAuth
-from errata_tool import Erratum, ErrataException
 from kerberos import GSSError
+from errata_tool import Erratum, ErrataException, ErrataConnector
+
+ErrataConnector._url = constants.errata_url
 
 
 def find_mutable_erratum(kind, minor, major=3):

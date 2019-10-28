@@ -12,12 +12,12 @@ import logutil
 
 # ours
 import constants
-from elliottlib import exceptions, constants
+from elliottlib import exceptions, constants, util
 
 # 3rd party
 import click
 import bugzilla
-from util import yellow_print
+
 
 logger = logutil.getLogger(__name__)
 
@@ -72,24 +72,36 @@ def get_tracker_bugs(bzapi, bugs):
         if t is None:
             raise exceptions.BugzillaFatalError("Couldn't find bug with list of ids provided")
         if "SecurityTracking" not in t.keywords or "Security" not in t.keywords:
-            yellow_print("Non-SecurityTracking bug to be added: %s" % t.id)
+            util.yellow_print("Non-SecurityTracking bug to be added: %s" % t.id)
         else:
             tracker_bugs.append(t)
     return tracker_bugs
 
 
-def get_highest_impact(bugs):
-    """Get the hightest impact of a list of bugs
+def get_highest_impact(trackers, tracker_flaws_map):
+    """Get the hightest impact of security bugs
 
-    :param bugs: The IDs of the bug you want to compare to get the highest severity
-
+    :param trackers: The list of tracking bugs you want to compare to get the highest severity
+    :param tracker_flaws_map: A dict with tracking bug IDs as keys and lists of flaw bugs as values
     :return: The highest impact of the bugs
     """
-    severity_index = constants.BUG_SEVERITY.index('low')
-    for b in bugs:
-        next_severity = constants.BUG_SEVERITY.index(b.severity.lower())
-        if next_severity > severity_index:
-            severity_index = next_severity
+    severity_index = 0  # "unspecified" severity
+    for tracker in trackers:
+        tracker_severity = constants.BUG_SEVERITY_NUMBER_MAP[tracker.severity.lower()]
+        if tracker_severity == 0:
+            # When severity isn't set on the tracker, check the severity of the flaw bugs
+            # https://jira.coreos.com/browse/ART-1192
+            flaws = tracker_flaws_map[tracker.id]
+            for flaw in flaws:
+                flaw_severity = constants.BUG_SEVERITY_NUMBER_MAP[flaw.severity.lower()]
+                if flaw_severity > tracker_severity:
+                    tracker_severity = flaw_severity
+        if tracker_severity > severity_index:
+            severity_index = tracker_severity
+    if severity_index == 0:
+        # When severity isn't set on al tracking and flaw bugs, default to "Low"
+        # https://jira.coreos.com/browse/ART-1192
+        logger.warning("CVE impact couldn't be determined for tracking bug {}, defaulting to Low.".format(tracker.id))
     return constants.SECURITY_IMPACT[severity_index]
 
 
@@ -97,27 +109,86 @@ def get_flaw_bugs(trackers):
     """Get a list of flaw bugs blocked by a list of tracking bugs. For a definition of these terms see
     https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
 
-    :param trackers: A list of tracking bug ids
+    :param trackers: A list of tracking bugs
 
     :return: A list of flaw bug ids
     """
     flaw_ids = []
     for t in trackers:
         # Tracker bugs can block more than one flaw bug, but must be more than 0
-        if len(t.blocks) == 0:
+        if not t.blocks:
             # This should never happen, log a warning here if it does
-            yellow_print("Warning: found tracker bugs which doesn't block any other bugs")
-        for b in t.blocks:
-            flaw_ids.append(b)
+            util.yellow_print(
+                "Warning: found tracker bugs which doesn't block any other bugs")
+        else:
+            flaw_ids.extend(t.blocks)
     return flaw_ids
 
 
-def get_flaw_aliases(bzapi, flaw_ids):
+def get_tracker_flaws_map(bzapi, trackers):
+    """Get flaw bugs blocked by tracking bugs. For a definition of these terms see
+    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
+
+    :param bzapi: An instance of the python-bugzilla Bugzilla class
+    :param trackers: A list of tracking bugs
+
+    :return: A dict with tracking bug IDs as keys and lists of flaw bugs as values
+    """
+    tracker_flaw_ids_map = {
+        tracker.id: get_flaw_bugs([tracker]) for tracker in trackers
+    }
+
+    flaw_ids = [flaw_id for _, flaw_ids in tracker_flaw_ids_map.items() for flaw_id in flaw_ids]
+    flaw_id_bug_map = get_bugs(bzapi, flaw_ids)
+
+    tracker_flaws_map = {tracker.id: [] for tracker in trackers}
+    for tracker_id, flaw_ids in tracker_flaw_ids_map.items():
+        for flaw_id in flaw_ids:
+            flaw_bug = flaw_id_bug_map.get(flaw_id)
+            if not flaw_bug or not is_flaw_bug(flaw_bug):
+                logger.warning("Bug {} is not a flaw bug.".format(flaw_id))
+                continue
+            tracker_flaws_map[tracker_id].append(flaw_bug)
+    return tracker_flaws_map
+
+
+def get_bugs(bzapi, ids, raise_on_error=True):
+    """ Get a map of bug ids and bug objects.
+
+    :param bzapi: An instance of the python-bugzilla Bugzilla class
+    :param ids: The IDs of the bugs you want to get the Bug objects for
+    :param raise_on_error: If True, raise an error if failing to find bugs
+
+    :return: A map of bug ids and bug objects
+
+    :raises:
+        BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
+        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
+        session has expired.
+    """
+    id_bug_map = {}
+    bugs = bzapi.getbugs(ids)  # type: list
+    for i, bug in enumerate(bugs):
+        bug_id = ids[i]
+        if not bug:
+            msg = "Couldn't find bug {}.".format(bug_id)
+            if raise_on_error:
+                raise exceptions.BugzillaFatalError(msg)
+            logger.warning(msg)
+        id_bug_map[bug_id] = bug
+    return id_bug_map
+
+
+def is_flaw_bug(bug):
+    return bug.product == "Security Response" and bug.component == "vulnerability"
+
+
+def get_flaw_aliases(flaws):
     """Get a map of flaw bug ids and associated CVE aliases. For a definition of these terms see
     https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
 
     :param bzapi: An instance of the python-bugzilla Bugzilla class
-    :param flaw_ids: The IDs of the flaw bugs you want to get the aliases for
+    :param flaws: Flaw bugs you want to get the aliases for
 
     :return: A map of flaw bug ids and associated CVE alisas.
 
@@ -127,7 +198,6 @@ def get_flaw_aliases(bzapi, flaw_ids):
         session has expired.
     """
     flaw_cve_map = {}
-    flaws = bzapi.getbugs(flaw_ids)
     for flaw in flaws:
         if flaw is None:
             raise exceptions.BugzillaFatalError("Couldn't find bug with list of ids provided")
