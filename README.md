@@ -1,3 +1,6 @@
+NOTE: This branch is used for Python 3 migration. Python 3 test is enabled on this branch.
+We periodically synchronize the master with this branch until we get everything working on Python 3.
+
 # Elliott - Errata Tool Automation
 
 [![PyPI version](https://badge.fury.io/py/rh-elliott.svg)](https://badge.fury.io/py/rh-elliott)
