@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 from elliottlib import version, constants, Runtime, cli_opts
 from elliottlib.util import green_prefix, red_prefix
 import click
-import dotconfig
+from elliottlib import dotconfig
 
 # https://click.palletsprojects.com/en/7.x/python3/
 click.disable_unicode_literals_warning = True
