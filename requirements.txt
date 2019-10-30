@@ -4,7 +4,6 @@ dockerfile-parse
 errata-tool >= 1.19
 future
 koji >= 1.18
-pydotconfig
 pygit2
 pygitdata
 pykwalify
