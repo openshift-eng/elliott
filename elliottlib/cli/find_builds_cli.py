@@ -5,8 +5,8 @@ import elliottlib
 from elliottlib import constants, logutil, Runtime
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import exit_unauthenticated, override_product_version, ensure_erratatool_auth
-from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header
+from elliottlib.util import exit_unauthenticated, override_product_version, ensure_erratatool_auth, get_release_version
+from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header, red_print
 
 from errata_tool import Erratum
 from kerberos import GSSError
@@ -228,9 +228,36 @@ def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
         candidates,
         lambda nvr: elliottlib.brew.get_brew_build(nvr, product_version, session=session)
     )
+    return _attached_to_open_erratum_with_correct_product_version(results, product_version, elliottlib.errata)
 
-    # We only want builds not attached to an existing open advisory
-    return [b for b in results if not b.attached_to_open_erratum]
+
+def _attached_to_open_erratum_with_correct_product_version(results, product_version, errata):
+    unshipped_builds = []
+    # will probably end up loading the same errata and
+    # its comments many times, which is pretty slow
+    # so we cached the result.
+    errata_version_cache = {}
+    for b in results:
+        same_version_exist = False
+        # We only want builds not attached to an existing open advisory
+        if b.attached_to_open_erratum:
+            for e in b.open_errata_id:
+                if not errata_version_cache.get(e):
+                    metadata_comments_json = errata.get_metadata_comments_json(e)
+                    if not metadata_comments_json:
+                        # Does not contain ART metadata, skip it
+                        red_print("Errata {} Does not contain ART metadata\n".format(e))
+                        continue
+                    # it's possible for an advisory to have multiple metadata comments,
+                    # though not very useful (there's a command for adding them,
+                    # but not much point in doing it). just looking at the first one is fine.
+                    errata_version_cache[e] = metadata_comments_json[0]['release']
+                if errata_version_cache[e] == get_release_version(product_version):
+                    same_version_exist = True
+                    break
+        if not same_version_exist or not b.attached_to_open_erratum:
+            unshipped_builds.append(b)
+    return unshipped_builds
 
 
 def _attach_to_advisory(builds, kind, advisory):
