@@ -1,4 +1,3 @@
-#!/bin/env python
 # -*- coding: utf-8 -*-
 """
 Elliott is a CLI tool for managing Red Hat release advisories using the Erratatool

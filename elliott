@@ -1,0 +1,11 @@
+#!/usr/bin/env python
+# # -*- coding: utf-8 -*-
+"""
+Elliott is a CLI tool for managing Red Hat release advisories using the Erratatool
+web service.
+"""
+
+from elliottlib.cli.__main__ import main
+
+if __name__ == '__main__':
+    main()
