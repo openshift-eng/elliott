@@ -244,7 +244,7 @@ def search_for_bugs(bz_data, status, search_filter='default', filter_out_securit
     if verbose:
         click.echo(query_url)
 
-    return _perform_query(bzapi, query_url)
+    return _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component'])
 
 
 def search_for_security_bugs(bz_data, status=None, search_filter='security', cve=None, verbose=False):
