@@ -277,7 +277,7 @@ advisory with the --add option.
                                                                                     bug.status,
                                                                                     bug.cf_pm_score,
                                                                                     days_ago,
-                                                                                    bug.summary[:60].encode('ascii','replace')))
+                                                                                    bug.summary[:60].encode('ascii', 'replace')))
 
     if len(flag) > 0:
         for bug in bug_ids:
