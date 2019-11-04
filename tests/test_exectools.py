@@ -7,7 +7,7 @@ import unittest
 
 import flexmock
 
-import exectools
+from elliottlib import exectools
 
 
 class RetryTestCase(unittest.TestCase):
