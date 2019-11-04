@@ -136,7 +136,7 @@ Use --force to add new tarball sources to an existing directory.".format(os.path
 
                 LOGGER.debug("Copying {} to {}...".format(
                     temp_tarball_path, tarball_abspath))
-                shutil.copy2(temp_tarball_path, tarball_abspath)
+                shutil.copyfile(temp_tarball_path, tarball_abspath)  # `shutil.copyfile` uses default umask
                 tarball_sources_list.append(tarball_abspath)
                 util.green_print(
                     "Created tarball source {}.".format(tarball_abspath))
@@ -167,7 +167,7 @@ All tarball sources are successfully created.
 
 To send all tarball sources to rcm-guest, run:
 
-    rsync -avz {} ocp-build@rcm-guest.app.eng.bos.redhat.com:/mnt/rcm-guest/puddles/RHAOS/container-sources/
+    rsync -avz --chmod=go+rX {} ocp-build@rcm-guest.app.eng.bos.redhat.com:/mnt/rcm-guest/puddles/RHAOS/container-sources/
 
 Then notify RCM (https://projects.engineering.redhat.com/projects/RCM/issues) that the following tarball sources have been uploaded to rcm-guest:
 

@@ -183,8 +183,12 @@ Bugzilla Bugs.
 @click.option("--flag", metavar='FLAG',
               required=False, multiple=True,
               help="Optional flag to apply to found bugs [MULTIPLE]")
+@click.option("--report",
+              required=False,
+              is_flag=True,
+              help="Output a detailed report of the found bugs")
 @pass_runtime
-def find_bugs(runtime, advisory, default_advisory_type, mode, status, id, from_diff, flag):
+def find_bugs(runtime, advisory, default_advisory_type, mode, status, id, from_diff, flag, report):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list and the --id option.
@@ -263,6 +267,18 @@ advisory with the --add option.
 
     green_prefix("Found {} bugs:".format(len(bug_ids)))
     click.echo(" {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
+
+    if report:
+        green_print("{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
+        for bug in bug_ids:
+            created_date = datetime.datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
+            days_ago = (datetime.datetime.today() - created_date).days
+            click.echo("{:<8d} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.id,
+                                                                                    bug.component,
+                                                                                    bug.status,
+                                                                                    bug.cf_pm_score,
+                                                                                    days_ago,
+                                                                                    bug.summary[:60].encode('ascii','replace')))
 
     if len(flag) > 0:
         for bug in bug_ids:
