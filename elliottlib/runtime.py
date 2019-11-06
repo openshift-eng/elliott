@@ -15,8 +15,8 @@ import logging
 import functools
 import traceback
 import urlparse
-import gitdata
 
+from elliottlib import gitdata
 import logutil
 import assertion
 import exectools
