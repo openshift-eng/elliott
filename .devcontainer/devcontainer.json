@@ -47,7 +47,7 @@
 	// "appPort": [],
 
 	// Uncomment the next line to run commands after the container is created - for example installing git.
-	"postCreateCommand": "sudo chown -R dev: /workspaces/elliott-working-dir && pip install --user -r requirements.txt",
+	"postCreateCommand": "sudo chown -R dev: /workspaces/elliott-working-dir && pip install --user -r requirements-dev.txt -e .",
 
 	// Add the IDs of extensions you want installed when the container is created in the array below.
 	"extensions": [

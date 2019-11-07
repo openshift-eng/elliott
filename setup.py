@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from setuptools import setup, find_packages
 
 with open('./requirements.txt') as f:
@@ -25,11 +22,21 @@ setup(
     license="Apache License, Version 2.0",
     packages=find_packages(),
     include_package_data=True,
-    scripts=[
-        'elliott'
-    ],
-
+    entry_points={
+        'console_scripts': [
+            'elliott = elliottlib.cli.__main__:main'
+        ]
+    },
     install_requires=INSTALL_REQUIRES,
-
-    dependency_links=[]
+    dependency_links=[],
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Programming Language :: Python :: 2.7",
+        "Environment :: Console",
+        "Operating System :: POSIX",
+        "License :: OSI Approved :: Apache Software License",
+        "Intended Audience :: Developers",
+        "Topic :: Software Development :: Build Tools",
+        "Natural Language :: English",
+    ]
 )
