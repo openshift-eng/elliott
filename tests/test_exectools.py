@@ -86,13 +86,13 @@ class TestCmdExec(unittest.TestCase):
 
         (flexmock(exectools.logger)
             .should_receive("debug")
-            .with_args("Executing:cmd_gather [cwd=/my/path]: ['/bin/true']")
+            .with_args('Executing:cmd_gather [cwd=/my/path]: ["/bin/true"]')
             .once()
             .ordered())
 
         (flexmock(exectools.logger)
             .should_receive("debug")
-            .with_args("Process [cwd=/my/path]: ['/bin/true']: exited with: 0\nstdout>>out<<\nstderr>>err<<\n")
+            .with_args('Process [cwd=/my/path]: ["/bin/true"]: exited with: 0\nstdout>>out<<\nstderr>>err<<\n')
             .once()
             .ordered())
 
@@ -124,14 +124,14 @@ class TestCmdExec(unittest.TestCase):
             .and_return(proc_mock))
 
         expected_log_calls = [
-            "Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']",
-            "Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n",
+            "Executing:cmd_gather [cwd=/my/path]: [\"/usr/bin/false\"]",
+            "Process [cwd=/my/path]: [\"/usr/bin/false\"]: exited with: 1\nstdout>>out<<\nstderr>>err<<\n",
             'cmd_assert: Failed 1 times. Retrying in 1 seconds: /usr/bin/false',
-            "Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']",
-            "Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n",
+            "Executing:cmd_gather [cwd=/my/path]: [\"/usr/bin/false\"]",
+            "Process [cwd=/my/path]: [\"/usr/bin/false\"]: exited with: 1\nstdout>>out<<\nstderr>>err<<\n",
             'cmd_assert: Failed 2 times. Retrying in 1 seconds: /usr/bin/false',
-            "Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/false']",
-            "Process [cwd=/my/path]: ['/usr/bin/false']: exited with: 1\nstdout>>out<<\nstderr>>err<<\n",
+            "Executing:cmd_gather [cwd=/my/path]: [\"/usr/bin/false\"]",
+            "Process [cwd=/my/path]: [\"/usr/bin/false\"]: exited with: 1\nstdout>>out<<\nstderr>>err<<\n",
             'cmd_assert: Final result = 1 in 2 tries.'
         ]
 
@@ -165,13 +165,13 @@ class TestGather(unittest.TestCase):
 
         (flexmock(exectools.logger)
             .should_receive("debug")
-            .with_args("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/echo', 'hello', 'there']")
+            .with_args('Executing:cmd_gather [cwd=/my/path]: ["/usr/bin/echo", "hello", "there"]')
             .once()
             .ordered())
 
         (flexmock(exectools.logger)
             .should_receive("debug")
-            .with_args("Process [cwd=/my/path]: ['/usr/bin/echo', 'hello', 'there']: exited with: 0\nstdout>>hello there\n<<\nstderr>><<\n")
+            .with_args('Process [cwd=/my/path]: ["/usr/bin/echo", "hello", "there"]: exited with: 0\nstdout>>hello there\n<<\nstderr>><<\n')
             .once()
             .ordered())
 
@@ -206,13 +206,13 @@ class TestGather(unittest.TestCase):
 
         (flexmock(exectools.logger)
             .should_receive("debug")
-            .with_args("Executing:cmd_gather [cwd=/my/path]: ['/usr/bin/sed', '-e', 'f']")
+            .with_args('Executing:cmd_gather [cwd=/my/path]: ["/usr/bin/sed", "-e", "f"]')
             .once()
             .ordered())
 
         (flexmock(exectools.logger)
             .should_receive("debug")
-            .with_args("Process [cwd=/my/path]: ['/usr/bin/sed', '-e', 'f']: exited with: 1\nstdout>><<\nstderr>>/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n<<\n")
+            .with_args('Process [cwd=/my/path]: ["/usr/bin/sed", "-e", "f"]: exited with: 1\nstdout>><<\nstderr>>/usr/bin/sed: -e expression #1, char 1: unknown command: `f\'\n<<\n')
             .once()
             .ordered())
 

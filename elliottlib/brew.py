@@ -223,7 +223,7 @@ finished date, built by, etc.
                     # ast.literal_eval() can handle that and load the
                     # string into a structure we can work with
                     buildinfo[key] = ast.literal_eval(rest)
-                except Exception as _:
+                except Exception:
                     buildinfo[key] = rest
                     continue
             else:
