@@ -1,6 +1,9 @@
 """
 Utility functions for general interactions with Brew and Builds
 """
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 # stdlib
 import ast
@@ -17,9 +20,9 @@ import koji_cli.lib
 import traceback
 
 # ours
-import constants
-import exectools
-import logutil
+from . import constants
+from . import exectools
+from . import logutil
 from elliottlib import exceptions
 
 # 3rd party

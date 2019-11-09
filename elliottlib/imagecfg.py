@@ -1,7 +1,9 @@
-import assertion
-import exectools
-import logutil
-from metadata import Metadata
+from __future__ import absolute_import
+from __future__ import unicode_literals
+from . import assertion
+from . import exectools
+from . import logutil
+from .metadata import Metadata
 
 logger = logutil.getLogger(__name__)
 

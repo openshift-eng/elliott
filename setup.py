@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 from setuptools import setup, find_packages
 
 with open('./requirements.txt') as f:

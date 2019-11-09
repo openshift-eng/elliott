@@ -1,8 +1,10 @@
+from __future__ import absolute_import
+from __future__ import unicode_literals
 import glob
 import os
-from pushd import Dir
-from metadata import Metadata
-from model import Missing
+from .pushd import Dir
+from .metadata import Metadata
+from .model import Missing
 
 
 class RPMMetadata(Metadata):

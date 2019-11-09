@@ -5,6 +5,7 @@ the asserted condition is not met.
 The use of the FileNotFound exception makes this Python3 ready.
 Making them functions keeps the exception definition localized.
 """
+from __future__ import unicode_literals
 import os
 import errno
 

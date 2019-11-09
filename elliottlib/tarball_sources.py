@@ -1,6 +1,7 @@
 from __future__ import unicode_literals, print_function, with_statement
+from __future__ import absolute_import
 from future.builtins import str
-import logutil
+from . import logutil
 from typing import List, Set, Dict, Tuple, Text, Optional
 import os
 from io import BytesIO
@@ -10,7 +11,7 @@ import pygit2
 import errata_tool
 import koji
 import logging
-import constants
+from . import constants
 from future.standard_library import install_aliases
 install_aliases()
 from urllib.parse import urlparse, urldefrag
