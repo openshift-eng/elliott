@@ -3,7 +3,7 @@ Test the cli options functions
 """
 import unittest
 
-import cli_opts
+from elliottlib import cli_opts
 
 
 class TestCLI(unittest.TestCase):

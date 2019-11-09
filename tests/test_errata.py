@@ -1,7 +1,6 @@
 """
 Test errata models/controllers
 """
-
 import datetime
 import mock
 import json
@@ -11,7 +10,7 @@ from errata_tool import ErrataException
 import bugzilla
 
 import unittest
-import test_structures
+from . import test_structures
 from elliottlib import errata, constants, brew, exceptions
 
 

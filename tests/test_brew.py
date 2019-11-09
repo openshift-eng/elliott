@@ -5,40 +5,14 @@ Test the brew related functions/classes
 """
 
 import flexmock
-
-import logging
-import StringIO
-
 import platform
-(major, minor, patch) = platform.python_version_tuple()
-if int(major) == 2 and int(minor) < 7:
-    import unittest2 as unittest
-else:
-    import unittest
+import unittest
 
-from elliottlib import exceptions
-import constants
-import brew
-import test_structures
+from elliottlib import exceptions, constants, brew
+from . import test_structures
 
 
 class TestBrew(unittest.TestCase):
-
-    def setUp(self):
-        """
-        Define and provide mock logging for test/response
-        """
-        self.stream = StringIO.StringIO()
-        logging.basicConfig(level=logging.DEBUG, stream=self.stream)
-        self.logger = logging.getLogger()
-
-    def tearDown(self):
-        """
-        Reset logging for each test.
-        """
-        logging.shutdown()
-        reload(logging)
-
     def test_build_attached_to_open_erratum(self):
         """We can tell if a build is attached to any open erratum"""
         # Create Erratum(), create Build() using dict with all_errata

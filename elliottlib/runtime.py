@@ -15,13 +15,13 @@ import logging
 import functools
 import traceback
 import urlparse
-import gitdata
 
+from elliottlib import gitdata
 import logutil
 import assertion
 import exectools
 from pushd import Dir
-from image import ImageMetadata
+from imagecfg import ImageMetadata
 from rpmcfg import RPMMetadata
 from model import Model, Missing
 from multiprocessing import Lock
