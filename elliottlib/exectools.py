@@ -11,6 +11,7 @@ from __future__ import unicode_literals
 import subprocess
 import time
 import shlex
+import json
 
 from . import logutil
 from . import pushd
@@ -101,7 +102,7 @@ def cmd_gather(cmd):
         cmd_list = cmd
 
     cwd = pushd.Dir.getcwd()
-    cmd_info = '[cwd={}]: {}'.format(cwd, cmd_list)
+    cmd_info = '[cwd={}]: {}'.format(cwd, json.dumps(cmd_list))
 
     logger.debug("Executing:cmd_gather {}".format(cmd_info))
     proc = subprocess.Popen(
