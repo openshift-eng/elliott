@@ -6,7 +6,7 @@ import unittest
 
 import flexmock
 
-import imagecfg
+from elliottlib import imagecfg
 
 
 class TestImageMetadata(unittest.TestCase):

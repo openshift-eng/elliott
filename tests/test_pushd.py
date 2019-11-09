@@ -7,7 +7,7 @@ import unittest
 import os
 from multiprocessing.dummy import Pool
 
-import pushd
+from elliottlib import pushd
 
 
 class DirTestCase(unittest.TestCase):

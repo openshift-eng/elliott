@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import unittest
-from runtime import Runtime
+from elliottlib.runtime import Runtime
 
 
 class RuntimeTestCase(unittest.TestCase):
