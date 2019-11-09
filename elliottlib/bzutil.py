@@ -2,16 +2,19 @@
 Utility functions and object abstractions for general interactions
 with Red Hat Bugzilla
 """
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 # stdlib
 from subprocess import call, check_output
 from time import sleep
 
 import urllib
-import logutil
+from . import logutil
 
 # ours
-import constants
+from . import constants
 from elliottlib import exceptions, constants, util
 
 # 3rd party

@@ -1,6 +1,7 @@
 """
 Test the Dir() class.  Verify that it works as a context_manager.
 """
+from __future__ import unicode_literals
 
 import unittest
 

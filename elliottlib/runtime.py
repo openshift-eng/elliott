@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+from __future__ import unicode_literals
 from multiprocessing import Lock
 from multiprocessing.dummy import Pool as ThreadPool
 from pykwalify.core import Core
@@ -17,16 +19,16 @@ import traceback
 import urlparse
 
 from elliottlib import gitdata
-import logutil
-import assertion
-import exectools
-from pushd import Dir
-from imagecfg import ImageMetadata
-from rpmcfg import RPMMetadata
-from model import Model, Missing
+from . import logutil
+from . import assertion
+from . import exectools
+from .pushd import Dir
+from .imagecfg import ImageMetadata
+from .rpmcfg import RPMMetadata
+from .model import Model, Missing
 from multiprocessing import Lock
-import brew
-import constants
+from . import brew
+from . import constants
 from elliottlib.exceptions import ElliottFatalError
 
 

@@ -1,6 +1,7 @@
 """
 This file contains constants that are used to manage OCP Image and RPM builds
 """
+from __future__ import unicode_literals
 
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"

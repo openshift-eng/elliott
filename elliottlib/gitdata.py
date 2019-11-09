@@ -1,10 +1,12 @@
+from __future__ import absolute_import
+from __future__ import unicode_literals
 import yaml
 import logging
 import urlparse
 import os
 import shutil
-import exectools
-from pushd import Dir
+from . import exectools
+from .pushd import Dir
 
 
 SCHEMES = ['ssh', 'ssh+git', "http", "https"]

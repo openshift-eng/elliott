@@ -3,6 +3,7 @@
 Test the brew related functions/classes
 
 """
+from __future__ import unicode_literals
 
 import flexmock
 import platform
