@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 import unittest
 from elliottlib.cli.find_builds_cli import _attached_to_open_erratum_with_correct_product_version
 from elliottlib.errata import get_metadata_comments_json

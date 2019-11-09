@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 CLI_OPTS = {
     'data_path': {
         'env': 'ELLIOTT_DATA_PATH',

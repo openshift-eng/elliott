@@ -1,6 +1,7 @@
 """Common tooling exceptions. Store them in this central place to
 avoid circular imports
 """
+from __future__ import unicode_literals
 
 
 class ElliottFatalError(Exception):

@@ -5,14 +5,16 @@ ordinary subprocess behaviors.
 """
 
 from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import subprocess
 import time
 import shlex
 
-import logutil
-import pushd
-import assertion
+from . import logutil
+from . import pushd
+from . import assertion
 
 SUCCESS = 0
 

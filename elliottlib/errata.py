@@ -7,6 +7,9 @@ associated metadata.
 Classes representing an ERRATUM (a single errata)
 
 """
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 from __future__ import unicode_literals, print_function, with_statement
 from errata_tool import ErrataConnector
@@ -14,7 +17,7 @@ import copy
 import datetime
 import json
 import ssl
-import brew
+from . import brew
 import re
 from elliottlib import exceptions, constants
 from elliottlib.util import green_prefix, exit_unauthenticated
