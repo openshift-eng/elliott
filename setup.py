@@ -20,7 +20,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/openshift/elliott",
     license="Apache License, Version 2.0",
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests", "tests.*"]),
     include_package_data=True,
     entry_points={
         'console_scripts': [
@@ -28,6 +28,7 @@ setup(
         ]
     },
     install_requires=INSTALL_REQUIRES,
+    test_suite='tests',
     dependency_links=[],
     classifiers=[
         "Development Status :: 4 - Beta",
