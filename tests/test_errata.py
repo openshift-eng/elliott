@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import datetime
 import mock
 import json
-from contextlib import nested
 import flexmock
 from errata_tool import ErrataException
 import bugzilla
