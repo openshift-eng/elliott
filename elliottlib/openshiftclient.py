@@ -6,6 +6,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 # stdlib
+from __future__ import print_function
 from subprocess import call, check_output, CalledProcessError
 import json
 
