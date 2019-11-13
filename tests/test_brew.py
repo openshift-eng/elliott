@@ -99,8 +99,8 @@ class TestBrew(unittest.TestCase):
         b2 = brew.Build(nvr='tuxracer-42')
 
         builds = set([])
-        builds.add(b1)
-        builds.add(b1)
+        builds.add(str(b1))
+        builds.add(str(b1))
 
         self.assertEqual(1, len(builds))
         self.assertTrue(b1 != b2)
