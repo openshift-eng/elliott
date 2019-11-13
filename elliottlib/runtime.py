@@ -1,5 +1,9 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
+from future.standard_library import install_aliases
+install_aliases()
+from urllib.parse import urlparse
+
 from multiprocessing import Lock
 from multiprocessing.dummy import Pool as ThreadPool
 from pykwalify.core import Core
@@ -16,7 +20,6 @@ import click
 import logging
 import functools
 import traceback
-import urlparse
 
 from elliottlib import gitdata
 from . import logutil
