@@ -3,9 +3,12 @@
 
 from __future__ import absolute_import
 from __future__ import unicode_literals
+from future.standard_library import install_aliases
+install_aliases()
+from urllib.parse import urlparse
+
 import yaml
 import logging
-import urlparse
 import os
 import shutil
 from . import exectools
