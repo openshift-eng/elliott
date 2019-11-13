@@ -198,7 +198,7 @@ class Model(dict):
     def primitive(self):
         """ Recursively turn Model into dicts. """
         d = {}
-        for k, v in self.iteritems():
+        for k, v in self.items():
             if isinstance(v, Model) or isinstance(v, ListModel):
                 v = v.primitive()
             d[k] = v

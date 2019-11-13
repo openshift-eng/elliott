@@ -86,12 +86,12 @@ class Config(object):
             data = yaml.full_load(f)
             self._data.update(data)
             # load envvars if given and override
-            for k, v in envvars.iteritems():
+            for k, v in envvars.items():
                 if v in os.environ:
                     self._data[k] = os.environ[v]
 
             # finally, override with given cli args
-            for k, v in cli_args.iteritems():
+            for k, v in cli_args.items():
                 if k not in self._data or v is not None:
                     self._data[k] = v
 
@@ -99,7 +99,7 @@ class Config(object):
         return self._data[item]
 
     def iteritems(self):
-        return self._data.iteritems()
+        return self._data.items()
 
     def to_dict(self):
         return dict(self._data)
