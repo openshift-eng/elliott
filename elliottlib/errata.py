@@ -505,7 +505,7 @@ def get_advisory_images(image_advisory_id):
     pattern = re.compile(r'^redhat-openshift(\d)-')
 
     def _get_image_name(repo):
-        return pattern.sub(r'openshift\1/', repo['docker']['target']['repos'].keys()[0])
+        return pattern.sub(r'openshift\1/', list(repo['docker']['target']['repos'].keys())[0])
 
     def _get_nvr(component):
         parts = component.split('-')
@@ -513,7 +513,7 @@ def get_advisory_images(image_advisory_id):
 
     image_list = [
         '{}:{}'.format(_get_image_name(repo), _get_nvr(key))
-        for key, repo in sorted(cdn_docker_file_list.iteritems())
+        for key, repo in sorted(list(cdn_docker_file_list.items()))
     ]
 
     return '#########\n{}\n#########'.format('\n'.join(image_list))

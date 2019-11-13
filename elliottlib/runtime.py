@@ -433,7 +433,7 @@ class Runtime(object):
         # synchronize output to the file.
         with self.log_lock:
             record = "%s|" % record_type
-            for k, v in kwargs.iteritems():
+            for k, v in kwargs.items():
                 assert ("\n" not in str(k))
                 # Make sure the values have no linefeeds as this would interfere with simple parsing.
                 v = str(v).replace("\n", " ;;; ").replace("\r", "")

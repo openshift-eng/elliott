@@ -829,7 +829,7 @@ unsigned builds.
         all_signed = False
         # `errata_builds` is a dict with brew tags as keys, values are
         # lists of builds on the advisory with that tag
-        for k, v in e.errata_builds.iteritems():
+        for k, v in e.errata_builds.items():
             all_builds = all_builds.union(set(v))
         green_prefix("Fetching initial states: ")
         click.echo("{} builds to check".format(len(all_builds)))

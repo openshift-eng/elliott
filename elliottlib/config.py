@@ -20,7 +20,7 @@ VALID_UPDATES = {
 # in --help output
 def valid_updates():
     res = '\n\tKey\tValid Options\n\n'
-    for k, v in VALID_UPDATES.iteritems():
+    for k, v in VALID_UPDATES.items():
         opts = ""
         if v:
             v = [str(i) for i in v]
