@@ -46,7 +46,7 @@ class TarballSourcesTestCase(unittest.TestCase):
         with mock.patch("koji.ClientSession", spec=True) as MockSession:
             session = MockSession()
             session.getBuild = mock.MagicMock(side_effect=fake_get_build)
-            expected = build_infos.values()
+            expected = list(build_infos.values())
             actual = tarball_sources.get_builds_from_brew(session, build_nvrs)
             self.assertListEqual(list(actual), expected)
 
