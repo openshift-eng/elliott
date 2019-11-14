@@ -443,3 +443,41 @@ def add_bugs_with_retry(advisory, bug_list, retried):
                 add_bugs_with_retry(advisory, retry_list, True)
         else:
             raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
+
+
+def get_rpmdiff_runs(advisory_id, status=None, session=None):
+    """ Get RPMDiff runs for a given advisory.
+    :param advisory_id: advisory number
+    :param status: If set, only returns RPMDiff runs in the status.
+    :param session: requests.Session object.
+    """
+    params = {
+        "filter[active]": "true",
+        "filter[test_type]": "rpmdiff",
+        "filter[errata_id]": advisory_id,
+    }
+    if status:
+        if status not in constants.ET_EXTERNAL_TEST_STATUSES:
+            raise ValueError("{} is not a valid RPMDiff run status.".format(status))
+        params["filter[status]"] = status
+    url = constants.errata_url + "/api/v1/external_tests"
+    if not session:
+        session = requests.Session()
+
+    # This is a paginated API. We need to increment page[number] until an empty array is returned.
+    # https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-pagination
+    page_number = 1
+    while True:
+        params["page[number]"] = page_number
+        resp = session.get(
+            url,
+            params=params,
+            auth=HTTPKerberosAuth(),
+        )
+        resp.raise_for_status()
+        data = resp.json()["data"]
+        if not data:
+            break
+        for item in data:
+            yield item
+        page_number += 1
