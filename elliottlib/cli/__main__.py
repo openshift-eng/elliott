@@ -48,6 +48,7 @@ from elliottlib.cli.create_cli import create_cli
 from elliottlib.cli.add_metadata_cli import add_metadata_cli
 from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
 from elliottlib.cli.puddle_advisories_cli import puddle_advisories_cli
+from elliottlib.cli.rpmdiff_cli import rpmdiff_cli
 
 
 # 3rd party
@@ -882,6 +883,7 @@ cli.add_command(create_placeholder_cli)
 cli.add_command(create_cli)
 cli.add_command(list_cli)
 cli.add_command(puddle_advisories_cli)
+cli.add_command(rpmdiff_cli)
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
