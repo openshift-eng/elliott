@@ -7,11 +7,10 @@ from elliottlib.cli.common import cli, use_default_advisory_option, find_default
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated, override_product_version, ensure_erratatool_auth, get_release_version
 from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header, red_print
-
 from errata_tool import Erratum
 from kerberos import GSSError
 import requests
-import click
+import click, koji
 # https://click.palletsprojects.com/en/7.x/python3/
 click.disable_unicode_literals_warning = True
 
@@ -162,7 +161,19 @@ def _fetch_builds_by_id(builds, product_version, session):
 def _fetch_builds_from_diff(from_payload, to_payload, product_version, session):
     green_print('Fetching changed images between payloads...')
     changed_builds = elliottlib.openshiftclient.get_build_list(from_payload, to_payload)
-    return [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds]
+    brew_session = koji.ClientSession(constants.BREW_HUB)
+    builds = []
+    for cb in changed_builds:
+        for tag in brew_session.listTags(cb):
+            name = tag.get('name')
+            if name:
+                break
+        if name:
+            pv = override_product_version('', name)
+        else:
+            pv = product_version
+        builds.append(elliottlib.brew.get_brew_build(cb, pv, session=session))
+    return builds
 
 
 def _fetch_builds_by_kind_image(runtime, default_product_version, session):

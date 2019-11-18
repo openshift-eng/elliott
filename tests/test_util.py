@@ -17,6 +17,12 @@ class UtilTestCase(unittest.TestCase):
         ret = util.override_product_version('RHEL-7-OSE-4.1', 'rhaos-4.1-rhel-7')
         self.assertEqual(ret, 'RHEL-7-OSE-4.1')
 
+        ret = util.override_product_version('', 'rhaos-4.1-rhel-7')
+        self.assertEqual(ret, 'RHEL-7-OSE-4.1')
+
+        ret = util.override_product_version('', 'rhaos-4.1-rhel-8-candidate')
+        self.assertEqual(ret, 'OSE-4.1-RHEL-8')
+
 
 if __name__ == "__main__":
     unittest.main()
