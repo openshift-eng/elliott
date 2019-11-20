@@ -4,7 +4,7 @@ LABEL name="elliott-dev" \
   maintainer="OpenShift Automated Release Tooling (ART) Team <aos-team-art@redhat.com>"
 RUN dnf install -y \
     # runtime dependencies
-    krb5-workstation python-bugzilla-cli rsync \
+    krb5-workstation python-bugzilla-cli rsync docker \
     python2 python2-certifi python2-click python2-dockerfile-parse python2-koji \
     python2-pykwalify python2-pyyaml python2-bugzilla python2-requests \
     python2-requests-kerberos python2-pygit2 python2-future \
@@ -28,6 +28,12 @@ RUN wget -O /etc/yum.repos.d/rcm-tools-fedora.repo https://download.devel.redhat
   && dnf install -y koji brewkoji \
   && dnf install -y rhpkg \
   && dnf clean all
+
+ARG OC_VERSION=4.2.4
+#include latest oc client
+RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"$OC_VERSION"/openshift-client-linux-"$OC_VERSION".tar.gz \
+  && tar -C /usr/local/bin -xzf  /tmp/openshift-client-linux-"$OC_VERSION".tar.gz oc kubectl \
+  && rm /tmp/openshift-client-linux-"$OC_VERSION".tar.gz
 
 # Create a non-root user - see https://aka.ms/vscode-remote/containers/non-root-user.
 ARG USERNAME=dev
