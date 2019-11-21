@@ -19,6 +19,7 @@ BUG_SEVERITY_NUMBER_MAP = {
 # https://jira.coreos.com/browse/ART-1192
 SECURITY_IMPACT = ["Low", "Low", "Moderate", "Important", "Critical"]
 
+errata_xmlrpc_url = 'http://errata.engineering.redhat.com/errata/xmlrpc.cgi'
 errata_url = "https://errata.devel.redhat.com"
 
 # 1965 => (RHBA; Active; Product: RHOSE; Devel Group: ENG OpenShift
