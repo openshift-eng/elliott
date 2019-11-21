@@ -271,7 +271,7 @@ def _attach_to_advisory(builds, kind, advisory):
         product_version_set = {build.product_version for build in builds}
         for pv in product_version_set:
             erratum.addBuilds(
-                buildlist=[build.nvr for build in builds if build.product_version is pv],
+                buildlist=[build.nvr for build in builds if build.product_version == pv],
                 release=pv,
                 file_types={build.nvr: [file_type] for build in builds}
             )
