@@ -8,6 +8,7 @@ Classes representing an ERRATUM (a single errata)
 
 """
 
+from __future__ import unicode_literals, print_function, with_statement
 from errata_tool import ErrataConnector
 import copy
 import datetime
@@ -23,7 +24,13 @@ from requests_kerberos import HTTPKerberosAuth
 from kerberos import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
 
+try:
+    from xmlrpc import client as xmlrpclib
+except ImportError:
+    import xmlrpclib
+
 ErrataConnector._url = constants.errata_url
+errata_xmlrpc = xmlrpclib.ServerProxy(constants.errata_xmlrpc_url)
 
 
 def find_mutable_erratum(kind, minor, major=3):
@@ -481,3 +488,29 @@ def get_rpmdiff_runs(advisory_id, status=None, session=None):
         for item in data:
             yield item
         page_number += 1
+
+
+def get_advisory_images(image_advisory_id):
+    """List images of a given advisory in the format we usually send to CCS (docs team)
+
+    :param int image_advisory_id: ID of the main image advisory
+
+    :return: str with a list of images from the advisory in a format CCS consumes
+    """
+    cdn_docker_file_list = errata_xmlrpc.get_advisory_cdn_docker_file_list(image_advisory_id)
+
+    pattern = re.compile(r'^redhat-openshift(\d)-')
+
+    def _get_image_name(repo):
+        return pattern.sub(r'openshift\1/', repo['docker']['target']['repos'].keys()[0])
+
+    def _get_nvr(component):
+        parts = component.split('-')
+        return '{}-{}'.format(parts[-2], parts[-1])
+
+    image_list = [
+        '{}:{}'.format(_get_image_name(repo), _get_nvr(key))
+        for key, repo in sorted(cdn_docker_file_list.iteritems())
+    ]
+
+    return '#########\n{}\n#########'.format('\n'.join(image_list))
