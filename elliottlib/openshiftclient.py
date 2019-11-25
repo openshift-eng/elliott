@@ -2,6 +2,8 @@
 Utility functions and object abstractions for general interactions
 with oc cli
 """
+from __future__ import print_function
+from __future__ import unicode_literals
 
 # stdlib
 from subprocess import call, check_output, CalledProcessError
@@ -125,7 +127,7 @@ def get_image_nvr(image):
         image_version = image_json['config']['config']['Labels']['version']
         image_release = image_json['config']['config']['Labels']['release']
     except Exception:
-        print "This image json does not have the expected fields:\n" + oc_output
+        print("This image json does not have the expected fields:\n" + oc_output)
         raise
 
     return "{}-{}-{}".format(image_name, image_version, image_release)

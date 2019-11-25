@@ -1,6 +1,7 @@
 """
 Test the task related functions for the OpenShift Image/RPM Build Tool
 """
+from __future__ import unicode_literals
 import unittest
 
 from elliottlib import assertion

@@ -1,13 +1,15 @@
+from __future__ import absolute_import
+from __future__ import unicode_literals
 import yaml
 import os
 import urllib
 
-import assertion
-import constants
-import exectools
-import logutil
+from . import assertion
+from . import constants
+from . import exectools
+from . import logutil
 
-from model import Model, Missing
+from .model import Model, Missing
 
 
 def cgit_url(name, filename, rev=None):

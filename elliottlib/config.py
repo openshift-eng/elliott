@@ -1,10 +1,13 @@
-import metadata
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
+from . import metadata
 import yaml
 from pykwalify.core import Core
 import os
 import shutil
-from pushd import Dir
-import exectools
+from .pushd import Dir
+from . import exectools
 import sys
 
 

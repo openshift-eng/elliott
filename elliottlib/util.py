@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 import click
 import datetime
 from multiprocessing import cpu_count
