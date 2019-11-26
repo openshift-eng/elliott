@@ -85,7 +85,7 @@ def show(ctx, advisory):
             else:
                 util.red_print(result_msg)
             # get last waiver message
-            waivers = rpmdiff_client.get_waivers(package_name, test_id, limit=1)
+            waivers = rpmdiff_client.list_waivers(package_name, test_id, limit=1)
             if waivers:
                 util.green_print("    Last waiver: @" + waivers[0]["owner"]["username"] + ": " + waivers[0]["description"])
             else:
