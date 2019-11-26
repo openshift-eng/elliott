@@ -31,11 +31,16 @@ class RPMDiffClient(object):
         resp.raise_for_status()
         return resp.json()["results"]
 
-    def get_waivers(self, package_name, test_id, offset=0, limit=10):
+    def list_waivers(self, package_name, test, offset=0, limit=10):
+        """ List waivers.
+
+        https://rpmdiff-hub.host.prod.eng.bos.redhat.com/api/v1/waivers/
+        """
         endpoint = self.hub_url + "/api/v1/waivers/"
         params = {
             "package": package_name,
-            "test_id": int(test_id),
+            "test": int(test),
+            "limit": int(limit),
         }
         resp = self.session.get(endpoint, params=params)
         resp.raise_for_status()

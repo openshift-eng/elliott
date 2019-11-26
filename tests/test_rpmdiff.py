@@ -44,7 +44,7 @@ class TestRPMDiffClient(unittest.TestCase):
         actual = self.client.get_test_results(12345)
         self.assertEqual(actual, response["results"])
 
-    def test_get_waivers(self):
+    def test_list_waivers(self):
         response = {
             "results": [
                 {"waiver_id": 1},
@@ -53,5 +53,5 @@ class TestRPMDiffClient(unittest.TestCase):
             ]
         }
         self.client.session.get.return_value.json.return_value = response
-        actual = self.client.get_waivers("foo", 123)
+        actual = self.client.list_waivers("foo", 123)
         self.assertEqual(actual, response["results"])
