@@ -72,6 +72,20 @@ class TestErrata(unittest.TestCase):
             actual = errata.get_advisories_for_bug(bug, session)
             self.assertEqual(actual, advisories)
 
+    def test_parse_proudct_version(self):
+        product_version_map = {}
+        product_version_json = """{
+            "data":[
+                {"id":964,"type":"product_versions","attributes":{"name":"OSE-4.1-RHEL-8","description":"Red Hat OpenShift Container Platform 4.1","default_brew_tag":"rhaos-4.1-rhel-8-candidate","allow_rhn_debuginfo":false,"is_oval_product":false,"is_rhel_addon":false,"is_server_only":true,"enabled":true},"brew_tags":["rhaos-4.1-rhel-8-candidate"],"relationships":{"rhel_release":{"id":87,"name":"RHEL-8"},"sig_key":{"id":8,"name":"redhatrelease2"}}}]
+        }"""
+        data = json.loads(product_version_json)
+        for l in data['data']:
+            if l['type'] == 'product_versions':
+                for tags in l['brew_tags']:
+                    product_version_map[tags] = l['attributes']['name']
+
+        self.assertEqual(product_version_map, {'rhaos-4.1-rhel-8-candidate': 'OSE-4.1-RHEL-8'})
+
     def test_get_rpmdiff_runs(self):
         advisory_id = 12345
         responses = [

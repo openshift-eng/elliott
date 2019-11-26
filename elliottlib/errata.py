@@ -404,6 +404,26 @@ def get_advisories_for_bug(bug_id, session=None):
     return r.json()
 
 
+def get_product_version_from_tag(product_id, session=None):
+    """ Get the a product_version from a specific brew tag.
+
+    """
+    product_version_map = {}
+    if not session:
+        session = requests.session()
+
+    r = session.get(constants.errata_get_product_versions.format(id=int(product_id)),
+                    verify=ssl.get_default_verify_paths().openssl_cafile,
+                    auth=HTTPKerberosAuth())
+    r.raise_for_status()
+    data = r.json()
+    for l in data['data']:
+        if l['type'] == 'product_versions':
+            for tags in l['brew_tags']:
+                product_version_map[tags] = l['attributes']['name']
+    return product_version_map
+
+
 def parse_exception_error_message(e):
     """
     :param e: exception messages (format is like 'Bug #1685399 The bug is filed already in RHBA-2019:1589.

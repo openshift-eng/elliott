@@ -237,16 +237,10 @@ def parallel_results_with_progress(inputs, func):
 
 
 def override_product_version(pv, branch):
-    """ Override product_version with given brew tags
-
-    :param pv: orignal product_version, will be override by branch is those two are not same,
-    if pv is empty, also will be overrided.
-
-    :param branch: if user specify -b branch will override product_version of erratatool.yml
-    """
+    """ if user specify -b branch will override product_version of erratatool.yml"""
     rp = pv.split("-")
     rb = branch.split("-")
-    if not pv or rp[1] != rb[3] or rp[3] != rb[1]:
+    if rp[1] != rb[3] or rp[3] != rb[1]:
         if rb[3] == '8':
             # hardcoded differently for RHEL8 since the product version name changed
             # TODO: it should look up the right product version that can accept content from the brew tag.
@@ -256,5 +250,6 @@ def override_product_version(pv, branch):
 
 
 def get_release_version(pv):
-    """ there are two kind of format of product_version: OSE-4.1-RHEL-8 RHEL-7-OSE-4.1 """
+    """ there are two kind of format of product_version: OSE-4.1-RHEL-8 RHEL-7-OSE-4.1 RHEL-7-OSE-4.1-FOR-POWER-LE """
+    print(pv)
     return re.search(r'OSE-(\d+\.\d+)', pv).groups()[0]

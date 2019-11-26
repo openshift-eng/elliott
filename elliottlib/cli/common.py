@@ -41,6 +41,10 @@ context_settings = dict(help_option_names=['-h', '--help'])
     default=None, metavar='BRANCH',
     help='Branch to override any default in group.yml.')
 @click.option(
+    '--product-id',
+    default=None, metavar='PRODUCT_ID',
+    help='Product ID to override any default in erratatool.yml.')
+@click.option(
     '--stage',
     default=False, is_flag=True,
     help='Force checkout stage branch for sources in group.yml.')

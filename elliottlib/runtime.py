@@ -105,6 +105,7 @@ class Runtime(object):
 
         self._remove_tmp_working_dir = False
         self.group_config = None
+        self.erratatool_config = None
 
         self.record_log = None
         self.record_log_path = None
@@ -130,19 +131,19 @@ class Runtime(object):
         self.rpm_list = None
         self.rpm_search_tree = None
 
-    def get_group_config(self):
+    def get_yaml_config(self, file_name):
         # group.yml can contain a `vars` section which should be a
         # single level dict containing keys to str.format(**dict) replace
         # into the YAML content. If `vars` found, the format will be
         # preformed and the YAML model will reloaded from that result
-        tmp_config = Model(self.gitdata.load_data(key='group').data)
+        tmp_config = Model(self.gitdata.load_data(key=file_name).data)
         replace_vars = tmp_config.vars
         if replace_vars is not Missing:
             try:
                 group_yml = yaml.safe_dump(tmp_config.primitive(), default_flow_style=False)
                 tmp_config = Model(yaml.safe_load(group_yml.format(**replace_vars)))
             except KeyError as e:
-                raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
+                raise ValueError('{}.yml contains template key `{}` but no value was provided'.format(file_name, e.args[0]))
         return tmp_config
 
     def initialize(self, mode='images',
@@ -200,7 +201,8 @@ class Runtime(object):
         self.group_dir = self.gitdata.data_dir
 
         with Dir(self.group_dir):
-            self.group_config = self.get_group_config()
+            self.group_config = self.get_yaml_config('group')
+            self.erratatool_config = self.get_yaml_config('erratatool')
             self.arches = self.group_config.get('arches', ['x86_64'])
 
             if self.group_config.name != self.group:
@@ -209,6 +211,15 @@ class Runtime(object):
 
             if self.group_config.includes is not Missing and self.include is None:
                 self.include = self.group_config.includes
+
+            if self.product_id is not None:
+                self.logger.info("Using product_id from command line: %s" % self.product_id)
+            elif self.erratatool_config.product_id is not Missing:
+                self.product_id = self.erratatool_config.product_id
+                self.logger.info("Using product_id from erratatool.yml: %s" % self.branch)
+            else:
+                self.product_id = 79
+                self.logger.info("Using product_id 79 Atomic OpenShift")
 
             if self.branch is not None:
                 self.logger.info("Using branch from command line: %s" % self.branch)
