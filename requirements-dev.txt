@@ -3,5 +3,8 @@ coverage
 flake8
 flexmock
 mock
+pylint
 pytest
 tox
+typing
+typing-extensions
