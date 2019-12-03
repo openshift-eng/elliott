@@ -33,7 +33,7 @@ import elliottlib.openshiftclient
 
 from elliottlib.cli import cli_opts
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import exit_unauthenticated, green_prefix, YMD, override_product_version
+from elliottlib.util import exit_unauthenticated, green_prefix, YMD
 from elliottlib.util import default_release_date, validate_release_date
 from elliottlib.util import validate_email_address, red_print, major_from_branch
 from elliottlib.util import green_print, red_prefix, minor_from_branch

@@ -5,15 +5,11 @@ import elliottlib
 from elliottlib import constants, logutil, Runtime, brew
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import exit_unauthenticated, override_product_version, ensure_erratatool_auth, get_release_version
-from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header, red_print
-
+from elliottlib.util import exit_unauthenticated, ensure_erratatool_auth, get_release_version
+from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header, red_print, progress_func
 from errata_tool import Erratum
 from kerberos import GSSError
-import requests
-import click
-import koji
-
+import requests, click, koji
 LOGGER = logutil.getLogger(__name__)
 
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -91,7 +87,7 @@ PRESENT advisory. Here are some examples:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
 
     runtime.initialize(mode='images' if kind == 'image' else 'none')
-    base_tag, product_version, tag_pv_map = _determine_errata_info(runtime)
+    base_tag, tag_pv_map = _determine_errata_info(runtime)
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -99,17 +95,26 @@ PRESENT advisory. Here are some examples:
     ensure_erratatool_auth()  # before we waste time looking up builds we can't process
 
     # get the builds we want to add
-    unshipped_builds = []
-    session = requests.Session()
+    unshipped_nvrs = []
     if builds:
-        unshipped_builds = _fetch_builds_by_id(builds, product_version, session)
+        green_prefix('Build NVRs provided: ')
+        click.echo('Manually verifying the builds exist')
+        unshipped_nvrs = builds
     elif from_diff:
-        unshipped_builds = _fetch_builds_from_diff(from_diff[0], from_diff[1], product_version, session)
+        green_print('Fetching changed images between payloads...')
+        unshipped_nvrs = elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1])
     else:
         if kind == 'image':
-            unshipped_builds = _fetch_builds_by_kind_image(runtime, tag_pv_map, session)
+            unshipped_builds = _fetch_builds_by_kind_image(runtime, tag_pv_map)
         elif kind == 'rpm':
-            unshipped_builds = _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session)
+            unshipped_nvrs = _fetch_builds_by_kind_rpm(base_tag, tag_pv_map)
+
+    results = parallel_results_with_progress(
+        unshipped_nvrs,
+        lambda nvr: _nvrs_to_builds(nvr, tag_pv_map)
+    )
+
+    unshipped_builds = _attached_to_open_erratum_with_correct_pv(kind, results, elliottlib.errata)
 
     _json_dump(as_json, unshipped_builds, base_tag, kind)
 
@@ -117,7 +122,7 @@ PRESENT advisory. Here are some examples:
         green_print('No builds needed to be attached.')
         return
 
-    if advisory is not False:
+    if advisory:
         _attach_to_advisory(unshipped_builds, kind, advisory)
     else:
         click.echo('The following {n} builds '.format(n=len(unshipped_builds)), nl=False)
@@ -125,6 +130,20 @@ PRESENT advisory. Here are some examples:
         click.echo('to an advisory:')
         for b in sorted(unshipped_builds):
             click.echo(' ' + b.nvr)
+
+
+def _get_product_version(nvr, product_version_map, brew_session=koji.ClientSession(constants.BREW_HUB)):
+    product_version = ""
+    for tag in brew_session.listTags(nvr):
+        tag_name = tag.get('name')
+        product_version = product_version_map.get(tag_name, "")
+        if product_version:
+            return product_version
+
+
+def _nvrs_to_builds(nvr, product_version_map):
+    pv = _get_product_version(nvr, product_version_map)
+    return elliottlib.brew.get_brew_build(nvr, pv, session=requests.Session())
 
 
 def _json_dump(as_json, unshipped_builds, base_tag, kind):
@@ -142,30 +161,18 @@ def _determine_errata_info(runtime):
     if not runtime.branch:
         raise ElliottFatalError('Need to specify a branch either in group.yml or with --branch option')
     base_tag = runtime.branch
-
     et_data = runtime.gitdata.load_data(key='erratatool').data
-    product_version = override_product_version(et_data.get('product_version'), base_tag)
     tag_pv_map = et_data.get('brew_tag_product_version_mapping')
-    return base_tag, product_version, tag_pv_map
+    return base_tag, tag_pv_map
 
 
-def _fetch_builds_by_id(builds, product_version, session):
-    green_prefix('Build NVRs provided: ')
-    click.echo('Manually verifying the builds exist')
-    try:
-        return [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in builds]
-    except elliottlib.exceptions.BrewBuildException as ex:
-        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-
-
-def _fetch_builds_from_diff(from_payload, to_payload, product_version, session):
-    green_print('Fetching changed images between payloads...')
-    changed_builds = elliottlib.openshiftclient.get_build_list(from_payload, to_payload)
-    return [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds]
-
-
-def _fetch_builds_by_kind_image(runtime, tag_pv_map, session):
+def _fetch_builds_by_kind_image(runtime, tag_pv_map):
     image_metadata = runtime.image_metas()
+
+    pbar_header(
+        'Generating list of images: ',
+        'Hold on a moment, fetching Brew buildinfo',
+        image_metadata)
 
     # Returns a list of (n, v, r, pv) tuples of each build
     image_tuples = []
@@ -184,52 +191,35 @@ def _fetch_builds_by_kind_image(runtime, tag_pv_map, session):
         'Fetching data for {n} builds '.format(n=len(image_tuples)),
         image_tuples)
 
-    # By 'meta' I mean the lil bits of meta data given back from
-    # get_latest_build_info
-    #
-    # TODO: Update the ImageMetaData class to include the NVR as
-    # an object attribute.
-    results = parallel_results_with_progress(
-        image_tuples,
-        lambda meta: elliottlib.brew.get_brew_build(
-            '{}-{}-{}'.format(meta[0], meta[1], meta[2]),
-            product_version=meta[3],
-            session=session)
-    )
-
-    return [
-        b for b in results
-        if not b.attached_to_open_erratum
-        # filter out 'openshift-enterprise-base-container' since it's not needed in advisory
-        if 'openshift-enterprise-base-container' not in b.nvr
-    ]
+    nvrs = []
+    for meta in image_tuples:
+        nvrs.append('{}-{}-{}'.format(meta[0], meta[1], meta[2]))
+    return nvrs
 
 
-def _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session):
+def _fetch_builds_by_kind_rpm(base_tag, tag_pv_map):
     green_prefix('Generating list of rpms: ')
     click.echo('Hold on a moment, fetching Brew builds')
     candidates = elliottlib.brew.find_unshipped_build_candidates(
         base_tag,
-        product_version,
+        tag_pv_map["{}-candidate".format(base_tag)],
         kind='rpm')
 
     pbar_header('Gathering additional information: ', 'Brew buildinfo is required to continue', candidates)
-    # We could easily be making scores of requests, one for each build
-    # we need information about. May as well do it in parallel.
-    results = parallel_results_with_progress(
-        candidates,
-        lambda nvr: elliottlib.brew.get_brew_build(nvr, product_version, session=session)
-    )
-    return _attached_to_open_erratum_with_correct_product_version(results, product_version, elliottlib.errata)
+    return candidates
 
 
-def _attached_to_open_erratum_with_correct_product_version(results, product_version, errata):
+def _attached_to_open_erratum_with_correct_pv(kind, results, errata):
+    if kind != "image":
+        return results
     unshipped_builds = []
     # will probably end up loading the same errata and
     # its comments many times, which is pretty slow
     # so we cached the result.
     errata_version_cache = {}
     for b in results:
+        if b.nvr.startswith('openshift-enterprise-base-container'):
+            continue
         same_version_exist = False
         # We only want builds not attached to an existing open advisory
         if b.attached_to_open_erratum:
@@ -244,7 +234,7 @@ def _attached_to_open_erratum_with_correct_product_version(results, product_vers
                     # though not very useful (there's a command for adding them,
                     # but not much point in doing it). just looking at the first one is fine.
                     errata_version_cache[e] = metadata_comments_json[0]['release']
-                if errata_version_cache[e] == get_release_version(product_version):
+                if errata_version_cache[e] == get_release_version(b.product_version):
                     same_version_exist = True
                     break
         if not same_version_exist or not b.attached_to_open_erratum:
