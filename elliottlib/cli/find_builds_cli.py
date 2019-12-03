@@ -12,6 +12,10 @@ from errata_tool import Erratum
 from kerberos import GSSError
 import requests
 import click
+import koji
+# https://click.palletsprojects.com/en/7.x/python3/
+click.disable_unicode_literals_warning = True
+
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -179,10 +183,12 @@ def _fetch_builds_by_kind_image(runtime, default_product_version, session):
         image_metadata)
 
     # Returns a list of (n, v, r, pv) tuples of each build
-    image_tuples = parallel_results_with_progress(
-        image_metadata,
-        lambda build: build.get_latest_build_info(product_version_overide)
-    )
+    latest_builds = {}
+    image_tuples = []
+    tag_set = set()
+    brew_session = koji.ClientSession(constants.BREW_HUB)
+    for i in image_metadata:
+        image_tuples.append(i.get_latest_build_info(product_version_overide, tag_set, latest_builds, brew_session))
 
     pbar_header(
         'Generating build metadata: ',
