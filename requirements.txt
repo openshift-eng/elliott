@@ -4,7 +4,7 @@ dockerfile-parse
 errata-tool >= 1.19
 future
 koji >= 1.18
-pygit2
+pygit2 == 0.28.2
 pykwalify
 python-bugzilla
 pyyaml
