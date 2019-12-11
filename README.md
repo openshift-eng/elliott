@@ -391,3 +391,16 @@ Add or remove any other `*_test.py` tests you wish.
 If that works then you can open the HTML coverage report:
 
 * `xdg-open cover/index.html`
+
+## License
+
+Most of elliott is released under [Apache License 2.0][], except [elliottlib/dotconfig.py][] and
+[elliottlib/gitdata.py][], which are embedded copies of [dotconfig][] and [gitdata][] projects
+respectively, therefore those two files are released under [LGPL v3][].
+
+[Apache License 2.0]: https://github.com/openshift/elliott/blob/master/LICENSE
+[elliottlib/dotconfig.py]: https://github.com/openshift/elliott/blob/master/elliottlib/dotconfig.py
+[elliottlib/gitdata.py]: https://github.com/openshift/elliott/blob/master/elliottlib/gitdata.py
+[dotconfig]: https://github.com/adammhaile/dotconfig
+[gitdata]: https://github.com/adammhaile/gitdata
+[LGPL v3]: https://www.gnu.org/licenses/lgpl-3.0.en.html

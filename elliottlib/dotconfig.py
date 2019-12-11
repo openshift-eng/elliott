@@ -1,3 +1,6 @@
+# This file is part of dotconfig project <https://github.com/adammhaile/dotconfig>
+# and released under LGPL v3 <https://www.gnu.org/licenses/lgpl-3.0.en.html>
+
 from __future__ import unicode_literals
 import yaml
 import os
