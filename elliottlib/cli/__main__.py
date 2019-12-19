@@ -259,7 +259,7 @@ advisory with the --add option.
     if mode == 'sweep':
         green_prefix("Searching for bugs with target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
-        bug_ids = elliottlib.bzutil.search_for_bugs(bz_data, status)
+        bug_ids = elliottlib.bzutil.search_for_bugs(bz_data, status, verbose=runtime.debug)
     elif mode == 'list':
         bug_ids = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
     elif mode == "diff":
@@ -611,7 +611,7 @@ def find_cve_trackers(runtime, cve, status):
 
     click.echo("Searching for bugs with target release(s): {tr}".format(tr=", ".join(bz_data['target_release'])))
 
-    bug_list = elliottlib.bzutil.search_for_security_bugs(bz_data, status, cve=cve)
+    bug_list = elliottlib.bzutil.search_for_security_bugs(bz_data, status, cve=cve, verbose=runtime.debug)
 
     click.echo("Found {} bugs:".format(len(bug_list)))
     for b in bug_list:
