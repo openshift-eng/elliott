@@ -1,4 +1,5 @@
-from __future__ import unicode_literals, print_function, with_statement
+from __future__ import absolute_import, print_function, unicode_literals
+from builtins import str
 import click
 import re
 
@@ -46,7 +47,7 @@ def show(ctx, advisory):
             incomplete_runs.append(rpmdiff_run)
     util.green_prefix("good: {}".format(len(good_runs)))
     click.echo(", ", nl=False)
-    util.red_prefix("bad:{}".format(len(bad_runs)))
+    util.red_prefix("bad: {}".format(len(bad_runs)))
     click.echo(", ", nl=False)
     util.yellow_print("incomplete: {}".format(len(incomplete_runs)))
 

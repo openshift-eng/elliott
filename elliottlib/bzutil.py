@@ -2,16 +2,16 @@
 Utility functions and object abstractions for general interactions
 with Red Hat Bugzilla
 """
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
 
 # stdlib
-from subprocess import call, check_output
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str, object
 from time import sleep
 
-import urllib
-from . import logutil
+import urllib.parse
+from elliottlib import logutil
 
 # ours
 from . import constants
@@ -23,36 +23,6 @@ import bugzilla
 
 
 logger = logutil.getLogger(__name__)
-
-
-def get_tracker_bugs(bzapi, bugs):
-    """Returns a list of tracking bugs from a list of bug ids. For a definition of these terms see
-    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
-
-    :param bzapi: An instance of the python-bugzilla Bugzilla class
-    :param bugs: The IDs of the bugs you want to create an Erratum for. These can be
-    security tracking bugs or non-security tracking bugs. This method will determine
-    if they are security tracking bugs or not
-
-    :returns: A list of tracking bugs
-
-    :raises:
-        BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
-        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
-        session has expired.
-    """
-    if len(bugs) == 0:
-        return
-    bugs = bzapi.getbugs(bugs)
-    tracker_bugs = []
-    for t in bugs:
-        if t is None:
-            raise exceptions.BugzillaFatalError("Couldn't find bug with list of ids provided")
-        if "SecurityTracking" not in t.keywords or "Security" not in t.keywords:
-            util.yellow_print("Non-SecurityTracking bug to be added: %s" % t.id)
-        else:
-            tracker_bugs.append(t)
-    return tracker_bugs
 
 
 def get_highest_impact(trackers, tracker_flaws_map):
@@ -386,8 +356,8 @@ class SearchURL(object):
 
         url = root_string + self._status_string()
 
-        url += "&classification={}".format(urllib.quote(self.classification))
-        url += "&product={}".format(urllib.quote(self.product))
+        url += "&classification={}".format(urllib.parse.quote(self.classification))
+        url += "&product={}".format(urllib.parse.quote(self.product))
         url += self._keywords_string()
         url += self.filter_operator
         url += self._filter_string()
@@ -413,12 +383,6 @@ class SearchURL(object):
 
     def addFilter(self, field, operator, value):
         self.filters.append(SearchFilter(field, operator, value))
-
-    def addFilterOperator(self, operator):
-        # Valid operators:
-        #   AND_G - Match ALL against the same field
-        #   OR - Match separately
-        self.filter_operator += "&j_top={}".format(operator)
 
     def addTargetRelease(self, release_string):
         self.target_releases.append(release_string)

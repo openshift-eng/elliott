@@ -1,7 +1,7 @@
 """
 This file contains constants that are used to manage OCP Image and RPM builds
 """
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
 
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
@@ -143,5 +143,3 @@ errata_get_comments_url = errata_url + "/api/v1/comments"
 errata_get_erratum_url = errata_url + "/api/v1/erratum/{id}"
 errata_post_erratum_url = errata_url + "/api/v1/erratum"
 errata_get_advisories_for_bug_url = errata_url + "/bugs/{id}/advisories.json"
-
-DISTGIT_MAX_FILESIZE = 50000000

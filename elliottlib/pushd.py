@@ -16,8 +16,9 @@ Example:
 
   # os.getcwd() returns /tmp/somewhere
 """
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
 
+from builtins import object
 import os
 import threading
 

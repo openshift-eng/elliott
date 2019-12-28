@@ -1,8 +1,6 @@
-from __future__ import unicode_literals, print_function, with_statement
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function, unicode_literals
 from future.builtins import str
 from . import logutil
-from typing import List, Set, Dict, Tuple, Text, Optional
 import os
 from io import BytesIO
 import collections
@@ -14,7 +12,7 @@ import logging
 from . import constants
 from future.standard_library import install_aliases
 install_aliases()
-from urllib.parse import urlparse, urldefrag
+from urllib.parse import urldefrag
 
 # Exclude those files from the outputing tarball sources:
 TARBALL_IGNORES = {".gitignore", ".oit", "container.yaml",

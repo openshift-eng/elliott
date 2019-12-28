@@ -1,6 +1,8 @@
-from __future__ import unicode_literals
-from elliottlib import version, constants, Runtime, cli_opts
-from elliottlib.util import green_prefix, red_prefix
+from __future__ import absolute_import, print_function, unicode_literals
+import sys
+from elliottlib import version, constants, Runtime
+from elliottlib.cli import cli_opts
+from elliottlib.util import green_prefix, red_prefix, yellow_print
 import click
 from elliottlib import dotconfig
 
@@ -12,6 +14,7 @@ def print_version(ctx, param, value):
     if not value or ctx.resilient_parsing:
         return
     click.echo('Elliott v{}'.format(version()))
+    click.echo("Python v{}".format(sys.version))
     ctx.exit()
 
 
@@ -29,10 +32,6 @@ context_settings = dict(help_option_names=['-h', '--help'])
     metavar='PATH', default=None,
     help='Git repo or directory containing groups metadata')
 @click.option(
-    '--user',
-    metavar='USERNAME', envvar='ELLIOTT_USER', default=None,
-    help='Username for rhpkg.')
-@click.option(
     '--group', '-g',
     default=None, metavar='NAME',
     help='The group of images on which to operate.')
@@ -41,17 +40,9 @@ context_settings = dict(help_option_names=['-h', '--help'])
     default=None, metavar='BRANCH',
     help='Branch to override any default in group.yml.')
 @click.option(
-    '--stage',
-    default=False, is_flag=True,
-    help='Force checkout stage branch for sources in group.yml.')
-@click.option(
     '-i', '--images',
     default=[], metavar='NAME', multiple=True,
     help='Name of group image member to include in operation (all by default). Can be comma delimited list.')
-@click.option(
-    '-r', '--rpms',
-    default=[], metavar='NAME', multiple=True,
-    help='Name of group rpm member to include in operation (all by default). Can be comma delimited list.')
 @click.option(
     '-x', '--exclude',
     default=[], metavar='NAME', multiple=True,

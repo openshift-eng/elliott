@@ -1,4 +1,5 @@
-from __future__ import unicode_literals, print_function, with_statement
+from __future__ import absolute_import, print_function, unicode_literals
+from builtins import str
 import click
 import sys
 import elliottlib
@@ -7,10 +8,6 @@ from elliottlib import logutil, Runtime
 from elliottlib.cli.common import cli
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated, major_from_branch, minor_from_branch
-
-# https://click.palletsprojects.com/en/7.x/python3/
-click.disable_unicode_literals_warning = True
-
 
 LOGGER = logutil.getLogger(__name__)
 

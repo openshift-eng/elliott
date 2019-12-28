@@ -83,14 +83,14 @@ class TestGetHigestImpact(unittest.TestCase):
             tracker.id: [] for tracker in trackers
         }
         impact = bzutil.get_highest_impact(trackers, tracker_flaws_map)
-        self.assertEquals(impact, constants.SECURITY_IMPACT[4])
+        self.assertEqual(impact, constants.SECURITY_IMPACT[4])
 
     def test_single_impact(self):
         bugs = []
         severity = "high"
         bugs.append(flexmock(severity=severity))
         impact = bzutil.get_highest_impact(bugs, None)
-        self.assertEquals(impact, constants.SECURITY_IMPACT[constants.BUG_SEVERITY_NUMBER_MAP[severity]])
+        self.assertEqual(impact, constants.SECURITY_IMPACT[constants.BUG_SEVERITY_NUMBER_MAP[severity]])
 
     def test_impact_for_tracker_with_unspecified_severity(self):
         bugs = []
@@ -100,38 +100,12 @@ class TestGetHigestImpact(unittest.TestCase):
             123: [flexmock(id=123, severity="medium")],
         }
         impact = bzutil.get_highest_impact(bugs, tracker_flaws_map)
-        self.assertEquals(impact, "Moderate")
+        self.assertEqual(impact, "Moderate")
         tracker_flaws_map = {
             123: [flexmock(id=123, severity="unspecified")],
         }
         impact = bzutil.get_highest_impact(bugs, tracker_flaws_map)
-        self.assertEquals(impact, "Low")
-
-
-class TestGetTrackerBugs(unittest.TestCase):
-
-    def test_get_tracker_bugs_with_non_trackers(self):
-        one = flexmock(
-            id='1',
-            keywords=['Security', 'SecurityTracking']
-        )
-        two = flexmock(
-            id='2',
-            keywords=[]
-        )
-        bugs = [one, two]
-        bz = bugzilla.Bugzilla(None)
-        bzapi = flexmock(bz)
-        bzapi.should_receive('getbugs').once().and_return(bugs)
-        trackers = bzutil.get_tracker_bugs(bzapi, [1])
-        self.assertEquals(trackers, [one])
-
-    def test_get_tracker_bugs_empty(self):
-        bugs = [None]
-        bz = bugzilla.Bugzilla(None)
-        bzapi = flexmock(bz)
-        bzapi.should_receive('getbugs').once().and_return(bugs)
-        self.assertRaises(exceptions.BugzillaFatalError, bzutil.get_tracker_bugs, bzapi, [1])
+        self.assertEqual(impact, "Low")
 
 
 class TestGetFlawBugs(unittest.TestCase):
@@ -178,8 +152,8 @@ class TestGetFlawAliases(unittest.TestCase):
         )
         flaws = [CVE01, multiAlias, multiAlias2, noAlias, nonFlaw]
         flaw_cve_map = bzutil.get_flaw_aliases(flaws)
-        self.assertEquals(len(flaw_cve_map.keys()), 4)
-        self.assertEquals(flaw_cve_map['4'], "")
+        self.assertEqual(len(flaw_cve_map.keys()), 4)
+        self.assertEqual(flaw_cve_map['4'], "")
 
 
 if __name__ == "__main__":

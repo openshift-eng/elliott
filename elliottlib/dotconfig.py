@@ -1,7 +1,8 @@
 # This file is part of dotconfig project <https://github.com/adammhaile/dotconfig>
 # and released under LGPL v3 <https://www.gnu.org/licenses/lgpl-3.0.en.html>
 
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
+from builtins import object
 import yaml
 import os
 import shutil
@@ -98,7 +99,7 @@ class Config(object):
     def __getitem__(self, item):
         return self._data[item]
 
-    def iteritems(self):
+    def items(self):
         return self._data.items()
 
     def to_dict(self):

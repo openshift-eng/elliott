@@ -26,10 +26,9 @@ RUN dnf install -y \
 # install brewkoji
 RUN wget -O /etc/yum.repos.d/rcm-tools-fedora.repo https://download.devel.redhat.com/rel-eng/RCMTOOLS/rcm-tools-fedora.repo \
   && dnf install -y koji brewkoji \
-  && dnf install -y rhpkg \
   && dnf clean all
 
-ARG OC_VERSION=4.2.8
+ARG OC_VERSION=4.2.12
 # include oc client
 RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"$OC_VERSION"/openshift-client-linux-"$OC_VERSION".tar.gz \
   && tar -C /usr/local/bin -xzf  /tmp/openshift-client-linux-"$OC_VERSION".tar.gz oc kubectl \
@@ -49,6 +48,12 @@ RUN groupadd --gid "$USER_GID" "$USERNAME" \
     && chmod 0755 /home/"$USERNAME" \
     && echo "$USERNAME" ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/"$USERNAME" \
     && chmod 0440 /etc/sudoers.d/"$USERNAME"
+
+# Preinstall dependencies
+COPY ./requirements.txt ./requirements-dev.txt /tmp/elliott/
+RUN pushd /tmp/elliott \
+  && sudo -u "$USERNAME" pip3 install --user -r ./requirements.txt -r requirements-dev.txt \
+  && popd && rm -rf /tmp/elliott
 
 USER "$USER_UID"
 WORKDIR /workspaces/elliott

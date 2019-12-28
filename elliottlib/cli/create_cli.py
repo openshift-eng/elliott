@@ -1,4 +1,5 @@
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
+from builtins import str, map
 import click
 import datetime
 from kerberos import GSSError
@@ -205,5 +206,5 @@ def _assert_bugs_are_viable(errata_type, bugs, bug_objects):
         if advisories:
             raise ElliottFatalError(
                 "Bug {} is already attached to advisories: {}"
-                .format(bug_id, " ".join(map(lambda item: str(item["id"]), advisories))))
+                .format(bug_id, " ".join([str(item["id"]) for item in advisories])))
         LOGGER.info("Bug {} is viable.".format(bug_id))

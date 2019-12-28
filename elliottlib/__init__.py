@@ -1,7 +1,5 @@
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
 from .runtime import Runtime
-from .pushd import Dir
-from .errata import Erratum
 
 
 def version():

@@ -1,4 +1,4 @@
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
 import click
 import datetime
 from multiprocessing import cpu_count
@@ -16,38 +16,38 @@ now = datetime.datetime.now()
 YMD = '%Y-%b-%d'
 
 
-def red_prefix(msg):
+def red_prefix(msg, file=None):
     """Print out a message prefix in bold red letters, like for "Error: "
 messages"""
-    click.secho(msg, nl=False, bold=True, fg='red')
+    click.secho(msg, nl=False, bold=True, fg='red', file=file)
 
 
-def green_prefix(msg):
+def green_prefix(msg, file=None):
     """Print out a message prefix in bold green letters, like for "Success: "
 messages"""
-    click.secho(msg, nl=False, bold=True, fg='green')
+    click.secho(msg, nl=False, bold=True, fg='green', file=file)
 
 
-def yellow_prefix(msg):
+def yellow_prefix(msg, file=None):
     """Print out a message prefix in bold yellow letters, like for "Warning: "
 or Notice: messages"""
-    click.secho(msg, nl=False, bold=True, fg='yellow')
+    click.secho(msg, nl=False, bold=True, fg='yellow', file=file)
 
 
-def red_print(msg):
+def red_print(msg, file=None):
     """Print out a message in red text"
 messages"""
-    click.secho(msg, nl=True, bold=False, fg='red')
+    click.secho(msg, nl=True, bold=False, fg='red', file=file)
 
 
-def green_print(msg):
+def green_print(msg, file=None):
     """Print out a message in green text"""
-    click.secho(msg, nl=True, bold=False, fg='green')
+    click.secho(msg, nl=True, bold=False, fg='green', file=file)
 
 
-def yellow_print(msg):
+def yellow_print(msg, file=None):
     """Print out a message in yellow text"""
-    click.secho(msg, nl=True, bold=False, fg='yellow')
+    click.secho(msg, nl=True, bold=False, fg='yellow', file=file)
 
 
 def cprint(msg):

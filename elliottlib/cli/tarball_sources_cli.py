@@ -1,21 +1,15 @@
-from __future__ import unicode_literals, print_function, with_statement
+from __future__ import absolute_import, print_function, unicode_literals
 from future.builtins import str
 import os
 import errno
 import shutil
 import koji
 import errata_tool
-from .. import constants
-import pipes
-from .. import tarball_sources
 import tempfile
-from .. import util
-from .. import logutil
-from typing import List, Set, Dict, Tuple, Text, Optional
+import pipes
 import click
-# https://click.palletsprojects.com/en/7.x/python3/
-click.disable_unicode_literals_warning = True
-
+from typing import List, Set, Dict, Tuple, Text, Optional
+from elliottlib import constants, tarball_sources, util, logutil
 
 LOGGER = logutil.getLogger(__name__)
 
