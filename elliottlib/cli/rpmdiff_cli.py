@@ -46,7 +46,7 @@ def show(ctx, advisory):
             incomplete_runs.append(rpmdiff_run)
     util.green_prefix("good: {}".format(len(good_runs)))
     click.echo(", ", nl=False)
-    util.red_prefix("bad:{}".format(len(bad_runs)))
+    util.red_prefix("bad: {}".format(len(bad_runs)))
     click.echo(", ", nl=False)
     util.yellow_print("incomplete: {}".format(len(incomplete_runs)))
 
