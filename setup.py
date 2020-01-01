@@ -21,7 +21,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/openshift/elliott",
     license="Apache License, Version 2.0",
-    packages=find_packages(exclude=["tests", "tests.*"]),
+    packages=find_packages(exclude=["tests", "tests.*", "functional_tests", "functional_tests.*"]),
     include_package_data=True,
     entry_points={
         'console_scripts': [
