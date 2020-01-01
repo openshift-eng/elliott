@@ -10,8 +10,8 @@ web service.
 
 # Prepare for Python 3
 # stdlib
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
+from builtins import str
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
 import datetime
@@ -31,7 +31,7 @@ import elliottlib.errata
 import elliottlib.exceptions
 import elliottlib.openshiftclient
 
-from elliottlib import cli_opts
+from elliottlib.cli import cli_opts
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated, green_prefix, YMD, override_product_version
 from elliottlib.util import default_release_date, validate_release_date
@@ -61,6 +61,7 @@ import errata_tool.build
 from errata_tool import Erratum, ErrataException
 from kerberos import GSSError
 
+
 # -----------------------------------------------------------------------------
 # Constants and defaults
 # -----------------------------------------------------------------------------
@@ -79,7 +80,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("--state", '-s', required=True,
               type=click.Choice(['NEW_FILES', 'QE', 'REL_PREP']),
               help="New state for the Advisory. NEW_FILES, QE, REL_PREP")
-@click.option("--advisory", "-a", metavar='ADVISORY',
+@click.option("--advisory", "-a", metavar='ADVISORY', type=int,
               help="Change state of ADVISORY")
 @use_default_advisory_option
 @click.option("--noop", "--dry-run",
@@ -114,10 +115,10 @@ Bugzilla Bugs.
 
     $ elliott change-state -s NEW_FILES -a 123456 --noop
 """
-    runtime.initialize()
-
-    if advisory and default_advisory_type:
+    if not (bool(advisory) ^ bool(default_advisory_type)):
         raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
+
+    runtime.initialize(no_group=default_advisory_type is None)
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -664,7 +665,7 @@ written out to summary_results.json.
     all_advisory_nvrs = {}
     # Results come back with top level keys which are brew tags
     green_prefix("Looping over tags: ")
-    click.echo("{} tags to check".format(len(builds.keys())))
+    click.echo("{} tags to check".format(len(builds)))
     for tag in builds.keys():
         # Each top level has a key 'builds' which is a list of dicts
         green_prefix("Looping over builds in tag: ")
@@ -812,10 +813,10 @@ unsigned builds.
 \b
     $ elliott -g openshift-4.2 poll-signed --noop --use-default-advisory rpm
 """
-    runtime.initialize()
-
-    if advisory and default_advisory_type:
+    if not (bool(advisory) ^ bool(default_advisory_type)):
         raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
+
+    runtime.initialize(no_group=default_advisory_type is None)
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -829,7 +830,7 @@ unsigned builds.
         all_signed = False
         # `errata_builds` is a dict with brew tags as keys, values are
         # lists of builds on the advisory with that tag
-        for k, v in e.errata_builds.iteritems():
+        for k, v in e.errata_builds.items():
             all_builds = all_builds.union(set(v))
         green_prefix("Fetching initial states: ")
         click.echo("{} builds to check".format(len(all_builds)))
@@ -894,10 +895,9 @@ cli.add_command(advisory_images_cli)
 
 
 def main():
+    if sys.version_info.major < 3:
+        yellow_print("DEPRECATION: Python 2.7 will reach the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 won't be maintained after that date. A future version of Elliott will drop support for Python 2.7.", file=sys.stderr)
     try:
-        if 'REQUESTS_CA_BUNDLE' not in os.environ:
-            os.environ['REQUESTS_CA_BUNDLE'] = '/etc/pki/tls/certs/ca-bundle.crt'
-
         cli(obj={})
     except ElliottFatalError as ex:
         # Allow capturing actual tool errors and print them

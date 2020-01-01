@@ -1,4 +1,5 @@
-from __future__ import unicode_literals, print_function, with_statement
+from __future__ import absolute_import, print_function, unicode_literals
+from builtins import str
 import click
 import re
 

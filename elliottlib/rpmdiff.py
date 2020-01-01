@@ -1,5 +1,6 @@
-from __future__ import unicode_literals, absolute_import, print_function, with_statement
+from __future__ import absolute_import, print_function, unicode_literals
 
+from builtins import object
 import requests
 from requests_kerberos import HTTPKerberosAuth
 
@@ -40,6 +41,7 @@ class RPMDiffClient(object):
         params = {
             "package": package_name,
             "test": int(test),
+            "offset": int(offset),
             "limit": int(limit),
         }
         resp = self.session.get(endpoint, params=params)

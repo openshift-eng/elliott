@@ -2,42 +2,14 @@
 Utility functions and object abstractions for general interactions
 with oc cli
 """
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
 
 # stdlib
-from subprocess import call, check_output, CalledProcessError
+from subprocess import check_output, CalledProcessError
 import json
 
 # ours
 from elliottlib.exceptions import ElliottFatalError
-
-
-def get_changelog(working_dir, old, new):
-    """
-    Get changelog between two payloads. Needs to clone the entire
-    okd repo, so it can be quite slow.
-
-    :param str working_dir: file location to clone okd repo
-    :param str old: URL to the previous payload
-    :param str new: URL to the current payload
-
-    :return: A str with the changelog text
-    :raises exceptions.CalledProcessError: When oc returns a non-zero exit
-
-    """
-    changelog = ""
-    try:
-        changelog = check_output([
-            'oc', 'adm', 'release', 'info',
-            '--changelog={}/origin'.format(working_dir),  # clone origin to working dir
-            '--changes-from={}'.format(old),
-            new  # payloads to compare
-        ])
-    except CalledProcessError as e:
-        raise ElliottFatalError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode, e.output))
-
-    return changelog
 
 
 def get_bug_list(working_dir, old, new):
@@ -94,7 +66,7 @@ def get_build_list(old, new):
     payload_json = json.loads(oc_output)
     changed_images = []
 
-    for k, v in payload_json["changedImages"].iteritems():
+    for k, v in payload_json["changedImages"].items():
         if k == "machine-os-content":
             continue  # no use in comparing this as it doesn't go in the advisory
         if v["to"]:

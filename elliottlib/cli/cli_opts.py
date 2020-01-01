@@ -1,4 +1,4 @@
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
 CLI_OPTS = {
     'data_path': {
         'env': 'ELLIOTT_DATA_PATH',
@@ -14,9 +14,9 @@ CLI_OPTS = {
     },
 }
 
-CLI_ENV_VARS = {k: v['env'] for (k, v) in CLI_OPTS.iteritems()}
+CLI_ENV_VARS = {k: v['env'] for (k, v) in CLI_OPTS.items()}
 
-CLI_CONFIG_TEMPLATE = '\n'.join(['#{}\n{}:\n'.format(v['help'], k) for (k, v) in CLI_OPTS.iteritems()])
+CLI_CONFIG_TEMPLATE = '\n'.join(['#{}\n{}:\n'.format(v['help'], k) for (k, v) in CLI_OPTS.items()])
 
 
 def id_convert(ids):

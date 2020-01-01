@@ -1,0 +1,21 @@
+version: "2.2"
+
+services:
+  elliott:
+    build:
+      context: ..
+      dockerfile: .devcontainer/dev.Dockerfile
+    image: local/elliott-dev:latest
+    command: /bin/bash
+    volumes:
+    - ../:/workspaces/elliott:cached,z
+    - ${HOME:-}${USERPROFILE:-}/.ssh:/home/dev/.ssh:ro,cached,z
+    - ./settings.yaml:/home/dev/.config/elliott/settings.yaml:ro,cached,z
+    - ./krb5-redhat.conf:/etc/krb5.conf.d/krb5-redhat.conf:ro,cached,z
+    - ./brewkoji.conf:/etc/koji.conf.d/brewkoji.conf:ro,cached,z
+    - dev-elliott-working-dir:/workspaces/elliott-working-dir:delegated,z
+    working_dir: /workspaces/elliott
+    tty: true
+    stdin_open: true
+volumes:
+  dev-elliott-working-dir:

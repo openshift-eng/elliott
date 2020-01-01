@@ -3,11 +3,7 @@ This module contains a set of functions for managing shell commands
 consistently. It adds some logging and some additional capabilties to the
 ordinary subprocess behaviors.
 """
-
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import unicode_literals
-
+from __future__ import absolute_import, print_function, unicode_literals
 import subprocess
 import time
 import shlex
@@ -48,7 +44,7 @@ def retry(retries, task_f, check_f=bool, wait_f=None):
     raise RetryException("Giving up after {} failed attempt(s)".format(retries))
 
 
-def cmd_assert(cmd, retries=1, pollrate=60, on_retry=None):
+def cmd_assert(cmd, retries=1, pollrate=60, on_retry=None, text_mode=True):
     """
     Run a command, logging (using exec_cmd) and raise an exception if the
     return code of the command indicates failure.
@@ -58,6 +54,7 @@ def cmd_assert(cmd, retries=1, pollrate=60, on_retry=None):
     :param retries int: The number of times to try before declaring failure
     :param pollrate int: how long to sleep between tries
     :param on_retry <string|list>: A shell command to run before retrying a failure
+    :param text_mode: True to return stdout and stderr as strings
     :return: (stdout,stderr) if exit code is zero
     """
 
@@ -70,7 +67,7 @@ def cmd_assert(cmd, retries=1, pollrate=60, on_retry=None):
             if on_retry is not None:
                 cmd_gather(on_retry)  # no real use for the result though
 
-        result, stdout, stderr = cmd_gather(cmd)
+        result, stdout, stderr = cmd_gather(cmd, text_mode)
         if result == SUCCESS:
             break
 
@@ -84,7 +81,7 @@ def cmd_assert(cmd, retries=1, pollrate=60, on_retry=None):
     return stdout, stderr
 
 
-def cmd_gather(cmd):
+def cmd_gather(cmd, text_mode=True):
     """
     Runs a command and returns rc,stdout,stderr as a tuple.
 
@@ -93,6 +90,7 @@ def cmd_gather(cmd):
     directory of the process (i.e. it is thread-safe).
 
     :param cmd: The command and arguments to execute
+    :param text_mode: True to return stdout and stderr as strings
     :return: (rc,stdout,stderr)
     """
 
@@ -110,7 +108,14 @@ def cmd_gather(cmd):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = proc.communicate()
     rc = proc.returncode
-    logger.debug(
-        "Process {}: exited with: {}\nstdout>>{}<<\nstderr>>{}<<\n".
-        format(cmd_info, rc, out, err))
-    return rc, out, err
+    if text_mode:
+        out_str = out.decode(encoding="utf-8")
+        err_str = err.decode(encoding="utf-8")
+        logger.debug(
+            "Process {}: exited with: {}\nstdout>>{}<<\nstderr>>{}<<\n".
+            format(cmd_info, rc, out_str, err_str))
+        return rc, out_str, err_str
+    else:
+        logger.debug(
+            "Process {}: exited with: {}".format(rc))
+        return rc, out, err

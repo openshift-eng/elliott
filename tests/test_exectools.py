@@ -32,9 +32,10 @@ class RetryTestCase(unittest.TestCase):
         correctly with a single retry limit and greater.
         """
         fail_function = lambda: False
-        self.assertRaisesRegexp(
+        assertRaisesRegex = self.assertRaisesRegex if hasattr(self, 'assertRaisesRegex') else self.assertRaisesRegexp
+        assertRaisesRegex(
             Exception, self.ERROR_MSG.format(1), exectools.retry, 1, fail_function)
-        self.assertRaisesRegexp(
+        assertRaisesRegex(
             Exception, self.ERROR_MSG.format(2), exectools.retry, 2, fail_function)
 
     def test_wait(self):
@@ -49,7 +50,8 @@ class RetryTestCase(unittest.TestCase):
         calls = []
 
         # loop 3 times, writing into the collector each try and wait
-        self.assertRaisesRegexp(
+        assertRaisesRegex = self.assertRaisesRegex if hasattr(self, 'assertRaisesRegex') else self.assertRaisesRegexp
+        assertRaisesRegex(
             Exception, self.ERROR_MSG.format(3),
             exectools.retry, 3, lambda: calls.append("f"),
             wait_f=lambda n: calls.extend(("w", str(n))))
@@ -78,7 +80,7 @@ class TestCmdExec(unittest.TestCase):
             .and_return("/my/path"))
 
         proc_mock = flexmock(returncode=0)
-        proc_mock.should_receive("communicate").once().and_return(("out", "err"))
+        proc_mock.should_receive("communicate").once().and_return((b"out", b"err"))
 
         (flexmock(exectools.subprocess)
             .should_receive("Popen")
@@ -117,7 +119,7 @@ class TestCmdExec(unittest.TestCase):
             .and_return("/my/path"))
 
         proc_mock = flexmock(returncode=1)
-        proc_mock.should_receive("communicate").times(3).and_return(("out", "err"))
+        proc_mock.should_receive("communicate").times(3).and_return((b"out", b"err"))
 
         (flexmock(exectools.subprocess)
             .should_receive("Popen")
@@ -157,7 +159,7 @@ class TestGather(unittest.TestCase):
             .and_return("/my/path"))
 
         proc_mock = flexmock(returncode=0)
-        proc_mock.should_receive("communicate").once().and_return(("hello there\n", ""))
+        proc_mock.should_receive("communicate").once().and_return((b"hello there\n", b""))
 
         (flexmock(exectools.subprocess)
             .should_receive("Popen")
@@ -181,9 +183,9 @@ class TestGather(unittest.TestCase):
         stdout_expected = "hello there\n"
         stderr_expected = ""
 
-        self.assertEquals(status_expected, status)
-        self.assertEquals(stdout, stdout_expected)
-        self.assertEquals(stderr, stderr_expected)
+        self.assertEqual(status_expected, status)
+        self.assertEqual(stdout, stdout_expected)
+        self.assertEqual(stderr, stderr_expected)
 
     def test_gather_fail(self):
         """
@@ -198,7 +200,7 @@ class TestGather(unittest.TestCase):
         (proc_mock
             .should_receive("communicate")
             .once()
-            .and_return(("", "/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n")))
+            .and_return((b"", b"/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n")))
 
         (flexmock(exectools.subprocess)
             .should_receive("Popen")
@@ -223,9 +225,9 @@ class TestGather(unittest.TestCase):
         stdout_expected = ""
         stderr_expected = "/usr/bin/sed: -e expression #1, char 1: unknown command: `f'\n"
 
-        self.assertEquals(status_expected, status)
-        self.assertEquals(stdout, stdout_expected)
-        self.assertEquals(stderr, stderr_expected)
+        self.assertEqual(status_expected, status)
+        self.assertEqual(stdout, stdout_expected)
+        self.assertEqual(stderr, stderr_expected)
 
 
 if __name__ == "__main__":

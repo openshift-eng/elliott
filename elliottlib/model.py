@@ -1,4 +1,5 @@
-from __future__ import unicode_literals
+from __future__ import absolute_import, print_function, unicode_literals
+from builtins import str
 
 
 class ModelException(Exception):
@@ -55,9 +56,6 @@ class MissingModel(dict):
     def __repr__(self):
         return "(MissingModel)"
 
-    def can_match(self, *vals):
-        return False
-
 
 # Singleton which indicates if any model attribute was not defined
 Missing = MissingModel()
@@ -101,61 +99,6 @@ class ListModel(list):
         for i in range(0, super(self.__class__, self).__len__()):
             yield self[i]
 
-    def _element_can_match(self, master, test):
-        if master is Missing:
-            return False
-
-        if master is None or test is None:
-            return master is test
-
-        if isinstance(master, str):
-            master = unicode(master)  # Turn str into unicode
-
-        if isinstance(test, str):
-            test = unicode(test)  # Turn str into unicode
-
-        for prim in [bool, int, unicode, float]:
-            if isinstance(master, prim):
-                return master == test or str(master) == str(test)
-
-        if isinstance(master, dict):
-            if isinstance(test, dict):
-                return self._dict_is_subset(master, test)
-            else:
-                return False
-
-        if isinstance(master, list):
-            if isinstance(test, list):
-                return self._list_is_subset(master, test)
-            else:
-                return False
-
-        raise ValueError("Don't know how to compare %s and %s" % (str(type(master)), str(type(test))))
-
-    def _element_in_list(self, master, e):
-        for m in master:
-            if self._element_can_match(m, e):
-                return True
-        return False
-
-    def _list_is_subset(self, master, test):
-
-        for e in test:
-            if not self._element_in_list(master, e):
-                return False
-        return True
-
-    def _dict_is_subset(self, master, subset):
-        for k, v in subset.items():
-            m = master.get(k, Missing)
-            if not self._element_can_match(m, v):
-                return False
-
-        return True
-
-    def can_match(self, *vals):
-        return self._list_is_subset(self, vals)
-
     # Converts the model to a raw list
     def primitive(self):
         lst = []
@@ -198,7 +141,7 @@ class Model(dict):
     def primitive(self):
         """ Recursively turn Model into dicts. """
         d = {}
-        for k, v in self.iteritems():
+        for k, v in self.items():
             if isinstance(v, Model) or isinstance(v, ListModel):
                 v = v.primitive()
             d[k] = v

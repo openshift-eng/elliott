@@ -7,17 +7,14 @@ associated metadata.
 Classes representing an ERRATUM (a single errata)
 
 """
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import unicode_literals
-
-from __future__ import unicode_literals, print_function, with_statement
+from __future__ import absolute_import, print_function, unicode_literals
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
 from errata_tool import ErrataConnector
-import copy
 import datetime
 import json
 import ssl
-from . import brew
 import re
 from elliottlib import exceptions, constants
 from elliottlib.util import green_prefix, exit_unauthenticated
@@ -27,124 +24,10 @@ from requests_kerberos import HTTPKerberosAuth
 from kerberos import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
 
-try:
-    from xmlrpc import client as xmlrpclib
-except ImportError:
-    import xmlrpclib
+import xmlrpc.client
 
 ErrataConnector._url = constants.errata_url
-errata_xmlrpc = xmlrpclib.ServerProxy(constants.errata_xmlrpc_url)
-
-
-def find_mutable_erratum(kind, minor, major=3):
-    """Find the latest mutable (may be updated/changed) erratum for a
-    release series using a combination of search parameters.
-
-    :param string kind: One of 'rpm' or 'image'
-    :param str/int minor: The minor release to search against (i.e.,
-        3.10, minor=10)
-    :param str/int major: [Default 3] The major release to search
-        against (i.e., 3.10, major=3)
-
-    Example:
-
-    To find a 3.10 erratum that you could attach new image builds to:
-    * kind='image', minor=10
-
-    Return Values:
-
-    If an open AND mutable erratum exists matching your search:
-    :return: An `Erratum` object of the discovered erratum
-
-    If no open OR mutable erratum exists matching your search:
-    :return: `None`
-
-    DEV NOTE: If this function returns `None` then you can use the
-    other find_*_erratum function to find the latest erratum of kind
-    `kind` in the given release series. That is to say, if there are
-    no open erratum for your release series you can still find the
-    most recent erratum, even if it has passed the `QA` state or has
-    even already been released.
-
-    :raises: exceptions.ErrataToolUnauthorizedException if the user is not authenticated to make the request
-
-    """
-    pass
-
-
-def find_latest_erratum(kind, major, minor):
-    """Find an erratum in a given release series, in ANY state.
-
-    Put simply, this tells you the erratum that has the most recent,
-    or furthest in the future, release date set.
-
-    This is useful for determining the release date of a new
-    erratum. This combines the functionality provided by
-    find_mutable_erratum and extends it by including searching closed
-    or immutable erratum. These two functions can work well in tandem.
-
-    Contrast this with find_mutable_erratum (best suited for elliott
-    actions explicitly designed to UPDATE an erratum), this function
-    promises to tell you the freshest release date of erratum in any
-    state in a given release series.
-
-    Example:
-
-    You are creating a new erratum. The latest erratum in that series
-    MAY or MAY NOT have gone to SHIPPED_LIVE state yet. Regardless of
-    that, this function will tell you what the latest ship date is for
-    an erratum in that series.
-
-    If erratum exists matching your search:
-    :return: An `Erratum` object of the erratum
-
-    If no erratum can be found matching your search:
-    :return: `None`
-    """
-    release = "{}.{}".format(major, minor)
-
-    # List of hashes because we will scan the Mutable advisories first
-    filters = [
-        {'Mutable Advisories': constants.errata_default_filter},
-        {'Immutable Advisories': constants.errata_immutable_advisory_filter}
-    ]
-
-    # Fetch initial lists of advisories in each pre-defined filter
-    advisory_list = []
-    print("Running initial advisory fetching")
-    for f in filters:
-        state_desc, filter_id = f.items()[0]
-        print("Fetching {state}".format(state=state_desc))
-        advisories = get_filtered_list(filter_id, limit=50)
-        # Filter out advisories that aren't for this release
-        advisory_list.extend(
-            [advs for advs in advisories if " {} ".format(release) in advs.synopsis])
-        print("Advisory list has {n} items after this fetch".format(
-            n=len(advisory_list)))
-
-    print("Looking for elliott metadata in comments:")
-    matched_advisories = []
-    for advisory in advisory_list:
-        print("Scanning advisory {}".format(str(advisory)))
-
-        for c in get_comments(advisory.errata_id):
-            try:
-                metadata = json.loads(c['attributes']['text'])
-            except Exception:
-                pass
-            else:
-                if str(metadata['release']) == str(release) and metadata['kind'] == kind and metadata['impetus'] == 'standard':
-                    matched_advisories.append(advisory)
-                    # Don't scan any more comments
-                    break
-
-    if matched_advisories == []:
-        return None
-    else:
-        # loop over discovered advisories, select one with max() date
-        real_advisories = [Erratum(errata_id=e.advisory_id) for e in matched_advisories]
-        sorted_dates = sorted(real_advisories, key=lambda advs: advs.release_date)
-        return sorted_dates[-1]
+errata_xmlrpc = xmlrpc.client.ServerProxy(constants.errata_xmlrpc_url)
 
 
 def new_erratum(et_data, errata_type=None, boilerplate_name=None, kind=None, release_date=None, create=False,
@@ -505,7 +388,7 @@ def get_advisory_images(image_advisory_id):
     pattern = re.compile(r'^redhat-openshift(\d)-')
 
     def _get_image_name(repo):
-        return pattern.sub(r'openshift\1/', repo['docker']['target']['repos'].keys()[0])
+        return pattern.sub(r'openshift\1/', list(repo['docker']['target']['repos'].keys())[0])
 
     def _get_nvr(component):
         parts = component.split('-')
@@ -513,7 +396,7 @@ def get_advisory_images(image_advisory_id):
 
     image_list = [
         '{}:{}'.format(_get_image_name(repo), _get_nvr(key))
-        for key, repo in sorted(cdn_docker_file_list.iteritems())
+        for key, repo in sorted(cdn_docker_file_list.items())
     ]
 
     return '#########\n{}\n#########'.format('\n'.join(image_list))

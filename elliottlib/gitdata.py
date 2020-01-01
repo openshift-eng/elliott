@@ -1,11 +1,13 @@
 # This file is part of gitdata project <https://github.com/adammhaile/gitdata>
 # and released under LGPL v3 <https://www.gnu.org/licenses/lgpl-3.0.en.html>
+from __future__ import absolute_import, print_function, unicode_literals
+from builtins import str, object
+from future.standard_library import install_aliases
+install_aliases()
+from urllib.parse import urlparse
 
-from __future__ import absolute_import
-from __future__ import unicode_literals
 import yaml
 import logging
-import urlparse
 import os
 import shutil
 from . import exectools
@@ -87,7 +89,7 @@ class GitData(object):
         """
         self.data_path = data_path
 
-        data_url = urlparse.urlparse(self.data_path)
+        data_url = urlparse(self.data_path)
         if data_url.scheme in SCHEMES or (data_url.scheme == '' and ':' in data_url.path):
             data_name = os.path.splitext(os.path.basename(data_url.path))[0]
             data_destination = os.path.join(self.clone_dir, data_name)

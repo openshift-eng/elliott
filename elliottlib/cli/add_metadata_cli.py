@@ -1,4 +1,4 @@
-from __future__ import unicode_literals, print_function, with_statement
+from __future__ import absolute_import, print_function, unicode_literals
 import json
 
 import elliottlib
@@ -12,8 +12,7 @@ from errata_tool import Erratum, ErrataException
 from kerberos import GSSError
 import requests
 import click
-# https://click.palletsprojects.com/en/7.x/python3/
-click.disable_unicode_literals_warning = True
+
 LOGGER = logutil.getLogger(__name__)
 
 pass_runtime = click.make_pass_decorator(Runtime)

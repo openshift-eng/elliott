@@ -1,4 +1,4 @@
-from __future__ import unicode_literals, print_function, with_statement
+from __future__ import absolute_import, print_function, unicode_literals
 import json
 
 import elliottlib
@@ -12,9 +12,6 @@ from errata_tool import Erratum
 from kerberos import GSSError
 import requests
 import click
-# https://click.palletsprojects.com/en/7.x/python3/
-click.disable_unicode_literals_warning = True
-
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -92,7 +89,7 @@ PRESENT advisory. Here are some examples:
     if advisory and default_advisory_type:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
 
-    runtime.initialize()
+    runtime.initialize(mode='images' if kind == 'image' else 'none')
     base_tag, product_version = _determine_errata_info(runtime)
 
     if default_advisory_type is not None:

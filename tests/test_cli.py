@@ -4,7 +4,7 @@ Test the cli options functions
 from __future__ import unicode_literals
 import unittest
 
-from elliottlib import cli_opts
+from elliottlib.cli import cli_opts
 
 
 class TestCLI(unittest.TestCase):
