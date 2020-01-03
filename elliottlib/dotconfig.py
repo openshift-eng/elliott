@@ -2,7 +2,7 @@
 # and released under LGPL v3 <https://www.gnu.org/licenses/lgpl-3.0.en.html>
 
 from __future__ import absolute_import, print_function, unicode_literals
-from builtins import object
+from future.utils import string_types
 import yaml
 import os
 import shutil
@@ -75,7 +75,7 @@ class Config(object):
                 else:
                     with open(self.full_path, 'w') as f:
                         if template:
-                            if isinstance(template, str):
+                            if isinstance(template, string_types):
                                 f.write(template)
                             elif isinstance(template, dict):
                                 yaml.dump(template, f, default_flow_style=False)

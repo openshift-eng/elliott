@@ -1,7 +1,6 @@
 from __future__ import absolute_import, print_function, unicode_literals
 from future import standard_library
 standard_library.install_aliases()
-from builtins import str, object
 from multiprocessing import Lock
 from multiprocessing.dummy import Pool as ThreadPool
 import os

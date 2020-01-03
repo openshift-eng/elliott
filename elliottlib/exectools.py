@@ -117,5 +117,5 @@ def cmd_gather(cmd, text_mode=True):
         return rc, out_str, err_str
     else:
         logger.debug(
-            "Process {}: exited with: {}".format(rc))
+            "Process {}: exited with: {}".format(cmd_info, rc))
         return rc, out, err

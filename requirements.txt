@@ -4,9 +4,11 @@ dockerfile-parse
 errata-tool >= 1.19
 future
 koji >= 1.18
-pygit2 == 0.28.2
+pygit2 ~= 0.28 ; python_version <= '3.4'
+pygit2 ; python_version >= '3.5'
 python-bugzilla
 pyyaml
 requests
 requests_kerberos
-typing
+six
+typing ; python_version <= '3.4'

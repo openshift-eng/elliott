@@ -3,11 +3,10 @@ Utility functions and object abstractions for general interactions
 with Red Hat Bugzilla
 """
 from __future__ import absolute_import, print_function, unicode_literals
-
+from future.utils import as_native_str
 # stdlib
 from future import standard_library
 standard_library.install_aliases()
-from builtins import str, object
 from time import sleep
 
 import urllib.parse
@@ -351,6 +350,7 @@ class SearchURL(object):
         self.keyword = ""
         self.keywords_type = ""
 
+    @as_native_str()
     def __str__(self):
         root_string = SearchURL.url_format.format(self.bz_host)
 

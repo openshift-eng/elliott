@@ -11,7 +11,6 @@ web service.
 # Prepare for Python 3
 # stdlib
 from __future__ import absolute_import, print_function, unicode_literals
-from builtins import str
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
 import datetime

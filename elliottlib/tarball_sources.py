@@ -1,5 +1,4 @@
 from __future__ import absolute_import, print_function, unicode_literals
-from future.builtins import str
 from . import logutil
 import os
 from io import BytesIO

@@ -1,6 +1,7 @@
 from __future__ import absolute_import, print_function, unicode_literals
 import unittest
 import subprocess
+import six
 from functional_tests import constants
 
 
@@ -12,4 +13,4 @@ class FindCVETrackersTestCase(unittest.TestCase):
                 "--group=openshift-4.3", "find-cve-trackers",
             ]
         )
-        self.assertRegexpMatches(out.decode("utf-8"), "Found \\d+ bugs")
+        six.assertRegex(self, out.decode("utf-8"), "Found \\d+ bugs")
