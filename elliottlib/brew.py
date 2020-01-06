@@ -30,6 +30,16 @@ from requests_kerberos import HTTPKerberosAuth
 logger = logutil.getLogger(__name__)
 
 
+def get_latest_builds(tag, component_names, brew_session=koji.ClientSession(constants.BREW_HUB)):
+    latest_builds = {}
+    component_names = set(component_names)
+    builds = brew_session.getLatestBuilds(tag)
+    for b in builds:
+        if b['name'] in component_names:
+            latest_builds[b['name']] = b
+    return latest_builds
+
+
 def get_brew_build(nvr, product_version='', session=None):
     """5.2.2.1. GET /api/v1/build/{id_or_nvr}
 

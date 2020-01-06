@@ -2,7 +2,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 import json
 
 import elliottlib
-from elliottlib import constants, logutil, Runtime
+from elliottlib import constants, logutil, Runtime, brew
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated, override_product_version, ensure_erratatool_auth, get_release_version
@@ -13,9 +13,6 @@ from kerberos import GSSError
 import requests
 import click
 import koji
-# https://click.palletsprojects.com/en/7.x/python3/
-click.disable_unicode_literals_warning = True
-
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -94,7 +91,7 @@ PRESENT advisory. Here are some examples:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
 
     runtime.initialize(mode='images' if kind == 'image' else 'none')
-    base_tag, product_version = _determine_errata_info(runtime)
+    base_tag, product_version, tag_pv_map = _determine_errata_info(runtime)
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -110,7 +107,7 @@ PRESENT advisory. Here are some examples:
         unshipped_builds = _fetch_builds_from_diff(from_diff[0], from_diff[1], product_version, session)
     else:
         if kind == 'image':
-            unshipped_builds = _fetch_builds_by_kind_image(runtime, product_version, session)
+            unshipped_builds = _fetch_builds_by_kind_image(runtime, tag_pv_map, session)
         elif kind == 'rpm':
             unshipped_builds = _fetch_builds_by_kind_rpm(builds, base_tag, product_version, session)
 
@@ -148,7 +145,8 @@ def _determine_errata_info(runtime):
 
     et_data = runtime.gitdata.load_data(key='erratatool').data
     product_version = override_product_version(et_data.get('product_version'), base_tag)
-    return base_tag, product_version
+    tag_pv_map = et_data.get('brew_tag_product_version_mapping')
+    return base_tag, product_version, tag_pv_map
 
 
 def _fetch_builds_by_id(builds, product_version, session):
@@ -166,29 +164,20 @@ def _fetch_builds_from_diff(from_payload, to_payload, product_version, session):
     return [elliottlib.brew.get_brew_build(b, product_version, session=session) for b in changed_builds]
 
 
-def _fetch_builds_by_kind_image(runtime, default_product_version, session):
-    image_metadata = []
-    product_version_overide = {}
-    for b in runtime.image_metas():
-        # filter out non_release builds
-        if b not in runtime.group_config.get('non_release', []):
-            product_version_overide[b.name] = default_product_version
-            if b.branch() != runtime.branch:
-                product_version_overide[b.name] = override_product_version(default_product_version, b.branch())
-            image_metadata.append(b)
-
-    pbar_header(
-        'Generating list of images: ',
-        'Hold on a moment, fetching Brew buildinfo',
-        image_metadata)
+def _fetch_builds_by_kind_image(runtime, tag_pv_map, session):
+    image_metadata = runtime.image_metas()
 
     # Returns a list of (n, v, r, pv) tuples of each build
-    latest_builds = {}
     image_tuples = []
-    tag_set = set()
-    brew_session = koji.ClientSession(constants.BREW_HUB)
+    component_names = []
+    latest_builds = {}
     for i in image_metadata:
-        image_tuples.append(i.get_latest_build_info(product_version_overide, tag_set, latest_builds, brew_session))
+        component_names.append(i.get_component_name())
+
+    for tag in tag_pv_map:
+        latest_builds = brew.get_latest_builds(tag, component_names)
+        for _, b in latest_builds.items():
+            image_tuples.append((b['name'], b['version'], b['release'], tag_pv_map[tag]))
 
     pbar_header(
         'Generating build metadata: ',
