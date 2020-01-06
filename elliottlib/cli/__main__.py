@@ -51,6 +51,7 @@ from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
 from elliottlib.cli.puddle_advisories_cli import puddle_advisories_cli
 from elliottlib.cli.rpmdiff_cli import rpmdiff_cli
 from elliottlib.cli.advisory_images_cli import advisory_images_cli
+from elliottlib.cli.advisory_impetus_cli import advisory_impetus_cli
 
 
 # 3rd party
@@ -888,6 +889,7 @@ cli.add_command(list_cli)
 cli.add_command(puddle_advisories_cli)
 cli.add_command(rpmdiff_cli)
 cli.add_command(advisory_images_cli)
+cli.add_command(advisory_impetus_cli)
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
