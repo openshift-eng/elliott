@@ -95,23 +95,23 @@ PRESENT advisory. Here are some examples:
     ensure_erratatool_auth()  # before we waste time looking up builds we can't process
 
     # get the builds we want to add
-    unshipped_nvrs = []
+    unshipped_nvrps = []
     if builds:
         green_prefix('Build NVRs provided: ')
         click.echo('Manually verifying the builds exist')
-        unshipped_nvrs = builds
+        unshipped_nvrps = _gen_nvrp_tuples('nvr', builds, tag_pv_map)
     elif from_diff:
         green_print('Fetching changed images between payloads...')
-        unshipped_nvrs = elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1])
+        unshipped_nvrps = _gen_nvrp_tuples('nvr', elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1]), tag_pv_map)
     else:
         if kind == 'image':
-            unshipped_builds = _fetch_builds_by_kind_image(runtime, tag_pv_map)
+            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map)
         elif kind == 'rpm':
-            unshipped_nvrs = _fetch_builds_by_kind_rpm(base_tag, tag_pv_map)
+            unshipped_nvrps = _fetch_builds_by_kind_rpm(base_tag, tag_pv_map)
 
     results = parallel_results_with_progress(
-        unshipped_nvrs,
-        lambda nvr: _nvrs_to_builds(nvr, tag_pv_map)
+        unshipped_nvrps,
+        lambda nvrp: elliottlib.brew.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
     )
 
     unshipped_builds = _attached_to_open_erratum_with_correct_pv(kind, results, elliottlib.errata)
@@ -141,9 +141,14 @@ def _get_product_version(nvr, product_version_map, brew_session=koji.ClientSessi
             return product_version
 
 
-def _nvrs_to_builds(nvr, product_version_map):
-    pv = _get_product_version(nvr, product_version_map)
-    return elliottlib.brew.get_brew_build(nvr, pv, session=requests.Session())
+def _gen_nvrp_tuples(key, builds, tag_pv_map):
+    latest_builds = {}
+    tuples = []
+    for tag in tag_pv_map:
+        latest_builds = brew.get_latest_builds(key, tag, builds)
+        for _, b in latest_builds.items():
+            tuples.append((b['name'], b['version'], b['release'], tag_pv_map[tag]))
+    return tuples
 
 
 def _json_dump(as_json, unshipped_builds, base_tag, kind):
@@ -167,7 +172,8 @@ def _determine_errata_info(runtime):
 
 
 def _fetch_builds_by_kind_image(runtime, tag_pv_map):
-    image_metadata = runtime.image_metas()
+    # filter out image like 'openshift-enterprise-base'
+    image_metadata = [i for i in runtime.image_metas() if not i.base_only]
 
     pbar_header(
         'Generating list of images: ',
@@ -175,26 +181,18 @@ def _fetch_builds_by_kind_image(runtime, tag_pv_map):
         image_metadata)
 
     # Returns a list of (n, v, r, pv) tuples of each build
-    image_tuples = []
     component_names = []
-    latest_builds = {}
     for i in image_metadata:
         component_names.append(i.get_component_name())
 
-    for tag in tag_pv_map:
-        latest_builds = brew.get_latest_builds(tag, component_names)
-        for _, b in latest_builds.items():
-            image_tuples.append((b['name'], b['version'], b['release'], tag_pv_map[tag]))
+    image_tuples = _gen_nvrp_tuples('name', component_names, tag_pv_map)
 
     pbar_header(
         'Generating build metadata: ',
         'Fetching data for {n} builds '.format(n=len(image_tuples)),
         image_tuples)
 
-    nvrs = []
-    for meta in image_tuples:
-        nvrs.append('{}-{}-{}'.format(meta[0], meta[1], meta[2]))
-    return nvrs
+    return image_tuples
 
 
 def _fetch_builds_by_kind_rpm(base_tag, tag_pv_map):
@@ -204,9 +202,8 @@ def _fetch_builds_by_kind_rpm(base_tag, tag_pv_map):
         base_tag,
         tag_pv_map["{}-candidate".format(base_tag)],
         kind='rpm')
-
     pbar_header('Gathering additional information: ', 'Brew buildinfo is required to continue', candidates)
-    return candidates
+    return _gen_nvrp_tuples('nvr', candidates, tag_pv_map)
 
 
 def _attached_to_open_erratum_with_correct_pv(kind, results, errata):
@@ -218,8 +215,6 @@ def _attached_to_open_erratum_with_correct_pv(kind, results, errata):
     # so we cached the result.
     errata_version_cache = {}
     for b in results:
-        if b.nvr.startswith('openshift-enterprise-base-container'):
-            continue
         same_version_exist = False
         # We only want builds not attached to an existing open advisory
         if b.attached_to_open_erratum:

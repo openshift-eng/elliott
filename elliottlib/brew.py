@@ -30,13 +30,13 @@ from requests_kerberos import HTTPKerberosAuth
 logger = logutil.getLogger(__name__)
 
 
-def get_latest_builds(tag, component_names, brew_session=koji.ClientSession(constants.BREW_HUB)):
+def get_latest_builds(key, tag, component_names, brew_session=koji.ClientSession(constants.BREW_HUB)):
     latest_builds = {}
     component_names = set(component_names)
     builds = brew_session.getLatestBuilds(tag)
     for b in builds:
-        if b['name'] in component_names:
-            latest_builds[b['name']] = b
+        if b[key] in component_names:
+            latest_builds[b[key]] = b
     return latest_builds
 
 

@@ -78,10 +78,10 @@ class TestFindBuildsCli(unittest.TestCase):
             session = MockSession()
             session.listTags = mock.MagicMock(side_effect=fake_listTags)
 
-            pv = _get_product_version(nvr1, "RHEL-7-OSE-4.1", product_version_map, session)
+            pv = _get_product_version(nvr1, product_version_map, session)
             self.assertEqual(pv, "RHEL-7-OSE-4.1")
 
-            pv = _get_product_version(nvr2, "RHEL-7-OSE-4.1", product_version_map, session)
+            pv = _get_product_version(nvr2, product_version_map, session)
             self.assertEqual(pv, "OSE-4.2-RHEL-8")
 
 
