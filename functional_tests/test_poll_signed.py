@@ -1,6 +1,7 @@
 from __future__ import absolute_import, print_function, unicode_literals
 import unittest
 import subprocess
+import six
 from functional_tests import constants
 
 
@@ -12,4 +13,4 @@ class PollSignedTestCase(unittest.TestCase):
                 "--group=openshift-3.10", "poll-signed", "--noop", "--use-default-advisory=rpm",
             ]
         )
-        self.assertRegexpMatches(out.decode("utf-8"), "All builds signed|Signing incomplete")
+        six.assertRegex(self, out.decode("utf-8"), "All builds signed|Signing incomplete")

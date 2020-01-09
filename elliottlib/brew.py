@@ -2,19 +2,16 @@
 Utility functions for general interactions with Brew and Builds
 """
 from __future__ import absolute_import, print_function, unicode_literals
-
+from future.utils import as_native_str
 # stdlib
-from builtins import str, object
 import ast
 import time
 import datetime
 import subprocess
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
-from multiprocessing import Lock
 import shlex
 import ssl
-import koji
 
 # ours
 from . import constants
@@ -334,9 +331,11 @@ initialized Build object (provided the build exists).
         self.buildinfo = {}
         self.process()
 
+    @as_native_str()
     def __str__(self):
         return self.nvr
 
+    @as_native_str()
     def __repr__(self):
         return "Build({nvr})".format(nvr=self.nvr)
 

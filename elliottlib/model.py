@@ -1,5 +1,5 @@
 from __future__ import absolute_import, print_function, unicode_literals
-from builtins import str
+from future.utils import as_native_str
 
 
 class ModelException(Exception):
@@ -20,6 +20,7 @@ class ModelException(Exception):
             d["result"] = self.result
         return d
 
+    @as_native_str()
     def __str__(self):
         if self.result is None:
             return self.msg
@@ -50,9 +51,11 @@ class MissingModel(dict):
     def __delitem__(self, key):
         raise ModelException("Invalid attempt to delete key(%s) in missing branch of model" % key)
 
+    @as_native_str()
     def __str__(self):
         return "(MissingModel)"
 
+    @as_native_str()
     def __repr__(self):
         return "(MissingModel)"
 
