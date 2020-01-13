@@ -87,7 +87,8 @@ PRESENT advisory. Here are some examples:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
 
     runtime.initialize(mode='images' if kind == 'image' else 'none')
-    tag_pv_map = runtime.gitdata.load_data(key='erratatool').data.get('brew_tag_product_version_mapping')
+    replace_vars = runtime.group_config.vars.primitive() if runtime.group_config.vars else {}
+    tag_pv_map = runtime.gitdata.load_data(key='erratatool', replace_vars=replace_vars).data.get('brew_tag_product_version_mapping')
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -189,6 +190,9 @@ def _fetch_builds_by_kind_rpm(tag_pv_map):
     for tag in tag_pv_map:
         if tag.endswith('-candidate'):
             base_tag = tag[:-10]
+        else:
+            red_print("key of brew_tag_product_version_mapping in erratatool.yml must be candidate\n")
+            continue
         candidates = elliottlib.brew.find_unshipped_build_candidates(
             base_tag,
             tag_pv_map[tag],
