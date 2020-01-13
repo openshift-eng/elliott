@@ -87,7 +87,7 @@ PRESENT advisory. Here are some examples:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
 
     runtime.initialize(mode='images' if kind == 'image' else 'none')
-    base_tag, tag_pv_map = _determine_errata_info(runtime)
+    tag_pv_map = runtime.gitdata.load_data(key='erratatool').data.get('brew_tag_product_version_mapping')
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -107,7 +107,7 @@ PRESENT advisory. Here are some examples:
         if kind == 'image':
             unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map)
         elif kind == 'rpm':
-            unshipped_nvrps = _fetch_builds_by_kind_rpm(base_tag, tag_pv_map)
+            unshipped_nvrps = _fetch_builds_by_kind_rpm(tag_pv_map)
 
     results = parallel_results_with_progress(
         unshipped_nvrps,
@@ -116,7 +116,7 @@ PRESENT advisory. Here are some examples:
 
     unshipped_builds = _attached_to_open_erratum_with_correct_pv(kind, results, elliottlib.errata)
 
-    _json_dump(as_json, unshipped_builds, base_tag, kind)
+    _json_dump(as_json, unshipped_builds, kind, tag_pv_map)
 
     if not unshipped_builds:
         green_print('No builds needed to be attached.')
@@ -132,15 +132,6 @@ PRESENT advisory. Here are some examples:
             click.echo(' ' + b.nvr)
 
 
-def _get_product_version(nvr, product_version_map, brew_session=koji.ClientSession(constants.BREW_HUB)):
-    product_version = ""
-    for tag in brew_session.listTags(nvr):
-        tag_name = tag.get('name')
-        product_version = product_version_map.get(tag_name, "")
-        if product_version:
-            return product_version
-
-
 def _gen_nvrp_tuples(key, builds, tag_pv_map):
     latest_builds = {}
     tuples = []
@@ -151,24 +142,20 @@ def _gen_nvrp_tuples(key, builds, tag_pv_map):
     return tuples
 
 
-def _json_dump(as_json, unshipped_builds, base_tag, kind):
+def _json_dump(as_json, unshipped_builds, kind, tag_pv_map):
     if as_json:
-        build_nvrs = sorted(build.nvr for build in unshipped_builds)
-        json_data = dict(builds=build_nvrs, base_tag=base_tag, kind=kind)
+        builds = []
+        tags = []
+        reversed_tag_pv_map = {y: x for x, y in tag_pv_map.items()}
+        for b in sorted(unshipped_builds):
+            builds.append(b.nvr)
+            tags.append(reversed_tag_pv_map[b.product_version])
+        json_data = dict(builds=builds, base_tag=tags, kind=kind)
         if as_json == '-':
             click.echo(json.dumps(json_data, indent=4, sort_keys=True))
         else:
             with open(as_json, 'w') as json_file:
                 json.dump(json_data, json_file, indent=4, sort_keys=True)
-
-
-def _determine_errata_info(runtime):
-    if not runtime.branch:
-        raise ElliottFatalError('Need to specify a branch either in group.yml or with --branch option')
-    base_tag = runtime.branch
-    et_data = runtime.gitdata.load_data(key='erratatool').data
-    tag_pv_map = et_data.get('brew_tag_product_version_mapping')
-    return base_tag, tag_pv_map
 
 
 def _fetch_builds_by_kind_image(runtime, tag_pv_map):
@@ -195,15 +182,20 @@ def _fetch_builds_by_kind_image(runtime, tag_pv_map):
     return image_tuples
 
 
-def _fetch_builds_by_kind_rpm(base_tag, tag_pv_map):
+def _fetch_builds_by_kind_rpm(tag_pv_map):
     green_prefix('Generating list of rpms: ')
     click.echo('Hold on a moment, fetching Brew builds')
-    candidates = elliottlib.brew.find_unshipped_build_candidates(
-        base_tag,
-        tag_pv_map["{}-candidate".format(base_tag)],
-        kind='rpm')
-    pbar_header('Gathering additional information: ', 'Brew buildinfo is required to continue', candidates)
-    return _gen_nvrp_tuples('nvr', candidates, tag_pv_map)
+    rpm_tuple = []
+    for tag in tag_pv_map:
+        if tag.endswith('-candidate'):
+            base_tag = tag[:-10]
+        candidates = elliottlib.brew.find_unshipped_build_candidates(
+            base_tag,
+            tag_pv_map[tag],
+            kind='rpm')
+        pbar_header('Gathering additional information: ', 'Brew buildinfo is required to continue', candidates)
+        rpm_tuple.extend(_gen_nvrp_tuples('nvr', candidates, tag_pv_map))
+    return rpm_tuple
 
 
 def _attached_to_open_erratum_with_correct_pv(kind, results, errata):
