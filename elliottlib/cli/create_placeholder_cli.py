@@ -5,7 +5,7 @@ import elliottlib
 from elliottlib import constants, logutil, Runtime
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import exit_unauthenticated, override_product_version, ensure_erratatool_auth
+from elliottlib.util import exit_unauthenticated, ensure_erratatool_auth
 from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header
 
 from errata_tool import Erratum, ErrataException
