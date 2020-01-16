@@ -12,6 +12,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
 import shlex
 import ssl
+import koji
 
 # ours
 from . import constants
