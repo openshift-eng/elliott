@@ -98,7 +98,7 @@ PRESENT advisory. Here are some examples:
     # get the builds we want to add
     unshipped_nvrps = []
     if builds:
-        green_prefix('Fetching Brew tags...')
+        green_prefix('Fetching tags for builds...')
         unshipped_nvrps = _fetch_builds_by_nvr_or_id(builds, tag_pv_map)
     elif from_diff:
         unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1])
@@ -113,7 +113,7 @@ PRESENT advisory. Here are some examples:
         lambda nvrp: elliottlib.errata.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
     )
 
-    unshipped_builds = _attached_to_open_erratum_with_correct_pv(kind, results, elliottlib.errata)
+    unshipped_builds = _filter_out_inviable_builds(kind, results, elliottlib.errata)
 
     _json_dump(as_json, unshipped_builds, kind, tag_pv_map)
 
@@ -218,16 +218,14 @@ def _fetch_builds_by_kind_rpm(tag_pv_map):
     return rpm_tuple
 
 
-def _attached_to_open_erratum_with_correct_pv(kind, results, errata):
-    if kind != "image":
-        return results
+def _filter_out_inviable_builds(kind, results, errata):
     unshipped_builds = []
     # will probably end up loading the same errata and
     # its comments many times, which is pretty slow
     # so we cached the result.
     errata_version_cache = {}
     for b in results:
-        same_version_exist = False
+        in_same_version = False
         # We only want builds not attached to an existing open advisory
         if b.attached_to_open_erratum:
             for e in b.open_errata_id:
@@ -242,9 +240,9 @@ def _attached_to_open_erratum_with_correct_pv(kind, results, errata):
                     # but not much point in doing it). just looking at the first one is fine.
                     errata_version_cache[e] = metadata_comments_json[0]['release']
                 if errata_version_cache[e] == get_release_version(b.product_version):
-                    same_version_exist = True
+                    in_same_version = True
                     break
-        if not same_version_exist or not b.attached_to_open_erratum:
+        if not (in_same_version and (b.attached_to_open_erratum or b.attached_to_shipped_erratum)):
             unshipped_builds.append(b)
     return unshipped_builds
 

@@ -215,6 +215,11 @@ initialized Build object (provided the build exists).
         return [e for e in self.all_errata if e['status'] in constants.errata_active_advisory_labels]
 
     @property
+    def shipped_erratum(self):
+        """Any shipped live erratum this build is attached to"""
+        return [e for e in self.all_errata if e['status'] == constants.errata_shipped_advisory_label]
+
+    @property
     def open_errata_id(self):
         """Any open erratum this build is attached to"""
         return [e['id'] for e in self.all_errata if e['status'] in constants.errata_active_advisory_labels]
@@ -223,6 +228,11 @@ initialized Build object (provided the build exists).
     def attached_to_open_erratum(self):
         """Attached to any open erratum"""
         return len(self.open_erratum) > 0
+
+    @property
+    def attached_to_shipped_erratum(self):
+        """Attached to any shipped erratum"""
+        return len(self.shipped_erratum) > 0
 
     @property
     def closed_erratum(self):

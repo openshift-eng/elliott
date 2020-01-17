@@ -52,6 +52,8 @@ errata_inactive_advisory_labels = [
     "DROPPED_NO_SHIP"
 ]
 
+errata_shipped_advisory_label = "SHIPPED_LIVE"
+
 errata_valid_impetus = [
     'standard',
     'cve',
