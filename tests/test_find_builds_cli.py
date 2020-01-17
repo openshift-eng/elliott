@@ -1,6 +1,6 @@
 from __future__ import unicode_literals
 import unittest
-from elliottlib.cli.find_builds_cli import _attached_to_open_erratum_with_correct_pv
+from elliottlib.cli.find_builds_cli import _filter_out_inviable_builds
 from elliottlib.brew import Build
 import elliottlib
 import flexmock, json, mock
@@ -29,7 +29,7 @@ class TestFindBuildsCli(unittest.TestCase):
         builds.should_receive("open_errata_id").and_return([12345])
 
         # expect return empty list []
-        self.assertEqual([], _attached_to_open_erratum_with_correct_pv("image", [builds], fake_errata))
+        self.assertEqual([], _filter_out_inviable_builds("image", [builds], fake_errata))
 
     def test_attached_errata_succeed(self):
         """
@@ -49,7 +49,7 @@ class TestFindBuildsCli(unittest.TestCase):
         builds.should_receive("open_errata_id").and_return([12345])
 
         # expect return list with one build
-        self.assertEqual([Build("test-1.1.1")], _attached_to_open_erratum_with_correct_pv("image", [builds], fake_errata))
+        self.assertEqual([Build("test-1.1.1")], _filter_out_inviable_builds("image", [builds], fake_errata))
 
 
 if __name__ == "__main__":
