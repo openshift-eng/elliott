@@ -101,8 +101,7 @@ PRESENT advisory. Here are some examples:
         green_prefix('Fetching Brew tags...')
         unshipped_nvrps = _fetch_builds_by_nvr_or_id(builds, tag_pv_map)
     elif from_diff:
-        green_print('Fetching changed images between payloads...')
-        unshipped_nvrps = _gen_nvrp_tuples('nvr', elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1]), tag_pv_map)
+        unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1])
     else:
         if kind == 'image':
             unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map)
@@ -111,7 +110,7 @@ PRESENT advisory. Here are some examples:
 
     results = parallel_results_with_progress(
         unshipped_nvrps,
-        lambda nvrp: elliottlib.brew.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
+        lambda nvrp: elliottlib.errata.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
     )
 
     unshipped_builds = _attached_to_open_erratum_with_correct_pv(kind, results, elliottlib.errata)
@@ -145,13 +144,10 @@ def _fetch_builds_by_nvr_or_id(ids_or_nvrs, tag_pv_map):
     return nvrps
 
 
-def _gen_nvrp_tuples(key, builds, tag_pv_map):
-    latest_builds = {}
+def _gen_nvrp_tuples(builds, tag_pv_map, tag):
     tuples = []
-    for tag in tag_pv_map:
-        latest_builds = brew.get_latest_builds(key, tag, builds)
-        for _, b in latest_builds.items():
-            tuples.append((b['name'], b['version'], b['release'], tag_pv_map[tag]))
+    for _, b in builds.items():
+        tuples.append((b['name'], b['version'], b['release'], tag_pv_map[tag]))
     return tuples
 
 
@@ -171,6 +167,15 @@ def _json_dump(as_json, unshipped_builds, kind, tag_pv_map):
                 json.dump(json_data, json_file, indent=4, sort_keys=True)
 
 
+def _fetch_builds_from_diff(from_payload, to_payload, tag_pv_map):
+    green_print('Fetching changed images between payloads...')
+    payload_tuple = []
+    for tag in tag_pv_map:
+        latest_builds = brew.get_latest_builds('nvr', tag, elliottlib.openshiftclient.get_build_list(from_payload, to_payload))
+        payload_tuple.extend(_gen_nvrp_tuples(latest_builds, tag_pv_map, tag))
+    return payload_tuple
+
+
 def _fetch_builds_by_kind_image(runtime, tag_pv_map):
     # filter out image like 'openshift-enterprise-base'
     image_metadata = [i for i in runtime.image_metas() if not i.base_only]
@@ -185,14 +190,16 @@ def _fetch_builds_by_kind_image(runtime, tag_pv_map):
     for i in image_metadata:
         component_names.append(i.get_component_name())
 
-    image_tuples = _gen_nvrp_tuples('name', component_names, tag_pv_map)
+    image_tuple = []
+    for tag in tag_pv_map:
+        latest_builds = brew.get_latest_builds('name', tag, component_names)
+        image_tuple.extend(_gen_nvrp_tuples(latest_builds, tag_pv_map, tag))
+        pbar_header(
+            'Generating build metadata: ',
+            'Fetching data for {n} builds '.format(n=len(image_tuple)),
+            image_tuple)
 
-    pbar_header(
-        'Generating build metadata: ',
-        'Fetching data for {n} builds '.format(n=len(image_tuples)),
-        image_tuples)
-
-    return image_tuples
+    return image_tuple
 
 
 def _fetch_builds_by_kind_rpm(tag_pv_map):
@@ -205,12 +212,9 @@ def _fetch_builds_by_kind_rpm(tag_pv_map):
         else:
             red_print("key of brew_tag_product_version_mapping in erratatool.yml must be candidate\n")
             continue
-        candidates = elliottlib.brew.find_unshipped_build_candidates(
-            base_tag,
-            tag_pv_map[tag],
-            kind='rpm')
+        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag)
         pbar_header('Gathering additional information: ', 'Brew buildinfo is required to continue', candidates)
-        rpm_tuple.extend(_gen_nvrp_tuples('nvr', candidates, tag_pv_map))
+        rpm_tuple.extend(_gen_nvrp_tuples(candidates, tag_pv_map, tag))
     return rpm_tuple
 
 

@@ -15,7 +15,7 @@ import datetime
 import json
 import ssl
 import re
-from elliottlib import exceptions, constants
+from elliottlib import exceptions, constants, brew
 from elliottlib.util import green_prefix, exit_unauthenticated
 
 import requests
@@ -270,6 +270,42 @@ def get_builds(advisory_id):
         raise exceptions.ErrataToolUnauthorizedException(res.text)
 
 # https://errata.devel.redhat.com/bugs/1743872/advisories.json
+
+
+def get_brew_build(nvr, product_version='', session=None):
+    """5.2.2.1. GET /api/v1/build/{id_or_nvr}
+
+    Get Brew build details.
+
+    https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-get-apiv1buildid_or_nvr
+
+    :param str nvr: A name-version-release string of a brew rpm/image build
+    :param str product_version: The product version tag as given to ET
+    when attaching a build
+    :param requests.Session session: A python-requests Session object,
+    used for for connection pooling. Providing `session` object can
+    yield a significant reduction in total query time when looking up
+    many builds.
+
+    http://docs.python-requests.org/en/master/user/advanced/#session-objects
+
+    :return: An initialized Build object with the build details
+    :raises exceptions.BrewBuildException: When build not found
+
+    """
+    if session is None:
+        session = requests.session()
+
+    res = session.get(constants.errata_get_build_url.format(id=nvr),
+                      verify=ssl.get_default_verify_paths().openssl_cafile,
+                      auth=HTTPKerberosAuth())
+
+    if res.status_code == 200:
+        return brew.Build(nvr=nvr, body=res.json(), product_version=product_version)
+    else:
+        raise exceptions.BrewBuildException("{build}: {msg}".format(
+            build=nvr,
+            msg=res.text))
 
 
 def get_advisories_for_bug(bug_id, session=None):
