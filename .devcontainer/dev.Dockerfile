@@ -1,9 +1,7 @@
-FROM fedora:30
+FROM fedora:31
 LABEL name="elliott-dev" \
   description="Elliott development container image" \
   maintainer="OpenShift Automated Release Tooling (ART) Team <aos-team-art@redhat.com>"
-
-ENV PYCURL_SSL_LIBRARY=openssl
 
 RUN dnf install -y \
     # runtime dependencies
@@ -28,7 +26,7 @@ RUN wget -O /etc/yum.repos.d/rcm-tools-fedora.repo https://download.devel.redhat
   && dnf install -y koji brewkoji \
   && dnf clean all
 
-ARG OC_VERSION=4.2.12
+ARG OC_VERSION=4.2.16
 # include oc client
 RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"$OC_VERSION"/openshift-client-linux-"$OC_VERSION".tar.gz \
   && tar -C /usr/local/bin -xzf  /tmp/openshift-client-linux-"$OC_VERSION".tar.gz oc kubectl \
