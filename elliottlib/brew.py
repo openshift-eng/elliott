@@ -38,6 +38,41 @@ def get_latest_builds(key, tag, component_names, brew_session=koji.ClientSession
     return latest_builds
 
 
+def get_build_objects(ids_or_nvrs, session=None):
+    """Get information of multiple Koji/Brew builds
+
+    :param ids_or_nvrs: list of build nvr strings or numbers.
+    :param session: instance of :class:`koji.ClientSession`
+    :return: a list Koji/Brew build objects
+    """
+    logger.debug(
+        "Fetching build info for {} from Koji/Brew...".format(ids_or_nvrs))
+    if not session:
+        session = koji.ClientSession(constants.BREW_HUB)
+    # Use Koji multicall interface to boost performance. See https://pagure.io/koji/pull-request/957
+    tasks = []
+    with session.multicall(strict=True) as m:
+        for b in ids_or_nvrs:
+            tasks.append(m.getBuild(b))
+    return [task.result for task in tasks]
+
+
+def get_builds_tags(build_nvrs, session=None):
+    """Get tags of multiple Koji/Brew builds
+
+    :param builds_nvrs: list of build nvr strings or numbers.
+    :param session: instance of :class:`koji.ClientSession`
+    :return: a list of Koji/Brew tag list
+    """
+    if not session:
+        session = koji.ClientSession(constants.BREW_HUB)
+    tasks = []
+    with session.multicall(strict=True) as m:
+        for nvr in build_nvrs:
+            tasks.append(m.listTags(build=nvr))
+    return [task.result for task in tasks]
+
+
 def get_brew_build(nvr, product_version='', session=None):
     """5.2.2.1. GET /api/v1/build/{id_or_nvr}
 
