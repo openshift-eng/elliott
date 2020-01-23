@@ -9,7 +9,7 @@ import tempfile
 import pipes
 import click
 from typing import List, Set, Dict, Tuple, Text, Optional
-from elliottlib import constants, tarball_sources, util, logutil
+from elliottlib import constants, tarball_sources, util, logutil, brew
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -102,8 +102,7 @@ Use --force to add new tarball sources to an existing directory.".format(os.path
     click.echo("Fetching build infos for {} from Koji/Brew...".format(
         ", ".join(nvr_dirs.keys())))
     brew_session = koji.ClientSession(constants.BREW_HUB)
-    brew_builds = tarball_sources.get_builds_from_brew(
-        brew_session, nvr_dirs.keys())
+    brew_builds = brew.get_build_objects(nvr_dirs.keys(), brew_session)
 
     # Ready to generate tarballs
     tarball_sources_list = []

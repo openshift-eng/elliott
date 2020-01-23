@@ -54,25 +54,6 @@ def find_builds_from_advisory(advisory_number, components):
     return filtered_builds
 
 
-def get_builds_from_brew(session, build_nvrs):
-    """Get information of multiple Koji/Brew builds
-
-    :param session: instance of :class:`koji.ClientSession`
-    :param builds_nvrs: list of build nvr strings or numbers.
-    :return: an iterator over Koji/Brew build objects
-    """
-    LOGGER.debug(
-        "Fetching build info for {} from Koji/Brew...".format(build_nvrs))
-    # Use Koji multicall interface to boost performance. See https://pagure.io/koji/pull-request/957
-    futures = {}
-    with session.multicall(strict=True):
-        for nvr in build_nvrs:
-            futures[nvr] = session.getBuild(nvr)
-    for nvr, build in futures.items():
-        LOGGER.debug("Got build info for {} from Brew.".format(nvr))
-        yield build
-
-
 def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, force_fetch=False):
     """ Gereate a tarball source from specified commit of a remote Git repository.
 

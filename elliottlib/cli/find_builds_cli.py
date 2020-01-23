@@ -98,9 +98,8 @@ PRESENT advisory. Here are some examples:
     # get the builds we want to add
     unshipped_nvrps = []
     if builds:
-        green_prefix('Build NVRs provided: ')
-        click.echo('Manually verifying the builds exist')
-        unshipped_nvrps = _gen_nvrp_tuples('nvr', builds, tag_pv_map)
+        green_prefix('Fetching Brew tags...')
+        unshipped_nvrps = _fetch_builds_by_nvr_or_id(builds, tag_pv_map)
     elif from_diff:
         green_print('Fetching changed images between payloads...')
         unshipped_nvrps = _gen_nvrp_tuples('nvr', elliottlib.openshiftclient.get_build_list(from_diff[0], from_diff[1]), tag_pv_map)
@@ -131,6 +130,19 @@ PRESENT advisory. Here are some examples:
         click.echo('to an advisory:')
         for b in sorted(unshipped_builds):
             click.echo(' ' + b.nvr)
+
+
+def _fetch_builds_by_nvr_or_id(ids_or_nvrs, tag_pv_map):
+    session = koji.ClientSession(constants.BREW_HUB)
+    builds = brew.get_build_objects(ids_or_nvrs, session)
+    nvrps = []
+    for index, tags in enumerate(brew.get_builds_tags(builds, session)):
+        build = builds[index]  # type: dict
+        tag_names = {tag["name"] for tag in tags}
+        for tag, prod_version in tag_pv_map.items():
+            if tag in tag_names:
+                nvrps.append((build["name"], build["version"], build["release"], prod_version))
+    return nvrps
 
 
 def _gen_nvrp_tuples(key, builds, tag_pv_map):
