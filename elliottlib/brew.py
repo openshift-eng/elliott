@@ -110,7 +110,7 @@ def get_brew_build(nvr, product_version='', session=None):
             msg=res.text))
 
 
-def find_unshipped_build_candidates(base_tag, product_version, kind='rpm'):
+def find_unshipped_build_candidates(base_tag, kind='rpm', brew_session=koji.ClientSession(constants.BREW_HUB)):
     """Find builds for a product and return a list of the builds only
     labeled with the -candidate tag that aren't attached to any open
     advisory.
@@ -118,10 +118,9 @@ def find_unshipped_build_candidates(base_tag, product_version, kind='rpm'):
     :param str base_tag: The tag to search for shipped/candidate
     builds. This is combined with '-candidate' to return the build
     difference.
-    :param str product_version: The product version tag as given to ET
-    when attaching a build
+
     :param str kind: Search for RPM builds by default. 'image' is also
-    acceptable
+    acceptable (In elliott we only use this function for rpm)
 
     For example, if `base_tag` is 'rhaos-3.7-rhel7' then this will
     look for two sets of tagged builds:
@@ -132,198 +131,17 @@ def find_unshipped_build_candidates(base_tag, product_version, kind='rpm'):
     :return: A set of build strings where each build is only tagged as
     a -candidate build
     """
-    if kind == 'rpm':
-        candidate_builds = BrewTaggedRPMBuilds(base_tag + "-candidate")
-        shipped_builds = BrewTaggedRPMBuilds(base_tag)
-    elif kind == 'image':
-        candidate_builds = BrewTaggedImageBuilds(base_tag + "-candidate")
-        shipped_builds = BrewTaggedImageBuilds(base_tag)
+    shipped_builds_set = set()
+    diff_builds = {}
+    candidate_builds = brew_session.listTagged(tag='{}-candidate'.format(base_tag), latest=True, type=kind)
+    for b in brew_session.listTagged(tag=base_tag, latest=True, type=kind):
+        shipped_builds_set.add(b['nvr'])
 
-    # Multiprocessing may seem overkill, but these queries can take
-    # longer than you'd like
-    pool = ThreadPool(cpu_count())
-    pool.map(
-        lambda builds: builds.refresh(),
-        [candidate_builds, shipped_builds])
-    # Wait for results
-    pool.close()
-    pool.join()
+    for b in candidate_builds:
+        if b['nvr'] not in shipped_builds_set:
+            diff_builds[b['nvr']] = b
 
-    # Builds only tagged with -candidate (not shipped yet)
-    return candidate_builds.builds.difference(shipped_builds.builds)
-
-
-def get_brew_buildinfo(build):
-    """Get the buildinfo of a brew build from brew.
-
-    :param str|int build: A build NVR or numeric ID
-
-    :return dict buildinfo: A dict of the build info. Certain fields
-    may be transformed such as 'Tags' turned into a list, and 'Extra'
-    into a proper dict object instead of a JSON string
-
-    :return str buildinfo: The raw unparsed buildinfo as a string
-
-Note: This is different from get_brew_build in that this function
-queries brew directly using the 'brew buildinfo' command. Whereas,
-get_brew_build queries the Errata Tool API for other information.
-
-This function will give information not provided by ET: build tags,
-finished date, built by, etc.
-    """
-    query_string = "brew buildinfo {nvr}".format(nvr=build.nvr)
-    rc, stdout, stderr = exectools.cmd_gather(shlex.split(query_string))
-    buildinfo = {}
-
-    as_string = "???"  # F821 undefined name 'as_string'
-    if as_string and rc == 0:
-        return stdout
-    else:
-        buildinfo = {}
-
-        # These keys indicate content which can be whitespace split into
-        # an array, ex: the value of the "Tags" key comes as a string, but
-        # we can split it on space characters and have a list of tags
-        # instead.
-        split_keys = ['Tags']
-        # The value of these keys contain json strings which we can
-        # attempt to load into a datastructure
-        json_keys = ['Extra']
-        for line in stdout.splitlines():
-            key, token, rest = line.partition(': ')
-            if key in split_keys:
-                buildinfo[key] = rest.split(' ')
-                continue
-            elif key in json_keys:
-                try:
-                    # Why would we use the ast module for this? Is
-                    # json.loads not enough? Actually, no, it isn't
-                    # enough. The <airquotes>JSON</airquotes> returned
-                    # from 'brew buildinfo' uses single-quotes to wrap
-                    # strings, that is not valid json. Whereas,
-                    # ast.literal_eval() can handle that and load the
-                    # string into a structure we can work with
-                    buildinfo[key] = ast.literal_eval(rest)
-                except Exception:
-                    buildinfo[key] = rest
-                    continue
-            else:
-                buildinfo[key] = rest
-        return buildinfo
-
-
-def get_tagged_image_builds(tag, latest=True):
-    """Wrapper around shelling out to run 'brew list-tagged' for a given tag.
-
-    :param str tag: The tag to list builds from
-    :param bool latest: Only show the single latest build of a package
-    """
-    if latest:
-        latest_option = '--latest'
-    else:
-        latest_option = ''
-
-    query_string = "brew list-tagged {tag} {latest} --type=image --quiet".format(tag=tag, latest=latest_option)
-    # --latest - Only the last build for that package
-    # --type=image - Only show container images builds
-    # --quiet - Omit field headers in output
-
-    return exectools.cmd_gather(shlex.split(query_string))
-
-
-def get_tagged_rpm_builds(tag, arch='src', latest=True):
-    """Wrapper around shelling out to run 'brew list-tagged' for a given tag.
-
-    :param str tag: The tag to list builds from
-    :param str arch: Filter results to only this architecture
-    :param bool latest: Only show the single latest build of a package
-    """
-    if latest is True:
-        latest_flag = "--latest"
-    else:
-        latest_flag = ""
-
-    query_string = "brew list-tagged {tag} {latest} --rpm --quiet --arch {arch}".format(tag=tag, latest=latest_flag, arch=arch)
-    # --latest - Only the last build for that package
-    # --rpm - Only show RPM builds
-    # --quiet - Omit field headers in output
-    # --arch {arch} - Only show builds of this architecture
-
-    return exectools.cmd_gather(shlex.split(query_string))
-
-# ============================================================================
-# Brew object interaction models
-# ============================================================================
-
-
-class BrewTaggedImageBuilds(object):
-    """
-    Abstraction around working with lists of brew tagged image
-    builds. Ensures the result set is formatted correctly for this
-    build type.
-    """
-
-    def __init__(self, tag):
-        self.tag = tag
-        self.builds = set([])
-
-    def refresh(self):
-        """Refresh or build initial list of brew builds
-
-        :return: True if builds could be found for the given tag
-
-        :raises: Exception if there is an error looking up builds
-        """
-        rc, stdout, stderr = get_tagged_image_builds(self.tag)
-
-        print("Refreshing for tag: {tag}".format(tag=self.tag))
-
-        if rc != 0:
-            raise exceptions.BrewBuildException("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
-        else:
-            builds = set(stdout.splitlines())
-            for b in builds:
-                self.builds.add(b.split()[0])
-
-        return True
-
-
-class BrewTaggedRPMBuilds(object):
-    """
-    Abstraction around working with lists of brew tagged rpm
-    builds. Ensures the result set is formatted correctly for this
-    build type.
-    """
-
-    def __init__(self, tag):
-        self.tag = tag
-        self.builds = set([])
-
-    def refresh(self):
-        """Refresh or build initial list of brew builds
-
-        :return: True if builds could be found for the given tag
-
-        :raises: Exception if there is an error looking up builds
-        """
-        rc, stdout, stderr = get_tagged_rpm_builds(self.tag)
-
-        print("Refreshing for tag: {tag}".format(tag=self.tag))
-
-        if rc != 0:
-            raise exceptions.BrewBuildException("Failed to get brew builds for tag: {tag} - {err}".format(tag=self.tag, err=stderr))
-        else:
-            builds = set(stdout.splitlines())
-            for b in builds:
-                # The results come back with the build arch (.src)
-                # appended. Remove that if it is in the string.
-                try:
-                    self.builds.add(b[:b.index('.src')])
-                except ValueError:
-                    # Raised if the given substring is not found
-                    self.builds.add(b)
-
-        return True
+    return diff_builds
 
 
 class Build(object):
@@ -423,7 +241,7 @@ initialized Build object (provided the build exists).
 
     def process(self):
         """Generate some easy to access attributes about this build so we
-don't have to do extra manipulation later back in the view"""
+           don't have to do extra manipulation later back in the view"""
         # Has this build been attached to any erratum?
         self.all_errata = self.body.get('all_errata', [])
 
@@ -452,14 +270,6 @@ don't have to do extra manipulation later back in the view"""
                     self.kind = 'image'
                     self.file_type = 'tar'
                     break
-
-    def add_buildinfo(self, verbose=False):
-        """Add buildinfo from upstream brew"""
-        date_format = '%a, %d %b %Y %H:%M:%S %Z'
-        if verbose:
-            click.secho('.', nl=False)
-        self.buildinfo = get_brew_buildinfo(self)
-        self.finished = datetime.datetime.strptime(self.buildinfo['Finished'], date_format)
 
     def to_json(self):
         """Method for adding this build to advisory via the Errata Tool

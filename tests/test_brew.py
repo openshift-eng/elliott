@@ -1,7 +1,5 @@
 """
-
 Test the brew related functions/classes
-
 """
 from __future__ import unicode_literals
 
@@ -10,7 +8,7 @@ import platform
 import unittest
 import mock
 
-from elliottlib import exceptions, constants, brew
+from elliottlib import exceptions, constants, brew, errata
 from . import test_structures
 
 
@@ -141,11 +139,11 @@ class TestBrew(unittest.TestCase):
         self.assertEqual(expected_json, b.to_json())
 
     def test_get_brew_build_success(self):
-        (flexmock(brew.ssl)
+        (flexmock(errata.ssl)
             .should_receive("get_default_verify_paths")
             .and_return(flexmock(openssl_cafile="/my/cert.pem")))
 
-        (flexmock(brew)
+        (flexmock(errata)
             .should_receive("HTTPKerberosAuth")
             .and_return("MyHTTPKerberosAuth"))
 
@@ -155,23 +153,23 @@ class TestBrew(unittest.TestCase):
         nvr = 'coreutils-8.22-21.el7'
         pv = 'rhaos-test-7'
 
-        (flexmock(brew.requests)
+        (flexmock(errata.requests.Session)
             .should_receive("get")
             .with_args(constants.errata_get_build_url.format(id=nvr),
                        auth="MyHTTPKerberosAuth",
                        verify="/my/cert.pem")
             .and_return(response))
 
-        b = brew.get_brew_build(nvr, product_version=pv)
+        b = errata.get_brew_build(nvr, product_version=pv)
 
         self.assertEqual(nvr, b.nvr)
 
     def test_get_brew_build_success_session(self):
-        (flexmock(brew.ssl)
+        (flexmock(errata.ssl)
             .should_receive("get_default_verify_paths")
             .and_return(flexmock(openssl_cafile="/my/cert.pem")))
 
-        (flexmock(brew)
+        (flexmock(errata)
             .should_receive("HTTPKerberosAuth")
             .and_return("MyHTTPKerberosAuth"))
 
@@ -189,16 +187,16 @@ class TestBrew(unittest.TestCase):
                        verify="/my/cert.pem")
             .and_return(response))
 
-        b = brew.get_brew_build(nvr, product_version=pv, session=session)
+        b = errata.get_brew_build(nvr, product_version=pv, session=session)
 
         self.assertEqual(nvr, b.nvr)
 
     def test_get_brew_build_failure(self):
-        (flexmock(brew.ssl)
+        (flexmock(errata.ssl)
             .should_receive("get_default_verify_paths")
             .and_return(flexmock(openssl_cafile="/my/cert.pem")))
 
-        (flexmock(brew)
+        (flexmock(errata)
             .should_receive("HTTPKerberosAuth")
             .and_return("MyHTTPKerberosAuth"))
 
@@ -207,7 +205,7 @@ class TestBrew(unittest.TestCase):
         nvr = 'coreutils-8.22-21.el7'
         pv = 'rhaos-test-7'
 
-        (flexmock(brew.requests)
+        (flexmock(errata.requests.Session)
             .should_receive("get")
             .with_args(constants.errata_get_build_url.format(id=nvr),
                        auth="MyHTTPKerberosAuth",
@@ -215,119 +213,7 @@ class TestBrew(unittest.TestCase):
             .and_return(response))
 
         self.assertRaises(exceptions.BrewBuildException,
-                          brew.get_brew_build, nvr, product_version=pv)
-
-    def test_get_tagged_image_builds_success(self):
-        """Ensure the brew list-tagged command is correct for images"""
-        # Any value will work for this. Let's use a real one though to
-        # maintain our sanity. This matches with the example data in
-        # test_structures
-        tag = 'rhaos-3.9-rhel-7-candidate'
-        # Big multi-line string with brew image build ouput.
-        image_builds_mock_return = test_structures.brew_list_tagged_3_9_image_builds
-        image_builds_mock_length = len(image_builds_mock_return.splitlines())
-
-        expected_args = ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate',
-                         '--latest', '--type=image', '--quiet']
-
-        (flexmock(brew.exectools)
-            .should_receive("cmd_gather")
-            .with_args(expected_args)
-            .once()
-            .and_return((0, image_builds_mock_return, '')))
-
-        # Now we can test the BrewTaggedImageBuilds
-        # collecter/parser class as well as the
-        # get_tagged_image_builds function
-        tagged_image_builds = brew.BrewTaggedImageBuilds(tag)
-        # This invokes get_tagged_image_builds, which in turn
-        # invokes our mocked gather_exec
-        images_refreshed = tagged_image_builds.refresh()
-
-        # Refreshing returns True after parsing the results from
-        # the brew CLI command, errors will raise an exception
-        self.assertTrue(images_refreshed)
-
-        # Our example data has 59 valid parseable images listed
-        self.assertEqual(image_builds_mock_length, len(tagged_image_builds.builds))
-
-    def test_get_tagged_image_builds_failed(self):
-        """Ensure the brew list-tagged explodes if the brew subprocess fails"""
-        # Any value will work for this. Let's use a real one though to
-        # maintain our sanity. This matches with the example data in
-        # test_structures
-        tag = 'rhaos-3.9-rhel-7-candidate'
-        # Big multi-line string with brew image build ouput.
-        image_builds_mock_return = test_structures.brew_list_tagged_3_9_image_builds
-
-        expected_args = ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate',
-                         '--latest', '--type=image', '--quiet']
-
-        (flexmock(brew.exectools)
-            .should_receive("cmd_gather")
-            .with_args(expected_args)
-            .once()
-            .and_return((1, image_builds_mock_return, "")))
-
-        tagged_image_builds = brew.BrewTaggedImageBuilds(tag)
-
-        self.assertRaises(exceptions.BrewBuildException, tagged_image_builds.refresh)
-
-    def test_get_tagged_rpm_builds_success(self):
-        """Ensure the brew list-tagged command is correct for rpms"""
-        # Any value will work for this. Let's use a real one though to
-        # maintain our sanity. This matches with the example data in
-        # test_structures
-        tag = 'rhaos-3.9-rhel-7-candidate'
-        # Big multi-line string with brew rpm build ouput.
-        rpm_builds_mock_return = test_structures.brew_list_tagged_3_9_rpm_builds
-        rpm_builds_mock_length = len(rpm_builds_mock_return.splitlines())
-
-        expected_args = ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate',
-                         '--latest', '--rpm', '--quiet', '--arch', 'src']
-
-        (flexmock(brew.exectools)
-            .should_receive("cmd_gather")
-            .with_args(expected_args)
-            .once()
-            .and_return((0, rpm_builds_mock_return, "")))
-
-        # Now we can test the BrewTaggedRPMBuilds
-        # collecter/parser class as well as the
-        # get_tagged_rpm_builds function
-        tagged_rpm_builds = brew.BrewTaggedRPMBuilds(tag)
-        # This invokes get_tagged_rpm_builds, which in turn
-        # invokes our mocked gather_exec
-        rpms_refreshed = tagged_rpm_builds.refresh()
-
-        # Refreshing returns True after parsing the results from
-        # the brew CLI command, errors will raise an exception
-        self.assertTrue(rpms_refreshed)
-
-        # Our example data has 59 valid parseable rpms listed
-        self.assertEqual(rpm_builds_mock_length, len(tagged_rpm_builds.builds))
-
-    def test_get_tagged_rpm_builds_failed(self):
-        """Ensure the brew list-tagged explodes if the brew subprocess fails"""
-        # Any value will work for this. Let's use a real one though to
-        # maintain our sanity. This matches with the example data in
-        # test_structures
-        tag = 'rhaos-3.9-rhel-7-candidate'
-        # Big multi-line string with brew rpm build ouput.
-        rpm_builds_mock_return = test_structures.brew_list_tagged_3_9_rpm_builds
-
-        expected_args = ['brew', 'list-tagged', 'rhaos-3.9-rhel-7-candidate',
-                         '--latest', '--rpm', '--quiet', '--arch', 'src']
-
-        (flexmock(brew.exectools)
-            .should_receive("cmd_gather")
-            .with_args(expected_args)
-            .once()
-            .and_return((1, rpm_builds_mock_return, "")))
-
-        tagged_rpm_builds = brew.BrewTaggedRPMBuilds(tag)
-
-        self.assertRaises(exceptions.BrewBuildException, tagged_rpm_builds.refresh)
+                          errata.get_brew_build, nvr, product_version=pv)
 
     def test_get_build_objects(self):
         build_infos = {
