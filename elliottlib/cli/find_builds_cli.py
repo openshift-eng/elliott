@@ -220,29 +220,26 @@ def _fetch_builds_by_kind_rpm(tag_pv_map):
 
 def _filter_out_inviable_builds(kind, results, errata):
     unshipped_builds = []
-    # will probably end up loading the same errata and
-    # its comments many times, which is pretty slow
-    # so we cached the result.
-    errata_version_cache = {}
+    errata_version_cache = {}  # avoid reloading the same errata for multiple builds
     for b in results:
+        # check if build is attached to any existing advisory for this version
         in_same_version = False
-        # We only want builds not attached to an existing open advisory
-        if b.attached_to_open_erratum:
-            for e in b.open_errata_id:
-                if not errata_version_cache.get(e):
-                    metadata_comments_json = errata.get_metadata_comments_json(e)
-                    if not metadata_comments_json:
-                        # Does not contain ART metadata, skip it
-                        red_print("Errata {} Does not contain ART metadata\n".format(e))
-                        continue
-                    # it's possible for an advisory to have multiple metadata comments,
-                    # though not very useful (there's a command for adding them,
-                    # but not much point in doing it). just looking at the first one is fine.
-                    errata_version_cache[e] = metadata_comments_json[0]['release']
-                if errata_version_cache[e] == get_release_version(b.product_version):
-                    in_same_version = True
-                    break
-        if not (in_same_version and (b.attached_to_open_erratum or b.attached_to_shipped_erratum)):
+        for eid in [e['id'] for e in b.all_errata]:
+            if eid not in errata_version_cache:
+                metadata_comments_json = errata.get_metadata_comments_json(eid)
+                if not metadata_comments_json:
+                    # Does not contain ART metadata; consider it unversioned
+                    red_print("Errata {} Does not contain ART metadata\n".format(eid))
+                    errata_version_cache[eid] = ''
+                    continue
+                # it's possible for an advisory to have multiple metadata comments,
+                # though not very useful (there's a command for adding them,
+                # but not much point in doing it). just looking at the first one is fine.
+                errata_version_cache[eid] = metadata_comments_json[0]['release']
+            if errata_version_cache[eid] == get_release_version(b.product_version):
+                in_same_version = True
+                break
+        if not in_same_version:
             unshipped_builds.append(b)
     return unshipped_builds
 

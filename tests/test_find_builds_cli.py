@@ -25,8 +25,7 @@ class TestFindBuildsCli(unittest.TestCase):
         fake_errata.should_receive("get_metadata_comments_json").and_return(metadata_json_list)
 
         builds = flexmock(Build(nvr="test-1.1.1", product_version="RHEL-7-OSE-4.1"))
-        builds.should_receive("attached_to_open_erratum").and_return(True)
-        builds.should_receive("open_errata_id").and_return([12345])
+        builds.should_receive("all_errata").and_return([{"id": 12345}])
 
         # expect return empty list []
         self.assertEqual([], _filter_out_inviable_builds("image", [builds], fake_errata))
@@ -45,8 +44,7 @@ class TestFindBuildsCli(unittest.TestCase):
         fake_errata.should_receive("get_metadata_comments_json").and_return(metadata_json_list)
 
         builds = flexmock(Build(nvr="test-1.1.1", product_version="RHEL-7-OSE-4.5"))
-        builds.should_receive("attached_to_open_erratum").and_return(True)
-        builds.should_receive("open_errata_id").and_return([12345])
+        builds.should_receive("all_errata").and_return([{"id": 12345}])
 
         # expect return list with one build
         self.assertEqual([Build("test-1.1.1")], _filter_out_inviable_builds("image", [builds], fake_errata))
