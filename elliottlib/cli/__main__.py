@@ -48,6 +48,7 @@ from elliottlib.cli.create_cli import create_cli
 from elliottlib.cli.add_metadata_cli import add_metadata_cli
 from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
 from elliottlib.cli.puddle_advisories_cli import puddle_advisories_cli
+from elliottlib.cli.create_candidate import create_candidate_cli
 from elliottlib.cli.rpmdiff_cli import rpmdiff_cli
 from elliottlib.cli.advisory_images_cli import advisory_images_cli
 from elliottlib.cli.advisory_impetus_cli import advisory_impetus_cli
@@ -883,6 +884,7 @@ cli.add_command(tarball_sources_cli)
 cli.add_command(find_builds_cli)
 cli.add_command(add_metadata_cli)
 cli.add_command(create_placeholder_cli)
+cli.add_command(create_candidate_cli)
 cli.add_command(create_cli)
 cli.add_command(list_cli)
 cli.add_command(puddle_advisories_cli)
