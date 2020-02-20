@@ -69,11 +69,11 @@ def new_erratum(et_data, errata_type=None, boilerplate_name=None, kind=None, rel
     if not boilerplate_name:
         boilerplate_name = kind
 
-    if "boilerplates" in et_data:
+    if "boilerplates" in et_data and boilerplate_name in et_data["boilerplates"]:
         boilerplate = et_data['boilerplates'][boilerplate_name]
     else:  # FIXME: For backward compatibility.
         boilerplate = {
-            "synopsis": (et_data['synopsis'][boilerplate_name] if boilerplate_name != "cve"
+            "synopsis": (et_data['synopsis'].get(boilerplate_name, 'rpm') if boilerplate_name != "cve"
                          else et_data['synopsis'][kind]),
             "topic": et_data["topic"],
             "description": et_data["description"],
