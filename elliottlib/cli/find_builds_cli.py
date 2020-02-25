@@ -101,7 +101,7 @@ PRESENT advisory. Here are some examples:
         green_prefix('Fetching tags for builds...')
         unshipped_nvrps = _fetch_builds_by_nvr_or_id(builds, tag_pv_map)
     elif from_diff:
-        unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1])
+        unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1], tag_pv_map)
     else:
         if kind == 'image':
             unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map)
