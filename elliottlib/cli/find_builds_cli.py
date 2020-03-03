@@ -169,11 +169,8 @@ def _json_dump(as_json, unshipped_builds, kind, tag_pv_map):
 
 def _fetch_builds_from_diff(from_payload, to_payload, tag_pv_map):
     green_print('Fetching changed images between payloads...')
-    payload_tuple = []
-    for tag in tag_pv_map:
-        latest_builds = brew.get_latest_builds('nvr', tag, elliottlib.openshiftclient.get_build_list(from_payload, to_payload))
-        payload_tuple.extend(_gen_nvrp_tuples(latest_builds, tag_pv_map, tag))
-    return payload_tuple
+    nvrs = elliottlib.openshiftclient.get_build_list(from_payload, to_payload)
+    return _fetch_builds_by_nvr_or_id(nvrs, tag_pv_map)
 
 
 def _fetch_builds_by_kind_image(runtime, tag_pv_map):
