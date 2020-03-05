@@ -71,6 +71,7 @@ def request_edge_cli(runtime, candidate_version, next_version, github_org, githu
     exectools.cmd_assert('git clone {} {}'.format(repo.ssh_url, out_dir))
     LOGGER.info("Clone repo {} succeed....".format(repo.ssh_url))
     for counter in range(1, 3):
+        exectools.cmd_assert('git -C {} checkout -b master')
         branch = 'candidate-{}-{}-'.format(counter, candidate_version) + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
         exectools.cmd_assert('git -C {} checkout -b {}'.format(out_dir, branch))
         _modify_cincinnati_graph(out_dir, candidate_version, next_version, (cvr[0], cvr[1], cvr[2]), counter)
