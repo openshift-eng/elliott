@@ -279,9 +279,9 @@ advisory with the --add option.
             click.echo("{:<8d} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.id,
                                                                                     bug.component,
                                                                                     bug.status,
-                                                                                    bug.cf_pm_score,
+                                                                                    bug.cf_pm_score if hasattr(bug, "cf_pm_score") else '?',
                                                                                     days_ago,
-                                                                                    bug.summary[:60].encode('ascii', 'replace')))
+                                                                                    bug.summary[:60]))
 
     if len(flag) > 0:
         for bug in bug_ids:
