@@ -1,6 +1,8 @@
 from __future__ import absolute_import, print_function, unicode_literals
 import click
 import re
+import yaml
+import json
 
 from elliottlib import Runtime, errata, logutil, constants, util
 from elliottlib.rpmdiff import RPMDiffClient
@@ -15,8 +17,10 @@ def rpmdiff_cli(ctx):
 
 @rpmdiff_cli.command()
 @click.argument("advisory", metavar='ADVISORY', type=click.IntRange(1), required=False)
+@click.option("--yaml", is_flag=True, help="Print out the result as YAML format.")
+@click.option("--json", is_flag=True, help="Print out the result as JSON format.")
 @click.pass_context
-def show(ctx, advisory):
+def show(ctx, advisory, yaml, json):
     """ Show RPMDiff failures for an advisory.
     """
     runtime = ctx.obj  # type: Runtime
@@ -56,19 +60,26 @@ def show(ctx, advisory):
     logger.info("Fetching detailed information from RPMDiff for bad RPMDiff runs...")
     rpmdiff_client = RPMDiffClient(constants.RPMDIFF_HUB_URL)
     rpmdiff_client.authenticate()
+
+    if yaml or json:
+        _structured_output(bad_runs, rpmdiff_client, yaml)
+    else:
+        _unstructured_output(bad_runs, rpmdiff_client)
+
+
+def _unstructured_output(bad_runs, rpmdiff_client):
     for run in bad_runs:
         attr = run["attributes"]
         run_id = attr["external_id"]
         run_url = "{}/run/{}/".format(constants.RPMDIFF_WEB_URL, run_id)
+        test_results = rpmdiff_client.get_test_results(run_id)
+        run_obj = rpmdiff_client.get_run(run_id)
         print("----------------")
         msg = "{0} {1}".format(run["relationships"]["brew_build"]["nvr"], attr["status"])
         if attr["status"] == "NEEDS_INSPECTION":
             util.yellow_print(msg)
         else:
             util.red_print(msg)
-        test_results = rpmdiff_client.get_test_results(run_id)
-        run_obj = rpmdiff_client.get_run(run_id)
-
         for result in test_results:
             score = result["score"]
             if score >= 0 and score < 3:  # good test result
@@ -99,3 +110,21 @@ def show(ctx, advisory):
                 content = re.sub('^', '        ', detail["content"], flags=re.MULTILINE)
                 print(content)
         print()
+
+
+def _structured_output(bad_runs, rpmdiff_client, is_yaml):
+    json_run = []
+    for run in bad_runs:
+        run_id = run["attributes"]["external_id"]
+        run_obj = rpmdiff_client.get_run(run_id)
+        test_results = rpmdiff_client.get_test_results(run_id)
+
+        json_obj = {}
+        json_obj['run_obj'] = run_obj
+        json_obj['test_results'] = test_results
+        json_run.append(json_obj)
+
+    if is_yaml:
+        print(yaml.safe_dump(json_run, None, default_flow_style=False))
+    else:
+        print(json.dumps(json_run, indent=4, sort_keys=True))
