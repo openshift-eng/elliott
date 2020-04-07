@@ -411,14 +411,18 @@ def get_rpmdiff_runs(advisory_id, status=None, session=None):
         page_number += 1
 
 
-def get_advisory_images(image_advisory_id):
-    """List images of a given advisory in the format we usually send to CCS (docs team)
+def get_advisory_images(image_advisory_id, raw=False):
+    """List images of a given advisory, raw, or in the format we usually send to CCS (docs team)
 
     :param int image_advisory_id: ID of the main image advisory
+    :param bool raw: Print undoctored artifact list
 
-    :return: str with a list of images from the advisory in a format CCS consumes
+    :return: str with a list of images
     """
     cdn_docker_file_list = errata_xmlrpc.get_advisory_cdn_docker_file_list(image_advisory_id)
+
+    if raw:
+        return '\n'.join(cdn_docker_file_list.keys())
 
     pattern = re.compile(r'^redhat-openshift(\d)-')
 
