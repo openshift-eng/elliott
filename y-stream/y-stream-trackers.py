@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 import bugzilla
 import os
 
@@ -27,6 +28,7 @@ def _get_flaw_cve(flaw):
     except IndexError:
         return None
 
+
 y_stream_trackers = bz.query(query)
 for y_stream_tracker in y_stream_trackers:
     component = y_stream_tracker.summary.split(":")[0].split(" ")[-1]
@@ -43,7 +45,7 @@ for y_stream_tracker in y_stream_trackers:
     def filter_tracker(tracker):
         if all([
             tracker.product == PRODUCT_NAME,
-            component+":" in tracker.summary,
+            component + ":" in tracker.summary,
             tracker.target_release[0] <= TARGET_RELEASE,
             tracker.target_release[0] > "4.0.0",
         ]):
@@ -53,7 +55,6 @@ for y_stream_tracker in y_stream_trackers:
     sorted_trackers = sorted(trackers, key=lambda x: x.target_release, reverse=True)
     filtered_trackers = filter(filter_tracker, sorted_trackers)
 
-    print "{} {}".format(" ".join(tracker_cves), component)
+    print("{} {}".format(" ".join(tracker_cves), component))
     for tracker in filtered_trackers:
-        print "\t{} {} {} {}".format(tracker.id, tracker.target_release[0], tracker.status, tracker.resolution)
-
+        print("\t{} {} {} {}".format(tracker.id, tracker.target_release[0], tracker.status, tracker.resolution))
