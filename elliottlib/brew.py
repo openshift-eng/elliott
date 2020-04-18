@@ -4,6 +4,7 @@ Utility functions for general interactions with Brew and Builds
 from __future__ import absolute_import, print_function, unicode_literals
 from future.utils import as_native_str
 # stdlib
+from typing import List, Dict, Optional, Tuple
 import ast
 import time
 import datetime
@@ -28,14 +29,21 @@ from requests_kerberos import HTTPKerberosAuth
 logger = logutil.getLogger(__name__)
 
 
-def get_latest_builds(key, tag, component_names, brew_session=koji.ClientSession(constants.BREW_HUB)):
-    latest_builds = {}
-    component_names = set(component_names)
-    builds = brew_session.getLatestBuilds(tag)
-    for b in builds:
-        if b[key] in component_names:
-            latest_builds[b[key]] = b
-    return latest_builds
+def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
+    """ Get latest builds for multiple Brew components
+
+    :param tag_component_tuples: List of (tag, component_name) tuples
+    :param session: instance of Brew session
+    :return: a list Koji/Brew build objects
+    """
+    tasks = []
+    with session.multicall(strict=True) as m:
+        for tag, component_name in tag_component_tuples:
+            if not (tag and component_name):
+                tasks.append(None)
+                continue
+            tasks.append(m.getLatestBuilds(tag, package=component_name))
+    return [task.result if task else None for task in tasks]
 
 
 def get_build_objects(ids_or_nvrs, session=None):
