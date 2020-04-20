@@ -248,6 +248,33 @@ class TestBrew(unittest.TestCase):
         expected = list(build_tags_map.values())
         self.assertListEqual(expected, actual)
 
+    def test_get_latest_builds(self):
+        tag_component_tuples = [
+            ("faketag1", "component1"),
+            ("faketag2", "component2"),
+            ("faketag2", None),
+            ("faketag1", "component4"),
+            ("", "component5"),
+            ("faketag2", "component6"),
+        ]
+        expected = [
+            {"name": "component1", "nvr": "component1-v1.0.0-1.faketag1"},
+            {"name": "component2", "nvr": "component2-v1.0.0-1.faketag2"},
+            None,
+            {"name": "component4", "nvr": "component4-v1.0.0-1.faketag1"},
+            None,
+            {"name": "component6", "nvr": "component6-v1.0.0-1.faketag2"},
+        ]
+
+        def fake_response(tag, package):
+            return mock.MagicMock(result={"name": package, "nvr": f"{package}-v1.0.0-1.{tag}"})
+
+        fake_session = mock.MagicMock()
+        fake_context_manager = fake_session.multicall.return_value.__enter__.return_value
+        fake_context_manager.getLatestBuilds.side_effect = fake_response
+        actual = brew.get_latest_builds(tag_component_tuples, fake_session)
+        self.assertListEqual(actual, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

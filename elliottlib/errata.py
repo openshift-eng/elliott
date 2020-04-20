@@ -215,17 +215,28 @@ def get_comments(advisory_id):
             "type": "Comment"
         }
     }
-    res = requests.get(constants.errata_get_comments_url,
-                       verify=ssl.get_default_verify_paths().openssl_cafile,
-                       auth=HTTPKerberosAuth(),
-                       json=body)
-
-    if res.status_code == 200:
-        return res.json().get('data', [])
-    elif res.status_code == 401:
-        raise exceptions.ErrataToolUnauthorizedException(res.text)
-    else:
-        return False
+    # This is a paginated API, we need to increment page[number] until an empty array is returned.
+    params = {
+        "page[number]": 1
+    }
+    while True:
+        res = requests.get(
+            constants.errata_get_comments_url,
+            params=params,
+            verify=ssl.get_default_verify_paths().openssl_cafile,
+            auth=HTTPKerberosAuth(),
+            json=body)
+        if res.ok:
+            data = res.json().get('data', [])
+            if not data:
+                break
+            for comment in data:
+                yield comment
+            params["page[number]"] += 1
+        elif res.status_code == 401:
+            raise exceptions.ErrataToolUnauthorizedException(res.text)
+        else:
+            return False
 
 
 def get_metadata_comments_json(advisory_id):
@@ -236,7 +247,7 @@ def get_metadata_comments_json(advisory_id):
     comments = get_comments(advisory_id)
     metadata_json_list = []
     # they come out in (mostly) reverse order, start at the beginning
-    for c in reversed(comments):
+    for c in reversed(list(comments)):
         try:
             metadata = json.loads(c['attributes']['text'])
         except Exception:

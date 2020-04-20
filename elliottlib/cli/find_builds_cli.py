@@ -29,7 +29,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
     multiple=True, metavar='NVR_OR_ID',
     help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
 @click.option(
-    '--kind', '-k', metavar='KIND',
+    '--kind', '-k', metavar='KIND', required=True,
     type=click.Choice(['rpm', 'image']),
     help='Find builds of the given KIND [rpm, image]')
 @click.option(
@@ -40,8 +40,11 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option(
     '--json', 'as_json', metavar='FILE_NAME',
     help='Dump new builds as JSON array to a file (or "-" for stdout)')
+@click.option(
+    '--allow-attached', metavar='FILE_NAME', is_flag=True,
+    help='Allow images that have been attached to other advisories (default to True when "--build/-b" is used)')
 @pass_runtime
-def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json):
+def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached):
     '''Automatically or manually find or attach viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -82,7 +85,9 @@ PRESENT advisory. Here are some examples:
 '''
 
     if from_diff and builds:
-        raise ElliottFatalError('Use only one of --build or --from-diff.')
+        raise click.BadParameter('Use only one of --build or --from-diff/--between.')
+    if from_diff and kind != "image":
+        raise click.BadParameter('Option --from-diff/--between should be used with --kind/-k image.')
     if advisory and default_advisory_type:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
 
@@ -103,17 +108,23 @@ PRESENT advisory. Here are some examples:
     elif from_diff:
         unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1], tag_pv_map)
     else:
+        brew_session = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
         if kind == 'image':
-            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map)
+            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session)
         elif kind == 'rpm':
-            unshipped_nvrps = _fetch_builds_by_kind_rpm(tag_pv_map)
+            unshipped_nvrps = _fetch_builds_by_kind_rpm(tag_pv_map, brew_session)
 
-    results = parallel_results_with_progress(
+    pbar_header(
+        'Fetching builds from Errata: ',
+        f'Hold on a moment, fetching buildinfos from Errata Tool...',
+        unshipped_nvrps)
+    unshipped_builds = parallel_results_with_progress(
         unshipped_nvrps,
         lambda nvrp: elliottlib.errata.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
     )
 
-    unshipped_builds = _filter_out_inviable_builds(kind, results, elliottlib.errata)
+    if not (allow_attached or builds):
+        unshipped_builds = _filter_out_inviable_builds(kind, unshipped_builds, elliottlib.errata)
 
     _json_dump(as_json, unshipped_builds, kind, tag_pv_map)
 
@@ -122,6 +133,7 @@ PRESENT advisory. Here are some examples:
         return
 
     if advisory:
+        click.echo(f"Attaching to advisory {advisory}...")
         _attach_to_advisory(unshipped_builds, kind, advisory)
     else:
         click.echo('The following {n} builds '.format(n=len(unshipped_builds)), nl=False)
@@ -173,33 +185,29 @@ def _fetch_builds_from_diff(from_payload, to_payload, tag_pv_map):
     return _fetch_builds_by_nvr_or_id(nvrs, tag_pv_map)
 
 
-def _fetch_builds_by_kind_image(runtime, tag_pv_map):
+def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session):
     # filter out image like 'openshift-enterprise-base'
-    image_metadata = [i for i in runtime.image_metas() if not i.base_only]
+    image_metas = [i for i in runtime.image_metas() if not i.base_only]
+    # Returns a list of (name, version, release, product_version) tuples of each build
+    nvrps = []
 
+    tag_component_tuples = [(tag, image.get_component_name()) for tag in tag_pv_map for image in image_metas]
     pbar_header(
         'Generating list of images: ',
-        'Hold on a moment, fetching Brew buildinfo',
-        image_metadata)
+        f'Hold on a moment, fetching Brew builds for {len(image_metas)} components with tags {", ".join(tag_pv_map.keys())}...',
+        tag_component_tuples)
+    latest_builds = brew.get_latest_builds(tag_component_tuples, brew_session)
 
-    # Returns a list of (n, v, r, pv) tuples of each build
-    component_names = []
-    for i in image_metadata:
-        component_names.append(i.get_component_name())
+    for i, build in enumerate(latest_builds):
+        if not build:
+            continue
+        tag = tag_component_tuples[i][0]
+        nvrps.append((build[0]['name'], build[0]['version'], build[0]['release'], tag_pv_map[tag]))
 
-    image_tuple = []
-    for tag in tag_pv_map:
-        latest_builds = brew.get_latest_builds('name', tag, component_names)
-        image_tuple.extend(_gen_nvrp_tuples(latest_builds, tag_pv_map, tag))
-        pbar_header(
-            'Generating build metadata: ',
-            'Fetching data for {n} builds '.format(n=len(image_tuple)),
-            image_tuple)
-
-    return image_tuple
+    return nvrps
 
 
-def _fetch_builds_by_kind_rpm(tag_pv_map):
+def _fetch_builds_by_kind_rpm(tag_pv_map, brew_session):
     green_prefix('Generating list of rpms: ')
     click.echo('Hold on a moment, fetching Brew builds')
     rpm_tuple = []
@@ -209,8 +217,7 @@ def _fetch_builds_by_kind_rpm(tag_pv_map):
         else:
             red_print("key of brew_tag_product_version_mapping in erratatool.yml must be candidate\n")
             continue
-        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag)
-        pbar_header('Gathering additional information: ', 'Brew buildinfo is required to continue', candidates)
+        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag, brew_session=brew_session)
         rpm_tuple.extend(_gen_nvrp_tuples(candidates, tag_pv_map, tag))
     return rpm_tuple
 
@@ -242,9 +249,8 @@ def _filter_out_inviable_builds(kind, results, errata):
 
 
 def _attach_to_advisory(builds, kind, advisory):
-    if kind is None:
-        raise ElliottFatalError('Need to specify with --kind=image or --kind=rpm with packages: {}'.format(builds))
-
+    if kind not in {"rpm", "image"}:
+        raise ValueError(f"{kind} should be one of 'rpm' or 'image'")
     try:
         erratum = Erratum(errata_id=advisory)
         file_type = 'tar' if kind == 'image' else 'rpm'
@@ -266,4 +272,4 @@ def _attach_to_advisory(builds, kind, advisory):
     except GSSError:
         exit_unauthenticated()
     except elliottlib.exceptions.BrewBuildException as ex:
-        raise ElliottFatalError('Error attaching builds: {}'.format(getattr(ex, 'message', repr(ex))))
+        raise ElliottFatalError(f'Error attaching builds: {str(ex)}')
