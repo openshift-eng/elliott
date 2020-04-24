@@ -47,6 +47,7 @@ from elliottlib.cli.find_builds_cli import find_builds_cli
 from elliottlib.cli.create_cli import create_cli
 from elliottlib.cli.add_metadata_cli import add_metadata_cli
 from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
+from elliottlib.cli.change_state_cli import change_state_cli
 from elliottlib.cli.puddle_advisories_cli import puddle_advisories_cli
 from elliottlib.cli.rpmdiff_cli import rpmdiff_cli
 from elliottlib.cli.advisory_images_cli import advisory_images_cli
@@ -71,91 +72,6 @@ pass_runtime = click.make_pass_decorator(Runtime)
 # -----------------------------------------------------------------------------
 # CLI Commands - Please keep these in alphabetical order
 # -----------------------------------------------------------------------------
-
-#
-# Set advisory state
-# change-state
-#
-@cli.command("change-state", short_help="Change ADVISORY state")
-@click.option("--state", '-s', required=True,
-              type=click.Choice(['NEW_FILES', 'QE', 'REL_PREP']),
-              help="New state for the Advisory. NEW_FILES, QE, REL_PREP")
-@click.option("--advisory", "-a", metavar='ADVISORY', type=int,
-              help="Change state of ADVISORY")
-@use_default_advisory_option
-@click.option("--noop", "--dry-run",
-              required=False,
-              default=False, is_flag=True,
-              help="Do not actually change anything")
-@pass_runtime
-def change_state(runtime, state, advisory, default_advisory_type, noop):
-    """Change the state of an ADVISORY. Additional permissions may be
-required to change an advisory to certain states.
-
-An advisory may not move between some states until all criteria have
-been met. For example, an advisory can not move from NEW_FILES to QE
-unless Bugzilla Bugs or JIRA Issues have been attached.
-
-    NOTE: The two advisory options are mutually exclusive and can not
-    be used together.
-
-See the find-bugs help for additional information on adding
-Bugzilla Bugs.
-
-    Move the advisory 123456 from NEW_FILES to QE state:
-
-    $ elliott change-state --state QE --advisory 123456
-
-    Move the advisory 123456 back to NEW_FILES (short option flag):
-
-    $ elliott change-state -s NEW_FILES -a 123456
-
-    Do not actually change state, just check that the command could
-    have ran (for example, when testing out pipelines)
-
-    $ elliott change-state -s NEW_FILES -a 123456 --noop
-"""
-    if not (bool(advisory) ^ bool(default_advisory_type)):
-        raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
-
-    runtime.initialize(no_group=default_advisory_type is None)
-
-    if default_advisory_type is not None:
-        advisory = find_default_advisory(runtime, default_advisory_type)
-
-    if noop:
-        prefix = "[NOOP] "
-    else:
-        prefix = ""
-
-    try:
-        e = Erratum(errata_id=advisory)
-
-        if e.errata_state == state:
-            green_prefix("{}No change to make: ".format(prefix))
-            click.echo("Target state is same as current state")
-            return
-        else:
-            if noop:
-                green_prefix("{}Would have changed state: ".format(prefix))
-                click.echo("{} ➔ {}".format(e.errata_state, state))
-                return
-            else:
-                # Capture current state because `e.commit()` will
-                # refresh the `e.errata_state` attribute
-                old_state = e.errata_state
-                e.setState(state)
-                e.commit()
-                green_prefix("Changed state: ")
-                click.echo("{old_state} ➔ {new_state}".format(
-                    old_state=old_state,
-                    new_state=state))
-    except ErrataException as ex:
-        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-
-    green_print("Successfully changed advisory state")
-
-
 #
 # Collect bugs
 # advisory:find-bugs
@@ -879,16 +795,17 @@ unsigned builds.
 
 
 # Register additional commands / groups
-cli.add_command(tarball_sources_cli)
-cli.add_command(find_builds_cli)
 cli.add_command(add_metadata_cli)
+cli.add_command(advisory_images_cli)
+cli.add_command(advisory_impetus_cli)
 cli.add_command(create_placeholder_cli)
 cli.add_command(create_cli)
+cli.add_command(change_state_cli)
+cli.add_command(find_builds_cli)
 cli.add_command(list_cli)
 cli.add_command(puddle_advisories_cli)
 cli.add_command(rpmdiff_cli)
-cli.add_command(advisory_images_cli)
-cli.add_command(advisory_impetus_cli)
+cli.add_command(tarball_sources_cli)
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
