@@ -222,7 +222,7 @@ openshift-enterprise-pod-container-v3.11.154-1"""
         actual = errata.get_advisory_images('_irrelevant_', True)
         self.assertEqual(actual, expected)
 
-    def test_get_doctored_advisory_images_ocp_4(self):
+    def test_get_raw_advisory_images_ocp_4(self):
         errata.errata_xmlrpc.get_advisory_cdn_docker_file_list = lambda *_: self.mocked_ocp4_response
 
         expected = """atomic-openshift-cluster-autoscaler-container-v4.2.5-201911121709
