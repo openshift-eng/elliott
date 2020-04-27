@@ -72,7 +72,7 @@ class TestErrata(unittest.TestCase):
             actual = errata.get_advisories_for_bug(bug, session)
             self.assertEqual(actual, advisories)
 
-    def test_parse_proudct_version(self):
+    def test_parse_product_version(self):
         product_version_map = {}
         product_version_json = """{
             "data":[
@@ -118,108 +118,119 @@ class TestErrata(unittest.TestCase):
 
 
 class TestAdvisoryImages(unittest.TestCase):
-    def test_get_advisory_images_ocp_4(self):
-        mocked_response = {
-            'kube-rbac-proxy-container-v3.11.154-1': {
-                'docker': {
-                    'target': {
-                        'repos': {
-                            'redhat-openshift3-ose-kube-rbac-proxy': {
-                                'tags': ['latest', 'v3.11', 'v3.11.154', 'v3.11.154-1']
-                            }
+
+    mocked_ocp3_response = {
+        'kube-rbac-proxy-container-v3.11.154-1': {
+            'docker': {
+                'target': {
+                    'repos': {
+                        'redhat-openshift3-ose-kube-rbac-proxy': {
+                            'tags': ['latest', 'v3.11', 'v3.11.154', 'v3.11.154-1']
                         }
                     }
                 }
-            },
-            'jenkins-slave-base-rhel7-container-v3.11.154-1': {
-                'docker': {
-                    'target': {
-                        'repos': {
-                            'redhat-openshift3-jenkins-slave-base-rhel7': {
-                                'tags': ['v3.11', 'v3.11.154', 'v3.11.154-1']
-                            }
+            }
+        },
+        'jenkins-slave-base-rhel7-container-v3.11.154-1': {
+            'docker': {
+                'target': {
+                    'repos': {
+                        'redhat-openshift3-jenkins-slave-base-rhel7': {
+                            'tags': ['v3.11', 'v3.11.154', 'v3.11.154-1']
                         }
                     }
                 }
-            },
-            'openshift-enterprise-pod-container-v3.11.154-1': {
-                'docker': {
-                    'target': {
-                        'repos': {
-                            'redhat-openshift3-ose-pod': {
-                                'tags': ['latest', 'v3.11', 'v3.11.154', 'v3.11.154-1']
-                            }
+            }
+        },
+        'openshift-enterprise-pod-container-v3.11.154-1': {
+            'docker': {
+                'target': {
+                    'repos': {
+                        'redhat-openshift3-ose-pod': {
+                            'tags': ['latest', 'v3.11', 'v3.11.154', 'v3.11.154-1']
                         }
                     }
                 }
             }
         }
-        errata.errata_xmlrpc.get_advisory_cdn_docker_file_list = lambda *_: mocked_response
+    }
+
+    mocked_ocp4_response = {
+        'atomic-openshift-cluster-autoscaler-container-v4.2.5-201911121709': {
+            'docker': {
+                'target': {
+                    'repos': {
+                        'redhat-openshift4-ose-cluster-autoscaler': {
+                            'tags': ['4.2', 'latest', 'v4.2.5', 'v4.2.5-201911121709']
+                        }
+                    }
+                }
+            }
+        },
+        'cluster-monitoring-operator-container-v4.2.5-201911121709': {
+            'docker': {
+                'target': {
+                    'repos': {
+                        'redhat-openshift4-ose-cluster-monitoring-operator': {
+                            'tags': ['4.2', 'latest', 'v4.2.5', 'v4.2.5-201911121709']
+                        }
+                    }
+                }
+            }
+        },
+        'cluster-node-tuning-operator-container-v4.2.5-201911121709': {
+            'docker': {
+                'target': {
+                    'repos': {
+                        'redhat-openshift4-ose-cluster-node-tuning-operator': {
+                            'tags': ['4.2', 'latest', 'v4.2.5', 'v4.2.5-201911121709']
+                        }
+                    }
+                }
+            }
+        },
+        'golang-github-openshift-oauth-proxy-container-v4.2.5-201911121709': {
+            'docker': {
+                'target': {
+                    'repos': {
+                        'redhat-openshift4-ose-oauth-proxy': {
+                            'tags': ['4.2', 'latest', 'v4.2.5', 'v4.2.5-201911121709']
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    def test_get_doctored_advisory_images_ocp_3(self):
+        errata.errata_xmlrpc.get_advisory_cdn_docker_file_list = lambda *_: self.mocked_ocp3_response
 
         expected = """#########
 openshift3/jenkins-slave-base-rhel7:v3.11.154-1
 openshift3/ose-kube-rbac-proxy:v3.11.154-1
 openshift3/ose-pod:v3.11.154-1
 #########"""
-        actual = errata.get_advisory_images('_irrelevant_')
+        actual = errata.get_advisory_images('_irrelevant_', False)
         self.assertEqual(actual, expected)
 
-    def test_get_advisory_images_ocp_4(self):
-        mocked_response = {
-            'atomic-openshift-cluster-autoscaler-container-v4.2.5-201911121709': {
-                'docker': {
-                    'target': {
-                        'repos': {
-                            'redhat-openshift4-ose-cluster-autoscaler': {
-                                'tags': ['4.2', 'latest', 'v4.2.5', 'v4.2.5-201911121709']
-                            }
-                        }
-                    }
-                }
-            },
-            'cluster-monitoring-operator-container-v4.2.5-201911121709': {
-                'docker': {
-                    'target': {
-                        'repos': {
-                            'redhat-openshift4-ose-cluster-monitoring-operator': {
-                                'tags': ['4.2', 'latest', 'v4.2.5', 'v4.2.5-201911121709']
-                            }
-                        }
-                    }
-                }
-            },
-            'cluster-node-tuning-operator-container-v4.2.5-201911121709': {
-                'docker': {
-                    'target': {
-                        'repos': {
-                            'redhat-openshift4-ose-cluster-node-tuning-operator': {
-                                'tags': ['4.2', 'latest', 'v4.2.5', 'v4.2.5-201911121709']
-                            }
-                        }
-                    }
-                }
-            },
-            'golang-github-openshift-oauth-proxy-container-v4.2.5-201911121709': {
-                'docker': {
-                    'target': {
-                        'repos': {
-                            'redhat-openshift4-ose-oauth-proxy': {
-                                'tags': ['4.2', 'latest', 'v4.2.5', 'v4.2.5-201911121709']
-                            }
-                        }
-                    }
-                }
-            },
-        }
-        errata.errata_xmlrpc.get_advisory_cdn_docker_file_list = lambda *_: mocked_response
+    def test_get_raw_advisory_images_ocp_3(self):
+        errata.errata_xmlrpc.get_advisory_cdn_docker_file_list = lambda *_: self.mocked_ocp3_response
 
-        expected = """#########
-openshift4/ose-cluster-autoscaler:v4.2.5-201911121709
-openshift4/ose-cluster-monitoring-operator:v4.2.5-201911121709
-openshift4/ose-cluster-node-tuning-operator:v4.2.5-201911121709
-openshift4/ose-oauth-proxy:v4.2.5-201911121709
-#########"""
-        actual = errata.get_advisory_images('_irrelevant_')
+        expected = """kube-rbac-proxy-container-v3.11.154-1
+jenkins-slave-base-rhel7-container-v3.11.154-1
+openshift-enterprise-pod-container-v3.11.154-1"""
+        actual = errata.get_advisory_images('_irrelevant_', True)
+        self.assertEqual(actual, expected)
+
+    def test_get_raw_advisory_images_ocp_4(self):
+        errata.errata_xmlrpc.get_advisory_cdn_docker_file_list = lambda *_: self.mocked_ocp4_response
+
+        expected = """atomic-openshift-cluster-autoscaler-container-v4.2.5-201911121709
+cluster-monitoring-operator-container-v4.2.5-201911121709
+cluster-node-tuning-operator-container-v4.2.5-201911121709
+golang-github-openshift-oauth-proxy-container-v4.2.5-201911121709"""
+
+        actual = errata.get_advisory_images('_irrelevant_', True)
         self.assertEqual(actual, expected)
 
 
