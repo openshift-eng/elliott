@@ -160,7 +160,7 @@ All tarball sources are successfully created.
 
 To send all tarball sources to rcm-guest, run:
 
-    rsync -avz --chmod=go+rX {} ocp-build@rcm-guest.app.eng.bos.redhat.com:/mnt/rcm-guest/ocp-client-handoff/
+    rsync -avz --no-perms --no-owner --no-group {} ocp-build@rcm-guest.app.eng.bos.redhat.com:/mnt/rcm-guest/ocp-client-handoff/
 
 Then notify RCM (https://projects.engineering.redhat.com/projects/RCM/issues) that the following tarball sources have been uploaded to rcm-guest:
 
