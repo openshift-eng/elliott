@@ -622,6 +622,8 @@ def find_cve_trackers(runtime, cve, status):
 # Verify images in a payload match the corresponding advisory
 # verify-payload
 #
+
+
 @cli.command("verify-payload", short_help="Verify payload contents match advisory builds")
 @click.argument("payload")
 @click.argument('advisory', type=int)
@@ -768,6 +770,8 @@ written out to summary_results.json.
 # Poll for rpm-signed state change
 # poll-signed
 #
+
+
 @cli.command("poll-signed", short_help="Poll for RPM build 'signed' status")
 @click.option("--minutes", "-m", required=False,
               default=15, type=int,

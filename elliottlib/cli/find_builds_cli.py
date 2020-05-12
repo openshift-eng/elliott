@@ -18,6 +18,8 @@ pass_runtime = click.make_pass_decorator(Runtime)
 # Attach Builds
 # advisory:find-builds
 #
+
+
 @cli.command('find-builds', short_help='Find or attach builds to ADVISORY')
 @click.option(
     '--attach', '-a', 'advisory',
@@ -116,7 +118,7 @@ PRESENT advisory. Here are some examples:
 
     pbar_header(
         'Fetching builds from Errata: ',
-        f'Hold on a moment, fetching buildinfos from Errata Tool...',
+        'Hold on a moment, fetching buildinfos from Errata Tool...',
         unshipped_nvrps)
     unshipped_builds = parallel_results_with_progress(
         unshipped_nvrps,

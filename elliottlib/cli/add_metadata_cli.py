@@ -20,6 +20,8 @@ pass_runtime = click.make_pass_decorator(Runtime)
 # Add metadata comment to an Advisory
 # advisory:add-metadata
 #
+
+
 @cli.command("add-metadata", short_help="Add metadata comment to an advisory")
 @click.argument('advisory', type=int)
 @click.option('--kind', '-k', required=True,

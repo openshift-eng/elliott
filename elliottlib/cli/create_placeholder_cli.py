@@ -21,6 +21,8 @@ pass_runtime = click.make_pass_decorator(Runtime)
 # Create Placeholder BZ
 # bugzilla:create-placeholder
 #
+
+
 @cli.command('create-placeholder',
              short_help='Create a placeholder BZ')
 @click.option('--kind', '-k', metavar='KIND',

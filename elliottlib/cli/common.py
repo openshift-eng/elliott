@@ -19,6 +19,8 @@ def print_version(ctx, param, value):
 
 
 context_settings = dict(help_option_names=['-h', '--help'])
+
+
 @click.group(context_settings=context_settings)
 @click.option(
     '--version',
