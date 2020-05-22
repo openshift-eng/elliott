@@ -45,9 +45,12 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option(
     '--allow-attached', metavar='FILE_NAME', is_flag=True,
     help='Allow images that have been attached to other advisories (default to True when "--build/-b" is used)')
+@click.option(
+    '--remove', required=False, is_flag=True,
+    help='Remove images from advisories instead of adding (default to False)')
 @pass_runtime
-def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached):
-    '''Automatically or manually find or attach viable rpm or image builds
+def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached, remove):
+    '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
 (-b) options. Manually provided builds are verified against the Errata
@@ -55,6 +58,7 @@ Tool API.
 
 \b
   * Attach the builds to ADVISORY by giving --attach
+  * Remove the builds to ADVISORY by giving --remove
   * Specify the build type using --kind KIND
 
 Example: Assuming --group=openshift-3.7, then a build is a VIABLE
@@ -82,8 +86,12 @@ PRESENT advisory. Here are some examples:
     VERIFY (no --attach) that the manually provided RPM NVR and build
     ID are viable builds:
 
+    $ elliott --group openshift-3.6 find-builds -k rpm -b megafrobber-1.0.1-2.el7 -a 93170
+
 \b
-    $ elliott --group openshift-3.6 find-builds -k rpm -b megafrobber-1.0.1-2.el7 -b 93170
+    Remove specific RPM NVR and build ID from advisory:
+
+    $ elliott --group openshift-4.3 find-builds -k image -b oauth-server-container-v4.3.22-202005212137 -a 55017 --remove
 '''
 
     if from_diff and builds:
@@ -135,8 +143,7 @@ PRESENT advisory. Here are some examples:
         return
 
     if advisory:
-        click.echo(f"Attaching to advisory {advisory}...")
-        _attach_to_advisory(unshipped_builds, kind, advisory)
+        _update_to_advisory(unshipped_builds, kind, advisory, remove)
     else:
         click.echo('The following {n} builds '.format(n=len(unshipped_builds)), nl=False)
         click.secho('may be attached ', bold=True, nl=False)
@@ -250,7 +257,11 @@ def _filter_out_inviable_builds(kind, results, errata):
     return unshipped_builds
 
 
-def _attach_to_advisory(builds, kind, advisory):
+def _update_to_advisory(builds, kind, advisory, remove):
+    if remove:
+        click.echo(f"Remvoing from advisory {advisory}...")
+    else:
+        click.echo(f"Attaching to advisory {advisory}...")
     if kind not in {"rpm", "image"}:
         raise ValueError(f"{kind} should be one of 'rpm' or 'image'")
     try:
@@ -259,19 +270,26 @@ def _attach_to_advisory(builds, kind, advisory):
 
         product_version_set = {build.product_version for build in builds}
         for pv in product_version_set:
-            erratum.addBuilds(
-                buildlist=[build.nvr for build in builds if build.product_version == pv],
-                release=pv,
-                file_types={build.nvr: [file_type] for build in builds}
-            )
+            if remove:
+                erratum.removeBuilds(
+                    buildlist=[build.nvr for build in builds if build.product_version == pv])
+            else:
+                erratum.addBuilds(
+                    buildlist=[build.nvr for build in builds if build.product_version == pv],
+                    release=pv,
+                    file_types={build.nvr: [file_type] for build in builds}
+                )
             erratum.commit()
 
         build_nvrs = sorted(build.nvr for build in builds)
-        green_print('Attached build(s) successfully:')
+        if remove:
+            green_print('Removed build(s) successfully:')
+        else:
+            green_print('Attached build(s) successfully:')
         for b in build_nvrs:
             click.echo(' ' + b)
 
     except GSSError:
         exit_unauthenticated()
     except elliottlib.exceptions.BrewBuildException as ex:
-        raise ElliottFatalError(f'Error attaching builds: {str(ex)}')
+        raise ElliottFatalError(f'Error attaching/remvoing builds: {str(ex)}')
