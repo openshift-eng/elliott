@@ -4,7 +4,7 @@ Utility functions for general interactions with Brew and Builds
 from __future__ import absolute_import, print_function, unicode_literals
 from future.utils import as_native_str
 # stdlib
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Iterable
 import ast
 import time
 import datetime
@@ -14,6 +14,7 @@ from multiprocessing import cpu_count
 import shlex
 import ssl
 import koji
+import logging
 
 # ours
 from . import constants
@@ -44,6 +45,49 @@ def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], session: koji
                 continue
             tasks.append(m.getLatestBuilds(tag, package=component_name))
     return [task.result if task else None for task in tasks]
+
+
+def tag_builds(tag: str, builds: List[str], session: koji.ClientSession):
+    tasks = []
+    with session.multicall(strict=False) as m:
+        for build in builds:
+            if not build:
+                tasks.append(None)
+                continue
+            tasks.append(m.tagBuild(tag, build))
+    return tasks
+
+
+def wait_tasks(task_ids: Iterable[int], session: koji.ClientSession, sleep_seconds=10, logger: logging.Logger = None):
+    waiting_tasks = set(task_ids)
+    while waiting_tasks:
+        multicall_tasks = []
+        with session.multicall(strict=False) as m:
+            for task_id in waiting_tasks:
+                multicall_tasks.append(m.getTaskInfo(task_id, request=True))
+        for t in multicall_tasks:
+            task_info = t.result
+            task_id = task_info["id"]
+            state = koji.TASK_STATES[task_info["state"]]
+            if logger:
+                logger.debug(f"Task {task_id} state is {state}")
+            if state not in {"FREE", "OPEN"}:
+                waiting_tasks.discard(task_id)  # remove from the wait list
+        if waiting_tasks:
+            if logger:
+                logger.debug(f"There are still {len(waiting_tasks)} tagging task(s) running. Will recheck in {sleep_seconds} seconds.")
+            time.sleep(sleep_seconds)
+
+
+def untag_builds(tag: str, builds: List[str], session: koji.ClientSession):
+    tasks = []
+    with session.multicall(strict=False) as m:
+        for build in builds:
+            if not build:
+                tasks.append(None)
+                continue
+            tasks.append(m.untagBuild(tag, build))
+    return tasks
 
 
 def get_build_objects(ids_or_nvrs, session=None):

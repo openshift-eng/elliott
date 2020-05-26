@@ -12,6 +12,7 @@ LOGGER = logutil.getLogger(__name__)
 
 pass_runtime = click.make_pass_decorator(Runtime)
 
+
 #
 # Set advisory state
 # change-state
