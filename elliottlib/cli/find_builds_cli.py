@@ -292,4 +292,4 @@ def _update_to_advisory(builds, kind, advisory, remove):
     except GSSError:
         exit_unauthenticated()
     except elliottlib.exceptions.BrewBuildException as ex:
-        raise ElliottFatalError(f'Error attaching/remvoing builds: {str(ex)}')
+        raise ElliottFatalError(f'Error attaching/removing builds: {str(ex)}')
