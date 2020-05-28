@@ -283,6 +283,44 @@ def get_builds(advisory_id):
 # https://errata.devel.redhat.com/bugs/1743872/advisories.json
 
 
+def get_brew_builds(errata_id, session=None):
+    """5.2.2.1. GET /api/v1/erratum/{id}/builds
+
+    Get Errata list of builds.
+
+    https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-get-apiv1erratumidbuilds
+
+    :param str errata_id: the errata id
+    :param requests.Session session: A python-requests Session object,
+    used for for connection pooling. Providing `session` object can
+    yield a significant reduction in total query time when looking up
+    many builds.
+
+    http://docs.python-requests.org/en/master/user/advanced/#session-objects
+
+    :return: A List of initialized Build object with the build details
+    :raises exceptions.BrewBuildException: When erratum return errors
+
+    """
+    if session is None:
+        session = requests.session()
+
+    res = session.get(constants.errata_get_builds_url.format(id=errata_id),
+                      verify=ssl.get_default_verify_paths().openssl_cafile,
+                      auth=HTTPKerberosAuth())
+    brew_list = []
+    if res.status_code == 200:
+        jlist = res.json()
+        for key in jlist.keys():
+            for obj in jlist[key]['builds']:
+                brew_list.append(brew.Build(nvr=list(obj.keys())[0], product_version=key))
+        return brew_list
+    else:
+        raise exceptions.BrewBuildException("fetch builds from {id}: {msg}".format(
+            id=errata_id,
+            msg=res.text))
+
+
 def get_brew_build(nvr, product_version='', session=None):
     """5.2.2.1. GET /api/v1/build/{id_or_nvr}
 

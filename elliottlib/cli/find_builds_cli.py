@@ -47,9 +47,12 @@ pass_runtime = click.make_pass_decorator(Runtime)
     help='Allow images that have been attached to other advisories (default to True when "--build/-b" is used)')
 @click.option(
     '--remove', required=False, is_flag=True,
-    help='Remove images from advisories instead of adding (default to False)')
+    help='Remove builds from advisories instead of adding (default to False)')
+@click.option(
+    '--clean', required=False, is_flag=True,
+    help='Clean up all the builds from advisories(default to False)')
 @pass_runtime
-def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached, remove):
+def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached, remove, clean):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -96,6 +99,10 @@ PRESENT advisory. Here are some examples:
 
     if from_diff and builds:
         raise click.BadParameter('Use only one of --build or --from-diff/--between.')
+    if remove and clean:
+        raise click.BadParameter('Use only one of --remove or --clean.')
+    if not builds and remove:
+        raise click.BadParameter('Option --remove only support removing specific build with -b.')
     if from_diff and kind != "image":
         raise click.BadParameter('Option --from-diff/--between should be used with --kind/-k image.')
     if advisory and default_advisory_type:
@@ -115,6 +122,8 @@ PRESENT advisory. Here are some examples:
     if builds:
         green_prefix('Fetching tags for builds...')
         unshipped_nvrps = _fetch_builds_by_nvr_or_id(builds, tag_pv_map)
+    elif clean:
+        unshipped_builds = elliottlib.errata.get_brew_builds(advisory)
     elif from_diff:
         unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1], tag_pv_map)
     else:
@@ -127,13 +136,21 @@ PRESENT advisory. Here are some examples:
     pbar_header(
         'Fetching builds from Errata: ',
         'Hold on a moment, fetching buildinfos from Errata Tool...',
-        unshipped_nvrps)
-    unshipped_builds = parallel_results_with_progress(
-        unshipped_nvrps,
-        lambda nvrp: elliottlib.errata.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
-    )
+        unshipped_builds if clean else unshipped_nvrps)
 
-    if not (allow_attached or builds):
+    if not clean:
+        # if is --clean then batch fetch from Erratum no need to fetch them individually
+        # if is not for --clean fetch individually using nvrp tuples then get specific
+        # elliottlib.brew.Build Objects by get_brew_build()
+        # e.g. :
+        # ('atomic-openshift-descheduler-container', 'v4.3.23', '202005250821', 'RHEL-7-OSE-4.3').
+        # Build(atomic-openshift-descheduler-container-v4.3.23-202005250821).
+        unshipped_builds = parallel_results_with_progress(
+            unshipped_nvrps,
+            lambda nvrp: elliottlib.errata.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
+        )
+
+    if not (clean or allow_attached or builds):
         unshipped_builds = _filter_out_inviable_builds(kind, unshipped_builds, elliottlib.errata)
 
     _json_dump(as_json, unshipped_builds, kind, tag_pv_map)
@@ -143,7 +160,7 @@ PRESENT advisory. Here are some examples:
         return
 
     if advisory:
-        _update_to_advisory(unshipped_builds, kind, advisory, remove)
+        _update_to_advisory(unshipped_builds, kind, advisory, remove, clean)
     else:
         click.echo('The following {n} builds '.format(n=len(unshipped_builds)), nl=False)
         click.secho('may be attached ', bold=True, nl=False)
@@ -257,9 +274,11 @@ def _filter_out_inviable_builds(kind, results, errata):
     return unshipped_builds
 
 
-def _update_to_advisory(builds, kind, advisory, remove):
+def _update_to_advisory(builds, kind, advisory, remove, clean):
     if remove:
         click.echo(f"Remvoing from advisory {advisory}...")
+    elif clean:
+        click.echo(f"Clean up all the builds from advisory {advisory}...")
     else:
         click.echo(f"Attaching to advisory {advisory}...")
     if kind not in {"rpm", "image"}:
@@ -267,7 +286,6 @@ def _update_to_advisory(builds, kind, advisory, remove):
     try:
         erratum = Erratum(errata_id=advisory)
         file_type = 'tar' if kind == 'image' else 'rpm'
-
         product_version_set = {build.product_version for build in builds}
         for pv in product_version_set:
             if remove:
@@ -284,6 +302,8 @@ def _update_to_advisory(builds, kind, advisory, remove):
         build_nvrs = sorted(build.nvr for build in builds)
         if remove:
             green_print('Removed build(s) successfully:')
+        elif clean:
+            green_print('Cleanup build(s) successfully:')
         else:
             green_print('Attached build(s) successfully:')
         for b in build_nvrs:
