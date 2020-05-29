@@ -51,8 +51,11 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option(
     '--clean', required=False, is_flag=True,
     help='Clean up all the builds from advisories(default to False)')
+@click.option(
+    '--no-cdn-repos', required=False, is_flag=True,
+    help='Do not configure CDN repos after attaching images (default to False)')
 @pass_runtime
-def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached, remove, clean):
+def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached, remove, clean, no_cdn_repos):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -110,7 +113,8 @@ PRESENT advisory. Here are some examples:
 
     runtime.initialize(mode='images' if kind == 'image' else 'none')
     replace_vars = runtime.group_config.vars.primitive() if runtime.group_config.vars else {}
-    tag_pv_map = runtime.gitdata.load_data(key='erratatool', replace_vars=replace_vars).data.get('brew_tag_product_version_mapping')
+    et_data = runtime.gitdata.load_data(key='erratatool', replace_vars=replace_vars).data
+    tag_pv_map = et_data.get('brew_tag_product_version_mapping')
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -160,7 +164,15 @@ PRESENT advisory. Here are some examples:
         return
 
     if advisory:
-        _update_to_advisory(unshipped_builds, kind, advisory, remove, clean)
+        erratum = _update_to_advisory(unshipped_builds, kind, advisory, remove, clean)
+        if not no_cdn_repos and kind == "image" and not (remove or clean):
+            cdn_repos = et_data.get('cdn_repos')
+            if cdn_repos:
+                # set up CDN repos
+                click.echo(f"Configuring CDN repos {', '.join(cdn_repos)}...")
+                erratum.metadataCdnRepos(enable=cdn_repos)
+                click.echo("Done")
+
     else:
         click.echo('The following {n} builds '.format(n=len(unshipped_builds)), nl=False)
         click.secho('may be attached ', bold=True, nl=False)
@@ -308,6 +320,7 @@ def _update_to_advisory(builds, kind, advisory, remove, clean):
             green_print('Attached build(s) successfully:')
         for b in build_nvrs:
             click.echo(' ' + b)
+        return erratum
 
     except GSSError:
         exit_unauthenticated()
