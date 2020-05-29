@@ -300,7 +300,7 @@ def _update_to_advisory(builds, kind, advisory, remove, clean):
         file_type = 'tar' if kind == 'image' else 'rpm'
         product_version_set = {build.product_version for build in builds}
         for pv in product_version_set:
-            if remove:
+            if remove or clean:
                 erratum.removeBuilds(
                     buildlist=[build.nvr for build in builds if build.product_version == pv])
             else:
