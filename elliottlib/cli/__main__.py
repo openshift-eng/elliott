@@ -53,6 +53,7 @@ from elliottlib.cli.rpmdiff_cli import rpmdiff_cli
 from elliottlib.cli.advisory_images_cli import advisory_images_cli
 from elliottlib.cli.advisory_impetus_cli import advisory_impetus_cli
 from elliottlib.cli.tag_builds_cli import tag_builds_cli
+from elliottlib.cli.golang_cve_cli import golang_cve_cli
 
 # 3rd party
 import bugzilla
@@ -811,6 +812,7 @@ cli.add_command(puddle_advisories_cli)
 cli.add_command(rpmdiff_cli)
 cli.add_command(tag_builds_cli)
 cli.add_command(tarball_sources_cli)
+cli.add_command(golang_cve_cli)
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
