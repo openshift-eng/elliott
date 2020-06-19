@@ -1,4 +1,4 @@
-FROM fedora:31
+FROM fedora:32
 LABEL name="elliott-dev" \
   description="Elliott development container image" \
   maintainer="OpenShift Automated Release Tooling (ART) Team <aos-team-art@redhat.com>"
@@ -6,11 +6,9 @@ LABEL name="elliott-dev" \
 RUN dnf install -y \
     # runtime dependencies
     krb5-workstation python-bugzilla-cli git rsync docker \
-    python2 python2-certifi python2-rpm \
     python3 python3-certifi python3-rpm \
     # development dependencies
     gcc krb5-devel libgit2-devel openssl-devel krb5-devel \
-    python2-devel python2-pip \
     python3-devel python3-pip \
     # other tools
     bash-completion vim tmux procps-ng psmisc wget curl net-tools iproute \
@@ -26,11 +24,11 @@ RUN wget -O /etc/yum.repos.d/rcm-tools-fedora.repo https://download.devel.redhat
   && dnf install -y koji brewkoji \
   && dnf clean all
 
-ARG OC_VERSION=4.2.16
-# include oc client
-RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"$OC_VERSION"/openshift-client-linux-"$OC_VERSION".tar.gz \
+ARG OC_VERSION=latest
+RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"$OC_VERSION"/openshift-client-linux.tar.gz \
   && tar -C /usr/local/bin -xzf  /tmp/openshift-client-linux-"$OC_VERSION".tar.gz oc kubectl \
   && rm /tmp/openshift-client-linux-"$OC_VERSION".tar.gz
+
 
 # Create a non-root user - see https://aka.ms/vscode-remote/containers/non-root-user.
 ARG USERNAME=dev
@@ -48,10 +46,10 @@ RUN groupadd --gid "$USER_GID" "$USERNAME" \
     && chmod 0440 /etc/sudoers.d/"$USERNAME"
 
 # Preinstall dependencies
-COPY ./requirements.txt ./requirements-dev.txt /tmp/elliott/
-RUN pushd /tmp/elliott \
-  && sudo -u "$USERNAME" pip3 install --user -r ./requirements.txt -r requirements-dev.txt \
-  && popd && rm -rf /tmp/elliott
-
+COPY ./ /tmp/elliott/
+RUN chown "$USERNAME" -R /tmp/elliott \
+ && pushd /tmp/elliott \
+ && sudo -u "$USERNAME" pip3 install --user -r ./requirements.txt -r requirements-dev.txt ./ \
+ && popd && rm -rf /tmp/elliott
 USER "$USER_UID"
 WORKDIR /workspaces/elliott
