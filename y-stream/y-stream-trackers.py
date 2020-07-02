@@ -1,8 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from __future__ import print_function
 import bugzilla
 import os
+import sys
 
 
 api_key = open(os.path.expanduser('~/.bugzilla_apikey')).read().strip()
@@ -11,7 +12,10 @@ bz = bugzilla.RHBugzilla(url=None, api_key=api_key)
 bz.connect('https://bugzilla.redhat.com')
 
 PRODUCT_NAME = "OpenShift Container Platform"
-TARGET_RELEASE = "4.4.0"
+try:
+    TARGET_RELEASE = sys.argv[1]  # e.g. "4.5.0"
+except IndexError:
+    sys.exit("Target Release required, e.g. '4.5.0'")
 
 query = bz.build_query(
     product=PRODUCT_NAME,
@@ -33,12 +37,12 @@ y_stream_trackers = bz.query(query)
 for y_stream_tracker in y_stream_trackers:
     component = y_stream_tracker.summary.split(":")[0].split(" ")[-1]
     blocking_bugs = bz.getbugs(y_stream_tracker.blocks)
-    flaw_bugs = filter(lambda x: x.product == "Security Response", blocking_bugs)
+    flaw_bugs = list(filter(lambda x: x.product == "Security Response", blocking_bugs))
 
-    tracker_cves = filter(lambda x: x is not None, (_get_flaw_cve(flaw) for flaw in flaw_bugs))
+    tracker_cves = list(filter(lambda x: x is not None, (_get_flaw_cve(flaw) for flaw in flaw_bugs)))
     if len(tracker_cves) == 0:
         continue
-    tracker_flaws = filter(lambda x: _get_flaw_cve(x) in tracker_cves, flaw_bugs)
+    tracker_flaws = list(filter(lambda x: _get_flaw_cve(x) in tracker_cves, flaw_bugs))
     flaw_tracker_ids = set([t for f in tracker_flaws for t in f.depends_on])
     trackers = bz.getbugs(flaw_tracker_ids)
 
