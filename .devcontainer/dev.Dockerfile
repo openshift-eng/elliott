@@ -10,6 +10,8 @@ RUN dnf install -y \
     # development dependencies
     gcc krb5-devel libgit2-devel openssl-devel krb5-devel \
     python3-devel python3-pip \
+    # Microsoft Python Language Server requires .NET Core 2.1 or later
+    dotnet-runtime-3.1 \
     # other tools
     bash-completion vim tmux procps-ng psmisc wget curl net-tools iproute \
   # Red Hat IT Root CA
