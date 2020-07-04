@@ -23,3 +23,6 @@ cover
 
 # Ignore vscode backup files
 .vscode
+
+# Ignore ocp-build-data
+ocp-build-data/

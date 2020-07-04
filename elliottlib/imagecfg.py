@@ -23,3 +23,7 @@ class ImageMetadata(Metadata):
         if present.
         """
         return self.config.base_only
+
+    @property
+    def is_payload(self):
+        return self.config.get('for_payload', False)
