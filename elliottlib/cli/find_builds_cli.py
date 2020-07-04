@@ -54,8 +54,14 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option(
     '--no-cdn-repos', required=False, is_flag=True,
     help='Do not configure CDN repos after attaching images (default to False)')
+@click.option(
+    '--payload', required=False, is_flag=True,
+    help='Only attach payload images')
+@click.option(
+    '--non-payload', required=False, is_flag=True,
+    help='Only attach non-payload images')
 @pass_runtime
-def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached, remove, clean, no_cdn_repos):
+def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached, remove, clean, no_cdn_repos, payload, non_payload):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -110,6 +116,8 @@ PRESENT advisory. Here are some examples:
         raise click.BadParameter('Option --from-diff/--between should be used with --kind/-k image.')
     if advisory and default_advisory_type:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
+    if payload and non_payload:
+        raise click.BadParameter('Use only one of --payload or --non-payload.')
 
     runtime.initialize(mode='images' if kind == 'image' else 'none')
     replace_vars = runtime.group_config.vars.primitive() if runtime.group_config.vars else {}
@@ -133,7 +141,7 @@ PRESENT advisory. Here are some examples:
     else:
         brew_session = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
         if kind == 'image':
-            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session)
+            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, payload, non_payload)
         elif kind == 'rpm':
             unshipped_nvrps = _fetch_builds_by_kind_rpm(tag_pv_map, brew_session)
 
@@ -223,13 +231,24 @@ def _fetch_builds_from_diff(from_payload, to_payload, tag_pv_map):
     return _fetch_builds_by_nvr_or_id(nvrs, tag_pv_map)
 
 
-def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session):
+def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, p, np):
     # filter out image like 'openshift-enterprise-base'
     image_metas = [i for i in runtime.image_metas() if not i.base_only]
     # Returns a list of (name, version, release, product_version) tuples of each build
     nvrps = []
 
-    tag_component_tuples = [(tag, image.get_component_name()) for tag in tag_pv_map for image in image_metas]
+    # type judge
+    def tj(image, p, np):
+        if p:
+            return p == image.is_payload
+        if np:
+            # boolean xor.
+            return np != image.is_payload
+        else:
+            return True
+
+    tag_component_tuples = [(tag, image.get_component_name()) for tag in tag_pv_map for image in image_metas if tj(image, p, np)]
+
     pbar_header(
         'Generating list of images: ',
         f'Hold on a moment, fetching Brew builds for {len(image_metas)} components with tags {", ".join(tag_pv_map.keys())}...',
