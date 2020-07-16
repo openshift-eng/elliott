@@ -1,4 +1,9 @@
 from __future__ import unicode_literals
+
+import sys
+if sys.version_info < (3, 6):
+    sys.exit('Sorry, Python < 3.6 is not supported.')
+
 from setuptools import setup, find_packages
 
 with open('./requirements.txt') as f:
@@ -31,11 +36,13 @@ setup(
     install_requires=INSTALL_REQUIRES,
     test_suite='tests',
     dependency_links=[],
+    python_requires='>=3.6',
     classifiers=[
-        "Development Status :: 4 - Beta",
+        "Development Status :: 5 - Production/Stable",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "Environment :: Console",
         "Operating System :: POSIX",
         "License :: OSI Approved :: Apache Software License",
