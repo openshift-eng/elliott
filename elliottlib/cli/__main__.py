@@ -818,8 +818,6 @@ cli.add_command(tarball_sources_cli)
 
 
 def main():
-    if sys.version_info.major < 3:
-        yellow_print("DEPRECATION: Python 2.7 will reach the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 won't be maintained after that date. A future version of Elliott will drop support for Python 2.7.", file=sys.stderr)
     try:
         cli(obj={})
     except ElliottFatalError as ex:
