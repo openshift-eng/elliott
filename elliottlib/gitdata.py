@@ -57,7 +57,7 @@ class DataObj(object):
 
 
 class GitData(object):
-    def __init__(self, data_path=None, clone_dir='./', branch='master',
+    def __init__(self, data_path=None, clone_dir='./', branch='main',
                  sub_dir=None, exts=['yaml', 'yml', 'json'], logger=None):
         """
         Load structured data from a git source.

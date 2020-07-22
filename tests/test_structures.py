@@ -654,9 +654,9 @@ golang-github-prometheus-node_exporter-docker-v3.9.15-1  rhaos-3.9-rhel-7-candid
 golang-github-prometheus-prometheus-docker-v3.9.15-1  rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
 image-inspector-docker-v3.9.15-1          rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
 jboss-datavirt-6-datavirt64-openshift-container-1.0-8  rhaos-3.9-rhel-7-candidate  jschatte
-jenkins-slave-base-rhel7-docker-v3.9.15-1  rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
-jenkins-slave-maven-rhel7-docker-v3.9.15-1  rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
-jenkins-slave-nodejs-rhel7-docker-v3.9.15-1  rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
+jenkins-subordinate-base-rhel7-docker-v3.9.15-1  rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
+jenkins-subordinate-maven-rhel7-docker-v3.9.15-1  rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
+jenkins-subordinate-nodejs-rhel7-docker-v3.9.15-1  rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
 logging-auth-proxy-docker-v3.9.15-1       rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
 logging-curator-docker-v3.9.15-1          rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com
 logging-elasticsearch-docker-v3.9.15-1    rhaos-3.9-rhel-7-candidate  ocp-build/buildvm.openshift.eng.bos.redhat.com

@@ -194,7 +194,7 @@ class Runtime(object):
         self.logger = logutil.getLogger()
         self.logger.propagate = False
 
-        # levels will be set at the handler level. Make sure master level is low.
+        # levels will be set at the handler level. Make sure main level is low.
         self.logger.setLevel(logging.DEBUG)
 
         main_stream_handler = logging.StreamHandler()
