@@ -131,11 +131,11 @@ class TestAdvisoryImages(unittest.TestCase):
                 }
             }
         },
-        'jenkins-slave-base-rhel7-container-v3.11.154-1': {
+        'jenkins-subordinate-base-rhel7-container-v3.11.154-1': {
             'docker': {
                 'target': {
                     'repos': {
-                        'redhat-openshift3-jenkins-slave-base-rhel7': {
+                        'redhat-openshift3-jenkins-subordinate-base-rhel7': {
                             'tags': ['v3.11', 'v3.11.154', 'v3.11.154-1']
                         }
                     }
@@ -206,7 +206,7 @@ class TestAdvisoryImages(unittest.TestCase):
         errata.errata_xmlrpc.get_advisory_cdn_docker_file_list = lambda *_: self.mocked_ocp3_response
 
         expected = """#########
-openshift3/jenkins-slave-base-rhel7:v3.11.154-1
+openshift3/jenkins-subordinate-base-rhel7:v3.11.154-1
 openshift3/ose-kube-rbac-proxy:v3.11.154-1
 openshift3/ose-pod:v3.11.154-1
 #########"""
@@ -217,7 +217,7 @@ openshift3/ose-pod:v3.11.154-1
         errata.errata_xmlrpc.get_advisory_cdn_docker_file_list = lambda *_: self.mocked_ocp3_response
 
         expected = """kube-rbac-proxy-container-v3.11.154-1
-jenkins-slave-base-rhel7-container-v3.11.154-1
+jenkins-subordinate-base-rhel7-container-v3.11.154-1
 openshift-enterprise-pod-container-v3.11.154-1"""
         actual = errata.get_advisory_images('_irrelevant_', True)
         self.assertEqual(actual, expected)
