@@ -192,7 +192,40 @@ advisory with the --add option.
         bug_id_strings = elliottlib.openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
         bugs = [bzapi.getbug(i) for i in bug_id_strings]
 
-    green_prefix("Found {} bugs:".format(len(bugs)))
+    # Some bugs should goes to CPaaS so we should ignore them
+    m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
+    if not m:
+        raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
+    major_version = int(m[1])
+    minor_version = int(m[2])
+
+    def _filter_bugs(bugs):  # returns a list of bugs that should be processed
+        r = []
+        ignored_repos = set()  # GitHub repos that should be ignored
+        if major_version == 4 and minor_version == 5:
+            # per https://issues.redhat.com/browse/ART-997: these repos should have their release-4.5 branches ignored by ART:
+            ignored_repos = {
+                "https://github.com/openshift/aws-ebs-csi-driver",
+                "https://github.com/openshift/aws-ebs-csi-driver-operator",
+                "https://github.com/openshift/cloud-provider-openstack",
+                "https://github.com/openshift/csi-driver-nfs",
+                "https://github.com/openshift/csi-driver-manila-operator"
+            }
+        for bug in bugs:
+            external_links = [ext["type"]["full_url"].replace("%id%", ext["ext_bz_bug_id"]) for ext in bug.external_bugs]  # https://github.com/python-bugzilla/python-bugzilla/blob/7aa70edcfea9b524cd8ac51a891b6395ca40dc87/bugzilla/_cli.py#L750
+            public_links = [runtime.get_public_upstream(url)[0] for url in external_links]  # translate openshift-priv org to openshift org when comparing to filter (i.e. prow may link to a PR on the private org).
+            # if a bug has 1 or more public_links, we should ignore the bug if ALL of the public_links are ANY of `ignored_repos`
+            if public_links and all(map(lambda url: any(map(lambda repo: url != repo and url.startswith(repo), ignored_repos)), public_links)):
+                continue
+            r.append(bug)
+        return r
+
+    if len(id) == 0:  # unless --id is given, we should ignore bugs that don't belong to ART. e.g. some bugs should go to CPaaS
+        filtered_bugs = _filter_bugs(bugs)
+        green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored):")
+        bugs = filtered_bugs
+    else:
+        green_prefix("Found {} bugs:".format(len(bugs)))
     click.echo(" {}".format(", ".join([str(b.bug_id) for b in bugs])))
 
     if report:
@@ -212,22 +245,20 @@ advisory with the --add option.
             for f in flag:
                 bug.updateflags({f: "+"})
 
-    if advisory is not False and not default_advisory_type:  # `--add ADVISORY_NUMBER` should respect the user's wish and attach all available bugs to whatever advisory is specified.
+    if advisory and not default_advisory_type:  # `--add ADVISORY_NUMBER` should respect the user's wish and attach all available bugs to whatever advisory is specified.
         elliottlib.errata.add_bugs_with_retry(advisory, [bug.id for bug in bugs], False)
         return
 
-    # if --use-default-advisory or --into-default-advisories is given, we need to determine which bugs should be swept into which advisory
-    if not into_default_advisories and not default_advisory_type:
+    # If --use-default-advisory or --into-default-advisories is given, we need to determine which bugs should be swept into which advisory.
+    # Otherwise we don't need to sweep bugs at all.
+    if not (into_default_advisories or default_advisory_type):
         return
     impetus_bugs = {}  # key is rpm impetus ("rpm", "image", "extras"), value is a set of bug IDs.
-    m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
-    if not m:
-        raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
     # @lmeyer: simple and stupid would still be keeping the logic in python, possibly with config flags for branched logic. until that logic becomes too ugly to keep in python, i suppose..
-    major_version = int(m[1])
     if major_version < 4:  # for 3.x, all bugs should go to the rpm advisory
         impetus_bugs["rpm"] = {bug.id for bug in bugs}
-    else:  # for 4.x, optional operators bugs should be swept to the "extras" advisory, while other bugs should be swept to "image" advisory.
+    else:  # for 4.x
+        # optional operators bugs should be swept to the "extras" advisory, while other bugs should be swept to "image" advisory.
         # a way to identify operator-related bugs is by its "Component" value. temporarily hardcode here until we need to move it to ocp-build-data.
         extra_components = {"Logging", "Service Brokers", "Metering Operator", "Node Feature Discovery Operator"}  # we will probably find more
         impetus_bugs["extras"] = {b.id for b in bugs if b.component in extra_components}
