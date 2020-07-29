@@ -172,7 +172,7 @@ advisory with the --add option.
         raise click.BadParameter("If using mode=payload, you must provide two payloads to compare")
 
     if sum(map(bool, [advisory, default_advisory_type, into_default_advisories])) > 1:
-        raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into_default_advisories")
+        raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
 
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
@@ -253,7 +253,7 @@ advisory with the --add option.
     # Otherwise we don't need to sweep bugs at all.
     if not (into_default_advisories or default_advisory_type):
         return
-    impetus_bugs = {}  # key is rpm impetus ("rpm", "image", "extras"), value is a set of bug IDs.
+    impetus_bugs = {}  # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
     # @lmeyer: simple and stupid would still be keeping the logic in python, possibly with config flags for branched logic. until that logic becomes too ugly to keep in python, i suppose..
     if major_version < 4:  # for 3.x, all bugs should go to the rpm advisory
         impetus_bugs["rpm"] = {bug.id for bug in bugs}
