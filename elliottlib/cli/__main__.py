@@ -106,8 +106,11 @@ pass_runtime = click.make_pass_decorator(Runtime)
               required=False,
               is_flag=True,
               help="Output a detailed report of the found bugs")
+@click.option("--into-default-advisories",
+              is_flag=True,
+              help='attaches bugs found to their correct default advisories, e.g. operator-related bugs go to "extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
 @pass_runtime
-def find_bugs(runtime, advisory, default_advisory_type, mode, status, id, from_diff, flag, report):
+def find_bugs(runtime, advisory, default_advisory_type, mode, status, id, from_diff, flag, report, into_default_advisories):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list and the --id option.
@@ -142,6 +145,11 @@ advisory with the --add option.
 \b
     $ elliott --group openshift-3.7 find-bugs --mode sweep --flag bro_ok
 
+    Attach bugs to their correct default advisories, e.g. operator-related bugs go to "extras" instead of the default "image":
+
+\b
+    $ elliott --group=openshift-4.4 find-bugs --mode=sweep --into-default-advisories
+
     Add two bugs to advisory 123456. Note that --group is not required
     because we're not auto searching:
 
@@ -163,8 +171,8 @@ advisory with the --add option.
     if mode == 'payload' and not len(from_diff) == 2:
         raise click.BadParameter("If using mode=payload, you must provide two payloads to compare")
 
-    if advisory and default_advisory_type:
-        raise click.BadParameter("Use only one of --use-default-advisory or --add")
+    if sum(map(bool, [advisory, default_advisory_type, into_default_advisories])) > 1:
+        raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
 
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
@@ -176,20 +184,53 @@ advisory with the --add option.
     if mode == 'sweep':
         green_prefix("Searching for bugs with target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
-        bug_ids = elliottlib.bzutil.search_for_bugs(bz_data, status, verbose=runtime.debug)
+        bugs = elliottlib.bzutil.search_for_bugs(bz_data, status, verbose=runtime.debug)
     elif mode == 'list':
-        bug_ids = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
+        bugs = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
     elif mode == "diff":
         click.echo(runtime.working_dir)
         bug_id_strings = elliottlib.openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
-        bug_ids = [bzapi.getbug(i) for i in bug_id_strings]
+        bugs = [bzapi.getbug(i) for i in bug_id_strings]
 
-    green_prefix("Found {} bugs:".format(len(bug_ids)))
-    click.echo(" {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
+    # Some bugs should goes to CPaaS so we should ignore them
+    m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
+    if not m:
+        raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
+    major_version = int(m[1])
+    minor_version = int(m[2])
+
+    def _filter_bugs(bugs):  # returns a list of bugs that should be processed
+        r = []
+        ignored_repos = set()  # GitHub repos that should be ignored
+        if major_version == 4 and minor_version == 5:
+            # per https://issues.redhat.com/browse/ART-997: these repos should have their release-4.5 branches ignored by ART:
+            ignored_repos = {
+                "https://github.com/openshift/aws-ebs-csi-driver",
+                "https://github.com/openshift/aws-ebs-csi-driver-operator",
+                "https://github.com/openshift/cloud-provider-openstack",
+                "https://github.com/openshift/csi-driver-nfs",
+                "https://github.com/openshift/csi-driver-manila-operator"
+            }
+        for bug in bugs:
+            external_links = [ext["type"]["full_url"].replace("%id%", ext["ext_bz_bug_id"]) for ext in bug.external_bugs]  # https://github.com/python-bugzilla/python-bugzilla/blob/7aa70edcfea9b524cd8ac51a891b6395ca40dc87/bugzilla/_cli.py#L750
+            public_links = [runtime.get_public_upstream(url)[0] for url in external_links]  # translate openshift-priv org to openshift org when comparing to filter (i.e. prow may link to a PR on the private org).
+            # if a bug has 1 or more public_links, we should ignore the bug if ALL of the public_links are ANY of `ignored_repos`
+            if public_links and all(map(lambda url: any(map(lambda repo: url != repo and url.startswith(repo), ignored_repos)), public_links)):
+                continue
+            r.append(bug)
+        return r
+
+    if len(id) == 0:  # unless --id is given, we should ignore bugs that don't belong to ART. e.g. some bugs should go to CPaaS
+        filtered_bugs = _filter_bugs(bugs)
+        green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored):")
+        bugs = filtered_bugs
+    else:
+        green_prefix("Found {} bugs:".format(len(bugs)))
+    click.echo(" {}".format(", ".join([str(b.bug_id) for b in bugs])))
 
     if report:
         green_print("{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
-        for bug in bug_ids:
+        for bug in bugs:
             created_date = datetime.datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
             days_ago = (datetime.datetime.today() - created_date).days
             click.echo("{:<8d} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.id,
@@ -200,12 +241,35 @@ advisory with the --add option.
                                                                                     bug.summary[:60]))
 
     if len(flag) > 0:
-        for bug in bug_ids:
+        for bug in bugs:
             for f in flag:
                 bug.updateflags({f: "+"})
 
-    if advisory is not False:
-        elliottlib.errata.add_bugs_with_retry(advisory, [bug.id for bug in bug_ids], False)
+    if advisory and not default_advisory_type:  # `--add ADVISORY_NUMBER` should respect the user's wish and attach all available bugs to whatever advisory is specified.
+        elliottlib.errata.add_bugs_with_retry(advisory, [bug.id for bug in bugs], False)
+        return
+
+    # If --use-default-advisory or --into-default-advisories is given, we need to determine which bugs should be swept into which advisory.
+    # Otherwise we don't need to sweep bugs at all.
+    if not (into_default_advisories or default_advisory_type):
+        return
+    impetus_bugs = {}  # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
+    # @lmeyer: simple and stupid would still be keeping the logic in python, possibly with config flags for branched logic. until that logic becomes too ugly to keep in python, i suppose..
+    if major_version < 4:  # for 3.x, all bugs should go to the rpm advisory
+        impetus_bugs["rpm"] = {bug.id for bug in bugs}
+    else:  # for 4.x
+        # optional operators bugs should be swept to the "extras" advisory, while other bugs should be swept to "image" advisory.
+        # a way to identify operator-related bugs is by its "Component" value. temporarily hardcode here until we need to move it to ocp-build-data.
+        extra_components = {"Logging", "Service Brokers", "Metering Operator", "Node Feature Discovery Operator"}  # we will probably find more
+        impetus_bugs["extras"] = {b.id for b in bugs if b.component in extra_components}
+        impetus_bugs["image"] = {b.id for b in bugs if b.component not in extra_components}
+
+    if default_advisory_type and impetus_bugs.get(default_advisory_type):
+        elliottlib.errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type], False)
+    elif into_default_advisories:
+        for impetus, bugs in impetus_bugs.items():
+            if bugs:
+                elliottlib.errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, False)
 
 
 #

@@ -240,3 +240,20 @@ def parallel_results_with_progress(inputs, func):
 def get_release_version(pv):
     """ there are two kind of format of product_version: OSE-4.1-RHEL-8 RHEL-7-OSE-4.1 RHEL-7-OSE-4.1-FOR-POWER-LE """
     return re.search(r'OSE-(\d+\.\d+)', pv).groups()[0]
+
+
+def convert_remote_git_to_https(source):
+    """
+    Accepts a source git URL in ssh or https format and return it in a normalized
+    https format:
+        - https protocol
+        - no trailing /
+    :param source: Git remote
+    :return: Normalized https git URL
+    """
+    url = re.sub(
+        pattern=r'[^@]+@([^:/]+)[:/]([^\.]+)',
+        repl='https://\\1/\\2',
+        string=source.strip(),
+    )
+    return re.sub(string=url, pattern=r'\.git$', repl='').rstrip('/')
