@@ -5,6 +5,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
+RESULTSDB_API_URL = "https://resultsdb-api.engineering.redhat.com/api/v2.0"
 
 VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
 

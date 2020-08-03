@@ -10,5 +10,6 @@ python-bugzilla
 pyyaml
 requests
 requests_kerberos
+ruamel.yaml
 six
 typing ; python_version <= '3.4'

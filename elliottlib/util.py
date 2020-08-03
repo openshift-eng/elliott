@@ -189,7 +189,7 @@ TODO: This would make a nice context wrapper.
     click.echo("[" + (char * len(seq)) + "]")
 
 
-def progress_func(func, char='*'):
+def progress_func(func, char='*', file=None):
     """Use to wrap functions called in parallel. Prints a character for
 each function call.
 
@@ -197,15 +197,16 @@ each function call.
     after printing a progress character
     :param str char: The character (or multi-char string, if you
     really wanted to) to print before calling `func`
+    :param file: the file to print the progress. None means stdout.
 
     Usage examples:
       * See find-builds command
     """
-    click.secho(char, fg='green', nl=False)
+    click.secho(char, fg='green', nl=False, file=file)
     return func()
 
 
-def parallel_results_with_progress(inputs, func):
+def parallel_results_with_progress(inputs, func, file=None):
     """Run a function against a list of inputs with a progress bar
 
     :param sequence inputs : A sequence of items to iterate over in parallel
@@ -223,16 +224,16 @@ def parallel_results_with_progress(inputs, func):
     [****************]
 
     """
-    click.secho('[', nl=False)
+    click.secho('[', nl=False, file=file)
     pool = ThreadPool(cpu_count())
     results = pool.map(
-        lambda it: progress_func(lambda: func(it)),
+        lambda it: progress_func(lambda: func(it), file=file),
         inputs)
 
     # Wait for results
     pool.close()
     pool.join()
-    click.echo(']')
+    click.echo(']', file=file)
 
     return results
 
