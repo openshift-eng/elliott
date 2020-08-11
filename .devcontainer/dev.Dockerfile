@@ -3,10 +3,18 @@ LABEL name="elliott-dev" \
   description="Elliott development container image" \
   maintainer="OpenShift Automated Release Tooling (ART) Team <aos-team-art@redhat.com>"
 
+# Trust the Red Hat IT Root CA and set up rcm-tools repo
+RUN curl -o /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.crt --fail -L \
+         https://password.corp.redhat.com/RH-IT-Root-CA.crt \
+ && update-ca-trust extract \
+ && curl -o /etc/yum.repos.d/rcm-tools-fedora.repo \
+         https://download.devel.redhat.com/rel-eng/RCMTOOLS/rcm-tools-fedora.repo
+
 RUN dnf install -y \
     # runtime dependencies
     krb5-workstation python-bugzilla-cli git rsync docker \
     python3 python3-certifi python3-rpm \
+    koji brewkoji \
     # development dependencies
     gcc krb5-devel libgit2-devel openssl-devel krb5-devel \
     python3-devel python3-pip \
@@ -21,10 +29,6 @@ RUN dnf install -y \
   # clean up
   && dnf clean all
 
-# install brewkoji
-RUN wget -O /etc/yum.repos.d/rcm-tools-fedora.repo https://download.devel.redhat.com/rel-eng/RCMTOOLS/rcm-tools-fedora.repo \
-  && dnf install -y koji brewkoji \
-  && dnf clean all
 
 ARG OC_VERSION=latest
 RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"$OC_VERSION"/openshift-client-linux.tar.gz \
