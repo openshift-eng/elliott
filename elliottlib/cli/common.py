@@ -92,3 +92,5 @@ use_default_advisory_option = click.option(
     type=click.Choice(constants.standard_advisory_types),
     help='Use the default value from group.yml for ADVISORY_TYPE [{}]'.format(
         ', '.join(constants.standard_advisory_types)))
+
+pass_runtime = click.make_pass_decorator(Runtime)

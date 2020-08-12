@@ -7,6 +7,8 @@ install_aliases()
 from urllib.parse import urlparse
 
 import yaml
+import ruamel.yaml
+import ruamel.yaml.util
 import logging
 import os
 import shutil
@@ -37,6 +39,8 @@ class DataObj(object):
         self.base_dir = os.path.dirname(self.path)
         self.filename = self.path.replace(self.base_dir, '').strip('/')
         self.data = data
+        self.indent = 2
+        self.block_seq_indent = None
 
     @as_native_str()
     def __repr__(self):
@@ -49,11 +53,13 @@ class DataObj(object):
 
     def reload(self):
         with open(self.path, 'r') as f:
-            self.data = yaml.full_load(f)
+            # Reload with ruamel.yaml and guess the indent.
+            self.data, self.indent, self.block_seq_indent = ruamel.yaml.util.load_yaml_guess_indent(f, preserve_quotes=True)
 
     def save(self):
         with open(self.path, 'w') as f:
-            yaml.safe_dump(self.data, f, default_flow_style=False)
+            # pyyaml doesn't preserve the order of keys or comments when loading and saving yamls. Save with ruamel.yaml instead to keep the format as much as possible.
+            ruamel.yaml.round_trip_dump(self.data, f, indent=self.indent, block_seq_indent=self.block_seq_indent)
 
 
 class GitData(object):
