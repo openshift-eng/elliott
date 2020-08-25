@@ -45,9 +45,9 @@ def get_highest_impact(trackers, tracker_flaws_map):
         if tracker_severity > severity_index:
             severity_index = tracker_severity
     if severity_index == 0:
-        # When severity isn't set on al tracking and flaw bugs, default to "Low"
+        # When severity isn't set on all tracking and flaw bugs, default to "Low"
         # https://jira.coreos.com/browse/ART-1192
-        logger.warning("CVE impact couldn't be determined for tracking bug {}, defaulting to Low.".format(tracker.id))
+        logger.warning("CVE impact couldn't be determined for tracking bug(s); defaulting to Low.")
     return constants.SECURITY_IMPACT[severity_index]
 
 

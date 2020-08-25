@@ -77,7 +77,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 # Collect bugs
 # advisory:find-bugs
 #
-@cli.command("find-bugs", short_help="Find or add MODIFED bugs to ADVISORY")
+@cli.command("find-bugs", short_help="Find or add MODIFED/VERIFIED bugs to ADVISORY")
 @click.option("--add", "-a", 'advisory',
               default=False, metavar='ADVISORY',
               help="Add found bugs to ADVISORY. Applies to bug flags as well (by default only a list of discovered bugs are displayed)")
