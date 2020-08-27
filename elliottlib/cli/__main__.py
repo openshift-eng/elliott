@@ -547,19 +547,7 @@ providing an advisory with the -a/--advisory option.
     for bug in attached_bugs:
         if bug.status in original_state:
             changed_bug_count += 1
-            if noop:
-                click.echo("Would have changed BZ#{bug_id} from {initial} to {final}".format(
-                    bug_id=bug.bug_id,
-                    initial=bug.status,
-                    final=new_state))
-            else:
-                click.echo("Changing BZ#{bug_id} from {initial} to {final}".format(
-                    bug_id=bug.bug_id,
-                    initial=bug.status,
-                    final=new_state))
-                bug.setstatus(status=new_state,
-                              comment="Elliott changed bug status from {initial} to {final}.".format(initial=original_state, final=new_state),
-                              private=True)
+            elliottlib.bzutil.set_state(bug, new_state, noop=noop)
 
     green_print("{} bugs successfullly modified (or would have been)".format(changed_bug_count))
 

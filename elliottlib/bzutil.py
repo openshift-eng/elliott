@@ -108,7 +108,7 @@ def get_bugs(bzapi, ids, raise_on_error=True):
     :return: A map of bug ids and bug objects
 
     :raises:
-        BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
+        BugzillaFatalError: If bugs contains invalid bug ids, or if some other error occurs trying to
         use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
         session has expired.
     """
@@ -139,7 +139,7 @@ def get_flaw_aliases(flaws):
     :return: A map of flaw bug ids and associated CVE alisas.
 
     :raises:
-        BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
+        BugzillaFatalError: If bugs contains invalid bug ids, or if some other error occurs trying to
         use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
         session has expired.
     """
@@ -160,6 +160,25 @@ def get_flaw_aliases(flaws):
         if flaw_cve_map[key] == "":
             logger.warning("Found flaw bug with no alias, this can happen is a flaw hasn't been assigned a CVE")
     return flaw_cve_map
+
+
+def set_state(bug, desired_state, noop=False):
+    """Change the state of a bug to desired_state
+
+    :param bug:
+    :param desired_state: Target state
+    :param noop: Do not do anything
+    """
+    current_state = bug.status
+    if noop:
+        logger.info(f"Would have changed BZ#{bug.bug_id} from {current_state} to {desired_state}")
+        return
+
+    logger.info(f"Changing BZ#{bug.bug_id} from {current_state} to {desired_state}")
+    comment = f'Elliott changed bug status from {current_state} to {desired_state}.'
+    bug.setstatus(status=desired_state,
+                  comment=comment,
+                  private=True)
 
 
 def create_placeholder(bz_data, kind, version):
