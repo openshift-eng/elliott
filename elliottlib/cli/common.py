@@ -1,13 +1,12 @@
-from __future__ import absolute_import, print_function, unicode_literals
+import asyncio
 import sys
-from elliottlib import version, constants, Runtime
+from functools import update_wrapper
+
+import click
+
+from elliottlib import Runtime, constants, dotconfig, version
 from elliottlib.cli import cli_opts
 from elliottlib.util import green_prefix, red_prefix, yellow_print
-import click
-from elliottlib import dotconfig
-
-# https://click.palletsprojects.com/en/7.x/python3/
-click.disable_unicode_literals_warning = True
 
 
 def print_version(ctx, param, value):
@@ -94,3 +93,15 @@ use_default_advisory_option = click.option(
         ', '.join(constants.standard_advisory_types)))
 
 pass_runtime = click.make_pass_decorator(Runtime)
+
+
+def coro(f):
+    """ A wrapper to allow to use asyncio with click.
+    https://github.com/pallets/click/issues/85
+    """
+    f = asyncio.coroutine(f)
+
+    def wrapper(*args, **kwargs):
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(f(*args, **kwargs))
+    return update_wrapper(wrapper, f)

@@ -1,3 +1,4 @@
+aiohttp[speedups] >= 3.6
 bashlex
 click
 dockerfile-parse
