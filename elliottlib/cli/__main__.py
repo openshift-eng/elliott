@@ -247,7 +247,7 @@ advisory with the --add option.
                 bug.updateflags({f: "+"})
 
     if advisory and not default_advisory_type:  # `--add ADVISORY_NUMBER` should respect the user's wish and attach all available bugs to whatever advisory is specified.
-        elliottlib.errata.add_bugs_with_retry(advisory, [bug.id for bug in bugs], False)
+        elliottlib.errata.add_bugs_with_retry(advisory, bugs)
         return
 
     # If --use-default-advisory or --into-default-advisories is given, we need to determine which bugs should be swept into which advisory.
@@ -257,20 +257,20 @@ advisory with the --add option.
     impetus_bugs = {}  # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
     # @lmeyer: simple and stupid would still be keeping the logic in python, possibly with config flags for branched logic. until that logic becomes too ugly to keep in python, i suppose..
     if major_version < 4:  # for 3.x, all bugs should go to the rpm advisory
-        impetus_bugs["rpm"] = {bug.id for bug in bugs}
+        impetus_bugs["rpm"] = set(bugs)
     else:  # for 4.x
         # optional operators bugs should be swept to the "extras" advisory, while other bugs should be swept to "image" advisory.
         # a way to identify operator-related bugs is by its "Component" value. temporarily hardcode here until we need to move it to ocp-build-data.
         extra_components = {"Logging", "Service Brokers", "Metering Operator", "Node Feature Discovery Operator"}  # we will probably find more
-        impetus_bugs["extras"] = {b.id for b in bugs if b.component in extra_components}
-        impetus_bugs["image"] = {b.id for b in bugs if b.component not in extra_components}
+        impetus_bugs["extras"] = {b for b in bugs if b.component in extra_components}
+        impetus_bugs["image"] = {b for b in bugs if b.component not in extra_components}
 
     if default_advisory_type and impetus_bugs.get(default_advisory_type):
-        elliottlib.errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type], False)
+        elliottlib.errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type])
     elif into_default_advisories:
         for impetus, bugs in impetus_bugs.items():
             if bugs:
-                elliottlib.errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, False)
+                elliottlib.errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs)
 
 
 #

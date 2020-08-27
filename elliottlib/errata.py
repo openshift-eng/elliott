@@ -386,14 +386,14 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugs_with_retry(advisory, bug_list, retried):
+def add_bugs_with_retry(advisory, bugs, retried=False):
     """
-    adding specified bug_list into advisory, retry 2 times: first time
+    adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
     list then add bug to advisory again, if still has failures raise exceptions
 
     :param advisory: advisory id
-    :param bug_list: bug id list which suppose to attach to advisory
+    :param bugs: iterable of bzutil.bug to attach to advisory
     :param retried: retry 2 times, first attempt fetch failed bugs sift out then attach again
     :return:
     """
@@ -406,20 +406,20 @@ def add_bugs_with_retry(advisory, bug_list, retried):
         raise exceptions.ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
 
     green_prefix("Adding {count} bugs to advisory {retry_times} times:".format(
-        count=len(bug_list),
+        count=len(bugs),
         retry_times=1 if retried is False else 2
     ))
     print(" {advs}".format(advs=advs))
     try:
-        advs.addBugs(bug_list)
+        advs.addBugs([bug.id for bug in bugs])
         advs.commit()
     except ErrataException as e:
         print("ErrataException Message: {}, retry it again".format(e))
         if retried is not True:
-            black_list = parse_exception_error_message(e)
-            retry_list = [x for x in bug_list if x not in black_list]
+            block_list = parse_exception_error_message(e)
+            retry_list = [x for x in bugs if x not in block_list]
             if len(retry_list) > 0:
-                add_bugs_with_retry(advisory, retry_list, True)
+                add_bugs_with_retry(advisory, retry_list, retried=True)
         else:
             raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
 
