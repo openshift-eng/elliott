@@ -64,8 +64,7 @@ def get_flaw_bugs(trackers):
         # Tracker bugs can block more than one flaw bug, but must be more than 0
         if not t.blocks:
             # This should never happen, log a warning here if it does
-            util.yellow_print(
-                "Warning: found tracker bugs which doesn't block any other bugs")
+            logger.warning("Warning: found tracker bugs which doesn't block any other bugs")
         else:
             flaw_ids.extend(t.blocks)
     return flaw_ids
@@ -158,7 +157,7 @@ def get_flaw_aliases(flaws):
                 flaw_cve_map[flaw.id] = ""
     for key in flaw_cve_map.keys():
         if flaw_cve_map[key] == "":
-            logger.warning("Found flaw bug with no alias, this can happen is a flaw hasn't been assigned a CVE")
+            logger.warning("Found flaw bug with no alias, this can happen if a flaw hasn't been assigned to a CVE")
     return flaw_cve_map
 
 
