@@ -268,12 +268,13 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
 def is_viable_bug(bug_obj):
     """ Check if a bug is viable to attach to an advisory.
 
-    A viable bug must be in one of MODIFIED and VERIFIED status.
+    A viable bug must be in one of MODIFIED and VERIFIED status. We accept ON_QA
+    bugs as viable as well, as they will be shortly moved to MODIFIED while attaching.
 
     :param bug_obj: bug object
     :returns: True if viable
     """
-    return bug_obj.status in ["MODIFIED", "VERIFIED"]
+    return bug_obj.status in ["MODIFIED", "ON_QA", "VERIFIED"]
 
 
 def is_cve_tracker(bug_obj):

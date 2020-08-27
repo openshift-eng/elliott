@@ -90,7 +90,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("--status", 'status',
               multiple=True,
               required=False,
-              default=['MODIFIED', 'VERIFIED'],
+              default=['MODIFIED', 'VERIFIED', 'ON_QA'],
               type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
               help="Status of the bugs")
 @click.option("--id", metavar='BUGID', default=None,
@@ -121,7 +121,7 @@ Use cases are described below:
 
 SWEEP: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
-for MODIFIED bugs in.
+for bugs claimed to be fixed, but not yet attached to advisories.
 
 LIST: The --group option is not required if you are specifying bugs
 manually. Provide one or more --id's for manual bug addition. In LIST
