@@ -3,12 +3,19 @@ import unittest
 import mock
 import flexmock
 import bugzilla
+import logging
 from elliottlib import exceptions, constants, bzutil
 
 hostname = "bugzilla.redhat.com"
 
 
 class TestBZUtil(unittest.TestCase):
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+
+    def tearDown(self):
+        logging.disable(logging.NOTSET)
+
     def test_is_flaw_bug(self):
         bug = mock.MagicMock(product="Security Response", component="vulnerability")
         self.assertTrue(bzutil.is_flaw_bug(bug))
@@ -75,6 +82,11 @@ class TestSearchFilter(unittest.TestCase):
 
 
 class TestGetHigestImpact(unittest.TestCase):
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+
+    def tearDown(self):
+        logging.disable(logging.NOTSET)
 
     def test_lowest_to_highest_impact(self):
         trackers = [flexmock(id=index, severity=severity)
@@ -109,6 +121,12 @@ class TestGetHigestImpact(unittest.TestCase):
 
 
 class TestGetFlawBugs(unittest.TestCase):
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+
+    def tearDown(self):
+        logging.disable(logging.NOTSET)
+
     def test_get_flaw_bugs(self):
         t1 = flexmock(id='1', blocks=['b1', 'b2'])
         t2 = flexmock(id='2', blocks=['b3'])
@@ -119,6 +137,12 @@ class TestGetFlawBugs(unittest.TestCase):
 
 
 class TestGetFlawAliases(unittest.TestCase):
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+
+    def tearDown(self):
+        logging.disable(logging.NOTSET)
+
     def test_get_flaw_aliases(self):
         CVE01 = flexmock(
             id='1',

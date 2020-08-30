@@ -64,8 +64,7 @@ def get_flaw_bugs(trackers):
         # Tracker bugs can block more than one flaw bug, but must be more than 0
         if not t.blocks:
             # This should never happen, log a warning here if it does
-            util.yellow_print(
-                "Warning: found tracker bugs which doesn't block any other bugs")
+            logger.warning("Warning: found tracker bugs which doesn't block any other bugs")
         else:
             flaw_ids.extend(t.blocks)
     return flaw_ids
@@ -108,7 +107,7 @@ def get_bugs(bzapi, ids, raise_on_error=True):
     :return: A map of bug ids and bug objects
 
     :raises:
-        BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
+        BugzillaFatalError: If bugs contains invalid bug ids, or if some other error occurs trying to
         use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
         session has expired.
     """
@@ -139,7 +138,7 @@ def get_flaw_aliases(flaws):
     :return: A map of flaw bug ids and associated CVE alisas.
 
     :raises:
-        BugzillaFatorError: If bugs contains invalid bug ids, or if some other error occurs trying to
+        BugzillaFatalError: If bugs contains invalid bug ids, or if some other error occurs trying to
         use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
         session has expired.
     """
@@ -158,8 +157,27 @@ def get_flaw_aliases(flaws):
                 flaw_cve_map[flaw.id] = ""
     for key in flaw_cve_map.keys():
         if flaw_cve_map[key] == "":
-            logger.warning("Found flaw bug with no alias, this can happen is a flaw hasn't been assigned a CVE")
+            logger.warning("Found flaw bug with no alias, this can happen if a flaw hasn't been assigned to a CVE")
     return flaw_cve_map
+
+
+def set_state(bug, desired_state, noop=False):
+    """Change the state of a bug to desired_state
+
+    :param bug:
+    :param desired_state: Target state
+    :param noop: Do not do anything
+    """
+    current_state = bug.status
+    if noop:
+        logger.info(f"Would have changed BZ#{bug.bug_id} from {current_state} to {desired_state}")
+        return
+
+    logger.info(f"Changing BZ#{bug.bug_id} from {current_state} to {desired_state}")
+    comment = f'Elliott changed bug status from {current_state} to {desired_state}.'
+    bug.setstatus(status=desired_state,
+                  comment=comment,
+                  private=True)
 
 
 def create_placeholder(bz_data, kind, version):
@@ -250,12 +268,13 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
 def is_viable_bug(bug_obj):
     """ Check if a bug is viable to attach to an advisory.
 
-    A viable bug must be in one of MODIFIED and VERIFIED status.
+    A viable bug must be in one of MODIFIED and VERIFIED status. We accept ON_QA
+    bugs as viable as well, as they will be shortly moved to MODIFIED while attaching.
 
     :param bug_obj: bug object
     :returns: True if viable
     """
-    return bug_obj.status in ["MODIFIED", "VERIFIED"]
+    return bug_obj.status in ["MODIFIED", "ON_QA", "VERIFIED"]
 
 
 def is_cve_tracker(bug_obj):

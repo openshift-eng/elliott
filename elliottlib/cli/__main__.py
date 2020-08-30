@@ -90,7 +90,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("--status", 'status',
               multiple=True,
               required=False,
-              default=['MODIFIED', 'VERIFIED'],
+              default=['MODIFIED', 'VERIFIED', 'ON_QA'],
               type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
               help="Status of the bugs")
 @click.option("--id", metavar='BUGID', default=None,
@@ -121,7 +121,7 @@ Use cases are described below:
 
 SWEEP: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
-for MODIFIED bugs in.
+for bugs claimed to be fixed, but not yet attached to advisories.
 
 LIST: The --group option is not required if you are specifying bugs
 manually. Provide one or more --id's for manual bug addition. In LIST
@@ -247,7 +247,7 @@ advisory with the --add option.
                 bug.updateflags({f: "+"})
 
     if advisory and not default_advisory_type:  # `--add ADVISORY_NUMBER` should respect the user's wish and attach all available bugs to whatever advisory is specified.
-        elliottlib.errata.add_bugs_with_retry(advisory, [bug.id for bug in bugs], False)
+        elliottlib.errata.add_bugs_with_retry(advisory, bugs)
         return
 
     # If --use-default-advisory or --into-default-advisories is given, we need to determine which bugs should be swept into which advisory.
@@ -257,20 +257,20 @@ advisory with the --add option.
     impetus_bugs = {}  # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
     # @lmeyer: simple and stupid would still be keeping the logic in python, possibly with config flags for branched logic. until that logic becomes too ugly to keep in python, i suppose..
     if major_version < 4:  # for 3.x, all bugs should go to the rpm advisory
-        impetus_bugs["rpm"] = {bug.id for bug in bugs}
+        impetus_bugs["rpm"] = set(bugs)
     else:  # for 4.x
         # optional operators bugs should be swept to the "extras" advisory, while other bugs should be swept to "image" advisory.
         # a way to identify operator-related bugs is by its "Component" value. temporarily hardcode here until we need to move it to ocp-build-data.
         extra_components = {"Logging", "Service Brokers", "Metering Operator", "Node Feature Discovery Operator"}  # we will probably find more
-        impetus_bugs["extras"] = {b.id for b in bugs if b.component in extra_components}
-        impetus_bugs["image"] = {b.id for b in bugs if b.component not in extra_components}
+        impetus_bugs["extras"] = {b for b in bugs if b.component in extra_components}
+        impetus_bugs["image"] = {b for b in bugs if b.component not in extra_components}
 
     if default_advisory_type and impetus_bugs.get(default_advisory_type):
-        elliottlib.errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type], False)
+        elliottlib.errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type])
     elif into_default_advisories:
         for impetus, bugs in impetus_bugs.items():
             if bugs:
-                elliottlib.errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, False)
+                elliottlib.errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs)
 
 
 #
@@ -547,19 +547,7 @@ providing an advisory with the -a/--advisory option.
     for bug in attached_bugs:
         if bug.status in original_state:
             changed_bug_count += 1
-            if noop:
-                click.echo("Would have changed BZ#{bug_id} from {initial} to {final}".format(
-                    bug_id=bug.bug_id,
-                    initial=bug.status,
-                    final=new_state))
-            else:
-                click.echo("Changing BZ#{bug_id} from {initial} to {final}".format(
-                    bug_id=bug.bug_id,
-                    initial=bug.status,
-                    final=new_state))
-                bug.setstatus(status=new_state,
-                              comment="Elliott changed bug status from {initial} to {final}.".format(initial=original_state, final=new_state),
-                              private=True)
+            elliottlib.bzutil.set_state(bug, new_state, noop=noop)
 
     green_print("{} bugs successfullly modified (or would have been)".format(changed_bug_count))
 
