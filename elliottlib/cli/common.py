@@ -95,7 +95,7 @@ use_default_advisory_option = click.option(
 pass_runtime = click.make_pass_decorator(Runtime)
 
 
-def coro(f):
+def click_coroutine(f):
     """ A wrapper to allow to use asyncio with click.
     https://github.com/pallets/click/issues/85
     """

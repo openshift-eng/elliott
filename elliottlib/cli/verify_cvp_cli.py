@@ -14,7 +14,7 @@ from ruamel.yaml import YAML
 
 import elliottlib
 from elliottlib import Runtime, brew, constants
-from elliottlib.cli.common import (cli, coro, find_default_advisory,
+from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    pass_runtime, use_default_advisory_option)
 from elliottlib.imagecfg import ImageMetadata
 from elliottlib.resultsdb import ResultsDBAPI
@@ -46,7 +46,7 @@ yaml = YAML()
     '--message', '-m', 'message', metavar='COMMIT_MESSAGE',
     help='Commit message for ocp-build-data when using `--fix`. If not given, no changes will be committed.')
 @pass_runtime
-@coro
+@click_coroutine
 async def verify_cvp_cli(runtime: Runtime, all_images, nvrs, optional_checks, all_optional_checks, fix, message):
     """ Verify CVP test results
 

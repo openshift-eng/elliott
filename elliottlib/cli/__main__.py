@@ -13,6 +13,7 @@ web service.
 from __future__ import absolute_import, print_function, unicode_literals
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
+import asyncio
 import datetime
 import json
 import os
@@ -38,7 +39,7 @@ from elliottlib.util import validate_email_address, red_print, major_from_branch
 from elliottlib.util import green_print, red_prefix, minor_from_branch
 from elliottlib.util import yellow_print, yellow_prefix, exit_unauthorized, release_from_branch
 from elliottlib.util import progress_func, pbar_header
-from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
+from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory, click_coroutine
 
 # cli commands
 from elliottlib.cli.list_cli import list_cli
@@ -597,7 +598,8 @@ def find_cve_trackers(runtime, cve, status):
 @click.argument("payload")
 @click.argument('advisory', type=int)
 @click.pass_context
-def verify_payload(ctx, payload, advisory):
+@click_coroutine
+async def verify_payload(ctx, payload, advisory):
     """Cross-check that the builds present in PAYLOAD match the builds
 attached to ADVISORY. The payload is treated as the source of
 truth. If something is absent or different in the advisory it is
@@ -669,18 +671,19 @@ written out to summary_results.json.
 
     green_prefix("Looping over payload images: ")
     click.echo("{} images to check".format(len(payload_json['references']['spec']['tags'])))
-    for image in payload_json['references']['spec']['tags']:
+    cmds = [['oc', 'image', 'info', '-o', 'json', tag['from']['name']] for tag in payload_json['references']['spec']['tags']]
+
+    green_prefix("Querying image infos...")
+    cmd_results = await asyncio.gather(*[exectools.cmd_gather_async(cmd) for cmd in cmds])
+
+    for image, cmd, cmd_result in zip(payload_json['references']['spec']['tags'], cmds, cmd_results):
         click.echo("----")
-        green_prefix("Getting payload image metadata: ")
-        click.echo("{}".format(image['from']['name']))
-        pullspec = image['from']['name']
         image_name = image['name']
-        pullspec_cmd = 'oc image info {} -o json'.format(pullspec)
-        rc, stdout, stderr = exectools.cmd_gather(pullspec_cmd)
+        rc, stdout, stderr = cmd_result
         if rc != 0:
             # Probably no point in continuing.. can't contact brew?
             red_prefix("Unable to run oc image info: ")
-            click.echo("out={}  ; err={}".format(stdout, stderr))
+            red_print(f"cmd={cmd!r}, out={stdout}  ; err={stderr}")
             exit(1)
 
         image_info = json.loads(stdout)
@@ -707,10 +710,13 @@ written out to summary_results.json.
 
     missing_in_errata = {}
     payload_doesnt_match_errata = {}
+    in_other_advisories = {}
     output = {
         'missing_in_advisory': missing_in_errata,
         'payload_advisory_mismatch': payload_doesnt_match_errata,
+        "in_other_advisories": in_other_advisories,
     }
+
     green_prefix("Analyzing data: ")
     click.echo("{} images to consider from payload".format(len(all_payload_nvrs)))
 
@@ -727,6 +733,20 @@ written out to summary_results.json.
                 'payload': vr,
                 'errata': all_advisory_nvrs[image]
             }
+
+    if missing_in_errata:
+        green_print(f"Checking if {len(missing_in_errata)} missing images are shipped...")
+        nvrs = list(missing_in_errata.values())
+        tag_lists = elliottlib.brew.get_builds_tags(nvrs)
+        for nvr, tags in zip(nvrs, tag_lists):
+            name = nvr.rsplit("-", 2)[0]
+            if any(map(lambda tag: tag["name"].endswith('-released'), tags)):
+                green_print(f"Build {nvr} is shipped. Skipping...")
+                del missing_in_errata[name]
+            elif any(map(lambda tag: tag["name"].endswith('-pending'), tags)):
+                green_print(f"Build {nvr} is in another advisory.")
+                del missing_in_errata[name]
+                in_other_advisories[name] = nvr
 
     green_print("Summary results:")
     click.echo(json.dumps(output, indent=4))
