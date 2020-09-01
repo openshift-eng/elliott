@@ -13,7 +13,10 @@ pipeline {
             steps {
                 script {
                     catchError(stageResult: 'FAILURE') {
-                        sh "tox > results.txt 2>&1"
+                        sh """
+                            tox_args="\$(git diff --name-only HEAD~5 | grep -Fxq -e requirements.txt -e requirements-dev.txt -e MANIFEST.in -e setup.py && echo '--recreate')"
+                            tox \$tox_args > results.txt 2>&1
+                        """
                     }
                     results = readFile("results.txt").trim()
                     echo results
