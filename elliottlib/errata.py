@@ -412,16 +412,6 @@ def add_bugs_with_retry(advisory, bugs, retried=False):
         retry_times=1 if retried is False else 2
     ))
 
-    # Due to a limitation of Errata Tool, a bug cannot be attached to an advisory
-    # if it has state ON_QA. This might change, see https://projects.engineering.redhat.com/browse/CLOUDWF-3104
-    for bug in bugs:
-        if bug.status == 'ON_QA':
-            try:
-                bzutil.set_state(bug, 'MODIFIED')
-            except Exception as e:
-                # Accept exception, it will fail while adding the bugs, after which it will be retried
-                logger.warning(f'Could not change BZ {bug.id} to ON_QA: {e.message}, {e.args}')
-
     print(" {advs}".format(advs=advs))
     try:
         advs.addBugs([bug.id for bug in bugs])
