@@ -84,7 +84,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @use_default_advisory_option
 @click.option("--mode",
               required=True,
-              type=click.Choice(['list', 'sweep', 'diff']),
+              type=click.Choice(['list', 'sweep', 'diff', 'qe']),
               default='list',
               help='Mode to use to find bugs')
 @click.option("--status", 'status',
@@ -110,8 +110,12 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("--into-default-advisories",
               is_flag=True,
               help='attaches bugs found to their correct default advisories, e.g. operator-related bugs go to "extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
+@click.option("--noop", "--dry-run",
+              is_flag=True,
+              default=False,
+              help="Don't change anything")
 @pass_runtime
-def find_bugs(runtime, advisory, default_advisory_type, mode, status, id, from_diff, flag, report, into_default_advisories):
+def find_bugs(runtime, advisory, default_advisory_type, mode, status, id, from_diff, flag, report, into_default_advisories, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list and the --id option.
@@ -129,6 +133,10 @@ mode you must provide a list of IDs to attach with the --id option.
 
 DIFF: For this use case, you must provide the --between option using two
 URLs to payloads.
+
+QE: Find MODIFIED bugs for the target-releases, and set them to ON_QA.
+The --group option MUST be provided. Cannot be used in combination
+with --into-default-advisories, --add, --into-default-advisories
 
 Using --use-default-advisory without a value set for the matching key
 in the build-data will cause an error and elliott will exit in a
@@ -162,6 +170,11 @@ advisory with the --add option.
 
 \b
     $ elliott --group=openshift-4.1 --mode sweep --use-default-advisory rpm
+
+    Find bugs for 4.6 that are in MODIFIED state, and set them to ON_QA:
+
+\b
+    $ elliott --group=openshift-4.6 --mode qe
 """
     if mode != 'list' and len(id) > 0:
         raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
@@ -175,6 +188,9 @@ advisory with the --add option.
     if sum(map(bool, [advisory, default_advisory_type, into_default_advisories])) > 1:
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
 
+    if mode == 'qe' and sum(map(bool, [advisory, default_advisory_type, into_default_advisories])) > 0:
+        raise click.BadParameter("--mode=qe does not operate on an advisory. Do not specify any of `--use-default-advisory`, `--add`, or `--into-default-advisories`")
+
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     bzapi = elliottlib.bzutil.get_bzapi(bz_data)
@@ -182,8 +198,10 @@ advisory with the --add option.
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    if mode == 'sweep':
-        green_prefix("Searching for bugs with target release(s):")
+    if mode == 'sweep' or mode == 'qe':
+        if mode == 'qe':
+            status = ['MODIFIED']
+        green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
         bugs = elliottlib.bzutil.search_for_bugs(bz_data, status, verbose=runtime.debug)
     elif mode == 'list':
@@ -229,6 +247,18 @@ advisory with the --add option.
         green_prefix("Found {} bugs:".format(len(bugs)))
     click.echo(" {}".format(", ".join([str(b.bug_id) for b in bugs])))
 
+    if mode == 'qe':
+        for bug in bugs:
+            elliottlib.bzutil.set_state(bug, 'ON_QA', noop=noop)
+
+    if len(flag) > 0:
+        for bug in bugs:
+            for f in flag:
+                if noop:
+                    click.echo(f'Would have updated bug {bug.id} by setting flag {f}')
+                    continue
+                bug.updateflags({f: "+"})
+
     if report:
         green_print("{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
         for bug in bugs:
@@ -241,13 +271,8 @@ advisory with the --add option.
                                                                                     days_ago,
                                                                                     bug.summary[:60]))
 
-    if len(flag) > 0:
-        for bug in bugs:
-            for f in flag:
-                bug.updateflags({f: "+"})
-
     if advisory and not default_advisory_type:  # `--add ADVISORY_NUMBER` should respect the user's wish and attach all available bugs to whatever advisory is specified.
-        elliottlib.errata.add_bugs_with_retry(advisory, bugs)
+        elliottlib.errata.add_bugs_with_retry(advisory, bugs, noop=noop)
         return
 
     # If --use-default-advisory or --into-default-advisories is given, we need to determine which bugs should be swept into which advisory.
@@ -266,11 +291,11 @@ advisory with the --add option.
         impetus_bugs["image"] = {b for b in bugs if b.component not in extra_components}
 
     if default_advisory_type and impetus_bugs.get(default_advisory_type):
-        elliottlib.errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type])
+        elliottlib.errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type], noop=noop)
     elif into_default_advisories:
         for impetus, bugs in impetus_bugs.items():
             if bugs:
-                elliottlib.errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs)
+                elliottlib.errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
 
 
 #

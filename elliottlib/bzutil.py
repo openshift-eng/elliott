@@ -348,7 +348,7 @@ class SearchFilter(object):
 
     def tostring(self, number):
         return SearchFilter.pattern.format(
-            number, self.field, self.operator, self.value
+            number, self.field, self.operator, urllib.parse.quote(self.value)
         )
 
 
