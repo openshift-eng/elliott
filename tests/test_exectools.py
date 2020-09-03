@@ -4,9 +4,11 @@ Test functions related to controlled command execution
 """
 from __future__ import unicode_literals
 
+import asyncio
 import unittest
 
 import flexmock
+import mock
 
 from elliottlib import exectools
 
@@ -228,6 +230,31 @@ class TestGather(unittest.TestCase):
         self.assertEqual(status_expected, status)
         self.assertEqual(stdout, stdout_expected)
         self.assertEqual(stderr, stderr_expected)
+
+    def test_cmd_gather_async(self):
+        loop = asyncio.get_event_loop()
+        cmd = ["uname", "-a"]
+        fake_cwd = "/foo/bar"
+        fake_stdout = b"fake_stdout"
+        fake_stderr = b"fake_stderr"
+        with mock.patch("asyncio.create_subprocess_exec") as create_subprocess_exec, \
+             mock.patch("elliottlib.pushd.Dir.getcwd", return_value=fake_cwd):
+            proc = create_subprocess_exec.return_value
+            proc.returncode = 0
+            proc.communicate.return_value = (fake_stdout, fake_stderr)
+
+            rc, out, err = loop.run_until_complete(exectools.cmd_gather_async(cmd, text_mode=True))
+            create_subprocess_exec.assert_called_once_with(*cmd, cwd=fake_cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            self.assertEqual(rc, 0)
+            self.assertEqual(out, fake_stdout.decode("utf-8"))
+            self.assertEqual(err, fake_stderr.decode("utf-8"))
+
+            create_subprocess_exec.reset_mock()
+            rc, out, err = loop.run_until_complete(exectools.cmd_gather_async(cmd, text_mode=False))
+            create_subprocess_exec.assert_called_once_with(*cmd, cwd=fake_cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            self.assertEqual(rc, 0)
+            self.assertEqual(out, fake_stdout)
+            self.assertEqual(err, fake_stderr)
 
 
 if __name__ == "__main__":

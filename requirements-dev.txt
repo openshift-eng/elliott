@@ -2,7 +2,7 @@ autopep8
 coverage
 flake8
 flexmock
-mock
+mock ~= 4.0.2
 pylint
 pytest
 tox

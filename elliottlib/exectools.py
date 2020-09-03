@@ -4,14 +4,14 @@ consistently. It adds some logging and some additional capabilties to the
 ordinary subprocess behaviors.
 """
 from __future__ import absolute_import, print_function, unicode_literals
+
+import asyncio
+import json
+import shlex
 import subprocess
 import time
-import shlex
-import json
 
-from . import logutil
-from . import pushd
-from . import assertion
+from . import assertion, logutil, pushd
 
 SUCCESS = 0
 
@@ -108,6 +108,38 @@ def cmd_gather(cmd, text_mode=True):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = proc.communicate()
     rc = proc.returncode
+    if text_mode:
+        out_str = out.decode(encoding="utf-8")
+        err_str = err.decode(encoding="utf-8")
+        logger.debug(
+            "Process {}: exited with: {}\nstdout>>{}<<\nstderr>>{}<<\n".
+            format(cmd_info, rc, out_str, err_str))
+        return rc, out_str, err_str
+    else:
+        logger.debug(
+            "Process {}: exited with: {}".format(cmd_info, rc))
+        return rc, out, err
+
+
+async def cmd_gather_async(cmd, text_mode=True):
+    """Similar to cmd_gather, but run asynchronously"""
+    if not isinstance(cmd, list):
+        cmd_list = shlex.split(cmd)
+    else:
+        cmd_list = cmd
+
+    cwd = pushd.Dir.getcwd()
+    cmd_info = '[cwd={}]: {}'.format(cwd, json.dumps(cmd_list))
+
+    logger.debug("Executing:cmd_gather {}".format(cmd_info))
+    proc = await asyncio.create_subprocess_exec(
+        *cmd, cwd=cwd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE)
+
+    out, err = await proc.communicate()
+    rc = proc.returncode
+
     if text_mode:
         out_str = out.decode(encoding="utf-8")
         err_str = err.decode(encoding="utf-8")
