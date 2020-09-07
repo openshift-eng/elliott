@@ -388,7 +388,7 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugs_with_retry(advisory, bugs, retried=False):
+def add_bugs_with_retry(advisory, bugs, retried=False, noop=False):
     """
     adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
@@ -422,7 +422,7 @@ def add_bugs_with_retry(advisory, bugs, retried=False):
             block_list = parse_exception_error_message(e)
             retry_list = [x for x in bugs if x not in block_list]
             if len(retry_list) > 0:
-                add_bugs_with_retry(advisory, retry_list, retried=True)
+                add_bugs_with_retry(advisory, retry_list, retried=True, noop=noop)
         else:
             raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
 
