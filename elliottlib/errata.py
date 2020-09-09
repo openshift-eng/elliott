@@ -420,7 +420,7 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False):
         print("ErrataException Message: {}, retry it again".format(e))
         if retried is not True:
             block_list = parse_exception_error_message(e)
-            retry_list = [x for x in bugs if x not in block_list]
+            retry_list = [x for x in bugs if x.id not in block_list]
             if len(retry_list) > 0:
                 add_bugs_with_retry(advisory, retry_list, retried=True, noop=noop)
         else:
