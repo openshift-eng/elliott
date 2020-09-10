@@ -399,6 +399,10 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False):
     :param retried: retry 2 times, first attempt fetch failed bugs sift out then attach again
     :return:
     """
+    if noop:
+        print(f'Would have added the following bugs to advisory {advisory}: {[bug.id for bug in bugs]}')
+        return
+
     try:
         advs = Erratum(errata_id=advisory)
     except GSSError:
@@ -412,7 +416,8 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False):
         retry_times=1 if retried is False else 2
     ))
 
-    print(" {advs}".format(advs=advs))
+    print(f" {advs}")
+
     try:
         advs.addBugs([bug.id for bug in bugs])
         advs.commit()
