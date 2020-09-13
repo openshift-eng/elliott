@@ -33,6 +33,10 @@ import re
 @click.option("--id", metavar='BUGID', default=None,
               multiple=True, required=False,
               help="Bugzilla IDs to add, required for LIST mode.")
+@click.option("--cve-trackers",
+              required=False,
+              is_flag=True,
+              help='Include CVE trackers in sweep mode')
 @click.option("--from-diff", "--between",
               required=False,
               nargs=2,
@@ -52,7 +56,7 @@ import re
               default=False,
               help="Don't change anything")
 @pass_runtime
-def find_bugs_cli(runtime, advisory, default_advisory_type, mode, status, id, from_diff, flag, report, into_default_advisories, noop):
+def find_bugs_cli(runtime, advisory, default_advisory_type, mode, status, id, cve_trackers, from_diff, flag, report, into_default_advisories, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list and the --id option.
@@ -140,10 +144,10 @@ advisory with the --add option.
             status = ['MODIFIED']
         green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
-        bugs = bzutil.search_for_bugs(bz_data, status, verbose=runtime.debug)
+        bugs = bzutil.search_for_bugs(bz_data, status, filter_out_security_bugs=not(cve_trackers), verbose=runtime.debug)
     elif mode == 'list':
         bugs = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
-    elif mode == "diff":
+    elif mode == 'diff':
         click.echo(runtime.working_dir)
         bug_id_strings = openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
         bugs = [bzapi.getbug(i) for i in bug_id_strings]
