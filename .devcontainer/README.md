@@ -18,7 +18,9 @@ using Visual Studio Code. See [https://code.visualstudio.com/docs/remote/contain
 The same Dockerfile can be used independently to provide a doozer environment container.
 A build with podman may look like:
     
-    podman build --build-arg USERNAME=yours --build-arg USER_UID=1234 \
+    USERNAME=yours
+    USER_UID=1234
+    podman build --build-arg USERNAME=$USERNAME --build-arg USER_UID=$USER_UID \
                  -f .devcontainer/dev.Dockerfile -t local/elliott .
     
 Then a script similar to the following (you will certainly want your own modifications)

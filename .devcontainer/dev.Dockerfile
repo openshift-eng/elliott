@@ -16,16 +16,12 @@ RUN dnf install -y \
     python3 python3-certifi python3-rpm \
     koji brewkoji \
     # development dependencies
-    gcc krb5-devel libgit2-devel openssl-devel krb5-devel \
+    gcc gcc-c++ krb5-devel libgit2-devel openssl-devel krb5-devel \
     python3-devel python3-pip \
     # Microsoft Python Language Server requires .NET Core 2.1 or later
     dotnet-runtime-3.1 \
     # other tools
     bash-completion vim tmux procps-ng psmisc wget curl net-tools iproute \
-  # Red Hat IT Root CA
-  && curl -o /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.crt --fail -L \
-    https://password.corp.redhat.com/RH-IT-Root-CA.crt \
-  && update-ca-trust extract \
   # clean up
   && dnf clean all
 
@@ -45,8 +41,8 @@ ARG USER_GID=$USER_UID
 # Create the "dev" user
 RUN groupadd --gid "$USER_GID" "$USERNAME" \
     && useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME" \
-    && mkdir -p /workspaces/elliott \
-    && chown -R "${USER_UID}:${USER_GID}" /home/"$USERNAME" /workspaces/elliott \
+    && mkdir -p /workspaces/{elliott,ocp-build-data} \
+    && chown -R "${USER_UID}:${USER_GID}" /home/"$USERNAME" /workspaces \
     && chmod 0755 /home/"$USERNAME" \
     && echo "$USERNAME" ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/"$USERNAME" \
     && chmod 0440 /etc/sudoers.d/"$USERNAME"
@@ -59,3 +55,5 @@ RUN chown "$USERNAME" -R /tmp/elliott \
  && popd && rm -rf /tmp/elliott
 USER "$USER_UID"
 WORKDIR /workspaces/elliott
+ENV ELLIOTT_DATA_PATH=https://github.com/openshift/ocp-build-data \
+    _ELLIOTT_DATA_PATH=/workspaces/ocp-build-data
