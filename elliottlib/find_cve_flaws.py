@@ -20,6 +20,10 @@ def is_tracker_bug(bug):
     return 'Security' in bug['keywords'] and 'SecurityTracking' in bug['keywords']
 
 
+def is_flaw_bug(bug):
+    return bug.product == 'Security Response'
+
+
 def get_advisory(advisory_id):
     res = requests.get(
         '{}/api/v1/erratum/{}'.format(constants.errata_url, advisory_id),
@@ -30,22 +34,32 @@ def get_advisory(advisory_id):
 
 
 def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
-    return bzapi.getbugs(unique(flatten([t.blocks for t in tracker_bugs])))
+    blocking_bugs = bzapi.getbugs(unique(flatten([t.blocks for t in tracker_bugs])))
+    return [flaw_bug for flaw_bug in blocking_bugs if is_flaw_bug(flaw_bug)]
 
 
-def is_first_fix(bzapi, flaw_bug, tracker_ids_to_be_ignored=[]):
+def is_first_fix(bzapi, flaw_bug, current_target_release, tracker_ids_to_be_ignored=[]):
     other_flaw_trackers = bzapi.getbugs([
         t for t in flaw_bug.depends_on
         if t not in tracker_ids_to_be_ignored
     ])
-    return not any([
-        t.status == 'RELEASE_PENDING'
-        or (
-            t.status == 'CLOSED'
-            and t.resolution in ['ERRATA', 'CURRENTRELEASE', 'NEXTRELEASE']
-        )
-        for t in other_flaw_trackers
-    ])
+
+    def _filter_tracker(bug):
+        if all([
+            bug.product == 'OpenShift Container Platform',
+            bug.target_release[0] <= current_target_release,
+        ]):
+            return True
+        return False
+
+    def _already_fixed(bug):
+        if bug.status == 'RELEASE_PENDING':
+            return True
+        if bug.status == 'CLOSED' and bug.resolution in ['ERRATA', 'CURRENTRELEASE', 'NEXTRELEASE']:
+            return True
+        return False
+
+    return not any([_already_fixed(t) for t in filter(_filter_tracker, other_flaw_trackers)])
 
 
 def is_security_advisory(advisory):

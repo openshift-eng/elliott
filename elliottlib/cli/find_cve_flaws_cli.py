@@ -41,6 +41,15 @@ def find_cve_flaws_cli(runtime, default_advisory_type):
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
     attached_tracker_bugs = get_attached_tracker_bugs(bzapi, advisory_id)
+    #### @TODO: remove this block before merge, let it here for now because it
+    #### is useful for testing the PR, when BZs are not yet attached to an advisory
+    # attached_tracker_bugs = bzapi.query(bzapi.build_query(
+    #     product='OpenShift Container Platform',
+    #     status=['MODIFIED', 'ON_QA', 'VERIFIED'],
+    #     target_release='3.11.z',
+    #     keywords=['Security', 'SecurityTracking'],
+    # ))
+    #### /testing
     runtime.logger.info('found {} tracker bugs attached to the advisory'.format(
         len(attached_tracker_bugs)
     ))
@@ -51,9 +60,10 @@ def find_cve_flaws_cli(runtime, default_advisory_type):
     ))
 
     attached_tracker_ids = [tracker.id for tracker in attached_tracker_bugs]
+    current_target_release = "{MAJOR}.{MINOR}.z".format(**runtime.group_config.vars)
     first_fix_flaw_bugs = [
         flaw_bug for flaw_bug in corresponding_flaw_bugs
-        if is_first_fix(bzapi, flaw_bug, attached_tracker_ids)
+        if is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids)
     ]
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
         len(first_fix_flaw_bugs), len(corresponding_flaw_bugs),
@@ -67,6 +77,7 @@ def find_cve_flaws_cli(runtime, default_advisory_type):
     if not is_security_advisory(advisory):
         runtime.logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
         cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
+        cves = ' '.join([flaw_bug.alias[0] for flaw_bug in first_fix_flaw_bugs])
         advisory.update(
             errata_type='RHSA',
             security_reviewer=cve_boilerplate['security_reviewer'],
@@ -74,8 +85,9 @@ def find_cve_flaws_cli(runtime, default_advisory_type):
             description=cve_boilerplate['description'],
             topic=cve_boilerplate['topic'],
             solution=cve_boilerplate['solution'],
-            cves=' '.join([flaw_bug.alias for flaw_bug in first_fix_flaw_bugs]),
+            cves=cves,
         )
+        print('List of CVEs: {}'.format(cves))
 
     highest_impact = get_highest_security_impact(first_fix_flaw_bugs)
     if is_advisory_impact_smaller_than(advisory, highest_impact):
