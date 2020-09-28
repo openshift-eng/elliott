@@ -58,9 +58,8 @@ def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
             "--kind must be specified when not using --use-default-advisory")
 
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
-    target_release = bz_data['target_release'][0]
-    newbug = elliottlib.bzutil.create_placeholder(
-        bz_data, kind, target_release)
+
+    newbug = elliottlib.bzutil.create_placeholder(bz_data, kind)
 
     click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
 

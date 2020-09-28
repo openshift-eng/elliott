@@ -180,22 +180,24 @@ def set_state(bug, desired_state, noop=False):
                   private=True)
 
 
-def create_placeholder(bz_data, kind, version):
+def create_placeholder(bz_data, kind):
     """Create a placeholder bug
 
     :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
     :param kind: The "kind" of placeholder to create. Generally 'rpm' or 'image'
-    :param version: The target version for the placeholder
 
     :return: Placeholder Bug object
     """
 
     bzapi = get_bzapi(bz_data)
-    boilerplate = "Placeholder bug for OCP {} {} release".format(version, kind)
+    version = bz_data['version'][0]
+    target_release = bz_data['target_release'][0]
+
+    boilerplate = "Placeholder bug for OCP {} {} release".format(target_release, kind)
 
     createinfo = bzapi.build_createbug(
         product=bz_data['product'],
-        version="unspecified",
+        version=version,
         component="Release",
         summary=boilerplate,
         description=boilerplate)
@@ -204,7 +206,7 @@ def create_placeholder(bz_data, kind, version):
 
     # change state to VERIFIED, set target release
     try:
-        update = bzapi.build_update(status="VERIFIED", target_release=version)
+        update = bzapi.build_update(status="VERIFIED", target_release=target_release)
         bzapi.update_bugs([newbug.id], update)
     except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
         sleep(5)
