@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+git diff --quiet
+
+old_version=$(cat elliottlib/VERSION)
+echo $old_version
+
+new_version=$( awk 'BEGIN{OFS=FS=".";}{$NF=$NF+1; print}' <<<"$old_version")
+
+echo "$new_version" >elliottlib/VERSION
+
+git add elliottlib/VERSION
+
+git commit -evm "Prepare for release v$new_version
+
+$(git log --oneline --no-merges v${old_version}..)"
