@@ -74,6 +74,7 @@ def find_cve_flaws_cli(runtime, default_advisory_type):
             description=cve_boilerplate['description'],
             topic=cve_boilerplate['topic'],
             solution=cve_boilerplate['solution'],
+            cves=' '.join([flaw_bug.alias for flaw_bug in first_fix_flaw_bugs]),
         )
 
     highest_impact = get_highest_security_impact(first_fix_flaw_bugs)
