@@ -69,7 +69,7 @@ def find_cve_flaws_cli(runtime, default_advisory_type):
         cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
         advisory.update(
             errata_type='RHSA',
-            security_reviewer='sfowler@redhat.com',
+            security_reviewer=cve_boilerplate['security_reviewer'],
             synopsis=cve_boilerplate['synopsis'],
             description=cve_boilerplate['description'],
             topic=cve_boilerplate['topic'],
