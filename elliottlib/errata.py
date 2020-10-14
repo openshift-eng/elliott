@@ -498,3 +498,20 @@ def get_advisory_images(image_advisory_id, raw=False):
     ]
 
     return '#########\n{}\n#########'.format('\n'.join(image_list))
+
+
+def detach_build(advisory_id: int, nvr: str, session=None):
+    """ Remove a build from advisory
+    :param advisory_id: advisory number
+    :param nvr: build NVR
+    :param session: Errata session
+
+    POST /api/v1/erratum/{id}/remove_build
+    """
+    if not session:
+        session = requests.Session()
+    url = constants.errata_remove_build_url.format(id=int(advisory_id))
+    with session.post(url, json={"nvr": nvr}, auth=HTTPKerberosAuth()) as response:
+        response.raise_for_status()
+        result = response.json()
+        return result
