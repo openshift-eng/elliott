@@ -4,6 +4,7 @@ This file contains constants that are used to manage OCP Image and RPM builds
 from __future__ import absolute_import, print_function, unicode_literals
 
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
+BREW_DOWNLOAD_TEMPLATE = "http://download.eng.bos.redhat.com/brewroot/packages/{name}/{version}/{release}/files/{file_path}"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
 RESULTSDB_API_URL = "https://resultsdb-api.engineering.redhat.com/api/v2.0"
 
