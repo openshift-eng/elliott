@@ -44,7 +44,7 @@ def verify_attached_operators_cli(runtime, advisories):
     image_builds.extend(_get_shipped_images(runtime, brew_session))
     available_shasums = _extract_available_image_shasums(image_builds)
     if _any_references_are_missing(referenced_specs, available_shasums):
-        raise ElliottFatalError("Some references were missing. Ensure all bundle references are shipped or shipping.")
+        raise ElliottFatalError("Some references were missing. Ensure all manifest references are shipped or shipping.")
     green_print("All operator manifest references were found.")
 
 
@@ -105,12 +105,14 @@ def _download_appregistry_image_references(appregistry_build):
     if res.status_code != 200:
         raise ElliottFatalError(f"appregistry data download {url} failed (status_code={res.status_code}): {res.text}")
 
-    minor_version = re.match(r'v(\d+\.\d+)', appregistry_build['version']).groups()[0]
+    minor_version = re.match(r'^v(\d+\.\d+)', appregistry_build['version']).groups()[0]
     csv = {}
     with ZipFile(BytesIO(res.content)) as z:
         for filename in z.namelist():
-            if re.match(f"{minor_version}/.*clusterserviceversion.yaml", filename):
+            if re.match(f"^{minor_version}/.*clusterserviceversion.yaml", filename):
                 with z.open(filename) as csv_file:
+                    if csv:
+                        raise ElliottFatalError(f"found more than one CSV in {appregistry_build['nvr']}?!? {filename}")
                     csv = yaml.full_load(csv_file)
 
     if not csv:
@@ -140,10 +142,10 @@ def _extract_available_image_shasums(image_builds):
 def _any_references_are_missing(references, available):
     # check that referenced are all attached
     missing = False
-    for image_pullspec, bundle in references.items():
+    for image_pullspec, metadata in references.items():
         digest = image_pullspec.split("@")[1]  # just the shasum
         if digest not in available:
             missing = True
             ref = image_pullspec.rsplit('/', 1)[1]  # cut off the registry/namespace, just need the name:shasum
-            red_print(f"{bundle} has a reference to {ref} not present in the advisories nor shipped images.")
+            red_print(f"{metadata} has a reference to {ref} not present in the advisories nor shipped images.")
     return missing
