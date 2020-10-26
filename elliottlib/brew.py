@@ -30,6 +30,20 @@ from requests_kerberos import HTTPKerberosAuth
 logger = logutil.getLogger(__name__)
 
 
+def get_tagged_builds(tags: Iterable[str], build_type: Optional[str], event: Optional[int], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
+    """ Get tagged builds for multiple Brew tags
+
+    :param tags: List of tag names
+    :param build_type: if given, only retrieve specified build type (rpm, image)
+    :param event: Brew event ID, or None for now.
+    :param session: instance of Brew session
+    :return: a list of Koji/Brew build dicts
+    """
+    with session.multicall(strict=True) as m:
+        tasks = [m.listTagged(tag, event=event, type=build_type) for tag in tags]
+    return [build for task in tasks for build in task.result]
+
+
 def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
     """ Get latest builds for multiple Brew components
 

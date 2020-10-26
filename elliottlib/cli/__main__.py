@@ -56,6 +56,7 @@ from elliottlib.cli.advisory_impetus_cli import advisory_impetus_cli
 from elliottlib.cli.tag_builds_cli import tag_builds_cli
 from elliottlib.cli.verify_cvp_cli import verify_cvp_cli
 from elliottlib.cli.advisory_drop_cli import advisory_drop_cli
+from elliottlib.cli.verify_attached_operators_cli import verify_attached_operators_cli
 
 # 3rd party
 import bugzilla
@@ -689,6 +690,7 @@ cli.add_command(tag_builds_cli)
 cli.add_command(tarball_sources_cli)
 cli.add_command(verify_cvp_cli)
 cli.add_command(advisory_drop_cli)
+cli.add_command(verify_attached_operators_cli)
 
 
 # -----------------------------------------------------------------------------

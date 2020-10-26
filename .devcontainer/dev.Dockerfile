@@ -23,7 +23,9 @@ RUN dnf install -y \
     # other tools
     bash-completion vim tmux procps-ng psmisc wget curl net-tools iproute \
   # clean up
-  && dnf clean all
+  && dnf clean all \
+  # make "python" available
+  && ln -s /usr/bin/python3 /usr/bin/python
 
 
 ARG OC_VERSION=latest
