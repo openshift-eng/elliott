@@ -23,6 +23,7 @@ SECURITY_IMPACT = ["Low", "Low", "Moderate", "Important", "Critical"]
 
 errata_xmlrpc_url = 'http://errata.engineering.redhat.com/errata/xmlrpc.cgi'
 errata_url = "https://errata.devel.redhat.com"
+# errata_url = "https://errata.stage.engineering.redhat.com"
 
 # 1965 => (RHBA; Active; Product: RHOSE; Devel Group: ENG OpenShift
 #          Enterprise; sorted by newest)
@@ -138,6 +139,7 @@ errata_add_builds_url = errata_url + "/api/v1/erratum/{id}/add_builds"
 errata_add_comment_url = errata_url + "/api/v1/erratum/{id}/add_comment"
 errata_bug_refresh_url = errata_url + "/api/v1/bug/refresh"
 errata_change_state_url = errata_url + "/api/v1/erratum/{id}/change_state"
+errata_drop_url = errata_url + "/errata/drop_errata/{id}"
 errata_filter_list_url = errata_url + "/filter/{id}.json"
 errata_get_build_url = errata_url + "/api/v1/build/{id}"
 errata_get_builds_url = errata_url + "/api/v1/erratum/{id}/builds"
