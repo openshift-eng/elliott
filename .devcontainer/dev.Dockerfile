@@ -25,7 +25,7 @@ RUN dnf install -y \
   # clean up
   && dnf clean all \
   # make "python" available
-  && ln -s /usr/bin/python3 /usr/bin/python
+  && ln -sfn /usr/bin/python3 /usr/bin/python
 
 
 ARG OC_VERSION=latest
