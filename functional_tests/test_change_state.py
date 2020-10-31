@@ -14,4 +14,4 @@ class ChangeStateTestCase(unittest.TestCase):
             stdout=subprocess.PIPE
         )
         out, _ = p.communicate()
-        self.assertIn("Cannot change state from SHIPPED_LIVE to QE", out.decode("utf-8"))
+        self.assertIn("current state is SHIPPED_LIVE", out.decode("utf-8"))
