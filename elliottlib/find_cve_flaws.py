@@ -1,6 +1,6 @@
 import requests
 import ssl
-from elliottlib import constants, bzutil
+from elliottlib import constants, bzutil, errata, util
 from requests_kerberos import HTTPKerberosAuth
 
 
@@ -13,7 +13,7 @@ def get_attached_tracker_bugs(bzapi, advisory_id):
 
 
 def get_all_attached_bugs(advisory_id):
-    return [bug['bug'] for bug in get_advisory(advisory_id)['bugs']['bugs']]
+    return [bug['bug'] for bug in errata.get_raw_erratum(advisory_id)['bugs']['bugs']]
 
 
 def is_tracker_bug(bug):
@@ -25,12 +25,7 @@ def is_flaw_bug(bug):
 
 
 def get_advisory(advisory_id):
-    res = requests.get(
-        '{}/api/v1/erratum/{}'.format(constants.errata_url, advisory_id),
-        verify=ssl.get_default_verify_paths().openssl_cafile,
-        auth=HTTPKerberosAuth(),
-    )
-    return res.json()
+    return errata.ErrataConnector()._get(f'/api/v1/erratum/{advisory_id}')
 
 
 def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
@@ -39,18 +34,15 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
 
 
 def is_first_fix(bzapi, flaw_bug, current_target_release, tracker_ids_to_be_ignored=[]):
-    other_flaw_trackers = bzapi.getbugs([
-        t for t in flaw_bug.depends_on
-        if t not in tracker_ids_to_be_ignored
-    ])
+    other_flaw_trackers = bzapi.query(bzapi.build_query(
+        product='OpenShift Container Platform',
+        bug_id=[t for t in flaw_bug.depends_on if t not in tracker_ids_to_be_ignored],
+    ))
 
     def _filter_tracker(bug):
-        if all([
-            bug.product == 'OpenShift Container Platform',
-            bug.target_release[0] <= current_target_release,
-        ]):
-            return True
-        return False
+        current_major_version = util.minor_version_tuple(current_target_release)[0]
+        bug_target_major_version = util.minor_version_tuple(bug.target_release[0])[0]
+        return bug_target_major_version == current_major_version
 
     def _already_fixed(bug):
         if bug.status == 'RELEASE_PENDING':
@@ -67,7 +59,7 @@ def is_security_advisory(advisory):
 
 
 def get_highest_security_impact(bugs):
-    security_impacts = [bug.severity.lower() for bug in bugs]
+    security_impacts = set(bug.severity.lower() for bug in bugs)
     if 'urgent' in security_impacts:
         return 'Critical'
     if 'high' in security_impacts:

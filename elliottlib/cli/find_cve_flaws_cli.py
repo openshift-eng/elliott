@@ -41,15 +41,14 @@ def find_cve_flaws_cli(runtime, default_advisory_type):
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
     attached_tracker_bugs = get_attached_tracker_bugs(bzapi, advisory_id)
-    #### @TODO: remove this block before merge, let it here for now because it
-    #### is useful for testing the PR, when BZs are not yet attached to an advisory
+    # # @TODO: remove this block before merge, let it here for now because it
+    # # is useful for testing the PR, when BZs are not yet attached to an advisory
     # attached_tracker_bugs = bzapi.query(bzapi.build_query(
     #     product='OpenShift Container Platform',
     #     status=['MODIFIED', 'ON_QA', 'VERIFIED'],
     #     target_release='3.11.z',
     #     keywords=['Security', 'SecurityTracking'],
     # ))
-    #### /testing
     runtime.logger.info('found {} tracker bugs attached to the advisory'.format(
         len(attached_tracker_bugs)
     ))

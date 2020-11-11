@@ -59,9 +59,6 @@ from elliottlib.cli.advisory_drop_cli import advisory_drop_cli
 from elliottlib.cli.verify_attached_operators_cli import verify_attached_operators_cli
 from elliottlib.cli.verify_attached_bugs_cli import verify_attached_bugs_cli
 from elliottlib.cli.find_cve_flaws_cli import find_cve_flaws_cli
-from elliottlib.cli.advisory_drop_cli import advisory_drop_cli
-from elliottlib.cli.verify_attached_operators_cli import verify_attached_operators_cli
-from elliottlib.cli.find_cve_flaws_cli import find_cve_flaws_cli
 
 # 3rd party
 import bugzilla
@@ -697,9 +694,6 @@ cli.add_command(verify_cvp_cli)
 cli.add_command(advisory_drop_cli)
 cli.add_command(verify_attached_operators_cli)
 cli.add_command(verify_attached_bugs_cli)
-cli.add_command(find_cve_flaws_cli)
-cli.add_command(advisory_drop_cli)
-cli.add_command(verify_attached_operators_cli)
 cli.add_command(find_cve_flaws_cli)
 
 
