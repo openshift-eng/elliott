@@ -268,5 +268,7 @@ def minor_version_tuple(bz_target):
     :param bz_target: A string like "4.5.0"
     :return: A tuple like (4, 5)
     """
+    if bz_target == '---':
+        return (0, 0)
     major, minor, _ = f"{bz_target}.z".split('.', 2)
     return (int(major), int(minor))
