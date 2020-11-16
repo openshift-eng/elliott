@@ -28,8 +28,8 @@
 		"python.testing.pytestEnabled": false,
 		"python.testing.nosetestsEnabled": false,
 		"python.testing.unittestEnabled": true,
-		"python.jediEnabled": false,  // false to use Microsoft Python Language Server. This requires .NET Core 2.1+
-		"python.languageServer": "Microsoft"
+		"python.jediEnabled": false,  // false to use Pylance Python Language Server.
+		"python.languageServer": "Pylance"
 	},
 	// Uncomment the next line if you want to publish any ports.
 	// "appPort": [],
@@ -37,8 +37,7 @@
 	"postCreateCommand": "sudo chown -R dev: /workspaces/elliott-working-dir && pip3 install --user -r requirements-dev.txt -e .",
 	// Add the IDs of extensions you want installed when the container is created in the array below.
 	"extensions": [
-		"ms-python.python",
-		"eamodio.gitlens",
-		"visualstudioexptteam.vscodeintellicode"
+		"ms-python.vscode-pylance",
+		"eamodio.gitlens"
 	]
 }
