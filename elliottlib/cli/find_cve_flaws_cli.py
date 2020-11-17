@@ -13,6 +13,10 @@ pass_runtime = click.make_pass_decorator(Runtime)
 
 @cli.command('find-cve-flaws',
              short_help='Attach corresponding flaw bugs for trackers in advisory (first-fix only)')
+@click.option("--noop", "--dry-run",
+              required=False,
+              default=False, is_flag=True,
+              help="Print what would change, but don't change anything")
 @use_default_advisory_option
 @pass_runtime
 def find_cve_flaws_cli(runtime, default_advisory_type):
@@ -90,5 +94,10 @@ def find_cve_flaws_cli(runtime, default_advisory_type):
     flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
     runtime.logger.info('Adding the following BZs to the advisory: {}'.format(flaw_ids))
     advisory.addBugs(flaw_ids)
+
+    if noop:
+        print('DRY-RUN: The following changes would have been applied to the advisory:')
+        print(advisory)
+        return True
 
     return advisory.commit()
