@@ -51,16 +51,16 @@ class BugValidator:
 
     def _get_attached_bugs(self, advisories):
         # get bugs attached to all advisories
-        bugs = []
+        bugs = set()
         try:
             for advisory in advisories:
                 green_print(f"Retrieving bugs for advisory {advisory}")
-                bugs.extend(errata.get_bug_ids(advisory))
+                bugs.update(errata.get_bug_ids(advisory))
         except GSSError:
             exit_unauthenticated()
         green_print(f"Found {len(bugs)} bugs")
 
-        return list(bzutil.get_bugs(self.bzapi, bugs).values())
+        return list(bzutil.get_bugs(self.bzapi, list(bugs)).values())
 
     def _get_attached_filtered_bugs(self, advisories):
         # get bugs from advisories that are for the expected product and version
