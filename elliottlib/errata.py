@@ -31,6 +31,21 @@ ErrataConnector._url = constants.errata_url
 errata_xmlrpc = xmlrpc.client.ServerProxy(constants.errata_xmlrpc_url)
 
 
+def get_raw_erratum(advisory_id):
+    """
+    Retrieve the raw dictionary object that we get for an erratum,
+    without wasting time processing it, loading builds, etc.
+    """
+    return ErrataConnector()._get(f"/api/v1/erratum/{advisory_id}")
+
+
+def get_bug_ids(advisory_id):
+    """
+    Retrieve just the bug IDs from an advisory without wasting time processing it, loading builds, etc.
+    """
+    return [bug['bug']['id'] for bug in get_raw_erratum(advisory_id)['bugs']['bugs']]
+
+
 def new_erratum(et_data, errata_type=None, boilerplate_name=None, kind=None, release_date=None, create=False,
                 assigned_to=None, manager=None, package_owner=None, impact=None, cves=None):
     """5.2.1.1. POST /api/v1/erratum

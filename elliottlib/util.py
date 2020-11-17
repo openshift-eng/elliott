@@ -258,3 +258,17 @@ def convert_remote_git_to_https(source):
         string=source.strip(),
     )
     return re.sub(string=url, pattern=r'\.git$', repl='').rstrip('/')
+
+
+def minor_version_tuple(bz_target):
+    """
+    Turns '4.5' or '4.5.z' into numeric (4, 5)
+    Assume the target version begins with numbers 'x.y' - explode otherwise
+
+    :param bz_target: A string like "4.5.0"
+    :return: A tuple like (4, 5)
+    """
+    if bz_target == '---':
+        return (0, 0)
+    major, minor, _ = f"{bz_target}.z".split('.', 2)
+    return (int(major), int(minor))
