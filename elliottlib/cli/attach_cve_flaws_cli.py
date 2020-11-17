@@ -3,7 +3,7 @@ import click
 from errata_tool import Erratum
 from elliottlib import Runtime, bzutil
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
-from elliottlib.find_cve_flaws import get_attached_tracker_bugs, \
+from elliottlib.attach_cve_flaws import get_attached_tracker_bugs, \
     get_corresponding_flaw_bugs, is_first_fix, is_security_advisory, \
     get_highest_security_impact, is_advisory_impact_smaller_than
 
@@ -11,7 +11,7 @@ from elliottlib.find_cve_flaws import get_attached_tracker_bugs, \
 pass_runtime = click.make_pass_decorator(Runtime)
 
 
-@cli.command('find-cve-flaws',
+@cli.command('attach-cve-flaws',
              short_help='Attach corresponding flaw bugs for trackers in advisory (first-fix only)')
 @click.option("--noop", "--dry-run",
               required=False,
@@ -19,14 +19,14 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="Print what would change, but don't change anything")
 @use_default_advisory_option
 @pass_runtime
-def find_cve_flaws_cli(runtime, default_advisory_type):
+def attach_cve_flaws_cli(runtime, noop, default_advisory_type):
     """Attach corresponding flaw bugs for trackers in advisory (first-fix only).
 
     Also converts advisory to RHSA, if not already.
 
     Example:
 
-    $ elliott --group openshift-4.6 find-cve-flaws --use-default-advisory image
+    $ elliott --group openshift-4.6 attach-cve-flaws --use-default-advisory image
     INFO Cloning config data from https://github.com/openshift/ocp-build-data.git
     INFO Using branch from group.yml: rhaos-4.6-rhel-8
     INFO found 114 tracker bugs attached to the advisory
