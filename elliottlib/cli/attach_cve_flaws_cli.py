@@ -82,6 +82,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
             description=cve_boilerplate['description'],
             topic=cve_boilerplate['topic'],
             solution=cve_boilerplate['solution'],
+            security_impact='Low',
         )
 
     cves = ' '.join([flaw_bug.alias[0] for flaw_bug in first_fix_flaw_bugs])
