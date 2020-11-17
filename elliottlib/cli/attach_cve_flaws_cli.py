@@ -13,13 +13,16 @@ pass_runtime = click.make_pass_decorator(Runtime)
 
 @cli.command('attach-cve-flaws',
              short_help='Attach corresponding flaw bugs for trackers in advisory (first-fix only)')
+@click.option('--advisory', '-a', 'advisory_id',
+              default=False,
+              help='Find tracker bugs in given advisory')
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
               help="Print what would change, but don't change anything")
 @use_default_advisory_option
 @pass_runtime
-def attach_cve_flaws_cli(runtime, noop, default_advisory_type):
+def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     """Attach corresponding flaw bugs for trackers in advisory (first-fix only).
 
     Also converts advisory to RHSA, if not already.
@@ -41,7 +44,7 @@ def attach_cve_flaws_cli(runtime, noop, default_advisory_type):
     bzurl = runtime.gitdata.load_data(key='bugzilla').data['server']
     bzapi = bugzilla.Bugzilla(bzurl)
 
-    if default_advisory_type is not None:
+    if not advisory_id and default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
     attached_tracker_bugs = get_attached_tracker_bugs(bzapi, advisory_id)
@@ -82,7 +85,7 @@ def attach_cve_flaws_cli(runtime, noop, default_advisory_type):
         )
 
     cves = ' '.join([flaw_bug.alias[0] for flaw_bug in first_fix_flaw_bugs])
-    advisory.update(cves="{} {}".format(advisory.cves, cves).strip())
+    advisory.update(cve_names="{} {}".format(advisory.cve_names, cves).strip())
     print('List of *new* CVEs: {}'.format(cves))
 
     highest_impact = get_highest_security_impact(first_fix_flaw_bugs)
