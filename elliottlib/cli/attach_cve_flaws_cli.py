@@ -72,7 +72,6 @@ def attach_cve_flaws_cli(runtime, noop, default_advisory_type):
     if not is_security_advisory(advisory):
         runtime.logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
         cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
-        cves = ' '.join([flaw_bug.alias[0] for flaw_bug in first_fix_flaw_bugs])
         advisory.update(
             errata_type='RHSA',
             security_reviewer=cve_boilerplate['security_reviewer'],
@@ -80,9 +79,11 @@ def attach_cve_flaws_cli(runtime, noop, default_advisory_type):
             description=cve_boilerplate['description'],
             topic=cve_boilerplate['topic'],
             solution=cve_boilerplate['solution'],
-            cves=cves,
         )
-        print('List of CVEs: {}'.format(cves))
+
+    cves = ' '.join([flaw_bug.alias[0] for flaw_bug in first_fix_flaw_bugs])
+    advisory.update(cves="{} {}".format(advisory.cves, cves).strip())
+    print('List of *new* CVEs: {}'.format(cves))
 
     highest_impact = get_highest_security_impact(first_fix_flaw_bugs)
     if is_advisory_impact_smaller_than(advisory, highest_impact):
