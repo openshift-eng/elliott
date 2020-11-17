@@ -40,7 +40,7 @@ def is_first_fix(bzapi, flaw_bug, current_target_release, tracker_ids_to_be_igno
     ))
 
     def _filter_tracker(bug):
-        current_major_version = util.minor_version_tuple(current_target_release)[0]
+        current_major_version = util.minor_version_tuple(current_target_release[0])[0]
         bug_target_major_version = util.minor_version_tuple(bug.target_release[0])[0]
         return bug_target_major_version == current_major_version
 

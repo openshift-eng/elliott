@@ -55,7 +55,7 @@ def attach_cve_flaws_cli(runtime, noop, default_advisory_type):
     ))
 
     attached_tracker_ids = [tracker.id for tracker in attached_tracker_bugs]
-    current_target_release = "{MAJOR}.{MINOR}.z".format(**runtime.group_config.vars)
+    current_target_release = runtime.gitdata.load_data(key='bugzilla').data['target_release']
     first_fix_flaw_bugs = [
         flaw_bug for flaw_bug in corresponding_flaw_bugs
         if is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids)
