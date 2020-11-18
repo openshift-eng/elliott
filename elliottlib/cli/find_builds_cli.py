@@ -263,6 +263,8 @@ def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, p, np):
 
     # type judge
     def tj(image, p, np):
+        if not image.is_release:
+            return False
         if p:
             return p == image.is_payload
         if np:

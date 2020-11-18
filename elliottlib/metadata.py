@@ -129,3 +129,7 @@ class Metadata(object):
             component_name = self.config.distgit.component
 
         return component_name
+
+    @property
+    def is_release(self):
+        return self.config.get('for_release', True)
