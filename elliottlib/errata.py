@@ -18,6 +18,7 @@ import re
 from elliottlib import exceptions, constants, brew, logutil, bzutil
 from elliottlib.util import green_prefix, exit_unauthenticated
 
+import click
 import requests
 from requests_kerberos import HTTPKerberosAuth
 from kerberos import GSSError
@@ -530,3 +531,34 @@ def detach_build(advisory_id: int, nvr: str, session=None):
         response.raise_for_status()
         result = response.json()
         return result
+
+
+def get_advisory_nvrs(advisory):
+    try:
+        green_prefix("Fetching advisory builds: ")
+        click.echo("Advisory - {}".format(advisory))
+        builds = get_builds(advisory)
+    except GSSError:
+        exit_unauthenticated()
+    except exceptions.ErrataToolError as ex:
+        raise exceptions.ElliottFatalError(getattr(ex, 'message', repr(ex)))
+
+    all_advisory_nvrs = {}
+    # Results come back with top level keys which are brew tags
+    green_prefix("Looping over tags: ")
+    click.echo("{} tags to check".format(len(builds)))
+    for tag in builds.keys():
+        # Each top level has a key 'builds' which is a list of dicts
+        green_prefix("Looping over builds in tag: ")
+        click.echo("{} with {} builds".format(tag, len(builds[tag]['builds'])))
+        for build in builds[tag]['builds']:
+            # Each dict has a top level key which might be the actual
+            # 'nvr' but I don't have enough data to know for sure
+            # yet. Also I don't know when there might be more than one
+            # key in the build dict. We'll loop over it to be sure.
+            for name in build.keys():
+                n, v, r = name.rsplit('-', 2)
+                version_release = "{}-{}".format(v, r)
+                all_advisory_nvrs[n] = version_release
+
+    return all_advisory_nvrs

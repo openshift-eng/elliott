@@ -210,6 +210,23 @@ def find_unshipped_build_candidates(base_tag, kind='rpm', brew_session=koji.Clie
     return diff_builds
 
 
+def get_nvr_root_log(name, version, release, arch='x86_64'):
+    root_log_url = '{host}/vol/rhel-{rhel_version}/packages/{name}/{version}/{release}/data/logs/{arch}/root.log'.format(
+        host=constants.BREW_DOWNLOAD_URL,
+        rhel_version=release[-1],
+        name=name,
+        version=version,
+        release=release,
+        arch=arch,
+    )
+
+    logger.debug(f"Trying {root_log_url}")
+    res = requests.get(root_log_url, verify=ssl.get_default_verify_paths().openssl_cafile)
+    if res.status_code != 200:
+        raise exceptions.BrewBuildException("Could not get root.log for {}-{}-{}".format(name, version, release))
+    return str(res.content)
+
+
 class Build(object):
     """An existing brew build
 

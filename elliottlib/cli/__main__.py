@@ -59,6 +59,7 @@ from elliottlib.cli.advisory_drop_cli import advisory_drop_cli
 from elliottlib.cli.verify_attached_operators_cli import verify_attached_operators_cli
 from elliottlib.cli.verify_attached_bugs_cli import verify_attached_bugs_cli
 from elliottlib.cli.attach_cve_flaws_cli import attach_cve_flaws_cli
+from elliottlib.cli.get_golang_versions import get_golang_versions_cli
 
 # 3rd party
 import bugzilla
@@ -431,32 +432,7 @@ written out to summary_results.json.
     $ elliott verify-payload quay.io/openshift-release-dev/ocp-release:4.1.0-rc.6 41567
 
     """
-    try:
-        green_prefix("Fetching advisory builds: ")
-        click.echo("Advisory - {}".format(advisory))
-        builds = elliottlib.errata.get_builds(advisory)
-    except GSSError:
-        exit_unauthenticated()
-    except elliottlib.exceptions.ErrataToolError as ex:
-        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
-
-    all_advisory_nvrs = {}
-    # Results come back with top level keys which are brew tags
-    green_prefix("Looping over tags: ")
-    click.echo("{} tags to check".format(len(builds)))
-    for tag in builds.keys():
-        # Each top level has a key 'builds' which is a list of dicts
-        green_prefix("Looping over builds in tag: ")
-        click.echo("{} with {} builds".format(tag, len(builds[tag]['builds'])))
-        for build in builds[tag]['builds']:
-            # Each dict has a top level key which might be the actual
-            # 'nvr' but I don't have enough data to know for sure
-            # yet. Also I don't know when there might be more than one
-            # key in the build dict. We'll loop over it to be sure.
-            for name in build.keys():
-                n, v, r = name.rsplit('-', 2)
-                version_release = "{}-{}".format(v, r)
-                all_advisory_nvrs[n] = version_release
+    all_advisory_nvrs = elliottlib.errata.get_advisory_nvrs(advisory)
 
     click.echo("Found {} builds".format(len(all_advisory_nvrs)))
 

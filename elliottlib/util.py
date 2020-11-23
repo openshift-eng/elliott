@@ -272,3 +272,11 @@ def minor_version_tuple(bz_target):
         return (0, 0)
     major, minor, _ = f"{bz_target}.z".split('.', 2)
     return (int(major), int(minor))
+
+
+def get_golang_version_from_root_log(root_log):
+    # Based on below greps:
+    # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang-(bin-|))[0-9]+.[0-9]+.[0-9]+[^ ]*' ./3.11/*.log | sed 's/:.*\([0-9]\+\.[0-9]\+\.[0-9]\+.*\)/: \1/'
+    # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang.*module[^ ]*).*[0-9]+.[0-9]+.[0-9]+[^ ]*' ./4.5/*.log | sed 's/\:.*\([^a-z][0-9]\+\.[0-9]\+\.[0-9]\+[^ ]*\)/:\ \1/'
+    m = re.search(r'(go-toolset-1[^ ]*|golang-(bin-|))[0-9]+.[0-9]+.[0-9]+[^ \\]*', root_log)
+    return m.group(0)
