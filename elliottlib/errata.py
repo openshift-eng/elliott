@@ -47,6 +47,16 @@ def get_bug_ids(advisory_id):
     return [bug['bug']['id'] for bug in get_raw_erratum(advisory_id)['bugs']['bugs']]
 
 
+def get_erratum_content_type(advisory_id: str):
+    raw_erratum = get_raw_erratum(advisory_id)
+    erratum = raw_erratum.get('errata')
+    for t in constants.ADVISORY_TYPES:
+        data = erratum.get(t)
+        if data is not None:
+            return data.get('content_types')[0]
+    return None
+
+
 def new_erratum(et_data, errata_type=None, boilerplate_name=None, kind=None, release_date=None, create=False,
                 assigned_to=None, manager=None, package_owner=None, impact=None, cves=None):
     """5.2.1.1. POST /api/v1/erratum
