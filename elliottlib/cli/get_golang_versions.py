@@ -18,15 +18,14 @@ def get_golang_versions_cli(runtime, advisory):
 \b
     $ elliott --group openshift-3.7 get-golang-versions ID
 """
-    all_advisory_nvrs = errata.get_advisory_nvrs(advisory)
+    all_advisory_nvrs = errata.get_all_advisory_nvrs(advisory)
 
     click.echo("Found {} builds".format(len(all_advisory_nvrs)))
-    for component, value in all_advisory_nvrs.items():
-        version, release = value.rsplit('-', 1)
+    for nvr in all_advisory_nvrs:
         try:
-            root_log = brew.get_nvr_root_log(component, version, release)
+            root_log = brew.get_nvr_root_log(*nvr)
         except BrewBuildException as e:
             print(e)
             continue
         golang_version = get_golang_version_from_root_log(root_log)
-        print('{}-{}-{}: {}'.format(component, version, release, golang_version))
+        print('{}-{}-{}:\t{}'.format(*nvr, golang_version))

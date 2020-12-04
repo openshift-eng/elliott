@@ -534,6 +534,9 @@ def detach_build(advisory_id: int, nvr: str, session=None):
 
 
 def get_advisory_nvrs(advisory):
+    """
+    :return: dict, with keys as package names and values as strs in the form: '{version}-{release}'
+    """
     try:
         green_prefix("Fetching advisory builds: ")
         click.echo("Advisory - {}".format(advisory))
@@ -560,5 +563,28 @@ def get_advisory_nvrs(advisory):
                 n, v, r = name.rsplit('-', 2)
                 version_release = "{}-{}".format(v, r)
                 all_advisory_nvrs[n] = version_release
+
+    return all_advisory_nvrs
+
+
+def get_all_advisory_nvrs(advisory):
+    """
+    :return: list of tuples (name, version, release)
+    """
+    try:
+        builds = get_builds(advisory)
+    except GSSError:
+        exit_unauthenticated()
+    except exceptions.ErrataToolError as ex:
+        raise exceptions.ElliottFatalError(getattr(ex, 'message', repr(ex)))
+
+    all_advisory_nvrs = []
+    # Results come back with top level keys which are brew tags
+    for tag in builds.keys():
+        # Each top level has a key 'builds' which is a list of dicts
+        for build in builds[tag]['builds']:
+            for name in build.keys():
+                n, v, r = name.rsplit('-', 2)
+                all_advisory_nvrs.append((n, v, r))
 
     return all_advisory_nvrs
