@@ -129,6 +129,8 @@ RPMDIFF_SCORE_NAMES = {
 RPMDIFF_WEB_URL = "https://rpmdiff.engineering.redhat.com"
 RPMDIFF_HUB_URL = "https://rpmdiff-hub.host.prod.eng.bos.redhat.com"
 
+ADVISORY_TYPES = ('rhba', 'rhea', 'rhsa')
+
 ######################################################################
 # API endpoints with string formatting placeholders as
 # necessary. Index of all available endpoints is available in the
