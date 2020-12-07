@@ -25,5 +25,9 @@ class ImageMetadata(Metadata):
         return self.config.base_only
 
     @property
+    def is_release(self):
+        return self.config.get('for_release', True)
+
+    @property
     def is_payload(self):
         return self.config.get('for_payload', False)
