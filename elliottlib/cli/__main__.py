@@ -522,7 +522,7 @@ written out to summary_results.json.
         advisory_nvrs: Dict[int, List[str]] = {}  # a dict mapping advisory numbers to lists of NVRs
         green_print(f"Checking if {len(missing_in_errata)} missing images are shipped...")
         for nvr in missing_in_errata.copy().values():
-            # get the list of advisoires that this build has been attached to
+            # get the list of advisories that this build has been attached to
             build = elliottlib.errata.get_brew_build(nvr)
             # filter out dropped advisories
             advisories = [ad for ad in build.all_errata if ad["status"] != "DROPPED_NO_SHIP"]
