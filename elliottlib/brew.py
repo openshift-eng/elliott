@@ -139,6 +139,43 @@ def get_builds_tags(build_nvrs, session=None):
     return [task.result for task in tasks]
 
 
+def list_archives_by_builds(build_ids: List[int], build_type: Optional[str], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
+    """ Retrieve information about archives by builds
+    :param build_ids: List of build IDs
+    :param build_type: build type, such as "image"
+    :param session: instance of Brew session
+    :return: a list of Koji/Brew archive lists (augmented with "rpms" entries for RPM lists)
+    """
+    tasks = []
+    with session.multicall(strict=True) as m:
+        for build_id in build_ids:
+            if not build_id:
+                tasks.append(None)
+                continue
+            tasks.append(m.listArchives(buildID=build_id, type=build_type))
+    archives_list = [task.result if task else None for task in tasks]
+
+    # each archives record contains an archive per arch; look up RPMs for each
+    archives = [ar for rec in archives_list for ar in rec or []]
+    archives_rpms = list_image_rpms([ar["id"] for ar in archives], session)
+    for archive, rpms in zip(archives, archives_rpms):
+        archive["rpms"] = rpms
+
+    return archives_list
+
+
+def list_image_rpms(image_ids: List[int], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
+    """ Retrieve RPMs in given images
+    :param image_ids: image IDs list
+    :param session: instance of Brew session
+    :return: a list of Koji/Brew RPM lists
+    """
+    tasks = []
+    with session.multicall(strict=True) as m:
+        tasks = [m.listRPMs(imageID=image_id) for image_id in image_ids]
+    return [task.result for task in tasks]
+
+
 def get_brew_build(nvr, product_version='', session=None):
     """5.2.2.1. GET /api/v1/build/{id_or_nvr}
 
