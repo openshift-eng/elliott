@@ -20,6 +20,7 @@ import os
 import re
 import sys
 import time
+from typing import Dict, List
 
 # ours
 from elliottlib import version, exectools
@@ -491,11 +492,13 @@ written out to summary_results.json.
 
     missing_in_errata = {}
     payload_doesnt_match_errata = {}
-    in_other_advisories = {}
+    in_pending_advisory = []
+    in_shipped_advisory = []
     output = {
         'missing_in_advisory': missing_in_errata,
         'payload_advisory_mismatch': payload_doesnt_match_errata,
-        "in_other_advisories": in_other_advisories,
+        "in_pending_advisory": in_pending_advisory,
+        "in_shipped_advisory": in_shipped_advisory,
     }
 
     green_prefix("Analyzing data: ")
@@ -515,19 +518,42 @@ written out to summary_results.json.
                 'errata': all_advisory_nvrs[image]
             }
 
-    if missing_in_errata:
+    if missing_in_errata:  # check if missing images are already shipped or pending to ship
+        advisory_nvrs: Dict[int, List[str]] = {}  # a dict mapping advisory numbers to lists of NVRs
         green_print(f"Checking if {len(missing_in_errata)} missing images are shipped...")
-        nvrs = list(missing_in_errata.values())
-        tag_lists = elliottlib.brew.get_builds_tags(nvrs)
-        for nvr, tags in zip(nvrs, tag_lists):
+        for nvr in missing_in_errata.copy().values():
+            # get the list of advisories that this build has been attached to
+            build = elliottlib.errata.get_brew_build(nvr)
+            # filter out dropped advisories
+            advisories = [ad for ad in build.all_errata if ad["status"] != "DROPPED_NO_SHIP"]
+            if not advisories:
+                red_print("Build {nvr} is not attached to any advisories.")
+                continue
+            for advisory in advisories:
+                if advisory["status"] == "SHIPPED_LIVE":
+                    green_print(f"Missing build {nvr} has been shipped with advisory {advisory}.")
+                else:
+                    yellow_print(f"Missing build {nvr} is in another pending advisory.")
+                advisory_nvrs.setdefault(advisory["id"], []).append(nvr)
             name = nvr.rsplit("-", 2)[0]
-            if any(map(lambda tag: tag["name"].endswith('-released'), tags)):
-                green_print(f"Build {nvr} is shipped. Skipping...")
-                del missing_in_errata[name]
-            elif any(map(lambda tag: tag["name"].endswith('-pending'), tags)):
-                green_print(f"Build {nvr} is in another advisory.")
-                del missing_in_errata[name]
-                in_other_advisories[name] = nvr
+            del missing_in_errata[name]
+        if advisory_nvrs:
+            click.echo(f"Getting information of {len(advisory_nvrs)} advisories...")
+            for advisory, nvrs in advisory_nvrs.items():
+                advisory_obj = elliottlib.errata.get_raw_erratum(advisory)
+                adv_type, adv_info = next(iter(advisory_obj["errata"].items()))
+                item = {
+                    "id": advisory,
+                    "type": adv_type.upper(),
+                    "url": elliottlib.constants.errata_url + f"/{advisory}",
+                    "summary": adv_info["synopsis"],
+                    "state": adv_info["status"],
+                    "nvrs": nvrs,
+                }
+                if adv_info["status"] == "SHIPPED_LIVE":
+                    in_shipped_advisory.append(item)
+                else:
+                    in_pending_advisory.append(item)
 
     green_print("Summary results:")
     click.echo(json.dumps(output, indent=4))
