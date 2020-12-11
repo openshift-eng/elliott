@@ -32,7 +32,9 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
     blocking_bugs = bzapi.getbugs(unique(flatten([t.blocks for t in tracker_bugs])))
     return [flaw_bug for flaw_bug in blocking_bugs if is_flaw_bug(flaw_bug)]
 
-
+# this logic works only for GA (y-stream)
+# not for a z-stream release
+# only run if this is GA
 def is_first_fix(bzapi, flaw_bug, current_target_release, tracker_ids_to_be_ignored=[]):
     other_flaw_trackers = bzapi.query(bzapi.build_query(
         product='OpenShift Container Platform',

@@ -7,10 +7,6 @@ from elliottlib.attach_cve_flaws import get_attached_tracker_bugs, \
     get_corresponding_flaw_bugs, is_first_fix, is_security_advisory, \
     get_highest_security_impact, is_advisory_impact_smaller_than
 
-
-pass_runtime = click.make_pass_decorator(Runtime)
-
-
 @cli.command('attach-cve-flaws',
              short_help='Attach corresponding flaw bugs for trackers in advisory (first-fix only)')
 @click.option('--advisory', '-a', 'advisory_id',
@@ -21,7 +17,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
               default=False, is_flag=True,
               help="Print what would change, but don't change anything")
 @use_default_advisory_option
-@pass_runtime
+@click.pass_obj
 def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     """Attach corresponding flaw bugs for trackers in advisory (first-fix only).
 
@@ -41,7 +37,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     1849044, 1856529, 1843575, 1840253]
     """
     runtime.initialize()
-    bzurl = runtime.gitdata.load_data(key='bugzilla').data['server']
+    bzurl = runtime.gitdata.bz_server_url()
     bzapi = bugzilla.Bugzilla(bzurl)
 
     if not advisory_id and default_advisory_type is not None:
@@ -58,7 +54,10 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     ))
 
     attached_tracker_ids = [tracker.id for tracker in attached_tracker_bugs]
-    current_target_release = runtime.gitdata.load_data(key='bugzilla').data['target_release']
+    current_target_release = runtime.gitdata.bz_target_release()
+
+    # if current_target_release is GA then run filtering
+    # otherwise don't filter
     first_fix_flaw_bugs = [
         flaw_bug for flaw_bug in corresponding_flaw_bugs
         if is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids)
@@ -66,43 +65,43 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
         len(first_fix_flaw_bugs), len(corresponding_flaw_bugs),
     ))
+    #
+    # if not first_fix_flaw_bugs:
+    #     runtime.logger.info('No "first-fix" bugs found, exiting')
+    #     exit(0)
+    #
+    # advisory = Erratum(errata_id=advisory_id)
+    # if not is_security_advisory(advisory):
+    #     runtime.logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
+    #     cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
+    #     advisory.update(
+    #         errata_type='RHSA',
+    #         security_reviewer=cve_boilerplate['security_reviewer'],
+    #         synopsis=cve_boilerplate['synopsis'],
+    #         description=cve_boilerplate['description'],
+    #         topic=cve_boilerplate['topic'],
+    #         solution=cve_boilerplate['solution'],
+    #         security_impact='Low',
+    #     )
+    #
+    # cves = ' '.join([flaw_bug.alias[0] for flaw_bug in first_fix_flaw_bugs])
+    # advisory.update(cve_names="{} {}".format(advisory.cve_names, cves).strip())
+    # print('List of *new* CVEs: {}'.format(cves))
+    #
+    # highest_impact = get_highest_security_impact(first_fix_flaw_bugs)
+    # if is_advisory_impact_smaller_than(advisory, highest_impact):
+    #     runtime.logger.info('Adjusting advisory security impact from {} to {}'.format(
+    #         advisory.security_impact, highest_impact
+    #     ))
+    #     advisory.update(security_impact=highest_impact)
+    #
+    # flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
+    # runtime.logger.info('Adding the following BZs to the advisory: {}'.format(flaw_ids))
+    # advisory.addBugs(flaw_ids)
+    #
+    # if noop:
+    #     print('DRY-RUN: The following changes would have been applied to the advisory:')
+    #     print(advisory)
+    #     return True
 
-    if not first_fix_flaw_bugs:
-        runtime.logger.info('No "first-fix" bugs found, exiting')
-        exit(0)
-
-    advisory = Erratum(errata_id=advisory_id)
-    if not is_security_advisory(advisory):
-        runtime.logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
-        cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
-        advisory.update(
-            errata_type='RHSA',
-            security_reviewer=cve_boilerplate['security_reviewer'],
-            synopsis=cve_boilerplate['synopsis'],
-            description=cve_boilerplate['description'],
-            topic=cve_boilerplate['topic'],
-            solution=cve_boilerplate['solution'],
-            security_impact='Low',
-        )
-
-    cves = ' '.join([flaw_bug.alias[0] for flaw_bug in first_fix_flaw_bugs])
-    advisory.update(cve_names="{} {}".format(advisory.cve_names, cves).strip())
-    print('List of *new* CVEs: {}'.format(cves))
-
-    highest_impact = get_highest_security_impact(first_fix_flaw_bugs)
-    if is_advisory_impact_smaller_than(advisory, highest_impact):
-        runtime.logger.info('Adjusting advisory security impact from {} to {}'.format(
-            advisory.security_impact, highest_impact
-        ))
-        advisory.update(security_impact=highest_impact)
-
-    flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
-    runtime.logger.info('Adding the following BZs to the advisory: {}'.format(flaw_ids))
-    advisory.addBugs(flaw_ids)
-
-    if noop:
-        print('DRY-RUN: The following changes would have been applied to the advisory:')
-        print(advisory)
-        return True
-
-    return advisory.commit()
+    # return advisory.commit()
