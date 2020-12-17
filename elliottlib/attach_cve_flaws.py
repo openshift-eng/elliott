@@ -9,7 +9,7 @@ def get_attached_tracker_bugs(bzapi, advisory_id):
         bug['id']
         for bug in get_all_attached_bugs(advisory_id)
         if is_tracker_bug(bug)
-    ])
+    ], permissive=False)  # fail if you cannot get all tracker bugs
 
 
 def get_all_attached_bugs(advisory_id):
@@ -29,12 +29,11 @@ def get_advisory(advisory_id):
 
 
 def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
-    blocking_bugs = bzapi.getbugs(unique(flatten([t.blocks for t in tracker_bugs])))
+    blocking_bugs = bzapi.getbugs(
+        unique(flatten([t.blocks for t in tracker_bugs])),
+        permissive=False
+    )
     return [flaw_bug for flaw_bug in blocking_bugs if is_flaw_bug(flaw_bug)]
-
-# this logic works only for GA (y-stream)
-# not for a z-stream release
-# only run if this is GA
 
 
 def is_first_fix(bzapi, flaw_bug, current_target_release, tracker_ids_to_be_ignored=[]):

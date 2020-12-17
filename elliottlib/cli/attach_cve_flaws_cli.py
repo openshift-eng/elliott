@@ -48,25 +48,30 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     runtime.logger.info('found {} tracker bugs attached to the advisory'.format(
         len(attached_tracker_bugs)
     ))
-    # if len(attached_tracker_bugs) == 0:
-    #     exit(0)
+    if len(attached_tracker_bugs) == 0:
+        exit(0)
 
     corresponding_flaw_bugs = get_corresponding_flaw_bugs(bzapi, attached_tracker_bugs)
     runtime.logger.info('found {} corresponding flaw bugs'.format(
         len(corresponding_flaw_bugs)
     ))
 
-    # attached_tracker_ids = [tracker.id for tracker in attached_tracker_bugs]
-    # current_target_release = runtime.gitdata.bz_target_release()
+    current_target_release = runtime.gitdata.bz_target_release()
 
-    # if current_target_release is GA then run filtering
-    # otherwise don't filter
-    first_fix_flaw_bugs = corresponding_flaw_bugs
+    # if current_target_release is GA then run first-fix bug filtering
+    # for GA not every flaw bug is considered first-fix
+    # for z-stream every flaw bug is considered first-fix
+    if current_target_release[-1][-1] == 'z':
+        runtime.logger.info("detected z-stream target release, every flaw bug is considered first-fix")
+        first_fix_flaw_bugs = corresponding_flaw_bugs
+    else:
+        runtime.logger.info("did not detect GA release, applying first-fix filtering..")
+        attached_tracker_ids = [tracker.id for tracker in attached_tracker_bugs]
+        first_fix_flaw_bugs = [
+            flaw_bug for flaw_bug in corresponding_flaw_bugs
+            if is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids)
+        ]
 
-    # first_fix_flaw_bugs = [
-    #     flaw_bug for flaw_bug in corresponding_flaw_bugs
-    #     if is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids)
-    # ]
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
         len(first_fix_flaw_bugs), len(corresponding_flaw_bugs),
     ))
@@ -90,7 +95,11 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         )
 
     cves = ' '.join([flaw_bug.alias[0] for flaw_bug in first_fix_flaw_bugs])
-    advisory.update("{} {}".format(advisory.cve_names, cves).strip())
+
+    cve_str = cves
+    if advisory.cve_names and cves not in advisory.cve_names:
+        cve_str = "{} {}".format(advisory.cve_names, cves).strip()
+    advisory.update(cve_names=cve_str)
     print('List of *new* CVEs: {}'.format(cves))
 
     highest_impact = get_highest_security_impact(first_fix_flaw_bugs)
