@@ -174,10 +174,10 @@ class GitData(object):
         return self.load_data(key='bugzilla')
 
     def bz_server_url(self):
-        return self.bz.data['server']
+        return self.bz().data['server']
 
     def bz_target_release(self):
-        return self.bz.data['target_release']
+        return self.bz().data['target_release']
 
     def load_data(self, path='', key=None, keys=None, exclude=None, filter_funcs=None, replace_vars={}):
         full_path = os.path.join(self.data_dir, path.replace('\\', '/'))

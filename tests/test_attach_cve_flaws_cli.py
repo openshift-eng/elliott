@@ -21,10 +21,9 @@ class TestAttachCVEFlawsCli(unittest.TestCase):
         )
 
         # mock bugzilla object
-        mock_bzapi = flexmock(
-            getbugs=lambda: []
-        )
+        mock_bzapi = flexmock()
         flexmock(Bugzilla).should_receive("__new__").and_return(mock_bzapi)
+        flexmock(attach_module).should_receive("find_default_advisory").and_return("123")
 
         # mock all external function calls
         flexmock(attach_module).should_receive("get_attached_tracker_bugs").and_return([])
@@ -48,7 +47,7 @@ class TestAttachCVEFlawsCli(unittest.TestCase):
         # so that this can act like an integration test more or less
 
         # invoke command
-        result = runner.invoke(attach_cve_flaws_cli, ['--advisory', '123'
+        result = runner.invoke(attach_cve_flaws_cli, ['--use-default-advisory',
                                                       'image',
                                                       '--dry-run'], obj=mock_runtime)
 
