@@ -18,7 +18,11 @@ def get_rpm_golang_versions(advisory_id: str):
         except BrewBuildException as e:
             print(e)
             continue
-        golang_version = get_golang_version_from_root_log(root_log)
+        try:
+            golang_version = get_golang_version_from_root_log(root_log)
+        except AttributeError:
+            print('Could not find Go version in {}-{}-{} root.log'.format(*nvr))
+            continue
         print('{}-{}-{}:\t{}'.format(*nvr, golang_version))
 
 

@@ -224,7 +224,7 @@ def get_nvr_root_log(name, version, release, arch='x86_64'):
     res = requests.get(root_log_url, verify=ssl.get_default_verify_paths().openssl_cafile)
     if res.status_code != 200:
         raise exceptions.BrewBuildException("Could not get root.log for {}-{}-{}".format(name, version, release))
-    return str(res.content)
+    return res.text
 
 
 class Build(object):
