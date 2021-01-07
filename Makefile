@@ -7,3 +7,6 @@ lint:
 
 test:
 	py.test --verbose --color=yes tests/
+
+tox:
+	tox --recreate
