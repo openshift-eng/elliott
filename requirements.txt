@@ -1,7 +1,5 @@
 aiohttp[speedups] >= 3.6
-bashlex
 click
-dockerfile-parse
 errata-tool >= 1.22
 future
 koji >= 1.18
