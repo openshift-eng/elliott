@@ -1,15 +1,16 @@
 aiohttp[speedups] >= 3.6
-click~=7.1.1
-future~=0.18.2
+bashlex
+click
+dockerfile-parse
+errata-tool >= 1.22
+future
 koji >= 1.18
-python-bugzilla~=3.0.2
-pyyaml~=5.3.1
-requests~=2.22.0
-six~=1.14.0
-
-flexmock~=0.10.4
-mock~=4.0.3
-setuptools~=41.6.0
-typing~=3.7.4.3
-kerberos~=1.3.0
-pygit2~=1.2.1
+pygit2 ~= 0.28 ; python_version <= '3.4'
+pygit2 ; python_version >= '3.5'
+python-bugzilla
+pyyaml
+requests
+requests_kerberos
+ruamel.yaml
+six
+typing ; python_version <= '3.4'

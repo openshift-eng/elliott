@@ -1,5 +1,5 @@
 # import reqs
-errata_tool==1.21.0
+errata_tool>=1.22.0
 kerberos==1.3.0
 pygit2==1.2.1
 future==0.18.2
