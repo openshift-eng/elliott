@@ -1,10 +1,17 @@
-autopep8
-coverage
-flake8
-flexmock
-mock ~= 4.0.2
-pylint
-pytest
-tox
-typing
-typing-extensions
+-rrequirements.txt
+
+# test reqs
+flexmock==0.10.4
+mock==4.0.3
+
+# tox reqs
+coverage==5.3
+flake8==3.8.4
+tox==3.20.1
+
+# makefile reqs
+virtualenv==20.2.2
+pytest==6.2.1
+
+pip~=20.3.3
+setuptools~=41.6.0

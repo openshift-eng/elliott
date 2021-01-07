@@ -170,6 +170,15 @@ class GitData(object):
         if not os.path.isdir(self.data_dir):
             raise GitDataPathException('{} is not a valid sub-directory in the data'.format(self.sub_dir))
 
+    def bz(self):
+        return self.load_data(key='bugzilla')
+
+    def bz_server_url(self):
+        return self.bz().data['server']
+
+    def bz_target_release(self):
+        return self.bz().data['target_release']
+
     def load_data(self, path='', key=None, keys=None, exclude=None, filter_funcs=None, replace_vars={}):
         full_path = os.path.join(self.data_dir, path.replace('\\', '/'))
         if path and not os.path.isdir(full_path):
