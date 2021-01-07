@@ -65,7 +65,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         runtime.logger.info("detected z-stream target release, every flaw bug is considered first-fix")
         first_fix_flaw_bugs = corresponding_flaw_bugs
     else:
-        runtime.logger.info("did not detect GA release, applying first-fix filtering..")
+        runtime.logger.info("detected GA release, applying first-fix filtering..")
         attached_tracker_ids = [tracker.id for tracker in attached_tracker_bugs]
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in corresponding_flaw_bugs
