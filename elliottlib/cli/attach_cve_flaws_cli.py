@@ -45,18 +45,24 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
     attached_tracker_bugs = get_attached_tracker_bugs(bzapi, advisory_id)
-    runtime.logger.info('found {} tracker bugs attached to the advisory'.format(
-        len(attached_tracker_bugs)
+    runtime.logger.info('found {} tracker bugs attached to the advisory: {}'.format(
+        len(attached_tracker_bugs), [bug.id for bug in attached_tracker_bugs]
     ))
     if len(attached_tracker_bugs) == 0:
         exit(0)
 
-    corresponding_flaw_bugs = get_corresponding_flaw_bugs(bzapi, attached_tracker_bugs)
-    runtime.logger.info('found {} corresponding flaw bugs'.format(
-        len(corresponding_flaw_bugs)
-    ))
+    target_releases = set(bug.target_release[0] for bug in attached_tracker_bugs)
+    if len(target_releases) != 1:
+        runtime.logger.info('found different target_release for tracker bugs: {}'.format(target_releases))
+        exit(1)
 
-    current_target_release = runtime.gitdata.bz_target_release()
+    current_target_release = target_releases.pop()
+    runtime.logger.info('current_target_release: {}'.format(current_target_release))
+
+    corresponding_flaw_bugs = get_corresponding_flaw_bugs(bzapi, attached_tracker_bugs)
+    runtime.logger.info('found {} corresponding flaw bugs: {}'.format(
+        len(corresponding_flaw_bugs), [bug.id for bug in corresponding_flaw_bugs]
+    ))
 
     # if current_target_release is GA then run first-fix bug filtering
     # for GA not every flaw bug is considered first-fix
@@ -100,7 +106,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     if advisory.cve_names and cves not in advisory.cve_names:
         cve_str = "{} {}".format(advisory.cve_names, cves).strip()
     advisory.update(cve_names=cve_str)
-    print('List of *new* CVEs: {}'.format(cves))
+    runtime.logger.info('List of *new* CVEs: {}'.format(cves))
 
     highest_impact = get_highest_security_impact(first_fix_flaw_bugs)
     if is_advisory_impact_smaller_than(advisory, highest_impact):
