@@ -152,7 +152,7 @@ advisory with the --add option.
         bug_id_strings = openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
         bugs = [bzapi.getbug(i) for i in bug_id_strings]
 
-    # Some bugs should goes to CPaaS so we should ignore them
+    # Some bugs should go to CPaaS so we should ignore them
     m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
     if not m:
         raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
@@ -225,6 +225,12 @@ advisory with the --add option.
     if major_version < 4:  # for 3.x, all bugs should go to the rpm advisory
         impetus_bugs["rpm"] = set(bugs)
     else:  # for 4.x
+        # TODO: this will affect all bugs, check if we need to filter for cve bugs only
+        impetus_bugs["rpm"] = {b for b in bugs if "component:" in b.whiteboard}
+        # TODO: use bzutil.is_rpm_bug()
+        # TODO: check for brew build
+        click.echo("rpm bugs found: {}".format(impetus_bugs["rpm"]))
+
         # optional operators bugs should be swept to the "extras" advisory, while other bugs should be swept to "image" advisory.
         # a way to identify operator-related bugs is by its "Component" value. temporarily hardcode here until we need to move it to ocp-build-data.
         extra_components = {"Logging", "Service Brokers", "Metering Operator", "Node Feature Discovery Operator"}  # we will probably find more

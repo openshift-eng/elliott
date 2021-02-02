@@ -236,7 +236,8 @@ def search_for_bugs(bz_data, status, search_filter='default', filter_out_securit
     if verbose:
         click.echo(query_url)
 
-    return _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs'])
+    return _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary', 'creation_time',
+                                                            'cf_pm_score', 'component', 'external_bugs', 'whiteboard'])
 
 
 def search_for_security_bugs(bz_data, status=None, search_filter='security', cve=None, verbose=False):
@@ -289,6 +290,15 @@ def is_cve_tracker(bug_obj):
     """
     return "SecurityTracking" in bug_obj.keywords and "Security" in bug_obj.keywords
 
+def is_rpm_bug(bug_obj):
+    """ Check if a bug is an rpm bug.
+
+    An OCP rpm bug has a whiteboard value starting with "component:<component_name>"
+
+    :param bug_obj: bug object
+    :returns: True if the bug is an rpm bug.
+    """
+    return 'component:' in bug_obj.whiteboard
 
 def get_bzapi(bz_data, interactive_login=False):
     bzapi = bugzilla.Bugzilla(bz_data['server'])
