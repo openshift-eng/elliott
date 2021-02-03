@@ -258,7 +258,6 @@ advisory with the --add option.
                            "the bugs")
                 click.echo(failed)
 
-
         # optional operators bugs should be swept to the "extras" advisory
         # a way to identify operator-related bugs is by its "Component" value.
         # temporarily hardcode here until we need to move it to ocp-build-data.

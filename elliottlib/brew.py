@@ -198,8 +198,8 @@ def find_unshipped_build_candidates(base_tag, kind='rpm', brew_session=koji.Clie
     a -candidate build
     """
     shipped_builds_set = {b['nvr'] for b in brew_session.listTagged(tag=base_tag, latest=True, type=kind)}
-    candidate_builds_set = {b['nvr'] for b in brew_session.listTagged(tag='{}-candidate'.format(base_tag), latest=True,
-                                                             type=kind)}
+    candidate_builds_set = {b['nvr'] for b in brew_session.listTagged(tag='{}-candidate'.format(base_tag),
+                                                                      latest=True, type=kind)}
     diff_builds = {}
     for b in candidate_builds_set - shipped_builds_set:
         diff_builds[b['nvr']] = b

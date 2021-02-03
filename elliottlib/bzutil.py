@@ -312,6 +312,7 @@ def get_valid_rpm_cves(bugs):
                 rpm_cves[b] = component_name
     return rpm_cves
 
+
 def get_bzapi(bz_data, interactive_login=False):
     bzapi = bugzilla.Bugzilla(bz_data['server'])
     if not bzapi.logged_in:
