@@ -229,15 +229,18 @@ def search_for_bugs(bz_data, status, search_filter='default', filter_out_securit
     bzapi = get_bzapi(bz_data)
     query_url = _construct_query_url(bz_data, status, search_filter)
 
+    fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
+
     if filter_out_security_bugs:
         query_url.addKeyword('SecurityTracking', 'nowords')
+    else:
+        fields.extend(['whiteboard', 'keywords'])
 
     # TODO: Expose this for debugging
     if verbose:
         click.echo(query_url)
 
-    return _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary', 'creation_time',
-                                                            'cf_pm_score', 'component', 'external_bugs', 'whiteboard'])
+    return _perform_query(bzapi, query_url, include_fields=fields)
 
 
 def search_for_security_bugs(bz_data, status=None, search_filter='security', cve=None, verbose=False):
@@ -290,15 +293,24 @@ def is_cve_tracker(bug_obj):
     """
     return "SecurityTracking" in bug_obj.keywords and "Security" in bug_obj.keywords
 
-def is_rpm_bug(bug_obj):
-    """ Check if a bug is an rpm bug.
 
-    An OCP rpm bug has a whiteboard value starting with "component:<component_name>"
+def get_valid_rpm_cves(bugs):
+    """ Get valid rpm cve trackers with their component names
 
-    :param bug_obj: bug object
-    :returns: True if the bug is an rpm bug.
+    An OCP rpm cve tracker has a whiteboard value "component:<component_name>"
+
+    :param bugs: list of bug objects
+    :returns: A dict of bug object as key and component name as value
     """
-    return 'component:' in bug_obj.whiteboard
+    marker = 'component:'
+    rpm_cves = {}
+    for b in bugs:
+        if is_cve_tracker(b) and marker in b.whiteboard:
+            tmp = b.whiteboard.split(marker)
+            if len(tmp) == 2:
+                component_name = tmp[1].strip()
+                rpm_cves[b] = component_name
+    return rpm_cves
 
 def get_bzapi(bz_data, interactive_login=False):
     bzapi = bugzilla.Bugzilla(bz_data['server'])

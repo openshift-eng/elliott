@@ -6,7 +6,7 @@ LOGGER = logutil.getLogger(__name__)
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import green_prefix, green_print, red_print
+from elliottlib.util import green_prefix, green_print, red_print, red_prefix
 
 import click
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -220,22 +220,53 @@ advisory with the --add option.
     # Otherwise we don't need to sweep bugs at all.
     if not (into_default_advisories or default_advisory_type):
         return
-    impetus_bugs = {}  # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
-    # @lmeyer: simple and stupid would still be keeping the logic in python, possibly with config flags for branched logic. until that logic becomes too ugly to keep in python, i suppose..
+
+    # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
+    impetus_bugs = {
+        "rpm": set(),
+        "image": set(),
+        "extras": set()
+    }
+
+    # @lmeyer: simple and stupid would still be keeping the logic in python,
+    # possibly with config flags for branched logic.
+    # until that logic becomes too ugly to keep in python, i suppose..
     if major_version < 4:  # for 3.x, all bugs should go to the rpm advisory
         impetus_bugs["rpm"] = set(bugs)
     else:  # for 4.x
-        # TODO: this will affect all bugs, check if we need to filter for cve bugs only
-        impetus_bugs["rpm"] = {b for b in bugs if "component:" in b.whiteboard}
-        # TODO: use bzutil.is_rpm_bug()
-        # TODO: check for brew build
-        click.echo("rpm bugs found: {}".format(impetus_bugs["rpm"]))
+        # sweep rpm cve trackers into "rpm" advisory
+        if mode == 'sweep' and cve_trackers:
+            rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
+            green_prefix("RPM CVEs found: ")
+            click.echo([b.id for b in rpm_bugs])
 
-        # optional operators bugs should be swept to the "extras" advisory, while other bugs should be swept to "image" advisory.
-        # a way to identify operator-related bugs is by its "Component" value. temporarily hardcode here until we need to move it to ocp-build-data.
+            # check if corresponding brew builds are attached to advisory
+            attached_builds = errata.get_advisory_nvrs(runtime.group_config.advisories["rpm"])
+            packages = attached_builds.keys()
+            failed = []
+            for bug, package_name in rpm_bugs.items():
+                if package_name not in packages:
+                    failed.append((bug.id, package_name))
+                    continue
+                impetus_bugs["rpm"] = {b for b in rpm_bugs}
+
+            if failed:
+                red_prefix("RPM CVE Warning: ")
+                click.echo("The following CVE tracker bugs were found but not attached, because no corresponding "
+                           "brew builds were found attached to the advisory. First attach builds and then rerun to "
+                           "attach "
+                           "the bugs")
+                click.echo(failed)
+
+
+        # optional operators bugs should be swept to the "extras" advisory
+        # a way to identify operator-related bugs is by its "Component" value.
+        # temporarily hardcode here until we need to move it to ocp-build-data.
         extra_components = {"Logging", "Service Brokers", "Metering Operator", "Node Feature Discovery Operator"}  # we will probably find more
         impetus_bugs["extras"] = {b for b in bugs if b.component in extra_components}
-        impetus_bugs["image"] = {b for b in bugs if b.component not in extra_components}
+
+        # all other bugs should go into "image" advisory
+        impetus_bugs["image"] = set(bugs) - impetus_bugs["extras"] - impetus_bugs["rpm"]
 
     if default_advisory_type and impetus_bugs.get(default_advisory_type):
         errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type], noop=noop)
