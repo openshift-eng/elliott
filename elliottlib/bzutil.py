@@ -216,18 +216,19 @@ def create_placeholder(bz_data, kind):
     return newbug
 
 
-def search_for_bugs(bz_data, status, search_filter='default', filter_out_security_bugs=True, verbose=False):
+def search_for_bugs(bz_data, status, search_filter='default', flag=None, filter_out_security_bugs=True, verbose=False):
     """Search the provided target_release's for bugs in the specified states
 
     :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
     :param status: The status(es) of bugs to search for
     :param search_filter: Which search filter from bz_data to use if multiple are specified
+    :param flag: A specific flag to filter out bugs
     :param filter_out_security_bugs: Boolean on whether to filter out bugs tagged with the SecurityTracking keyword.
 
     :return: A list of Bug objects
     """
     bzapi = get_bzapi(bz_data)
-    query_url = _construct_query_url(bz_data, status, search_filter)
+    query_url = _construct_query_url(bz_data, status, search_filter, flag=flag)
 
     if filter_out_security_bugs:
         query_url.addKeyword('SecurityTracking', 'nowords')
@@ -299,7 +300,7 @@ def get_bzapi(bz_data, interactive_login=False):
     return bzapi
 
 
-def _construct_query_url(bz_data, status, search_filter='default'):
+def _construct_query_url(bz_data, status, search_filter='default', flag=None):
     query_url = SearchURL(bz_data)
 
     if bz_data.get('filter'):
@@ -315,6 +316,9 @@ def _construct_query_url(bz_data, status, search_filter='default'):
 
     for r in bz_data.get('target_release', []):
         query_url.addTargetRelease(r)
+
+    if flag:
+        query_url.addFlagFilter(flag, "substring")
 
     return query_url
 
@@ -401,6 +405,9 @@ class SearchURL(object):
 
     def addFilter(self, field, operator, value):
         self.filters.append(SearchFilter(field, operator, value))
+
+    def addFlagFilter(self, flag, operator):
+        self.filters.append(SearchFilter("flagtypes.name", operator, flag))
 
     def addTargetRelease(self, release_string):
         self.target_releases.append(release_string)
