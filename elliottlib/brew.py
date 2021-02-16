@@ -30,7 +30,8 @@ from requests_kerberos import HTTPKerberosAuth
 logger = logutil.getLogger(__name__)
 
 
-def get_tagged_builds(tags: Iterable[str], build_type: Optional[str], event: Optional[int], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
+def get_tagged_builds(tags: Iterable[str], build_type: Optional[str], event: Optional[int],
+                      session: koji.ClientSession) -> List[Optional[List[Dict]]]:
     """ Get tagged builds for multiple Brew tags
 
     :param tags: List of tag names
@@ -44,7 +45,8 @@ def get_tagged_builds(tags: Iterable[str], build_type: Optional[str], event: Opt
     return [build for task in tasks for build in task.result]
 
 
-def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
+def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], session: koji.ClientSession) -> List[
+    Optional[List[Dict]]]:
     """ Get latest builds for multiple Brew components
 
     :param tag_component_tuples: List of (tag, component_name) tuples
@@ -89,7 +91,8 @@ def wait_tasks(task_ids: Iterable[int], session: koji.ClientSession, sleep_secon
                 waiting_tasks.discard(task_id)  # remove from the wait list
         if waiting_tasks:
             if logger:
-                logger.debug(f"There are still {len(waiting_tasks)} tagging task(s) running. Will recheck in {sleep_seconds} seconds.")
+                logger.debug(
+                    f"There are still {len(waiting_tasks)} tagging task(s) running. Will recheck in {sleep_seconds} seconds.")
             time.sleep(sleep_seconds)
 
 
@@ -198,11 +201,12 @@ def find_unshipped_build_candidates(base_tag, kind='rpm', brew_session=koji.Clie
     a -candidate build
     """
     shipped_builds_set = {b['nvr'] for b in brew_session.listTagged(tag=base_tag, latest=True, type=kind)}
-    candidate_builds_set = {b['nvr'] for b in brew_session.listTagged(tag='{}-candidate'.format(base_tag),
-                                                                      latest=True, type=kind)}
+    candidate_builds = {b['nvr']: b for b in brew_session.listTagged(tag='f{base_tag}-candidate',
+                                                                         latest=True, type=kind)}
+    candidate_builds_set = candidate_builds.keys()
     diff_builds = {}
-    for b in candidate_builds_set - shipped_builds_set:
-        diff_builds[b['nvr']] = b
+    for nvr in candidate_builds_set - shipped_builds_set:
+        diff_builds[nvr] = candidate_builds[nvr]
 
     return diff_builds
 
