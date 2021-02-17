@@ -72,7 +72,7 @@ Use cases are described below:
 SWEEP: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
 for bugs claimed to be fixed, but not yet attached to advisories.
---check-builds flag forces bug validation with attached builds to advisory.
+--check-builds flag forces bug validation with attached builds to rpm advisory.
 It assumes builds have been attached and only attaches bugs with matching builds.
 
 LIST: The --group option is not required if you are specifying bugs
@@ -268,6 +268,8 @@ advisory with the --add option.
                                "brew builds were found attached to the rpm advisory. First attach builds and then "
                                "rerun to attach the bugs")
                     click.echo(not_found)
+            else:
+                click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
 
         # optional operators bugs should be swept to the "extras" advisory
         # a way to identify operator-related bugs is by its "Component" value.
