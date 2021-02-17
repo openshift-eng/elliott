@@ -45,8 +45,7 @@ def get_tagged_builds(tags: Iterable[str], build_type: Optional[str], event: Opt
     return [build for task in tasks for build in task.result]
 
 
-def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], session: koji.ClientSession) -> List[
-    Optional[List[Dict]]]:
+def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
     """ Get latest builds for multiple Brew components
 
     :param tag_component_tuples: List of (tag, component_name) tuples
