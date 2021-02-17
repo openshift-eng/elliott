@@ -24,6 +24,10 @@ import re
               type=click.Choice(['list', 'sweep', 'diff', 'qe']),
               default='list',
               help='Mode to use to find bugs')
+@click.option("--check-builds",
+              required=False,
+              is_flag=True,
+              help='In sweep mode, add bugs only if corresponding builds attached to advisory')
 @click.option("--status", 'status',
               multiple=True,
               required=False,
@@ -56,7 +60,8 @@ import re
               default=False,
               help="Don't change anything")
 @pass_runtime
-def find_bugs_cli(runtime, advisory, default_advisory_type, mode, status, id, cve_trackers, from_diff, flag, report, into_default_advisories, noop):
+def find_bugs_cli(runtime, advisory, default_advisory_type, mode, check_builds, status, id, cve_trackers, from_diff,
+                  flag, report, into_default_advisories, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list and the --id option.
@@ -67,6 +72,8 @@ Use cases are described below:
 SWEEP: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
 for bugs claimed to be fixed, but not yet attached to advisories.
+--check-builds flag forces bug validation with attached builds to advisory.
+It assumes builds have been attached and only attaches bugs with matching builds.
 
 LIST: The --group option is not required if you are specifying bugs
 manually. Provide one or more --id's for manual bug addition. In LIST
@@ -240,23 +247,25 @@ advisory with the --add option.
             green_prefix("RPM CVEs found: ")
             click.echo([b.id for b in rpm_bugs])
 
-            # check if corresponding brew builds are attached to advisory
-            attached_builds = errata.get_advisory_nvrs(runtime.group_config.advisories["rpm"])
-            packages = attached_builds.keys()
-            failed = []
-            for bug, package_name in rpm_bugs.items():
-                if package_name not in packages:
-                    failed.append((bug.id, package_name))
-                    continue
-                impetus_bugs["rpm"] = {b for b in rpm_bugs}
+            # if --check-builds flag is set
+            # only attach bugs that have corresponding brew builds attached to rpm advisory
+            if check_builds:
+                click.echo("Validating bugs with builds attached to the rpm advisory")
+                attached_builds = errata.get_advisory_nvrs(runtime.group_config.advisories["rpm"])
+                packages = attached_builds.keys()
+                not_found = []
+                for bug, package_name in rpm_bugs.items():
+                    if package_name not in packages:
+                        not_found.append((bug.id, package_name))
+                    else:
+                        impetus_bugs["rpm"].add(bug)
 
-            if failed:
-                red_prefix("RPM CVE Warning: ")
-                click.echo("The following CVE tracker bugs were found but not attached, because no corresponding "
-                           "brew builds were found attached to the advisory. First attach builds and then rerun to "
-                           "attach "
-                           "the bugs")
-                click.echo(failed)
+                if not_found:
+                    red_prefix("RPM CVE Warning: ")
+                    click.echo("The following CVE tracker bugs were found but not attached, because no corresponding "
+                               "brew builds were found attached to the rpm advisory. First attach builds and then "
+                               "rerun to attach the bugs")
+                    click.echo(not_found)
 
         # optional operators bugs should be swept to the "extras" advisory
         # a way to identify operator-related bugs is by its "Component" value.
