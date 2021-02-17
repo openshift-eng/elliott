@@ -11,6 +11,7 @@ from time import sleep
 
 import urllib.parse
 from elliottlib import logutil
+import re
 
 # ours
 from . import constants
@@ -298,10 +299,12 @@ def get_valid_rpm_cves(bugs):
     """ Get valid rpm cve trackers with their component names
 
     An OCP rpm cve tracker has a whiteboard value "component:<component_name>"
+    excluding suffixes (apb|container)
 
     :param bugs: list of bug objects
     :returns: A dict of bug object as key and component name as value
     """
+
     marker = 'component:'
     rpm_cves = {}
     for b in bugs:
@@ -309,7 +312,8 @@ def get_valid_rpm_cves(bugs):
             tmp = b.whiteboard.split(marker)
             if len(tmp) == 2:
                 component_name = tmp[1].strip()
-                rpm_cves[b] = component_name
+                if not re.search(r'-(apb|container)$', component_name):
+                    rpm_cves[b] = component_name
     return rpm_cves
 
 
