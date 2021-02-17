@@ -189,11 +189,11 @@ advisory with the --add option.
 
     if len(id) == 0:  # unless --id is given, we should ignore bugs that don't belong to ART. e.g. some bugs should go to CPaaS
         filtered_bugs = _filter_bugs(bugs)
-        green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored):")
+        green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
         bugs = filtered_bugs
     else:
-        green_prefix("Found {} bugs:".format(len(bugs)))
-    click.echo(" {}".format(", ".join([str(b.bug_id) for b in bugs])))
+        green_prefix(f"Found {len(bugs)} bugs: ")
+    click.echo(", ".join(sorted(str(b.bug_id) for b in bugs)))
 
     if mode == 'qe':
         for bug in bugs:
@@ -245,7 +245,7 @@ advisory with the --add option.
         if mode == 'sweep' and cve_trackers:
             rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
             green_prefix("RPM CVEs found: ")
-            click.echo([b.id for b in rpm_bugs])
+            click.echo(sorted(b.id for b in rpm_bugs))
 
             # if --check-builds flag is set
             # only attach bugs that have corresponding brew builds attached to rpm advisory
@@ -262,7 +262,8 @@ advisory with the --add option.
 
                 if not_found:
                     red_prefix("RPM CVE Warning: ")
-                    click.echo("The following CVE tracker bugs were found but not attached, because no corresponding "
+                    click.echo("The following CVE (bug, package) were found but not attached, "
+                               "because no corresponding "
                                "brew builds were found attached to the rpm advisory. First attach builds and then "
                                "rerun to attach the bugs")
                     click.echo(not_found)
@@ -274,11 +275,12 @@ advisory with the --add option.
         impetus_bugs["extras"] = {b for b in bugs if b.component in extra_components}
 
         # all other bugs should go into "image" advisory
-        impetus_bugs["image"] = set(bugs) - impetus_bugs["extras"] - impetus_bugs["rpm"]
+        impetus_bugs["image"] = set(bugs) - impetus_bugs["extras"] - rpm_bugs.keys()
 
     if default_advisory_type and impetus_bugs.get(default_advisory_type):
         errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type], noop=noop)
     elif into_default_advisories:
         for impetus, bugs in impetus_bugs.items():
             if bugs:
+                green_prefix(f'{impetus} advisory: ')
                 errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
