@@ -305,13 +305,14 @@ def get_valid_rpm_cves(bugs):
     :returns: A dict of bug object as key and component name as value
     """
 
-    marker = 'component:'
+    marker = r'component:\s*([-\w]+)'
     rpm_cves = {}
     for b in bugs:
-        if is_cve_tracker(b) and marker in b.whiteboard:
-            tmp = b.whiteboard.split(marker)
-            if len(tmp) == 2:
-                component_name = tmp[1].strip()
+        if is_cve_tracker(b):
+            tmp = re.search(marker, b.whiteboard)
+            if tmp and len(tmp.groups()) == 1:
+                component_name = tmp.groups()[0]
+                # filter out non-rpm suffixes
                 if not re.search(r'-(apb|container)$', component_name):
                     rpm_cves[b] = component_name
     return rpm_cves

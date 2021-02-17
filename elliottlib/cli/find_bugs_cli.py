@@ -258,7 +258,7 @@ advisory with the --add option.
                     if package_name not in packages:
                         not_found.append((bug.id, package_name))
                     else:
-                        click.echo(f"Build found for #{bug.id}, #{package_name}")
+                        click.echo(f"Build found for #{bug.id}, {package_name}")
                         impetus_bugs["rpm"].add(bug)
 
                 if not_found:
