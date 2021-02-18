@@ -242,6 +242,7 @@ advisory with the --add option.
         impetus_bugs["rpm"] = set(bugs)
     else:  # for 4.x
         # sweep rpm cve trackers into "rpm" advisory
+        rpm_bugs = dict()
         if mode == 'sweep' and cve_trackers:
             rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
             green_prefix("RPM CVEs found: ")
