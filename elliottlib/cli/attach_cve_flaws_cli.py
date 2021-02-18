@@ -1,7 +1,6 @@
-import bugzilla
-import click
+import bugzilla, click, re
 from errata_tool import Erratum
-from elliottlib import Runtime, bzutil
+from elliottlib import util
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.attach_cve_flaws import get_attached_tracker_bugs, \
     get_corresponding_flaw_bugs, is_first_fix, is_security_advisory, \
@@ -51,12 +50,11 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     if len(attached_tracker_bugs) == 0:
         exit(0)
 
-    target_releases = set(bug.target_release[0] for bug in attached_tracker_bugs)
-    if len(target_releases) != 1:
-        runtime.logger.info('found different target_release for tracker bugs: {}'.format(target_releases))
+    # validate and get target_release
+    current_target_release, err = util.get_target_release(attached_tracker_bugs)
+    if err:
+        runtime.logger.error(err)
         exit(1)
-
-    current_target_release = target_releases.pop()
     runtime.logger.info('current_target_release: {}'.format(current_target_release))
 
     corresponding_flaw_bugs = get_corresponding_flaw_bugs(bzapi, attached_tracker_bugs)
@@ -64,10 +62,11 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         len(corresponding_flaw_bugs), [bug.id for bug in corresponding_flaw_bugs]
     ))
 
+    # current_target_release is digit.digit.[z|0]
     # if current_target_release is GA then run first-fix bug filtering
     # for GA not every flaw bug is considered first-fix
     # for z-stream every flaw bug is considered first-fix
-    if current_target_release[-1][-1] == 'z':
+    if current_target_release[-1] == 'z':
         runtime.logger.info("detected z-stream target release, every flaw bug is considered first-fix")
         first_fix_flaw_bugs = corresponding_flaw_bugs
     else:
@@ -75,7 +74,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         attached_tracker_ids = [tracker.id for tracker in attached_tracker_bugs]
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in corresponding_flaw_bugs
-            if is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids)
+            if is_first_fix(bzapi, flaw_bug, attached_tracker_ids)
         ]
 
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
