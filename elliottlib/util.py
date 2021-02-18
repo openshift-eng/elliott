@@ -243,8 +243,7 @@ def get_target_release(bugs):
     target_releases = set()
     for bug in bugs:
         # make sure it's a list with a valid str value
-        valid_target_rel = isinstance(bug.target_release, list) and len(bug.target_release) > 0 and \
-                           re.match(r'(\d+.\d+.[0|z])', bug.target_release[0])
+        valid_target_rel = isinstance(bug.target_release, list) and len(bug.target_release) > 0 and re.match(r'(\d+.\d+.[0|z])', bug.target_release[0])
         if not valid_target_rel:
             invalid_bugs.append(bug)
         else:
@@ -252,7 +251,7 @@ def get_target_release(bugs):
 
     err = ''
     if invalid_bugs:
-        err = f'bug.target_release should be a list with a string matching regex (\d+.\d+.[0|z])'
+        err = 'bug.target_release should be a list with a string matching regex (digit+.digit+.[0|z])'
         for b in invalid_bugs:
             err += f'\n bug.id: {b.id}, bug.target_release: {b.target_release} '
         return '', err
