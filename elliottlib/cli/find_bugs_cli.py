@@ -6,7 +6,7 @@ LOGGER = logutil.getLogger(__name__)
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import green_prefix, green_print, red_print
+from elliottlib.util import green_prefix, green_print, red_print, red_prefix
 
 import click
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -24,6 +24,10 @@ import re
               type=click.Choice(['list', 'sweep', 'diff', 'qe']),
               default='list',
               help='Mode to use to find bugs')
+@click.option("--check-builds",
+              required=False,
+              is_flag=True,
+              help='In sweep mode, add bugs only if corresponding builds attached to advisory')
 @click.option("--status", 'status',
               multiple=True,
               required=False,
@@ -56,7 +60,8 @@ import re
               default=False,
               help="Don't change anything")
 @pass_runtime
-def find_bugs_cli(runtime, advisory, default_advisory_type, mode, status, id, cve_trackers, from_diff, flag, report, into_default_advisories, noop):
+def find_bugs_cli(runtime, advisory, default_advisory_type, mode, check_builds, status, id, cve_trackers, from_diff,
+                  flag, report, into_default_advisories, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list and the --id option.
@@ -67,6 +72,8 @@ Use cases are described below:
 SWEEP: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
 for bugs claimed to be fixed, but not yet attached to advisories.
+--check-builds flag forces bug validation with attached builds to rpm advisory.
+It assumes builds have been attached and only attaches bugs with matching builds.
 
 LIST: The --group option is not required if you are specifying bugs
 manually. Provide one or more --id's for manual bug addition. In LIST
@@ -152,7 +159,7 @@ advisory with the --add option.
         bug_id_strings = openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
         bugs = [bzapi.getbug(i) for i in bug_id_strings]
 
-    # Some bugs should goes to CPaaS so we should ignore them
+    # Some bugs should go to CPaaS so we should ignore them
     m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
     if not m:
         raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
@@ -182,11 +189,11 @@ advisory with the --add option.
 
     if len(id) == 0:  # unless --id is given, we should ignore bugs that don't belong to ART. e.g. some bugs should go to CPaaS
         filtered_bugs = _filter_bugs(bugs)
-        green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored):")
+        green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
         bugs = filtered_bugs
     else:
-        green_prefix("Found {} bugs:".format(len(bugs)))
-    click.echo(" {}".format(", ".join([str(b.bug_id) for b in bugs])))
+        green_prefix(f"Found {len(bugs)} bugs: ")
+    click.echo(", ".join(sorted(str(b.bug_id) for b in bugs)))
 
     if mode == 'qe':
         for bug in bugs:
@@ -220,20 +227,64 @@ advisory with the --add option.
     # Otherwise we don't need to sweep bugs at all.
     if not (into_default_advisories or default_advisory_type):
         return
-    impetus_bugs = {}  # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
-    # @lmeyer: simple and stupid would still be keeping the logic in python, possibly with config flags for branched logic. until that logic becomes too ugly to keep in python, i suppose..
+
+    # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
+    impetus_bugs = {
+        "rpm": set(),
+        "image": set(),
+        "extras": set()
+    }
+
+    # @lmeyer: simple and stupid would still be keeping the logic in python,
+    # possibly with config flags for branched logic.
+    # until that logic becomes too ugly to keep in python, i suppose..
     if major_version < 4:  # for 3.x, all bugs should go to the rpm advisory
         impetus_bugs["rpm"] = set(bugs)
     else:  # for 4.x
-        # optional operators bugs should be swept to the "extras" advisory, while other bugs should be swept to "image" advisory.
-        # a way to identify operator-related bugs is by its "Component" value. temporarily hardcode here until we need to move it to ocp-build-data.
+        # sweep rpm cve trackers into "rpm" advisory
+        rpm_bugs = dict()
+        if mode == 'sweep' and cve_trackers:
+            rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
+            green_prefix("RPM CVEs found: ")
+            click.echo(sorted(b.id for b in rpm_bugs))
+
+            # if --check-builds flag is set
+            # only attach bugs that have corresponding brew builds attached to rpm advisory
+            if check_builds:
+                click.echo("Validating bugs with builds attached to the rpm advisory")
+                attached_builds = errata.get_advisory_nvrs(runtime.group_config.advisories["rpm"])
+                packages = attached_builds.keys()
+                not_found = []
+                for bug, package_name in rpm_bugs.items():
+                    if package_name not in packages:
+                        not_found.append((bug.id, package_name))
+                    else:
+                        click.echo(f"Build found for #{bug.id}, {package_name}")
+                        impetus_bugs["rpm"].add(bug)
+
+                if not_found:
+                    red_prefix("RPM CVE Warning: ")
+                    click.echo("The following CVE (bug, package) were found but not attached, "
+                               "because no corresponding "
+                               "brew builds were found attached to the rpm advisory. First attach builds and then "
+                               "rerun to attach the bugs")
+                    click.echo(not_found)
+            else:
+                click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
+
+        # optional operators bugs should be swept to the "extras" advisory
+        # a way to identify operator-related bugs is by its "Component" value.
+        # temporarily hardcode here until we need to move it to ocp-build-data.
         extra_components = {"Logging", "Service Brokers", "Metering Operator", "Node Feature Discovery Operator"}  # we will probably find more
         impetus_bugs["extras"] = {b for b in bugs if b.component in extra_components}
-        impetus_bugs["image"] = {b for b in bugs if b.component not in extra_components}
+
+        # all other bugs should go into "image" advisory
+        impetus_bugs["image"] = set(bugs) - impetus_bugs["extras"] - rpm_bugs.keys()
 
     if default_advisory_type and impetus_bugs.get(default_advisory_type):
         errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type], noop=noop)
     elif into_default_advisories:
         for impetus, bugs in impetus_bugs.items():
             if bugs:
+                green_prefix(f'{impetus} advisory: ')
                 errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)

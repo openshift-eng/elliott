@@ -426,7 +426,7 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False):
     :return:
     """
     if noop:
-        print(f'Would have added the following bugs to advisory {advisory}: {[bug.id for bug in bugs]}')
+        print(f'Would have added the following bugs to advisory {advisory}: {sorted(bug.id for bug in bugs)}')
         return
 
     try:

@@ -11,6 +11,7 @@ from time import sleep
 
 import urllib.parse
 from elliottlib import logutil
+import re
 
 # ours
 from . import constants
@@ -229,14 +230,18 @@ def search_for_bugs(bz_data, status, search_filter='default', filter_out_securit
     bzapi = get_bzapi(bz_data)
     query_url = _construct_query_url(bz_data, status, search_filter)
 
+    fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
+
     if filter_out_security_bugs:
         query_url.addKeyword('SecurityTracking', 'nowords')
+    else:
+        fields.extend(['whiteboard', 'keywords'])
 
     # TODO: Expose this for debugging
     if verbose:
         click.echo(query_url)
 
-    return _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs'])
+    return _perform_query(bzapi, query_url, include_fields=fields)
 
 
 def search_for_security_bugs(bz_data, status=None, search_filter='security', cve=None, verbose=False):
@@ -288,6 +293,29 @@ def is_cve_tracker(bug_obj):
     :returns: True if the bug is a CVE tracker.
     """
     return "SecurityTracking" in bug_obj.keywords and "Security" in bug_obj.keywords
+
+
+def get_valid_rpm_cves(bugs):
+    """ Get valid rpm cve trackers with their component names
+
+    An OCP rpm cve tracker has a whiteboard value "component:<component_name>"
+    excluding suffixes (apb|container)
+
+    :param bugs: list of bug objects
+    :returns: A dict of bug object as key and component name as value
+    """
+
+    marker = r'component:\s*([-\w]+)'
+    rpm_cves = {}
+    for b in bugs:
+        if is_cve_tracker(b):
+            tmp = re.search(marker, b.whiteboard)
+            if tmp and len(tmp.groups()) == 1:
+                component_name = tmp.groups()[0]
+                # filter out non-rpm suffixes
+                if not re.search(r'-(apb|container)$', component_name):
+                    rpm_cves[b] = component_name
+    return rpm_cves
 
 
 def get_bzapi(bz_data, interactive_login=False):
