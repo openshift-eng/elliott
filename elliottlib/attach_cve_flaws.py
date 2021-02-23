@@ -33,20 +33,38 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
     return [flaw_bug for flaw_bug in blocking_bugs if is_flaw_bug(flaw_bug)]
 
 
-def is_first_fix(bzapi, flaw_bug, tracker_ids_to_be_ignored=[]):
-    other_flaw_trackers = bzapi.query(bzapi.build_query(
+def is_first_fix(bzapi, flaw_bug, current_target_release, tracker_ids_to_be_ignored=[]):
+    """
+    Check if a flaw bug is considered a first-fix for a target release
+    """
+    # get all the tracker bugs for a flaw bug
+    # but only for OCP product
+    tracker_ids = [t for t in flaw_bug.depends_on if t not in tracker_ids_to_be_ignored]
+    tracker_bugs = bzapi.query(bzapi.build_query(
         product='OpenShift Container Platform',
-        bug_id=[t for t in flaw_bug.depends_on if t not in tracker_ids_to_be_ignored],
+        bug_id=tracker_ids,
     ))
 
-    def _already_fixed(bug):
+    def same_major_release(bug):
+        current_major_version = util.minor_version_tuple(current_target_release)[0]
+        bug_target_major_version = util.minor_version_tuple(bug.target_release[0])[0]
+        return bug_target_major_version == current_major_version
+
+    def already_fixed(bug):
         if bug.status == 'RELEASE_PENDING':
             return True
         if bug.status == 'CLOSED' and bug.resolution in ['ERRATA', 'CURRENTRELEASE', 'NEXTRELEASE']:
             return True
         return False
 
-    return not any([_already_fixed(t) for t in other_flaw_trackers])
+    # if any tracker bug for the flaw bug
+    # has been fixed for the same major release version
+    # then it is not a first fix
+    for b in tracker_bugs:
+        if same_major_release(b) and already_fixed(b):
+            return False
+
+    return True
 
 
 def is_security_advisory(advisory):
