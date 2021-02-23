@@ -47,7 +47,7 @@ import re
               required=False,
               default=None,
               is_flag=True,
-              help='Include CVE trackers in sweep mode')
+              help='Include CVE trackers')
 @click.option("--from-diff", "--between",
               required=False,
               nargs=2,
@@ -71,7 +71,7 @@ def find_bugs_cli(runtime, advisory, default_advisory_type, mode, check_builds, 
                   flag, report, into_default_advisories, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
-manually specifying one or more bugs using --mode list and the --id option.
+manually specifying one or more bugs using --mode list with the --id option.
 Use cases are described below:
 
     Note: Using --id without --add is basically pointless
@@ -98,7 +98,7 @@ The --group option MUST be provided. Cannot be used in combination
 with --add, --use-default-advisory, --into-default-advisories.
 default --status: ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
 Use --exclude_status to filter out from default status list.
-By default --cve-trackers set.
+By default --cve-trackers is True.
 
 Using --use-default-advisory without a value set for the matching key
 in the build-data will cause an error and elliott will exit in a
@@ -149,8 +149,8 @@ advisory with the --add option.
     if mode == 'list' and len(id) == 0:
         raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
 
-    if mode == 'payload' and not len(from_diff) == 2:
-        raise click.BadParameter("If using mode=payload, you must provide two payloads to compare")
+    if mode == 'diff' and not len(from_diff) == 2:
+        raise click.BadParameter("If using mode=diff, you must provide two payloads to compare")
 
     if advisory_attach_flags > 1:
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
@@ -162,6 +162,14 @@ advisory with the --add option.
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     bzapi = bzutil.get_bzapi(bz_data)
+
+    # Some bugs should goes to CPaaS so we should ignore them
+    m = re.match(r"rhaos-(\d+).(\d+)",
+                 runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
+    if not m:
+        raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
+    major_version = int(m[1])
+    minor_version = int(m[2])
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -196,13 +204,6 @@ advisory with the --add option.
         click.echo(runtime.working_dir)
         bug_id_strings = openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
         bugs = [bzapi.getbug(i) for i in bug_id_strings]
-
-    # Some bugs should go to CPaaS so we should ignore them
-    m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
-    if not m:
-        raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
-    major_version = int(m[1])
-    minor_version = int(m[2])
 
     def _filter_bugs(bugs):  # returns a list of bugs that should be processed
         r = []
