@@ -247,7 +247,7 @@ def get_target_release(bugs):
     for bug in bugs:
         # make sure it's a list with a valid str value
         valid_target_rel = isinstance(bug.target_release, list) and len(bug.target_release) > 0 and \
-                           re.match(r'(\d+.\d+.[0|z])', bug.target_release[0])
+            re.match(r'(\d+.\d+.[0|z])', bug.target_release[0])
         if not valid_target_rel:
             invalid_bugs.append(bug)
         else:
