@@ -141,7 +141,7 @@ advisory with the --add option.
 \b
     $ elliott --group=openshift-4.6 --mode blocker --report
 """
-    advisory_attach_flags = sum(map(bool, [advisory, default_advisory_type, into_default_advisories]))
+    count_advisory_attach_flags = sum(map(bool, [advisory, default_advisory_type, into_default_advisories]))
 
     if mode != 'list' and len(id) > 0:
         raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
@@ -152,10 +152,10 @@ advisory with the --add option.
     if mode == 'diff' and not len(from_diff) == 2:
         raise click.BadParameter("If using mode=diff, you must provide two payloads to compare")
 
-    if advisory_attach_flags > 1:
+    if count_advisory_attach_flags > 1:
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
 
-    if mode in ['qe', 'blocker'] and advisory_attach_flags > 0:
+    if mode in ['qe', 'blocker'] and count_advisory_attach_flags > 0:
         raise click.BadParameter("Mode does not operate on an advisory. Do not specify any of "
                                  "`--use-default-advisory`, `--add`, or `--into-default-advisories`")
 
@@ -163,7 +163,7 @@ advisory with the --add option.
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     bzapi = bzutil.get_bzapi(bz_data)
 
-    # Some bugs should goes to CPaaS so we should ignore them
+    # filter out bugs ART does not manage
     m = re.match(r"rhaos-(\d+).(\d+)",
                  runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
     if not m:
@@ -181,7 +181,7 @@ advisory with the --add option.
             else:
                 cve_trackers = False
 
-        if not status:
+        if not status:  # use default status filter according to mode
             if mode == 'sweep':
                 status = ['MODIFIED', 'ON_QA', 'VERIFIED']
             if mode == 'qe':
@@ -226,7 +226,7 @@ advisory with the --add option.
             r.append(bug)
         return r
 
-    if len(id) == 0:  # unless --id is given, we should ignore bugs that don't belong to ART. e.g. some bugs should go to CPaaS
+    if len(id) == 0:  # unless --id is given, we should filter out bugs ART does not manage
         filtered_bugs = _filter_bugs(bugs)
         green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
         bugs = filtered_bugs

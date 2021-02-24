@@ -223,7 +223,8 @@ def search_for_bugs(bz_data, status, search_filter='default', flag=None, filter_
     :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
     :param status: The status(es) of bugs to search for
     :param search_filter: Which search filter from bz_data to use if multiple are specified
-    :param flag: A specific flag to filter out bugs
+    :param flag: The Bugzilla flag (string) of bugs to search for. Flags are similar to status but are categorically
+    different. https://bugzilla.readthedocs.io/en/latest/using/understanding.html#flags
     :param filter_out_security_bugs: Boolean on whether to filter out bugs tagged with the SecurityTracking keyword.
 
     :return: A list of Bug objects
