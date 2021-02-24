@@ -111,7 +111,7 @@ class BugValidator:
                         f"Regression possible: bug {bug} is a backport of bug "
                         f"{blocker.id} which has status {blocker.status}"
                     )
-                if blocker.status == 'CLOSED' and blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA']:
+                if blocker.status == 'CLOSED' and blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG']:
                     self._complain(
                         f"Regression possible: bug {bug} is a backport of bug "
                         f"{blocker.id} which was CLOSED {blocker.resolution}"
