@@ -21,7 +21,7 @@ import re
 @use_default_advisory_option
 @click.option("--mode",
               required=True,
-              type=click.Choice(['list', 'sweep', 'diff', 'qe']),
+              type=click.Choice(['list', 'sweep', 'diff', 'qe', 'blocker']),
               default='list',
               help='Mode to use to find bugs')
 @click.option("--check-builds",
@@ -30,17 +30,24 @@ import re
               help='In sweep mode, add bugs only if corresponding builds attached to advisory')
 @click.option("--status", 'status',
               multiple=True,
+              default=None,
               required=False,
-              default=['MODIFIED', 'VERIFIED', 'ON_QA'],
               type=click.Choice(constants.VALID_BUG_STATES),
-              help="Status of the bugs")
+              help="Include bugs of this status")
+@click.option("--exclude-status", 'exclude_status',
+              multiple=True,
+              default=None,
+              required=False,
+              type=click.Choice(constants.VALID_BUG_STATES),
+              help="Exclude bugs of this status. Useful when using default statuses")
 @click.option("--id", metavar='BUGID', default=None,
               multiple=True, required=False,
               help="Bugzilla IDs to add, required for LIST mode.")
 @click.option("--cve-trackers",
               required=False,
+              default=None,
               is_flag=True,
-              help='Include CVE trackers in sweep mode')
+              help='Include CVE trackers')
 @click.option("--from-diff", "--between",
               required=False,
               nargs=2,
@@ -60,11 +67,11 @@ import re
               default=False,
               help="Don't change anything")
 @pass_runtime
-def find_bugs_cli(runtime, advisory, default_advisory_type, mode, check_builds, status, id, cve_trackers, from_diff,
+def find_bugs_cli(runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id, cve_trackers, from_diff,
                   flag, report, into_default_advisories, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
-manually specifying one or more bugs using --mode list and the --id option.
+manually specifying one or more bugs using --mode list with the --id option.
 Use cases are described below:
 
     Note: Using --id without --add is basically pointless
@@ -72,8 +79,8 @@ Use cases are described below:
 SWEEP: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
 for bugs claimed to be fixed, but not yet attached to advisories.
---check-builds flag forces bug validation with attached builds to rpm advisory.
-It assumes builds have been attached and only attaches bugs with matching builds.
+--check-builds flag forces bug validation with attached builds to rpm advisory. It assumes builds have been attached and only attaches bugs with matching builds.
+default --status: ['MODIFIED', 'ON_QA', 'VERIFIED']
 
 LIST: The --group option is not required if you are specifying bugs
 manually. Provide one or more --id's for manual bug addition. In LIST
@@ -84,7 +91,14 @@ URLs to payloads.
 
 QE: Find MODIFIED bugs for the target-releases, and set them to ON_QA.
 The --group option MUST be provided. Cannot be used in combination
-with --into-default-advisories, --add, --into-default-advisories
+with --add, --use-default-advisory, --into-default-advisories, --exclude-status.
+
+BLOCKER: List active blocker+ bugs for the target-releases.
+The --group option MUST be provided. Cannot be used in combination
+with --add, --use-default-advisory, --into-default-advisories.
+default --status: ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
+Use --exclude_status to filter out from default status list.
+By default --cve-trackers is True.
 
 Using --use-default-advisory without a value set for the matching key
 in the build-data will cause an error and elliott will exit in a
@@ -123,48 +137,73 @@ advisory with the --add option.
 
 \b
     $ elliott --group=openshift-4.6 --mode qe
+
+\b
+    $ elliott --group=openshift-4.6 --mode blocker --report
 """
+    count_advisory_attach_flags = sum(map(bool, [advisory, default_advisory_type, into_default_advisories]))
+
     if mode != 'list' and len(id) > 0:
         raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
 
     if mode == 'list' and len(id) == 0:
         raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
 
-    if mode == 'payload' and not len(from_diff) == 2:
-        raise click.BadParameter("If using mode=payload, you must provide two payloads to compare")
+    if mode == 'diff' and not len(from_diff) == 2:
+        raise click.BadParameter("If using mode=diff, you must provide two payloads to compare")
 
-    if sum(map(bool, [advisory, default_advisory_type, into_default_advisories])) > 1:
+    if count_advisory_attach_flags > 1:
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
 
-    if mode == 'qe' and sum(map(bool, [advisory, default_advisory_type, into_default_advisories])) > 0:
-        raise click.BadParameter("--mode=qe does not operate on an advisory. Do not specify any of `--use-default-advisory`, `--add`, or `--into-default-advisories`")
+    if mode in ['qe', 'blocker'] and count_advisory_attach_flags > 0:
+        raise click.BadParameter("Mode does not operate on an advisory. Do not specify any of "
+                                 "`--use-default-advisory`, `--add`, or `--into-default-advisories`")
 
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     bzapi = bzutil.get_bzapi(bz_data)
 
+    # filter out bugs ART does not manage
+    m = re.match(r"rhaos-(\d+).(\d+)",
+                 runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
+    if not m:
+        raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
+    major_version = int(m[1])
+    minor_version = int(m[2])
+
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    if mode == 'sweep' or mode == 'qe':
-        if mode == 'qe':
-            status = ['MODIFIED']
+    if mode in ['sweep', 'qe', 'blocker']:
+        if not cve_trackers:
+            if mode == 'blocker':
+                cve_trackers = True
+            else:
+                cve_trackers = False
+
+        if not status:  # use default status filter according to mode
+            if mode == 'sweep':
+                status = ['MODIFIED', 'ON_QA', 'VERIFIED']
+            if mode == 'qe':
+                status = ['MODIFIED']
+            if mode == 'blocker':
+                status = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
+
+        if mode != 'qe' and exclude_status:
+            status = set(status) - set(exclude_status)
+
         green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
-        bugs = bzutil.search_for_bugs(bz_data, status, filter_out_security_bugs=not(cve_trackers), verbose=runtime.debug)
+
+        search_flag = 'blocker+' if mode == 'blocker' else None
+        bugs = bzutil.search_for_bugs(bz_data, status, flag=search_flag, filter_out_security_bugs=not(cve_trackers),
+                                      verbose=runtime.debug)
     elif mode == 'list':
         bugs = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
     elif mode == 'diff':
         click.echo(runtime.working_dir)
         bug_id_strings = openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
         bugs = [bzapi.getbug(i) for i in bug_id_strings]
-
-    # Some bugs should go to CPaaS so we should ignore them
-    m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
-    if not m:
-        raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
-    major_version = int(m[1])
-    minor_version = int(m[2])
 
     def _filter_bugs(bugs):  # returns a list of bugs that should be processed
         r = []
@@ -187,7 +226,7 @@ advisory with the --add option.
             r.append(bug)
         return r
 
-    if len(id) == 0:  # unless --id is given, we should ignore bugs that don't belong to ART. e.g. some bugs should go to CPaaS
+    if len(id) == 0:  # unless --id is given, we should filter out bugs ART does not manage
         filtered_bugs = _filter_bugs(bugs)
         green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
         bugs = filtered_bugs
