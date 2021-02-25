@@ -7,6 +7,7 @@ from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import green_prefix, green_print, red_print, red_prefix
+from bugzilla import bug
 
 import click
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -296,8 +297,8 @@ advisory with the --add option.
                 errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
 
 
-# returns a list of bugs that should be processed
-def filter_bugs(bugs, major_version, minor_version, runtime):
+def filter_bugs(bugs: list[bug.Bug], major_version: int, minor_version: int, runtime) -> list[bug.Bug]:
+    """returns a list of bugs that should be processed"""
     r = []
     ignored_repos = set()  # GitHub repos that should be ignored
     if major_version == 4 and minor_version == 5:
@@ -319,7 +320,7 @@ def filter_bugs(bugs, major_version, minor_version, runtime):
     return r
 
 
-def add_flags(bugs, flags, noop):
+def add_flags(bugs: list[bug.Bug], flags: list[str], noop: bool) -> None:
     for bug in bugs:
         for f in flags:
             if noop:
@@ -328,7 +329,7 @@ def add_flags(bugs, flags, noop):
             bug.updateflags({f: "+"})
 
 
-def print_report(bugs):
+def print_report(bugs: list[bug.Bug]) -> None:
     green_print(
         "{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
     for bug in bugs:
@@ -343,14 +344,14 @@ def print_report(bugs):
                                                                                 bug.summary[:60]))
 
 
-def mode_list(advisory, bugs, report, flags, noop):
+def mode_list(advisory: str, bugs: list[bug.Bug], report: bool, flags: list[str], noop: bool) -> None:
     green_prefix(f"Found {len(bugs)} bugs: ")
     click.echo(", ".join(sorted(str(b.bug_id) for b in bugs)))
     if report:
         print_report(bugs)
 
     if flags:
-        add_flags(bugs, flags)
+        add_flags(bugs, flags, noop)
 
     errata.add_bugs_with_retry(advisory, bugs, noop=noop)
     return
