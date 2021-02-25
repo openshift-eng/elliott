@@ -7,7 +7,7 @@ from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import green_prefix, green_print, red_print, red_prefix
-from bugzilla import bug
+from bugzilla import bug as bug_module
 
 import click
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -297,7 +297,10 @@ advisory with the --add option.
                 errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
 
 
-def filter_bugs(bugs: list[bug.Bug], major_version: int, minor_version: int, runtime) -> list[bug.Bug]:
+type_bug_list = list[bug_module.Bug]
+
+
+def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, runtime) -> type_bug_list:
     """returns a list of bugs that should be processed"""
     r = []
     ignored_repos = set()  # GitHub repos that should be ignored
@@ -320,7 +323,7 @@ def filter_bugs(bugs: list[bug.Bug], major_version: int, minor_version: int, run
     return r
 
 
-def add_flags(bugs: list[bug.Bug], flags: list[str], noop: bool) -> None:
+def add_flags(bugs: type_bug_list, flags: list[str], noop: bool) -> None:
     for bug in bugs:
         for f in flags:
             if noop:
@@ -329,7 +332,7 @@ def add_flags(bugs: list[bug.Bug], flags: list[str], noop: bool) -> None:
             bug.updateflags({f: "+"})
 
 
-def print_report(bugs: list[bug.Bug]) -> None:
+def print_report(bugs: type_bug_list) -> None:
     green_print(
         "{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
     for bug in bugs:
@@ -344,7 +347,7 @@ def print_report(bugs: list[bug.Bug]) -> None:
                                                                                 bug.summary[:60]))
 
 
-def mode_list(advisory: str, bugs: list[bug.Bug], report: bool, flags: list[str], noop: bool) -> None:
+def mode_list(advisory: str, bugs: type_bug_list, report: bool, flags: list[str], noop: bool) -> None:
     green_prefix(f"Found {len(bugs)} bugs: ")
     click.echo(", ".join(sorted(str(b.bug_id) for b in bugs)))
     if report:
