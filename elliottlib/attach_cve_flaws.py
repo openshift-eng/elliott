@@ -5,7 +5,7 @@ def get_attached_tracker_bugs(bzapi, advisory_id):
     return bzapi.getbugs([
         bug['id']
         for bug in get_all_attached_bugs(advisory_id)
-        if is_tracker_bug(bug)
+        if is_tracker_bug(keywords=bug['keywords'])
     ], permissive=False)  # fail if you cannot get all tracker bugs
 
 
@@ -13,8 +13,12 @@ def get_all_attached_bugs(advisory_id):
     return [bug['bug'] for bug in errata.get_raw_erratum(advisory_id)['bugs']['bugs']]
 
 
-def is_tracker_bug(bug):
-    return 'Security' in bug['keywords'] and 'SecurityTracking' in bug['keywords']
+def is_tracker_bug(bug=None, keywords=None):
+    if bug is None and keywords is None:
+        raise ValueError("must pass at least 1 param, either bug object or value of bug keywords")
+    if keywords is None:
+        keywords = bug.keywords
+    return 'Security' in keywords and 'SecurityTracking' in keywords
 
 
 def is_flaw_bug(bug):
@@ -40,10 +44,10 @@ def is_first_fix(bzapi, flaw_bug, current_target_release, tracker_ids_to_be_igno
     # get all the tracker bugs for a flaw bug
     # but only for OCP product
     tracker_ids = [t for t in flaw_bug.depends_on if t not in tracker_ids_to_be_ignored]
-    tracker_bugs = bzapi.query(bzapi.build_query(
+    tracker_bugs = [b for b in bzapi.query(bzapi.build_query(
         product='OpenShift Container Platform',
         bug_id=tracker_ids,
-    ))
+    )) if is_tracker_bug(b)]
 
     def same_major_release(bug):
         current_major_version = util.minor_version_tuple(current_target_release)[0]
