@@ -272,10 +272,7 @@ advisory with the --add option.
 
                     if not_found:
                         red_prefix("RPM CVE Warning: ")
-                        click.echo("The following CVE (bug, package) were found but not attached, "
-                                "because no corresponding "
-                                "brew builds were found attached to the rpm advisory. First attach builds and then "
-                                "rerun to attach the bugs")
+                        click.echo("The following CVE (bug, package) were found but not attached, because no corresponding brew builds were found attached to the rpm advisory. First attach builds and then rerun to attach the bugs")
                         click.echo(not_found)
                 else:
                     click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
