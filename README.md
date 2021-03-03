@@ -85,7 +85,7 @@ Ensure you have a valid kerberos ticket before proceeding. A valid
 kerberos ticket is required to use elliott. See the following link for
 assistance with the basics of kerberos at Red Hat:
 
-* [DOC-87898](https://mojo.redhat.com/docs/DOC-87898) - Mojo - Using Kerberos Authentication
+* [Setting up a Kerberos ticket and Red Hat IdM](https://source.redhat.com/groups/public/ccs-onboarding-program/ccs_onboarding_wiki/setting_up_a_kerberos_ticket_and_red_hat_idm)
 
 Once you have that taken care of you should run a simple command from
 elliott. I suggest the following, it will verify that you can access
