@@ -1,4 +1,5 @@
 from __future__ import absolute_import, print_function, unicode_literals
+from typing import List
 
 import elliottlib
 from elliottlib import constants, logutil, Runtime, bzutil, openshiftclient, errata
@@ -295,7 +296,7 @@ advisory with the --add option.
                 errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
 
 
-type_bug_list = list[bug_module.Bug]
+type_bug_list = List[bug_module.Bug]
 
 
 def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, runtime) -> type_bug_list:
@@ -321,7 +322,7 @@ def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, run
     return r
 
 
-def add_flags(bugs: type_bug_list, flags: list[str], noop: bool) -> None:
+def add_flags(bugs: type_bug_list, flags: List[str], noop: bool) -> None:
     for bug in bugs:
         for f in flags:
             if noop:
@@ -345,7 +346,7 @@ def print_report(bugs: type_bug_list) -> None:
                                                                                 bug.summary[:60]))
 
 
-def mode_list(advisory: str, bugs: type_bug_list, report: bool, flags: list[str], noop: bool) -> None:
+def mode_list(advisory: str, bugs: type_bug_list, report: bool, flags: List[str], noop: bool) -> None:
     green_prefix(f"Found {len(bugs)} bugs: ")
     click.echo(", ".join(sorted(str(b.bug_id) for b in bugs)))
     if report:
