@@ -238,6 +238,35 @@ def parallel_results_with_progress(inputs, func, file=None):
     return results
 
 
+def get_target_release(bugs):
+    """
+    Pass in a list of bugs attached to an advisory and get the target release version back
+    """
+    invalid_bugs = []
+    target_releases = set()
+    for bug in bugs:
+        # make sure it's a list with a valid str value
+        valid_target_rel = isinstance(bug.target_release, list) and len(bug.target_release) > 0 and \
+            re.match(r'(\d+.\d+.[0|z])', bug.target_release[0])
+        if not valid_target_rel:
+            invalid_bugs.append(bug)
+        else:
+            target_releases.add(bug.target_release[0])
+
+    if invalid_bugs:
+        err = 'bug.target_release should be a list with a string matching regex (digit+.digit+.[0|z])'
+        for b in invalid_bugs:
+            err += f'\n bug.id: {b.id}, bug.target_release: {b.target_release} '
+        return '', err
+
+    if len(target_releases) != 1:
+        err = f'Found different target_release values for tracker bugs: {target_releases}. ' \
+              'There should be only 1 target release for all bugs. Fix the offending bug(s) and try again.'
+        return '', err
+
+    return target_releases.pop(), ''
+
+
 def get_release_version(pv):
     """ there are two kind of format of product_version: OSE-4.1-RHEL-8 RHEL-7-OSE-4.1 RHEL-7-OSE-4.1-FOR-POWER-LE """
     return re.search(r'OSE-(\d+\.\d+)', pv).groups()[0]
