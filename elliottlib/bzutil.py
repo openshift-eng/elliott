@@ -255,6 +255,7 @@ def search_for_security_bugs(bz_data, status=None, search_filter='security', cve
     bzapi = get_bzapi(bz_data, True)
     query_url = _construct_query_url(bz_data, status, search_filter)
     query_url.addKeyword('SecurityTracking')
+    query_url.addKeyword('Security')
 
     if verbose:
         click.echo(query_url)
@@ -287,7 +288,7 @@ def is_cve_tracker(bug_obj):
     :param bug_obj: bug object
     :returns: True if the bug is a CVE tracker.
     """
-    return "SecurityTracking" in bug_obj.keywords and "Security" in bug_obj.keywords
+    return "SecurityTracking" in bug_obj.keywords or "Security" in bug_obj.keywords
 
 
 def get_bzapi(bz_data, interactive_login=False):
