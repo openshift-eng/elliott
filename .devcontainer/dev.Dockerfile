@@ -1,4 +1,4 @@
-FROM fedora:32
+FROM fedora:33
 LABEL name="elliott-dev" \
   description="Elliott development container image" \
   maintainer="OpenShift Automated Release Tooling (ART) Team <aos-team-art@redhat.com>"
@@ -12,12 +12,12 @@ RUN curl -o /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.crt --fail -L \
 
 RUN dnf install -y \
     # runtime dependencies
-    krb5-workstation python-bugzilla-cli git rsync docker \
+    krb5-workstation python-bugzilla-cli git \
     python3 python3-certifi python3-rpm \
     koji brewkoji \
     # development dependencies
-    gcc gcc-c++ krb5-devel libgit2-devel openssl-devel krb5-devel \
-    python3-devel python3-pip \
+    gcc krb5-devel \
+    python3-devel python3-pip python3-wheel \
     # other tools
     bash-completion vim tmux procps-ng psmisc wget curl net-tools iproute socat \
   # clean up
