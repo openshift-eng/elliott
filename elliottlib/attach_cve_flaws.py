@@ -1,4 +1,5 @@
 from elliottlib import constants, errata, util
+from elliottlib import bzutil
 
 
 def get_attached_tracker_bugs(bzapi, advisory_id):
@@ -21,10 +22,6 @@ def is_tracker_bug(bug=None, keywords=None):
     return 'Security' in keywords and 'SecurityTracking' in keywords
 
 
-def is_flaw_bug(bug):
-    return bug.product == 'Security Response'
-
-
 def get_advisory(advisory_id):
     return errata.ErrataConnector()._get(f'/api/v1/erratum/{advisory_id}')
 
@@ -34,7 +31,7 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
         unique(flatten([t.blocks for t in tracker_bugs])),
         permissive=False
     )
-    return [flaw_bug for flaw_bug in blocking_bugs if is_flaw_bug(flaw_bug)]
+    return [flaw_bug for flaw_bug in blocking_bugs if bzutil.is_flaw_bug(flaw_bug)]
 
 
 def is_first_fix(bzapi, flaw_bug, current_target_release, tracker_ids_to_be_ignored=[]):

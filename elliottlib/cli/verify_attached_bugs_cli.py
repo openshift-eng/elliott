@@ -10,9 +10,10 @@ from elliottlib.util import (exit_unauthenticated, red_print, green_print, minor
 
 
 @cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
+@click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
 @click.argument("advisories", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
-def verify_attached_bugs_cli(runtime, advisories):
+def verify_attached_bugs_cli(runtime, verify_bug_status, advisories):
     """
     Verify the bugs in the advisories (specified as arguments or in group.yml) for a release.
     Requires a runtime to ensure that all bugs in the advisories match the runtime version.
@@ -27,7 +28,7 @@ def verify_attached_bugs_cli(runtime, advisories):
     if not advisories:
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
-    BugValidator(runtime).validate(advisories)
+    BugValidator(runtime).validate(advisories, verify_bug_status)
 
 
 class BugValidator:
@@ -40,10 +41,13 @@ class BugValidator:
         self.bzapi = bzutil.get_bzapi(self.bz_data)
         self.problems = []
 
-    def validate(self, advisories):
+    def validate(self, advisories, verify_bug_status):
         bugs = self._get_attached_filtered_bugs(advisories)
         blocking_bugs_for = self._get_blocking_bugs_for(bugs)
         self._verify_blocking_bugs(blocking_bugs_for)
+
+        if verify_bug_status:
+            self._verify_bug_status(bugs)
         if self.problems:
             red_print("Some bug problems were listed above. Please investigate.")
             exit(1)
@@ -116,6 +120,20 @@ class BugValidator:
                         f"Regression possible: bug {bug} is a backport of bug "
                         f"{blocker.id} which was CLOSED {blocker.resolution}"
                     )
+
+    def _verify_bug_status(self, bugs):
+        # complain about bugs that are not yet VERIFIED or more.
+        for bug in bugs:
+            if bzutil.is_flaw_bug(bug):
+                continue
+            if bug.status in ["VERIFIED", "RELEASE_PENDING"]:
+                continue
+            if bug.status == "CLOSED" and bug.resolution == "ERRATA":
+                continue
+            status = f"{bug.status}"
+            if bug.status == 'CLOSED':
+                status = f"{bug.status}: {bug.resolution}"
+            self._complain(f"Bug {bug.id} has status {status}")
 
     def _complain(self, problem):
         red_print(problem)
