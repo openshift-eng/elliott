@@ -425,9 +425,7 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False):
     :param retried: retry 2 times, first attempt fetch failed bugs sift out then attach again
     :return:
     """
-    if noop:
-        print(f'Would have added the following bugs to advisory {advisory}: {sorted(bug.id for bug in bugs)}')
-        return
+    print(f'Request to attach {len(bugs)} bugs to the advisory {advisory}')
 
     try:
         advs = Erratum(errata_id=advisory)
@@ -437,12 +435,23 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False):
     if advs is False:
         raise exceptions.ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
 
+    existing_bugs = advs.errata_bugs
+    new_bugs = set(bug.id for bug in bugs) - set(existing_bugs)
+    print(f'Bugs already attached: {len(existing_bugs)}')
+    print(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
+
+    if noop:
+        print('Dry run. Exiting.')
+        return
+
+    if not new_bugs:
+        print('No new bugs to attach. Exiting.')
+        return
+
     green_prefix("Adding {count} bugs to advisory {retry_times} times:".format(
         count=len(bugs),
         retry_times=1 if retried is False else 2
     ))
-
-    print(f" {advs}")
 
     try:
         advs.addBugs([bug.id for bug in bugs])
