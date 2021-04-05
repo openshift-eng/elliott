@@ -70,7 +70,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
     help='Only attach non-payload images')
 @click.option(
     '--brew-event', required=False,
-    help='Lock koji clients from runtime to this brew event')
+    help='Query brew at this time in the past, defined by the eventID')
 @pass_runtime
 def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached,
                     remove, clean, no_cdn_repos, payload, non_payload, brew_event):
