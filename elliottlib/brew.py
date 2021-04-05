@@ -45,20 +45,25 @@ def get_tagged_builds(tags: Iterable[str], build_type: Optional[str], event: Opt
     return [build for task in tasks for build in task.result]
 
 
-def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
+def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], event: Optional[int], session: koji.ClientSession) \
+    -> List[Optional[List[Dict]]]:
     """ Get latest builds for multiple Brew components
 
     :param tag_component_tuples: List of (tag, component_name) tuples
+    :param event: Brew event ID, or None for now.
     :param session: instance of Brew session
     :return: a list Koji/Brew build objects
     """
+    if event:
+        event = int(event)
+
     tasks = []
     with session.multicall(strict=True) as m:
         for tag, component_name in tag_component_tuples:
             if not (tag and component_name):
                 tasks.append(None)
                 continue
-            tasks.append(m.getLatestBuilds(tag, package=component_name))
+            tasks.append(m.getLatestBuilds(tag, event=event, package=component_name))
     return [task.result if task else None for task in tasks]
 
 
