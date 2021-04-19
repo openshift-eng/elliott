@@ -1,6 +1,6 @@
 import bugzilla, click, re
 from errata_tool import Erratum
-from elliottlib import util
+from elliottlib import util, template
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.attach_cve_flaws import get_attached_tracker_bugs, \
     get_corresponding_flaw_bugs, is_first_fix, is_security_advisory, \
@@ -86,16 +86,18 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         runtime.logger.info('No "first-fix" bugs found, exiting')
         exit(0)
 
+    cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
+
     advisory = Erratum(errata_id=advisory_id)
     if not is_security_advisory(advisory):
         runtime.logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
-        cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
+        topic = template.render_topic(cve_boilerplate['topic'], 'Low')
         advisory.update(
             errata_type='RHSA',
             security_reviewer=cve_boilerplate['security_reviewer'],
             synopsis=cve_boilerplate['synopsis'],
             description=cve_boilerplate['description'],
-            topic=cve_boilerplate['topic'],
+            topic=topic,
             solution=cve_boilerplate['solution'],
             security_impact='Low',
         )
@@ -114,6 +116,11 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
             advisory.security_impact, highest_impact
         ))
         advisory.update(security_impact=highest_impact)
+
+    if highest_impact not in advisory.topic:
+        topic = template.render_topic(cve_boilerplate['topic'], highest_impact)
+        runtime.logger.info('Topic updated to include impact of {}'.format(highest_impact))
+        advisory.update(topic=topic)
 
     flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
 

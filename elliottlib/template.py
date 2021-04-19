@@ -7,9 +7,10 @@ def render_topic(template, impact="Important"):
     return t.render(impact=impact)
 
 
-def render(template, MAJOR, MINOR):
+def render(template, **kwargs):
     t = Template(template)
-    return t.render(MAJOR=MAJOR, MINOR=MINOR)
+    return t.render(**kwargs)
+
 
 def render_map(template_map, replace_vars):
     return_map = {}

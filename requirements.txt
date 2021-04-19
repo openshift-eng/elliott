@@ -3,6 +3,7 @@ click
 errata-tool >= 1.22
 future
 koji >= 1.18
+Mako==1.1.4
 pygit2 ~= 0.28 ; python_version <= '3.4'
 pygit2 ; python_version >= '3.5'
 python-bugzilla

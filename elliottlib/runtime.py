@@ -146,7 +146,7 @@ class Runtime(object):
             image_data_tmpl = self.gitdata.load_data(path='images', keys=image_keys,
                                                      exclude=exclude_keys,
                                                      filter_funcs=None if len(image_keys) else filter_func)
-            for i in image_data.values():
+            for i in image_data_tmpl.values():
                 image_key = template.render(i.key, **replace_vars)
                 image_value = template.render(i, **replace_vars)
                 self.late_resolve_image(image_key, add=True, data_obj=image_value)
