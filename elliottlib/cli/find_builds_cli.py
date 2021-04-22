@@ -9,7 +9,7 @@ from errata_tool import Erratum
 from kerberos import GSSError
 
 import elliottlib
-from elliottlib import Runtime, brew, constants, errata, logutil
+from elliottlib import Runtime, brew, constants, errata, logutil, template
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.exceptions import ElliottFatalError
@@ -132,9 +132,11 @@ PRESENT advisory. Here are some examples:
         raise click.BadParameter('Use only one of --payload or --non-payload.')
 
     runtime.initialize(mode='images' if kind == 'image' else 'none')
+    # TODO fail early if group_config vars doesn't match expected dict?
     replace_vars = runtime.group_config.vars.primitive() if runtime.group_config.vars else {}
-    et_data = runtime.gitdata.load_data(key='erratatool', replace_vars=replace_vars).data
-    tag_pv_map = et_data.get('brew_tag_product_version_mapping')
+    et_data = runtime.gitdata.load_data(key='erratatool').data
+    tag_pv_map_tmpl = et_data.get('brew_tag_product_version_mapping')
+    tag_pv_map = template.render_map(tag_pv_map_tmpl, replace_vars)
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)

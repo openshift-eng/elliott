@@ -13,7 +13,7 @@ import requests
 from ruamel.yaml import YAML
 
 import elliottlib
-from elliottlib import Runtime, brew, constants
+from elliottlib import Runtime, brew, constants, template
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    pass_runtime, use_default_advisory_option)
 from elliottlib.imagecfg import ImageMetadata
@@ -68,7 +68,11 @@ async def verify_cvp_cli(runtime: Runtime, all_images, nvrs, optional_checks, al
         raise click.BadParameter('Use only one of --all-optional-checks or --include-optional-check.')
 
     runtime.initialize(mode='images')
-    tag_pv_map = runtime.gitdata.load_data(key='erratatool', replace_vars=runtime.group_config.vars.primitive() if runtime.group_config.vars else {}).data.get('brew_tag_product_version_mapping')
+    # TODO fail early if group_config vars doesn't match expected dict?
+    replace_vars = runtime.group_config.vars.primitive() if runtime.group_config.vars else {}
+    et_data_tmpl = runtime.gitdata.load_data(key='erratatool').data
+    tag_pv_map_tmpl = et_data_tmpl.get('brew_tag_product_version_mapping')
+    tag_pv_map = template.render_map(tag_pv_map_tmpl, replace_vars)
     brew_session = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
 
     builds = []

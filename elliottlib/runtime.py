@@ -15,7 +15,7 @@ from typing import Optional
 import click
 import yaml
 
-from elliottlib import assertion, brew, constants, gitdata, logutil, util
+from elliottlib import assertion, brew, constants, gitdata, logutil, util, template
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.imagecfg import ImageMetadata
 from elliottlib.model import Missing, Model
@@ -65,7 +65,8 @@ class Runtime(object):
         if replace_vars is not Missing:
             try:
                 group_yml = yaml.safe_dump(tmp_config.primitive(), default_flow_style=False)
-                tmp_config = Model(yaml.safe_load(group_yml.format(**replace_vars)))
+                formatted_group = yaml.safe_load(template.render(group_yml, **replace_vars))
+                tmp_config = Model(formatted_group)
             except KeyError as e:
                 raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
         return tmp_config
@@ -142,12 +143,13 @@ class Runtime(object):
 
         image_data = {}
         if mode in ['images', 'both']:
-            image_data = self.gitdata.load_data(path='images', keys=image_keys,
-                                                exclude=exclude_keys,
-                                                filter_funcs=None if len(image_keys) else filter_func,
-                                                replace_vars=replace_vars)
+            image_data_tmpl = self.gitdata.load_data(path='images', keys=image_keys,
+                                                     exclude=exclude_keys,
+                                                     filter_funcs=None if len(image_keys) else filter_func)
             for i in image_data.values():
-                self.late_resolve_image(i.key, add=True, data_obj=i)
+                image_key = template.render(i.key, **replace_vars)
+                image_value = template.render(i, **replace_vars)
+                self.late_resolve_image(image_key, add=True, data_obj=image_value)
             if not self.image_map:
                 self.logger.warning("No image metadata directories found for given options within: {}".format(self.group_dir))
 
@@ -231,8 +233,10 @@ class Runtime(object):
         if distgit_name in self.image_map:
             return self.image_map[distgit_name]
         if not data_obj:
+            # TODO fail early if group_config vars doesn't match expected dict?
             replace_vars = self.group_config.vars.primitive() if self.group_config.vars else {}
-            data_obj = self.gitdata.load_data(path='images', key=distgit_name, replace_vars=replace_vars)
+            data_obj_templ = self.gitdata.load_data(path='images', key=distgit_name)
+            data_obj = template.render(data_obj_templ, **replace_vars)
             if not data_obj:
                 raise ElliottFatalError('Unable to resovle image metadata for {}'.format(distgit_name))
 

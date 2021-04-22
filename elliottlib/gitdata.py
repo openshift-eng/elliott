@@ -179,7 +179,7 @@ class GitData(object):
     def bz_target_release(self):
         return self.bz().data['target_release']
 
-    def load_data(self, path='', key=None, keys=None, exclude=None, filter_funcs=None, replace_vars={}):
+    def load_data(self, path='', key=None, keys=None, exclude=None, filter_funcs=None):
         full_path = os.path.join(self.data_dir, path.replace('\\', '/'))
         if path and not os.path.isdir(full_path):
             raise GitDataPathException('Cannot find "{}" under "{}"'.format(path, self.data_dir))
@@ -218,11 +218,6 @@ class GitData(object):
                 if os.path.isfile(data_file):
                     with open(data_file, 'r') as f:
                         raw_text = f.read()
-                        if replace_vars:
-                            try:
-                                raw_text = raw_text.format(**replace_vars)
-                            except KeyError as e:
-                                self.logger.warning('{} contains template key `{}` but no value was provided'.format(data_file, e.args[0]))
                         data = yaml.full_load(raw_text)
                         use = True
                         if exclude and base_name in exclude:
