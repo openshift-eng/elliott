@@ -116,8 +116,15 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         advisory.update(security_impact=highest_impact)
 
     flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
-    runtime.logger.info('Adding the following BZs to the advisory: {}'.format(flaw_ids))
-    advisory.addBugs(flaw_ids)
+
+    runtime.logger.info(f'Request to attach {len(flaw_ids)} bugs to the advisory')
+    existing_bug_ids = advisory.errata_bugs
+    new_bugs = set(flaw_ids) - set(existing_bug_ids)
+    print(f'Bugs already attached: {len(existing_bug_ids)}')
+    print(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
+
+    if new_bugs:
+        advisory.addBugs(flaw_ids)
 
     if noop:
         print('DRY-RUN: The following changes would have been applied to the advisory:')
