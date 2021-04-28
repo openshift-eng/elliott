@@ -156,7 +156,7 @@ PRESENT advisory. Here are some examples:
             unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_event, brew_session, payload,
                                                           non_payload)
         elif kind == 'rpm':
-            unshipped_nvrps = _fetch_builds_by_kind_rpm(tag_pv_map, brew_session)
+            unshipped_nvrps = _fetch_builds_by_kind_rpm(tag_pv_map, brew_event, brew_session)
 
     pbar_header(
         'Fetching builds from Errata: ',

@@ -192,6 +192,8 @@ def find_unshipped_build_candidates(base_tag, event: Optional[int], kind='rpm', 
     builds. This is combined with '-candidate' to return the build
     difference.
 
+    :param int event: The brew event by which to limit builds by
+
     :param str kind: Search for RPM builds by default. 'image' is also
     acceptable (In elliott we only use this function for rpm)
 
@@ -204,6 +206,9 @@ def find_unshipped_build_candidates(base_tag, event: Optional[int], kind='rpm', 
     :return: A set of build strings where each build is only tagged as
     a -candidate build
     """
+    if event:
+        event = int(event)
+
     shipped_builds_set = {b['nvr'] for b in brew_session.listTagged(tag=base_tag, event=event, latest=True, type=kind)}
     candidate_builds = {b['nvr']: b for b in brew_session.listTagged(tag=f'{base_tag}-candidate', event=event,
                                                                          latest=True, type=kind)}
