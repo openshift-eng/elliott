@@ -68,8 +68,12 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option(
     '--non-payload', required=False, is_flag=True,
     help='Only attach non-payload images')
+@click.option(
+    '--brew-event', required=False,
+    help='Query brew at this time in the past, defined by the eventID')
 @pass_runtime
-def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached, remove, clean, no_cdn_repos, payload, non_payload):
+def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached,
+                    remove, clean, no_cdn_repos, payload, non_payload, brew_event):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -149,9 +153,10 @@ PRESENT advisory. Here are some examples:
         unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1], tag_pv_map)
     else:
         if kind == 'image':
-            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, payload, non_payload)
+            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_event, brew_session, payload,
+                                                          non_payload)
         elif kind == 'rpm':
-            unshipped_nvrps = _fetch_builds_by_kind_rpm(tag_pv_map, brew_session)
+            unshipped_nvrps = _fetch_builds_by_kind_rpm(tag_pv_map, brew_event, brew_session)
 
     pbar_header(
         'Fetching builds from Errata: ',
@@ -255,7 +260,7 @@ def _fetch_builds_from_diff(from_payload, to_payload, tag_pv_map):
     return _fetch_nvrps_by_nvr_or_id(nvrs, tag_pv_map)
 
 
-def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, p, np):
+def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_event, brew_session, p, np):
     # filter out image like 'openshift-enterprise-base'
     image_metas = [i for i in runtime.image_metas() if not i.base_only]
     # Returns a list of (name, version, release, product_version) tuples of each build
@@ -279,7 +284,7 @@ def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, p, np):
         'Generating list of images: ',
         f'Hold on a moment, fetching Brew builds for {len(image_metas)} components with tags {", ".join(tag_pv_map.keys())}...',
         tag_component_tuples)
-    latest_builds = brew.get_latest_builds(tag_component_tuples, brew_session)
+    latest_builds = brew.get_latest_builds(tag_component_tuples, event=brew_event, session=brew_session)
 
     for i, build in enumerate(latest_builds):
         if not build:
@@ -290,7 +295,7 @@ def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, p, np):
     return nvrps
 
 
-def _fetch_builds_by_kind_rpm(tag_pv_map, brew_session):
+def _fetch_builds_by_kind_rpm(tag_pv_map, brew_event, brew_session):
     green_prefix('Generating list of rpms: ')
     click.echo('Hold on a moment, fetching Brew builds')
     rpm_tuple = []
@@ -300,7 +305,7 @@ def _fetch_builds_by_kind_rpm(tag_pv_map, brew_session):
         else:
             red_print("key of brew_tag_product_version_mapping in erratatool.yml must be candidate\n")
             continue
-        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag, brew_session=brew_session)
+        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag, event=brew_event, kind='rpm', session=brew_session)
         rpm_tuple.extend(_gen_nvrp_tuples(candidates, tag_pv_map, tag))
     return rpm_tuple
 

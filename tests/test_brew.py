@@ -266,7 +266,7 @@ class TestBrew(unittest.TestCase):
             {"name": "component6", "nvr": "component6-v1.0.0-1.faketag2"},
         ]
 
-        def fake_response(tag, package):
+        def fake_response(tag, package, event=None):
             return mock.MagicMock(result={"name": package, "nvr": f"{package}-v1.0.0-1.{tag}"})
 
         fake_session = mock.MagicMock()
