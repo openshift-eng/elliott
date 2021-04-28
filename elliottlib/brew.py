@@ -183,7 +183,7 @@ def get_brew_build(nvr, product_version='', session=None):
             msg=res.text))
 
 
-def find_unshipped_build_candidates(base_tag, kind='rpm', brew_session=koji.ClientSession(constants.BREW_HUB)):
+def find_unshipped_build_candidates(base_tag, event: Optional[int], kind='rpm', brew_session=koji.ClientSession(constants.BREW_HUB)):
     """Find builds for a product and return a list of the builds only
     labeled with the -candidate tag that aren't attached to any open
     advisory.
@@ -204,8 +204,8 @@ def find_unshipped_build_candidates(base_tag, kind='rpm', brew_session=koji.Clie
     :return: A set of build strings where each build is only tagged as
     a -candidate build
     """
-    shipped_builds_set = {b['nvr'] for b in brew_session.listTagged(tag=base_tag, latest=True, type=kind)}
-    candidate_builds = {b['nvr']: b for b in brew_session.listTagged(tag=f'{base_tag}-candidate',
+    shipped_builds_set = {b['nvr'] for b in brew_session.listTagged(tag=base_tag, event=event, latest=True, type=kind)}
+    candidate_builds = {b['nvr']: b for b in brew_session.listTagged(tag=f'{base_tag}-candidate', event=event,
                                                                          latest=True, type=kind)}
     candidate_builds_set = candidate_builds.keys()
     diff_builds = {}
