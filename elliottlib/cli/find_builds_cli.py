@@ -284,7 +284,7 @@ def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_event, brew_session, p
         'Generating list of images: ',
         f'Hold on a moment, fetching Brew builds for {len(image_metas)} components with tags {", ".join(tag_pv_map.keys())}...',
         tag_component_tuples)
-    latest_builds = brew.get_latest_builds(tag_component_tuples, brew_event, brew_session)
+    latest_builds = brew.get_latest_builds(tag_component_tuples, event=brew_event, session=brew_session)
 
     for i, build in enumerate(latest_builds):
         if not build:
@@ -305,7 +305,7 @@ def _fetch_builds_by_kind_rpm(tag_pv_map, brew_event, brew_session):
         else:
             red_print("key of brew_tag_product_version_mapping in erratatool.yml must be candidate\n")
             continue
-        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag, brew_event, kind='rpm', brew_session=brew_session)
+        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag, event=brew_event, kind='rpm', session=brew_session)
         rpm_tuple.extend(_gen_nvrp_tuples(candidates, tag_pv_map, tag))
     return rpm_tuple
 
