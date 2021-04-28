@@ -45,7 +45,7 @@ def get_tagged_builds(tags: Iterable[str], build_type: Optional[str], event: Opt
     return [build for task in tasks for build in task.result]
 
 
-def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], event: Optional[int], session: koji.ClientSession) \
+def get_latest_builds(tag_component_tuples: List[Tuple[str, str]], session: koji.ClientSession, event: Optional[int] = None) \
         -> List[Optional[List[Dict]]]:
     """ Get latest builds for multiple Brew components
 
@@ -183,7 +183,7 @@ def get_brew_build(nvr, product_version='', session=None):
             msg=res.text))
 
 
-def find_unshipped_build_candidates(base_tag, event, kind='rpm', brew_session=koji.ClientSession(constants.BREW_HUB)):
+def find_unshipped_build_candidates(base_tag, kind='rpm', session=koji.ClientSession(constants.BREW_HUB), event: Optional[int] = None):
     """Find builds for a product and return a list of the builds only
     labeled with the -candidate tag that aren't attached to any open
     advisory.
@@ -192,10 +192,10 @@ def find_unshipped_build_candidates(base_tag, event, kind='rpm', brew_session=ko
     builds. This is combined with '-candidate' to return the build
     difference.
 
-    :param int event: The brew event by which to limit builds by
-
     :param str kind: Search for RPM builds by default. 'image' is also
     acceptable (In elliott we only use this function for rpm)
+
+    :param int event: The brew event by which to limit builds by
 
     For example, if `base_tag` is 'rhaos-3.7-rhel7' then this will
     look for two sets of tagged builds:
@@ -209,8 +209,8 @@ def find_unshipped_build_candidates(base_tag, event, kind='rpm', brew_session=ko
     if event:
         event = int(event)
 
-    shipped_builds_set = {b['nvr'] for b in brew_session.listTagged(tag=base_tag, event=event, latest=True, type=kind)}
-    candidate_builds = {b['nvr']: b for b in brew_session.listTagged(tag=f'{base_tag}-candidate', event=event, latest=True, type=kind)}
+    shipped_builds_set = {b['nvr'] for b in session.listTagged(tag=base_tag, event=event, latest=True, type=kind)}
+    candidate_builds = {b['nvr']: b for b in session.listTagged(tag=f'{base_tag}-candidate', event=event, latest=True, type=kind)}
     candidate_builds_set = candidate_builds.keys()
     diff_builds = {}
     for nvr in candidate_builds_set - shipped_builds_set:
