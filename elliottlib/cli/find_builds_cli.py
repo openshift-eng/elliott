@@ -305,7 +305,7 @@ def _fetch_builds_by_kind_rpm(tag_pv_map, brew_event, brew_session):
         else:
             red_print("key of brew_tag_product_version_mapping in erratatool.yml must be candidate\n")
             continue
-        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag, brew_event, brew_session)
+        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag, brew_event, kind='rpm', brew_session=brew_session)
         rpm_tuple.extend(_gen_nvrp_tuples(candidates, tag_pv_map, tag))
     return rpm_tuple
 
