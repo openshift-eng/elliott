@@ -1,4 +1,4 @@
-FROM fedora:33
+FROM fedora:34
 LABEL name="elliott-dev" \
   description="Elliott development container image" \
   maintainer="OpenShift Automated Release Tooling (ART) Team <aos-team-art@redhat.com>"

@@ -2,46 +2,44 @@
 Utility functions for general interactions with Brew and Builds
 """
 from __future__ import absolute_import, print_function, unicode_literals
-from future.utils import as_native_str
-# stdlib
-from typing import List, Dict, Optional, Tuple, Iterable
-import ast
-import time
-import datetime
-import subprocess
-from multiprocessing.dummy import Pool as ThreadPool
-from multiprocessing import cpu_count
-import shlex
-import ssl
-import koji
-import logging
 
-# ours
-from . import constants
-from . import exectools
-from . import logutil
-from elliottlib import exceptions
+# stdlib
+import logging
+import ssl
+import time
+from typing import Dict, Iterable, List, Optional, Tuple
 
 # 3rd party
-import click
+import koji
 import requests
+from future.utils import as_native_str
 from requests_kerberos import HTTPKerberosAuth
+
+# ours
+from elliottlib import constants, exceptions, logutil
 
 logger = logutil.getLogger(__name__)
 
 
-def get_tagged_builds(tags: Iterable[str], build_type: Optional[str], event: Optional[int],
-                      session: koji.ClientSession) -> List[Optional[List[Dict]]]:
-    """ Get tagged builds for multiple Brew tags
+def get_tagged_builds(tag_component_tuples: Iterable[Tuple[str, Optional[str]]], build_type: Optional[str], event: Optional[int], session: koji.ClientSession) -> List[Optional[List[Dict]]]:
+    """ Get tagged builds  for multiple Brew tags (and components) as of the given event
 
-    :param tags: List of tag names
+    In each list for a component, builds are ordered from newest tagged to oldest tagged:
+    https://pagure.io/koji/blob/3fed02c8adb93cde614af9f61abd12bbccdd6682/f/hub/kojihub.py#_1392
+
+    :param tag_component_tuples: List of (tag, component_name) tuples
     :param build_type: if given, only retrieve specified build type (rpm, image)
     :param event: Brew event ID, or None for now.
     :param session: instance of Brew session
     :return: a list of Koji/Brew build dicts
     """
+    tasks = []
     with session.multicall(strict=True) as m:
-        tasks = [m.listTagged(tag, event=event, type=build_type) for tag in tags]
+        for tag, component_name in tag_component_tuples:
+            if not tag:
+                tasks.append(None)
+                continue
+            tasks.append(m.listTagged(tag, event=event, package=component_name, type=build_type))
     return [build for task in tasks for build in task.result]
 
 
@@ -181,42 +179,6 @@ def get_brew_build(nvr, product_version='', session=None):
         raise exceptions.BrewBuildException("{build}: {msg}".format(
             build=nvr,
             msg=res.text))
-
-
-def find_unshipped_build_candidates(base_tag, kind='rpm', session=koji.ClientSession(constants.BREW_HUB), event: Optional[int] = None):
-    """Find builds for a product and return a list of the builds only
-    labeled with the -candidate tag that aren't attached to any open
-    advisory.
-
-    :param str base_tag: The tag to search for shipped/candidate
-    builds. This is combined with '-candidate' to return the build
-    difference.
-
-    :param str kind: Search for RPM builds by default. 'image' is also
-    acceptable (In elliott we only use this function for rpm)
-
-    :param int event: The brew event by which to limit builds by
-
-    For example, if `base_tag` is 'rhaos-3.7-rhel7' then this will
-    look for two sets of tagged builds:
-
-    (1) 'rhaos-3.7-rhel7'
-    (2) 'rhaos-3.7-rhel7-candidate'
-
-    :return: A set of build strings where each build is only tagged as
-    a -candidate build
-    """
-    if event:
-        event = int(event)
-
-    shipped_builds_set = {b['nvr'] for b in session.listTagged(tag=base_tag, event=event, latest=True, type=kind)}
-    candidate_builds = {b['nvr']: b for b in session.listTagged(tag=f'{base_tag}-candidate', event=event, latest=True, type=kind)}
-    candidate_builds_set = candidate_builds.keys()
-    diff_builds = {}
-    for nvr in candidate_builds_set - shipped_builds_set:
-        diff_builds[nvr] = candidate_builds[nvr]
-
-    return diff_builds
 
 
 def get_nvr_root_log(name, version, release, arch='x86_64'):

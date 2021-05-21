@@ -1,6 +1,7 @@
 from __future__ import absolute_import, print_function, unicode_literals
 
 import json
+from typing import Dict, List, Optional, Set, Union
 
 import click
 import koji
@@ -156,7 +157,7 @@ PRESENT advisory. Here are some examples:
             unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_event, brew_session, payload,
                                                           non_payload)
         elif kind == 'rpm':
-            unshipped_nvrps = _fetch_builds_by_kind_rpm(tag_pv_map, brew_event, brew_session)
+            unshipped_nvrps = _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_event, brew_session)
 
     pbar_header(
         'Fetching builds from Errata: ',
@@ -231,11 +232,10 @@ def _fetch_nvrps_by_nvr_or_id(ids_or_nvrs, tag_pv_map, ignore_product_version=Fa
     return nvrps
 
 
-def _gen_nvrp_tuples(builds, tag_pv_map, tag):
-    tuples = []
-    for _, b in builds.items():
-        tuples.append((b['name'], b['version'], b['release'], tag_pv_map[tag]))
-    return tuples
+def _gen_nvrp_tuples(builds: List[Dict], tag_pv_map: Dict[str, str]):
+    """Returns a list of (name, version, release, product_version) tuples of each build """
+    nvrps = [(b['name'], b['version'], b['release'], tag_pv_map[b['tag_name']]) for b in builds]
+    return nvrps
 
 
 def _json_dump(as_json, unshipped_builds, kind, tag_pv_map):
@@ -260,14 +260,59 @@ def _fetch_builds_from_diff(from_payload, to_payload, tag_pv_map):
     return _fetch_nvrps_by_nvr_or_id(nvrs, tag_pv_map)
 
 
-def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_event, brew_session, p, np):
+def _find_latest_builds(brew_builds: List[Dict], assembly: Optional[str]) -> List[Dict]:
+    """ Find latest builds specific to the assembly in a list of brew builds.
+    :param brew_builds: a list of build dicts sorted by tagging event in descending order
+    :param assembly: the name of assembly; None if assemblies support is disabled
+    :return: a list of latest brew build dicts
+    """
+
+    # group builds by tag and component name
+    grouped_builds = {}  # key is (tag, component_name), value is a list of Brew build dicts
+    for build in brew_builds:
+        key = (build["tag_name"], build["name"])
+        grouped_builds.setdefault(key, []).append(build)
+
+    for builds in grouped_builds.values():  # builds are ordered from newest tagged to oldest tagged
+        chosen_build = None
+        if not assembly:  # if assembly is not enabled, choose the true latest tagged
+            chosen_build = builds[0] if builds else None
+        else:  # assembly is enabled
+            # find the newest build containing ".assembly.<assembly-name>" in its RELEASE field
+            chosen_build = next((build for build in builds if f".assembly.{assembly}." in f'{build["release"]}.'), None)
+            if not chosen_build and assembly != "stream":
+                # If no such build, fall back to the newest build containing ".assembly.stream"
+                chosen_build = next((build for build in builds if ".assembly.stream." in f'{build["release"]}.'), None)
+            if not chosen_build:
+                # If none of the builds have .assembly.stream in the RELEASE field, fall back to the latest build without .assembly in the RELEASE field
+                chosen_build = next((build for build in builds if ".assembly." not in f'{build["release"]}.'), None)
+        if chosen_build:
+            yield chosen_build
+
+
+def _find_shipped_builds(build_ids: List[Union[str, int]], brew_session: koji.ClientSession) -> Set[Union[str, int]]:
+    """ Finds shipped builds
+    :param builds: list of Brew build IDs or NVRs
+    :param brew_session: Brew session
+    :return: a set of shipped Brew build IDs or NVRs
+    """
+    shipped_ids = set()
+    tag_lists = brew.get_builds_tags(build_ids, brew_session)
+    for build_id, tags in zip(build_ids, tag_lists):
+        # a shipped build with OCP Errata should have a Brew tag ending with `-released`, like `RHBA-2020:2713-released`
+        shipped = any(map(lambda tag: tag["name"].endswith("-released"), tags))
+        if shipped:
+            shipped_ids.add(build_id)
+    return shipped_ids
+
+
+def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str], brew_event: Optional[int],
+                                brew_session: koji.ClientSession, p: bool, np: bool):
     # filter out image like 'openshift-enterprise-base'
     image_metas = [i for i in runtime.image_metas() if not i.base_only]
-    # Returns a list of (name, version, release, product_version) tuples of each build
-    nvrps = []
 
     # type judge
-    def tj(image, p, np):
+    def tj(image):
         if not image.is_release:
             return False
         if p:
@@ -278,36 +323,35 @@ def _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_event, brew_session, p
         else:
             return True
 
-    tag_component_tuples = [(tag, image.get_component_name()) for tag in tag_pv_map for image in image_metas if tj(image, p, np)]
+    tag_component_tuples = [(tag, image.get_component_name()) for tag in tag_pv_map for image in image_metas if tj(image)]
 
     pbar_header(
         'Generating list of images: ',
         f'Hold on a moment, fetching Brew builds for {len(image_metas)} components with tags {", ".join(tag_pv_map.keys())}...',
         tag_component_tuples)
-    latest_builds = brew.get_latest_builds(tag_component_tuples, event=brew_event, session=brew_session)
 
-    for i, build in enumerate(latest_builds):
-        if not build:
-            continue
-        tag = tag_component_tuples[i][0]
-        nvrps.append((build[0]['name'], build[0]['version'], build[0]['release'], tag_pv_map[tag]))
+    brew_builds = brew.get_tagged_builds(tag_component_tuples, "image", event=brew_event, session=brew_session)
+    brew_latest_builds = list(_find_latest_builds(brew_builds, runtime.assembly))
 
+    click.echo(f'Found {len(brew_latest_builds)} builds. Filtering out shipped builds...')
+    shipped = _find_shipped_builds([b["id"] for b in brew_latest_builds], brew_session)
+    unshipped = [b for b in brew_latest_builds if b["id"] not in shipped]
+    nvrps = _gen_nvrp_tuples(unshipped, tag_pv_map)
     return nvrps
 
 
-def _fetch_builds_by_kind_rpm(tag_pv_map, brew_event, brew_session):
+def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew_event: Optional[int], brew_session: koji.ClientSession):
     green_prefix('Generating list of rpms: ')
     click.echo('Hold on a moment, fetching Brew builds')
-    rpm_tuple = []
-    for tag in tag_pv_map:
-        if tag.endswith('-candidate'):
-            base_tag = tag[:-10]
-        else:
-            red_print("key of brew_tag_product_version_mapping in erratatool.yml must be candidate\n")
-            continue
-        candidates = elliottlib.brew.find_unshipped_build_candidates(base_tag, event=brew_event, kind='rpm', session=brew_session)
-        rpm_tuple.extend(_gen_nvrp_tuples(candidates, tag_pv_map, tag))
-    return rpm_tuple
+    tag_component_tuples = [(tag, None) for tag in tag_pv_map]
+    brew_builds = brew.get_tagged_builds(tag_component_tuples, "rpm", event=brew_event, session=brew_session)
+    brew_latest_builds = _find_latest_builds(brew_builds, runtime.assembly)
+
+    click.echo(f'Found {len(brew_latest_builds)} builds. Filtering out shipped builds...')
+    shipped = _find_shipped_builds([b["id"] for b in brew_latest_builds], brew_session)
+    unshipped = [b for b in brew_latest_builds if b["id"] not in shipped]
+    nvrps = _gen_nvrp_tuples(unshipped, tag_pv_map)
+    return nvrps
 
 
 def _filter_out_inviable_builds(kind, results, errata):
@@ -365,7 +409,6 @@ def _update_to_advisory(builds, kind, advisory, remove, clean):
 
 
 def _detach_builds(advisory, nvrs):
-    import requests_kerberos
     session = requests.Session()
     click.echo(f"Removing build(s) from advisory {advisory}...")
     for nvr in nvrs:

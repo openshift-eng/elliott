@@ -124,7 +124,7 @@ def _get_shipped_images(runtime, brew_session):
     # retrieve all image builds ever shipped for this version (potential operands)
     tag = f"{runtime.branch}-container-released"
     tags = {tag, tag.replace('-rhel-7-', '-rhel-8-')}  # may be one or two depending
-    released = brew.get_tagged_builds(tags, build_type='image', event=None, session=brew_session)
+    released = brew.get_tagged_builds([(tag, None) for tag in tags], build_type='image', event=None, session=brew_session)
     released = brew.get_build_objects([b['build_id'] for b in released], session=brew_session)
     return [b for b in released if _is_image(b)]  # filter out source images
 

@@ -36,6 +36,9 @@ context_settings = dict(help_option_names=['-h', '--help'])
     '--group', '-g',
     default=None, metavar='NAME',
     help='The group of images on which to operate.')
+@click.option("--assembly", metavar="ASSEMBLY_NAME", default='stream',
+              help="The name of an assembly to rebase & build for. Assemblies must be enabled in group.yml or with --enable-assemblies.")
+@click.option('--enable-assemblies', default=False, is_flag=True, help='Enable assemblies even if not enabled in group.yml. Primarily for testing purposes.')
 @click.option(
     '--branch',
     default=None, metavar='BRANCH',
