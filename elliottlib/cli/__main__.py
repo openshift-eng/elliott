@@ -61,6 +61,7 @@ from elliottlib.cli.verify_attached_operators_cli import verify_attached_operato
 from elliottlib.cli.verify_attached_bugs_cli import verify_attached_bugs_cli
 from elliottlib.cli.attach_cve_flaws_cli import attach_cve_flaws_cli
 from elliottlib.cli.get_golang_versions import get_golang_versions_cli
+from elliottlib.cli.onboard_cli import onboard_cli
 
 # 3rd party
 import bugzilla
@@ -697,6 +698,7 @@ cli.add_command(advisory_drop_cli)
 cli.add_command(verify_attached_operators_cli)
 cli.add_command(verify_attached_bugs_cli)
 cli.add_command(attach_cve_flaws_cli)
+cli.add_command(onboard_cli)
 
 
 # -----------------------------------------------------------------------------
