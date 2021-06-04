@@ -62,6 +62,7 @@ from elliottlib.cli.verify_attached_bugs_cli import verify_attached_bugs_cli
 from elliottlib.cli.attach_cve_flaws_cli import attach_cve_flaws_cli
 from elliottlib.cli.get_golang_versions import get_golang_versions_cli
 from elliottlib.cli.validate_rhsa import validate_rhsa_cli
+from elliottlib.cli.rhcos_cli import rhcos_cli
 
 # 3rd party
 import bugzilla

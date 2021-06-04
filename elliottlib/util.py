@@ -4,8 +4,14 @@ from collections import deque
 from itertools import chain
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
+<<<<<<< HEAD
 from sys import getsizeof, stderr
 from typing import Dict, Iterable, List, Optional, Tuple
+=======
+import re
+from elliottlib import brew
+from elliottlib.exceptions import BrewBuildException
+>>>>>>> 2858a43 (initial commit)
 
 import click
 from errata_tool import Erratum
@@ -307,13 +313,14 @@ def minor_version_tuple(bz_target):
     return (int(major), int(minor))
 
 
-def get_golang_version_from_root_log(root_log):
+def get_golang_version_from_build_log(log):
     # TODO add a test for this
     # Based on below greps:
     # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang-(bin-|))[0-9]+.[0-9]+.[0-9]+[^ ]*' ./3.11/*.log | sed 's/:.*\([0-9]\+\.[0-9]\+\.[0-9]\+.*\)/: \1/'
     # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang.*module[^ ]*).*[0-9]+.[0-9]+.[0-9]+[^ ]*' ./4.5/*.log | sed 's/\:.*\([^a-z][0-9]\+\.[0-9]\+\.[0-9]\+[^ ]*\)/:\ \1/'
-    m = re.search(r'(go-toolset-1[^\s]*|golang-bin).*[0-9]+.[0-9]+.[0-9]+[^\s]*', root_log)
-    return m.group(0)
+    m = re.search(r'(go-toolset-1[^\s]*|golang-bin).*[0-9]+.[0-9]+.[0-9]+[^\s]*', log)
+    s = " ".join(m.group(0).split())
+    return s
 
 
 def split_el_suffix_in_release(release: str) -> Tuple[str, Optional[str]]:
@@ -547,3 +554,100 @@ def isolate_timestamp_in_release(release: str) -> Optional[str]:
         if year >= 2000 and month >= 1 and month <= 12 and day >= 1 and day <= 31 and hour <= 23 and minute <= 59:
             return match.group(0)
     return None
+
+
+def get_golang_container_nvrs(nvrs):
+    go_fail, brew_fail = 0, 0
+    all_build_objs = brew.get_build_objects([
+        '{}-{}-{}'.format(*n) for n in nvrs
+    ])
+    for build in all_build_objs:
+        golang_version = None
+        name = build.get('name')
+        try:
+            parents = build['extra']['image']['parent_image_builds']
+        except KeyError:
+            brew_fail += 1
+            continue
+
+        for p, pinfo in parents.items():
+            if 'builder' in p:
+                golang_version = pinfo.get('nvr')
+
+        if golang_version:
+            print(f'{name} {golang_version}')
+        elif 'golang-builder' in name:
+            try:
+                for n in nvrs:
+                    if name in n:
+                        build_log = brew.get_nvr_arch_log(*n)
+            except BrewBuildException:
+                brew_fail += 1
+                continue
+            try:
+                golang_version = get_golang_version_from_build_log(build_log)
+            except AttributeError:
+                go_fail += 1
+                continue
+            print(f'{name} {golang_version}')
+        else:
+            go_fail += 1
+    return brew_fail, go_fail
+
+
+def get_golang_rpm_nvrs(nvrs):
+    go_fail, brew_fail = 0, 0
+    for nvr in nvrs:
+        # what we build in brew as openshift
+        # is called openshift-hyperkube in rhcos
+        if nvr[0] == 'openshift-hyperkube':
+            n = 'openshift'
+            nvr = (n, nvr[1], nvr[2])
+        try:
+            root_log = brew.get_nvr_root_log(*nvr)
+        except BrewBuildException:
+            brew_fail += 1
+            continue
+        try:
+            golang_version = get_golang_version_from_build_log(root_log)
+        except AttributeError:
+            go_fail += 1
+            continue
+        nvr_s = '{}-{}-{}'.format(*nvr)
+        print(f'{nvr_s} {golang_version}')
+    return brew_fail, go_fail
+
+
+# some of our systems refer to golang's architecture nomenclature; translate between that and brew arches
+brew_arches = ["x86_64", "s390x", "ppc64le", "aarch64"]
+brew_arch_suffixes = ["", "-s390x", "-ppc64le", "-aarch64"]
+go_arches = ["amd64", "s390x", "ppc64le", "arm64"]
+go_arch_suffixes = ["", "-s390x", "-ppc64le", "-arm64"]
+
+
+def go_arch_for_brew_arch(brew_arch: str) -> str:
+    if brew_arch in go_arches:
+        return brew_arch   # allow to already be a go arch, just keep same
+    if brew_arch in brew_arches:
+        return go_arches[brew_arches.index(brew_arch)]
+    raise Exception(f"no such brew arch '{brew_arch}' - cannot translate to golang arch")
+
+
+def brew_arch_for_go_arch(go_arch: str) -> str:
+    if go_arch in brew_arches:
+        return go_arch  # allow to already be a brew arch, just keep same
+    if go_arch in go_arches:
+        return brew_arches[go_arches.index(go_arch)]
+    raise Exception(f"no such golang arch '{go_arch}' - cannot translate to brew arch")
+
+
+# imagestreams and such often began without consideration for multi-arch and then
+# added a suffix everywhere to accommodate arches (but kept the legacy location for x86).
+def go_suffix_for_arch(arch: str) -> str:
+    arch = go_arch_for_brew_arch(arch)  # translate either incoming arch style
+    return go_arch_suffixes[go_arches.index(arch)]
+
+
+def brew_suffix_for_arch(arch: str) -> str:
+    arch = brew_arch_for_go_arch(arch)  # translate either incoming arch style
+    return brew_arch_suffixes[brew_arches.index(arch)]

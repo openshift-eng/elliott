@@ -3,6 +3,9 @@ click
 errata-tool >= 1.22
 future
 koji >= 1.18
+kobo ~= 0.19.0
+rpm
+semver
 pygit2 ~= 0.28 ; python_version <= '3.4'
 pygit2 ; python_version >= '3.5'
 python-bugzilla >= 3.0.2
@@ -12,3 +15,4 @@ requests_kerberos
 ruamel.yaml
 six
 typing ; python_version <= '3.4'
+tenacity

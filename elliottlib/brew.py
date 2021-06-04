@@ -184,10 +184,26 @@ def get_brew_build(nvr, product_version='', session=None):
             msg=res.text))
 
 
+def get_nvr_arch_log(name, version, release, arch='x86_64'):
+    log_url = '{host}/packages/{name}/{version}/{release}/data/logs/{arch}.log'.format(
+        host=constants.BREW_DOWNLOAD_URL,
+        name=name,
+        version=version,
+        release=release,
+        arch=arch,
+    )
+
+    logger.debug(f"Trying {log_url}")
+    res = requests.get(log_url, verify=ssl.get_default_verify_paths().openssl_cafile)
+    if res.status_code != 200:
+        raise exceptions.BrewBuildException(f"Could not get {arch}.log for {name}-{version}-{release}")
+    return res.text
+
+
 def get_nvr_root_log(name, version, release, arch='x86_64'):
     root_log_url = '{host}/vol/rhel-{rhel_version}/packages/{name}/{version}/{release}/data/logs/{arch}/root.log'.format(
         host=constants.BREW_DOWNLOAD_URL,
-        rhel_version=release[-1],
+        rhel_version=(7 if 'el7' in release else 8),
         name=name,
         version=version,
         release=release,
