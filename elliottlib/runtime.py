@@ -42,6 +42,7 @@ class Runtime(object):
         self.verbose = False
         self.quiet = False
         self.data_path = None
+        self.assembly = 'stream'
 
         for key, val in kwargs.items():
             self.__dict__[key] = val
@@ -109,6 +110,14 @@ class Runtime(object):
         if self.group_config.name != self.group:
             raise IOError(
                 "Name in group.yml does not match group name. Someone may have copied this group without updating group.yml (make sure to check branch)")
+
+        if self.group_config.assemblies.enabled or self.enable_assemblies:
+            if re.fullmatch(r'[\w.]+', self.assembly) is None or self.assembly[0] == '.' or self.assembly[-1] == '.':
+                raise ValueError('Assembly names may only consist of alphanumerics, ., and _, but not start or end with a dot (.).')
+        else:
+            # If assemblies are not enabled for the group,
+            # ignore this argument throughout doozer.
+            self.assembly = None
 
         if self.branch is not None:
             self.logger.info("Using branch from command line: %s" % self.branch)
