@@ -62,13 +62,14 @@ class Runtime(object):
         # into the YAML content. If `vars` found, the format will be
         # preformed and the YAML model will reloaded from that result
         tmp_config = Model(self.gitdata.load_data(key='group').data)
-        replace_vars = tmp_config.vars
-        if replace_vars is not Missing:
-            try:
-                group_yml = yaml.safe_dump(tmp_config.primitive(), default_flow_style=False)
-                tmp_config = Model(yaml.safe_load(group_yml.format(**replace_vars)))
-            except KeyError as e:
-                raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
+        replace_vars = tmp_config.vars or Model()
+        if self.assembly:
+            replace_vars['runtime_assembly'] = self.assembly
+        try:
+            group_yml = yaml.safe_dump(tmp_config.primitive(), default_flow_style=False)
+            tmp_config = Model(yaml.safe_load(group_yml.format(**replace_vars)))
+        except KeyError as e:
+            raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
         return tmp_config
 
     def initialize(self, mode='none',
@@ -148,6 +149,8 @@ class Runtime(object):
         filter_func = filter_enabled
 
         replace_vars = self.group_config.vars.primitive() if self.group_config.vars else {}
+        if self.assembly:
+            replace_vars['runtime_assembly'] = self.assembly
 
         image_data = {}
         if mode in ['images', 'both']:
@@ -241,6 +244,8 @@ class Runtime(object):
             return self.image_map[distgit_name]
         if not data_obj:
             replace_vars = self.group_config.vars.primitive() if self.group_config.vars else {}
+            if self.assembly:
+                replace_vars['runtime_assembly'] = self.assembly
             data_obj = self.gitdata.load_data(path='images', key=distgit_name, replace_vars=replace_vars)
             if not data_obj:
                 raise ElliottFatalError('Unable to resovle image metadata for {}'.format(distgit_name))
