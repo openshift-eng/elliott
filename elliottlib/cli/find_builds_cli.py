@@ -345,7 +345,7 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
     click.echo('Hold on a moment, fetching Brew builds')
     tag_component_tuples = [(tag, None) for tag in tag_pv_map]
     brew_builds = brew.get_tagged_builds(tag_component_tuples, "rpm", event=brew_event, session=brew_session)
-    brew_latest_builds = _find_latest_builds(brew_builds, runtime.assembly)
+    brew_latest_builds = list(_find_latest_builds(brew_builds, runtime.assembly))
 
     shipped = _find_shipped_builds([b["id"] for b in brew_latest_builds], brew_session)
     unshipped = [b for b in brew_latest_builds if b["id"] not in shipped]
