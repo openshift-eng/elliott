@@ -444,7 +444,7 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=10
         print('No new bugs to attach. Exiting.')
         return
 
-    retry_times=1 if retried is False else 2
+    retry_times = 1 if retried is False else 2
     green_prefix(f"Adding {len(bugs)} bugs to advisory {retry_times} times\n")
 
     batches = list(range(0, len(bugs), batch_size))
@@ -452,8 +452,8 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=10
         batches.append(len(bugs))
 
     green_prefix(f"Adding bugs in batches of {batch_size}. Number of batches: {len(batches)-1}\n")
-    for i in range(len(batches)-1):
-        start, end = batches[i], batches[i+1]
+    for i in range(len(batches) - 1):
+        start, end = batches[i], batches[i + 1]
         print(f"Attaching Batch {i+1}")
         if noop:
             print('Dry run: Would have attached bugs')
