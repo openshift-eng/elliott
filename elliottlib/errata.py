@@ -414,7 +414,7 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugs_with_retry(advisory, bugs, retried=False, noop=False):
+def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=100):
     """
     adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
@@ -440,31 +440,36 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False):
     print(f'Bugs already attached: {len(existing_bugs)}')
     print(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
 
-    if noop:
-        print('Dry run. Exiting.')
-        return
-
     if not new_bugs:
         print('No new bugs to attach. Exiting.')
         return
 
-    green_prefix("Adding {count} bugs to advisory {retry_times} times:".format(
-        count=len(bugs),
-        retry_times=1 if retried is False else 2
-    ))
+    retry_times = 1 if retried is False else 2
+    green_prefix(f"Adding {len(bugs)} bugs to advisory {retry_times} times\n")
 
-    try:
-        advs.addBugs([bug.id for bug in bugs])
-        advs.commit()
-    except ErrataException as e:
-        print("ErrataException Message: {}, retry it again".format(e))
-        if retried is not True:
-            block_list = parse_exception_error_message(e)
-            retry_list = [x for x in bugs if x.id not in block_list]
-            if len(retry_list) > 0:
-                add_bugs_with_retry(advisory, retry_list, retried=True, noop=noop)
-        else:
-            raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
+    batches = list(range(0, len(bugs), batch_size))
+    if len(bugs) % batch_size != 0:
+        batches.append(len(bugs))
+
+    green_prefix(f"Adding bugs in batches of {batch_size}. Number of batches: {len(batches)-1}\n")
+    for i in range(len(batches) - 1):
+        start, end = batches[i], batches[i + 1]
+        print(f"Attaching Batch {i+1}")
+        if noop:
+            print('Dry run: Would have attached bugs')
+            continue
+        try:
+            advs.addBugs([bug.id for bug in bugs[start:end]])
+            advs.commit()
+        except ErrataException as e:
+            print("ErrataException Message: {}, retry it again".format(e))
+            if retried is not True:
+                block_list = parse_exception_error_message(e)
+                retry_list = [x for x in bugs[start:end] if x.id not in block_list]
+                if len(retry_list) > 0:
+                    add_bugs_with_retry(advisory, retry_list, retried=True, noop=noop, batch_size=batch_size)
+            else:
+                raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
 
 
 def get_rpmdiff_runs(advisory_id, status=None, session=None):
