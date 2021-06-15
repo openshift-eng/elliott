@@ -444,6 +444,7 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=10
         print('No new bugs to attach. Exiting.')
         return
 
+    bugs = list(new_bugs)
     retry_times = 1 if retried is False else 2
     green_prefix(f"Adding {len(bugs)} bugs to advisory {retry_times} times\n")
 
@@ -456,10 +457,10 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=10
         start, end = batches[i], batches[i + 1]
         print(f"Attaching Batch {i+1}")
         if noop:
-            print('Dry run: Would have attached bugs')
+            print(f'Dry run: Would have attached bugs')
             continue
         try:
-            advs.addBugs([bug.id for bug in bugs[start:end]])
+            advs.addBugs(bugs[start:end])
             advs.commit()
         except ErrataException as e:
             print("ErrataException Message: {}, retry it again".format(e))
