@@ -457,7 +457,7 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=10
         start, end = batches[i], batches[i + 1]
         print(f"Attaching Batch {i+1}")
         if noop:
-            print(f'Dry run: Would have attached bugs')
+            print('Dry run: Would have attached bugs')
             continue
         try:
             advs.addBugs(bugs[start:end])
