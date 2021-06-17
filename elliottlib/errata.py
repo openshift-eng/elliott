@@ -414,7 +414,7 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=100):
+def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=100):
     """
     adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
@@ -422,7 +422,6 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=10
 
     :param advisory: advisory id
     :param bugs: iterable of bzutil.bug to attach to advisory
-    :param retried: retry 2 times, first attempt fetch failed bugs sift out then attach again
     :return:
     """
     print(f'Request to attach {len(bugs)} bugs to the advisory {advisory}')
@@ -445,9 +444,6 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=10
         return
 
     bugs = list(new_bugs)
-    retry_times = 1 if retried is False else 2
-    green_prefix(f"Adding {len(bugs)} bugs to advisory {retry_times} times\n")
-
     batches = list(range(0, len(bugs), batch_size))
     if len(bugs) % batch_size != 0:
         batches.append(len(bugs))
@@ -464,13 +460,18 @@ def add_bugs_with_retry(advisory, bugs, retried=False, noop=False, batch_size=10
             advs.commit()
         except ErrataException as e:
             print("ErrataException Message: {}, retry it again".format(e))
-            if retried is not True:
-                block_list = parse_exception_error_message(e)
-                retry_list = [x for x in bugs[start:end] if x.id not in block_list]
-                if len(retry_list) > 0:
-                    add_bugs_with_retry(advisory, retry_list, retried=True, noop=noop, batch_size=batch_size)
-            else:
+            block_list = parse_exception_error_message(e)
+            retry_list = [x for x in bugs[start:end] if x not in block_list]
+            if len(retry_list) == 0:
+                continue
+
+            try:
+                advs = Erratum(errata_id=advisory)
+                advs.addBugs(retry_list)
+                advs.commit()
+            except ErrataException as e:
                 raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
+            print("remaining bugs attached")
 
 
 def get_rpmdiff_runs(advisory_id, status=None, session=None):
