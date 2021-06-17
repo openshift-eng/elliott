@@ -443,7 +443,7 @@ def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=100):
         print('No new bugs to attach. Exiting.')
         return
 
-    bugs = list(new_bugs)    
+    bugs = list(new_bugs)
     batches = list(range(0, len(bugs), batch_size))
     if len(bugs) % batch_size != 0:
         batches.append(len(bugs))
@@ -464,7 +464,7 @@ def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=100):
             retry_list = [x for x in bugs[start:end] if x not in block_list]
             if len(retry_list) == 0:
                 continue
-            
+
             try:
                 advs = Erratum(errata_id=advisory)
                 advs.addBugs(retry_list)
