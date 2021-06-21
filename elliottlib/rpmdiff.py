@@ -47,3 +47,20 @@ class RPMDiffClient(object):
         resp = self.session.get(endpoint, params=params)
         resp.raise_for_status()
         return resp.json()["results"]
+
+    def waive(self, result_id, comment):
+        """ Waive a test result
+
+        https://rpmdiff-hub.host.prod.eng.bos.redhat.com/api/v1/waivers/waive/
+        """
+        endpoint = self.hub_url + "/api/v1/waivers/waive/"
+        data = {
+            "result_id": result_id,
+            "description": comment
+        }
+        resp = self.session.post(endpoint, data=data)
+        if resp.status_code == 403:
+            print(f"Cannot waive {result_id}. See waiver for next steps")
+            return
+        resp.raise_for_status()
+        return resp.json()

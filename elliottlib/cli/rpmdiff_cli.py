@@ -19,8 +19,10 @@ def rpmdiff_cli(ctx):
 @click.argument("advisory", metavar='ADVISORY', type=click.IntRange(1), required=False)
 @click.option("--yaml", is_flag=True, help="Print out the result as YAML format.")
 @click.option("--json", is_flag=True, help="Print out the result as JSON format.")
+@click.option("--waive", help="Waive all rpmdiff results with provided comment")
+@click.option("--verbose", "-v", is_flag=True, help="Print out detailed info about test results including past waivers")
 @click.pass_context
-def show(ctx, advisory, yaml, json):
+def show(ctx, advisory, yaml, json, waive, verbose):
     """ Show RPMDiff failures for an advisory.
     """
     runtime = ctx.obj  # type: Runtime
@@ -64,10 +66,32 @@ def show(ctx, advisory, yaml, json):
     if yaml or json:
         _structured_output(bad_runs, rpmdiff_client, yaml)
     else:
-        _unstructured_output(bad_runs, rpmdiff_client)
+        _unstructured_output(bad_runs, rpmdiff_client, verbose)
+
+    if waive:
+        _waive(bad_runs, rpmdiff_client, waive)
 
 
-def _unstructured_output(bad_runs, rpmdiff_client):
+def _waive(bad_runs, rpmdiff_client, comment):
+    for run in bad_runs:
+        attr = run["attributes"]
+        run_id = attr["external_id"]
+        run_url = "{}/run/{}/".format(constants.RPMDIFF_WEB_URL, run_id)
+        test_results = rpmdiff_client.get_test_results(run_id)
+        for result in test_results:
+            score = result["score"]
+            if score >= 0 and score < 3:  # good test result
+                continue
+            result_id = result["result_id"]
+            test = result["test"]
+            test_id = test["test_id"]
+            result_url = run_url + str(test_id) + "/"
+            print(result_url)
+            waive = rpmdiff_client.waive(result_id, comment)
+            print(waive)
+
+
+def _unstructured_output(bad_runs, rpmdiff_client, verbose):
     for run in bad_runs:
         attr = run["attributes"]
         run_id = attr["external_id"]
@@ -95,20 +119,21 @@ def _unstructured_output(bad_runs, rpmdiff_client):
                 util.yellow_print(result_msg)
             else:
                 util.red_print(result_msg)
-            # get last waiver message
-            waivers = rpmdiff_client.list_waivers(package_name, test_id, limit=1)
-            if waivers:
-                util.green_print("    Last waiver: @" + waivers[0]["owner"]["username"] + ": " + waivers[0]["description"])
-            else:
-                util.yellow_print("    No last waiver found.")
-            for detail in details:
-                detail_msg = "    * {1} {0}".format(constants.RPMDIFF_SCORE_NAMES[detail["score"]], detail["subpackage"])
-                if detail["score"] == 3:
-                    util.yellow_print(detail_msg)
+            if verbose:
+                # get last waiver message
+                waivers = rpmdiff_client.list_waivers(package_name, test_id, limit=1)
+                if waivers:
+                    util.green_print("    Last waiver: @" + waivers[0]["owner"]["username"] + ": " + waivers[0]["description"])
                 else:
-                    util.red_print(detail_msg)
-                content = re.sub('^', '        ', detail["content"], flags=re.MULTILINE)
-                print(content)
+                    util.yellow_print("    No last waiver found.")
+                for detail in details:
+                    detail_msg = "    * {1} {0}".format(constants.RPMDIFF_SCORE_NAMES[detail["score"]], detail["subpackage"])
+                    if detail["score"] == 3:
+                        util.yellow_print(detail_msg)
+                    else:
+                        util.red_print(detail_msg)
+                    content = re.sub('^', '        ', detail["content"], flags=re.MULTILINE)
+                    print(content)
         print()
 
 
