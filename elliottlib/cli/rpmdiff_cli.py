@@ -21,8 +21,9 @@ def rpmdiff_cli(ctx):
 @click.option("--json", is_flag=True, help="Print out the result as JSON format.")
 @click.option("--waive", help="Waive all rpmdiff results with provided comment")
 @click.option("--verbose", "-v", is_flag=True, help="Print out detailed info about test results including past waivers")
+@click.option("--dry-run", "--noop", is_flag=True, help="Print what would change, but don't change anything")
 @click.pass_context
-def show(ctx, advisory, yaml, json, waive, verbose):
+def show(ctx, advisory, yaml, json, waive, verbose, dry_run):
     """ Show RPMDiff failures for an advisory.
     """
     runtime = ctx.obj  # type: Runtime
@@ -69,10 +70,10 @@ def show(ctx, advisory, yaml, json, waive, verbose):
         _unstructured_output(bad_runs, rpmdiff_client, verbose)
 
     if waive:
-        _waive(bad_runs, rpmdiff_client, waive)
+        _waive(bad_runs, rpmdiff_client, waive, dry_run)
 
 
-def _waive(bad_runs, rpmdiff_client, comment):
+def _waive(bad_runs, rpmdiff_client, comment, dry_run):
     for run in bad_runs:
         attr = run["attributes"]
         run_id = attr["external_id"]
@@ -87,6 +88,9 @@ def _waive(bad_runs, rpmdiff_client, comment):
             test_id = test["test_id"]
             result_url = run_url + str(test_id) + "/"
             print(result_url)
+            if dry_run:
+                print(f'Would have waived {result_id} with comment {comment}')
+                continue
             waive = rpmdiff_client.waive(result_id, comment)
             print(waive)
 
