@@ -132,8 +132,6 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         advisory.addBugs(flaw_ids)
 
     if noop:
-        print('DRY-RUN: The following changes would have been applied to the advisory:')
-        print(advisory.dump())
         return True
 
     return advisory.commit()
