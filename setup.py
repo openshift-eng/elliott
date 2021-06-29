@@ -46,6 +46,8 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Environment :: Console",
         "Operating System :: POSIX",
+        "Operating System :: POSIX :: Linux",
+        "Operating System :: MacOS",
         "License :: OSI Approved :: Apache Software License",
         "Intended Audience :: Developers",
         "Topic :: Software Development :: Build Tools",

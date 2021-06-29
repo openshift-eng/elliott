@@ -1,19 +1,25 @@
 from __future__ import absolute_import, print_function, unicode_literals
+
+import datetime
+import itertools
+import re
+from datetime import datetime, timezone
 from typing import List
 
-import elliottlib
-from elliottlib import constants, logutil, Runtime, bzutil, openshiftclient, errata
-LOGGER = logutil.getLogger(__name__)
-from elliottlib.cli import cli_opts
-from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
-from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import green_prefix, green_print, red_print, red_prefix
+import click
+import koji
 from bugzilla import bug as bug_module
 
-import click
+from elliottlib import (Runtime, bzutil, constants, errata, logutil,
+                        openshiftclient)
+from elliottlib.cli import cli_opts
+from elliottlib.cli.common import (cli, find_default_advisory,
+                                   use_default_advisory_option)
+from elliottlib.exceptions import ElliottFatalError
+from elliottlib.util import green_prefix, green_print, red_prefix
+
+LOGGER = logutil.getLogger(__name__)
 pass_runtime = click.make_pass_decorator(Runtime)
-import datetime
-import re
 
 
 @cli.command("find-bugs", short_help="Find or add MODIFED/VERIFIED bugs to ADVISORY")
@@ -64,13 +70,15 @@ import re
 @click.option("--into-default-advisories",
               is_flag=True,
               help='attaches bugs found to their correct default advisories, e.g. operator-related bugs go to "extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
+@click.option('--brew-event', type=click.INT, required=False,
+              help='Query brew at this time in the past, defined by the eventID')
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id, cve_trackers, from_diff,
-                  flag, report, into_default_advisories, noop):
+                  flag, report, into_default_advisories, brew_event, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
@@ -203,6 +211,67 @@ advisory with the --add option.
         search_flag = 'blocker+' if mode == 'blocker' else None
         bugs = bzutil.search_for_bugs(bz_data, status, flag=search_flag, filter_out_security_bugs=not(cve_trackers),
                                       verbose=runtime.debug)
+
+        if brew_event:
+            brew_api = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
+            basis_timestamp = brew_api.getEvent(brew_event)["ts"]
+
+            def to_timestamp(dt):
+                """ Converts xmlrpc.client.DateTime to timestamp """
+                return datetime.strptime(dt.value, "%Y%m%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+
+            # Filters out bugs that are created after the basis event
+            bugs = [bug for bug in bugs if to_timestamp(bug.creation_time) <= basis_timestamp]
+
+            # Queries bug history
+            bugs_history = bzapi.bugs_history_raw([bug.id for bug in bugs])
+
+            class BugStatusChange:
+                def __init__(self, timestamp: int, old: str, new: str) -> None:
+                    self.timestamp = timestamp  # when this change is made?
+                    self.old = old  # old status
+                    self.new = new  # new status
+
+                @classmethod
+                def from_history_ent(cls, history):
+                    """ Converts from bug history dict returned from Bugzilla to BugStatusChange object.
+                    The history dict returned from Bugzilla includes bug changes on all fields, but we are only interested in the "status" field change.
+                    :return: BugStatusChange object, or None if the history doesn't include a "status" field change.
+                    """
+                    status_change = next(filter(lambda change: change["field_name"] == "status", history["changes"]), None)
+                    return cls(to_timestamp(history["when"]), status_change["removed"], status_change["added"]) if status_change else None
+
+            qualified_bugs = []
+
+            for bug, bug_history in zip(bugs, bugs_history["bugs"]):
+                assert bug.id == bug_history["id"]  # `bugs_history["bugs"]` returned by Bugzilla should have the same order as `bugs`, but to be safe
+
+                # We are only interested in "status" field changes
+                status_changes = filter(None, map(BugStatusChange.from_history_ent, bug_history["history"]))
+
+                # status changes after the basis event
+                after_basis_status_changes = list(itertools.dropwhile(lambda change: change.timestamp <= basis_timestamp, status_changes))
+
+                # `basis_status` is the status of the bug at the moment of the basis event
+                if not after_basis_status_changes:
+                    basis_status = bug.status  # no status change after the basis event; use current status
+                else:
+                    basis_status = after_basis_status_changes[0].old  # basis_status should be the old status of the first status change after the basis event
+
+                if basis_status not in status:
+                    click.echo(f"Ignore BZ {bug.id} because its status was {basis_status} at the moment of basis event {brew_event} ({datetime.utcfromtimestamp(basis_timestamp)})")
+                    continue
+
+                # Per @Justin Pierce: If a BZ seems to qualify for a sweep currently and at the basis event, then all state changes after the basis event must be to a greater than the state which qualified the BZ at the basis event.
+                regressed_changes = [change.new for change in after_basis_status_changes if constants.VALID_BUG_STATES.index(change.new) <= constants.VALID_BUG_STATES.index(basis_status)]
+                if regressed_changes:
+                    click.echo(f"Ignore BZ {bug.id} because its status was {basis_status} at the moment of basis event {brew_event} ({datetime.utcfromtimestamp(basis_timestamp)})"
+                               f", however the status changed back to {regressed_changes} afterwards")
+                    continue
+
+                qualified_bugs.append(bug)
+            bugs = qualified_bugs
+
     elif mode == 'list':
         bugs = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
         mode_list(advisory=advisory, bugs=bugs, flags=flag, report=report, noop=noop)
@@ -335,8 +404,8 @@ def print_report(bugs: type_bug_list) -> None:
     green_print(
         "{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
     for bug in bugs:
-        created_date = datetime.datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
-        days_ago = (datetime.datetime.today() - created_date).days
+        created_date = datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
+        days_ago = (datetime.today() - created_date).days
         click.echo("{:<8d} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.id,
                                                                                 bug.component,
                                                                                 bug.status,
