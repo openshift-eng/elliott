@@ -41,10 +41,17 @@ def is_first_fix(bzapi, flaw_bug, current_target_release, tracker_ids_to_be_igno
     # get all the tracker bugs for a flaw bug
     # but only for OCP product
     tracker_ids = [t for t in flaw_bug.depends_on if t not in tracker_ids_to_be_ignored]
+    if len(tracker_ids) == 0:
+        print(f'No trackers found for {flaw_bug.id} confirm manually')
+        return False
+
     tracker_bugs = [b for b in bzapi.query(bzapi.build_query(
         product='OpenShift Container Platform',
         bug_id=tracker_ids,
     )) if is_tracker_bug(b)]
+    if len(tracker_bugs) == 0:
+        print(f'No trackers found for {flaw_bug.id} confirm manually')
+        return False
 
     def same_major_release(bug):
         current_major_version = util.minor_version_tuple(current_target_release)[0]
