@@ -248,7 +248,7 @@ advisory with the --add option.
     elif mode == 'list':
         bugs = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
         if not into_default_advisories:
-            mode_list(advisory=advisory, bugs=bugs, flags=flag, report=report, noop=noop)
+            mode_list(advisory=advisory, bugs=bugs, bzapi=bzapi, flags=flag, report=report, noop=noop)
             return
     elif mode == 'diff':
         click.echo(runtime.working_dir)
@@ -271,7 +271,7 @@ advisory with the --add option.
         print_report(bugs)
 
     if advisory and not default_advisory_type:  # `--add ADVISORY_NUMBER` should respect the user's wish and attach all available bugs to whatever advisory is specified.
-        errata.add_bugs_with_retry(advisory, bugs, noop=noop)
+        errata.filter_and_add_bugs(advisory, bugs, bzapi, noop=noop)
         return
 
     # If --use-default-advisory or --into-default-advisories is given, we need to determine which bugs should be swept into which advisory.
@@ -295,44 +295,61 @@ advisory with the --add option.
         # sweep rpm cve trackers into "rpm" advisory
         rpm_bugs = dict()
         if mode == 'sweep' and cve_trackers:
-            rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
+            rpm_bugs_dict = bzutil.get_valid_rpm_cves(bugs)
             green_prefix("RPM CVEs found: ")
-            click.echo(sorted(b.id for b in rpm_bugs))
+            click.echo(sorted(rpm_bugs_dict.keys()))
 
-            if rpm_bugs:
+            if rpm_bugs_dict:
+                rpm_advisory = errata.fetch_advisory(runtime.group_config.advisories["rpm"])
+                bug_objs = [i['bug'] for i in rpm_bugs_dict.values()]
+                rpm_bugs = errata.filter_advisory_bugs(rpm_advisory, bug_objs, bzapi)
+
                 # if --check-builds flag is set
                 # only attach bugs that have corresponding brew builds attached to rpm advisory
                 if check_builds:
                     click.echo("Validating bugs with builds attached to the rpm advisory")
                     attached_builds = errata.get_advisory_nvrs(runtime.group_config.advisories["rpm"])
                     packages = attached_builds.keys()
-                    not_found = []
-                    for bug, package_name in rpm_bugs.items():
+                    not_found = {}
+                    for bugid in rpm_bugs:
+                        package_name = rpm_bugs_dict[bugid]['component']
                         if package_name not in packages:
-                            not_found.append((bug.id, package_name))
+                            not_found[bugid] = package_name
                         else:
-                            click.echo(f"Build found for #{bug.id}, {package_name}")
-                            impetus_bugs["rpm"].add(bug)
+                            click.echo(f"Build found for #{bugid}, {package_name}")
+                            impetus_bugs["rpm"].add(rpm_bugs_dict[bugid])
 
                     if not_found:
                         red_prefix("RPM CVE Warning: ")
-                        click.echo("The following CVE (bug, package) were found but not attached, because no corresponding brew builds were found attached to the rpm advisory. First attach builds and then rerun to attach the bugs")
-                        click.echo(not_found)
+                        click.echo(
+                            "The following CVE (bug, package) were found but not attached, because no corresponding "
+                            "brew builds were found attached to the rpm advisory. First attach builds and then "
+                            "rerun to attach the bugs")
+                        for bugid, component in not_found.items():
+                            click.echo(f'{bugid}, {component}')
                 else:
                     click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
 
         impetus_bugs["extras"] = extras_bugs(bugs)
 
         # all other bugs should go into "image" advisory
-        impetus_bugs["image"] = set(bugs) - impetus_bugs["extras"] - rpm_bugs.keys()
+        impetus_bugs["image"] = set(bugs) - impetus_bugs["extras"] - set([i['bug'] for i in rpm_bugs_dict.values()])
 
-    if default_advisory_type and impetus_bugs.get(default_advisory_type):
-        errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type], noop=noop)
+    if default_advisory_type:
+        advisories = [default_advisory_type]
     elif into_default_advisories:
-        for impetus, bugs in impetus_bugs.items():
-            if bugs:
-                green_prefix(f'{impetus} advisory: ')
-                errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
+        advisories = impetus_bugs.keys()
+
+    for kind in advisories:
+        if not impetus_bugs[kind]:
+            continue
+        green_prefix(f'{kind} advisory: ')
+        if kind == 'rpm':
+            advisory_obj = rpm_advisory
+        else:
+            advisory_obj = errata.fetch_advisory(runtime.group_config.advisories[kind])
+        bugs = errata.filter_advisory_bugs(advisory_obj, impetus_bugs[kind], bzapi)
+        errata.add_bugs(advisory_obj, bugs, noop=noop)
 
 
 type_bug_list = List[bug_module.Bug]
@@ -407,7 +424,7 @@ def print_report(bugs: type_bug_list) -> None:
                                                                                 bug.summary[:60]))
 
 
-def mode_list(advisory: str, bugs: type_bug_list, report: bool, flags: List[str], noop: bool) -> None:
+def mode_list(advisory: str, bugs: type_bug_list, bzapi, report: bool, flags: List[str], noop: bool) -> None:
     green_prefix(f"Found {len(bugs)} bugs: ")
     click.echo(", ".join(sorted(str(b.bug_id) for b in bugs)))
     if report:
@@ -417,5 +434,5 @@ def mode_list(advisory: str, bugs: type_bug_list, report: bool, flags: List[str]
         add_flags(bugs, flags, noop)
 
     if advisory:
-        errata.add_bugs_with_retry(advisory, bugs, noop=noop)
+        errata.filter_and_add_bugs(advisory, bugs, bzapi, noop=noop)
     return

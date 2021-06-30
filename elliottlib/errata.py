@@ -414,50 +414,69 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=100):
+def fetch_advisory(advisory_id):
+    try:
+        advisory = Erratum(errata_id=advisory_id)
+    except GSSError:
+        exit_unauthenticated()
+
+    if advisory is False:
+        raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
+    return advisory
+
+
+def filter_advisory_bugs(advisory, bugs, bzapi):
+    # filter existing advisory bugs
+    existing_bugs = advisory.errata_bugs
+    new_bugs = set(bug.id for bug in bugs) - set(existing_bugs)
+
+    # filter placeholder bugs
+    full_bugs = [bzapi.getbug(i) for i in new_bugs]
+    ignore = set()
+    for bug in full_bugs:
+        if constants.BUGZILLA_PLACEHOLDER_BUG_TITLE in bug.summary:
+            ignore.add(bug.id)
+    new_bugs = new_bugs - ignore
+    if existing_bugs or ignore:
+        print(f'Filtering out already attached bugs, updated bugs: {len(new_bugs)}')
+    return new_bugs
+
+
+def filter_and_add_bugs(advisory_id, bugs, bzapi, noop=False, batch_size=100):
+    advisory = fetch_advisory(advisory_id)
+    filter_advisory_bugs(advisory, bugs, bzapi)
+    return add_bugs(advisory, bugs, noop, batch_size)
+
+
+def add_bugs(advisory, bugs, noop=False, batch_size=100):
     """
     adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
     list then add bug to advisory again, if still has failures raise exceptions
 
-    :param advisory: advisory id
+    :param advisory: advisory object
     :param bugs: iterable of bzutil.bug to attach to advisory
     :return:
     """
-    print(f'Request to attach {len(bugs)} bugs to the advisory {advisory}')
-
-    try:
-        advs = Erratum(errata_id=advisory)
-    except GSSError:
-        exit_unauthenticated()
-
-    if advs is False:
-        raise exceptions.ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
-
-    existing_bugs = advs.errata_bugs
-    new_bugs = set(bug.id for bug in bugs) - set(existing_bugs)
-    print(f'Bugs already attached: {len(existing_bugs)}')
-    print(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
-
-    if not new_bugs:
-        print('No new bugs to attach. Exiting.')
+    if not bugs:
+        print('No bugs to attach. Exiting.')
         return
 
-    bugs = list(new_bugs)
+    bugs = list(bugs)
+    print(f'Request to attach {len(bugs)} bugs to the advisory {advisory.errata_id}: {bugs}')
+
     batches = list(range(0, len(bugs), batch_size))
     if len(bugs) % batch_size != 0:
         batches.append(len(bugs))
 
-    green_prefix(f"Adding bugs in batches of {batch_size}. Number of batches: {len(batches)-1}\n")
     for i in range(len(batches) - 1):
         start, end = batches[i], batches[i + 1]
-        print(f"Attaching Batch {i+1}")
         if noop:
-            print('Dry run: Would have attached bugs')
+            print(f'Dry run: Would have attached {len(bugs[start:end])} bugs')
             continue
         try:
-            advs.addBugs(bugs[start:end])
-            advs.commit()
+            advisory.addBugs(bugs[start:end])
+            advisory.commit()
         except ErrataException as e:
             print("ErrataException Message: {}, retry it again".format(e))
             block_list = parse_exception_error_message(e)
@@ -465,13 +484,13 @@ def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=100):
             if len(retry_list) == 0:
                 continue
 
+            advisory = fetch_advisory(advisory.errata_id)
             try:
-                advs = Erratum(errata_id=advisory)
-                advs.addBugs(retry_list)
-                advs.commit()
+                advisory.addBugs(retry_list)
+                advisory.commit()
             except ErrataException as e:
                 raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
-            print("remaining bugs attached")
+            print(f"{len(retry_list)} bugs attached on retry")
 
 
 def get_rpmdiff_runs(advisory_id, status=None, session=None):

@@ -11,12 +11,13 @@ class TestFindBugsCli(unittest.TestCase):
         report = False
         flags = []
         noop = False
+        bzapi = None
 
         flexmock(errata_module).\
-            should_receive("add_bugs_with_retry").\
+            should_receive("filter_and_add_bugs").\
             once()
 
-        mode_list(advisory, bugs, report, flags, noop)
+        mode_list(advisory, bugs, bzapi, report, flags, noop)
 
 
 class TestExtrasBugs(unittest.TestCase):

@@ -365,7 +365,7 @@ def get_valid_rpm_cves(bugs):
             component_name = get_whiteboard_component(b)
             # filter out non-rpm suffixes
             if component_name and not re.search(r'-(apb|container)$', component_name):
-                rpm_cves[b] = component_name
+                rpm_cves[b.id] = {'bug': b, 'component': component_name}
     return rpm_cves
 
 

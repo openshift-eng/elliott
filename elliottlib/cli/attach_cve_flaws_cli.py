@@ -1,6 +1,6 @@
 import bugzilla, click, re
 from errata_tool import Erratum
-from elliottlib import util, attach_cve_flaws
+from elliottlib import util, attach_cve_flaws, errata
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 
 
@@ -88,24 +88,15 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
 
     if not first_fix_flaw_bugs:
         runtime.logger.info('No "first-fix" bugs found, exiting')
-        exit(0)
+        return
+
+    bugs = errata.filter_advisory_bugs(advisory, first_fix_flaw_bugs, bzapi)
+    if not bugs:
+        return
 
     cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
-    advisory = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, first_fix_flaw_bugs)
-
-    flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
-    runtime.logger.info(f'Request to attach {len(flaw_ids)} bugs to the advisory')
-    existing_bug_ids = advisory.errata_bugs
-    new_bugs = set(flaw_ids) - set(existing_bug_ids)
-    runtime.logger.info(f'Bugs already attached: {len(existing_bug_ids)}')
-    runtime.logger.info(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
-
-    if new_bugs:
-        advisory.addBugs(flaw_ids)
-    if noop:
-        return True
-
-    return advisory.commit()
+    advisory = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, bugs)
+    return errata.add_bugs(advisory, bugs, noop)
 
 
 def get_updated_advisory_rhsa(logger, cve_boilerplate, advisory, flaw_bugs):
