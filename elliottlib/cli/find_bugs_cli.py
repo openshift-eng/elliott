@@ -278,11 +278,7 @@ advisory with the --add option.
                 else:
                     click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
 
-        # optional operators bugs should be swept to the "extras" advisory
-        # a way to identify operator-related bugs is by its "Component" value.
-        # temporarily hardcode here until we need to move it to ocp-build-data.
-        extra_components = {"Logging", "Service Brokers", "Metering Operator", "Node Feature Discovery Operator"}  # we will probably find more
-        impetus_bugs["extras"] = {b for b in bugs if b.component in extra_components}
+        impetus_bugs["extras"] = extras_bugs(bugs)
 
         # all other bugs should go into "image" advisory
         impetus_bugs["image"] = set(bugs) - impetus_bugs["extras"] - rpm_bugs.keys()
@@ -297,6 +293,28 @@ advisory with the --add option.
 
 
 type_bug_list = List[bug_module.Bug]
+
+
+def extras_bugs(bugs: type_bug_list) -> type_bug_list:
+    # optional operators bugs should be swept to the "extras" advisory
+    # a way to identify operator-related bugs is by its "Component" value.
+    # temporarily hardcode here until we need to move it to ocp-build-data.
+    extras_components = {
+        "Logging",
+        "Service Brokers",
+        "Metering Operator",
+        "Node Feature Discovery Operator"
+    }  # we will probably find more
+    extras_subcomponents = {
+        ("Networking", "SR-IOV")
+    }
+    extra_bugs = set()
+    for bug in bugs:
+        if bug.component in extras_components:
+            extra_bugs.add(bug)
+        elif hasattr(bug, 'sub_component') and (bug.component, bug.sub_component) in extras_subcomponents:
+            extra_bugs.add(bug)
+    return extra_bugs
 
 
 def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, runtime) -> type_bug_list:
