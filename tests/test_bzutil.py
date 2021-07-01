@@ -1,10 +1,12 @@
-from __future__ import unicode_literals
-import unittest
-import mock
-import flexmock
-import bugzilla
+from datetime import datetime, timezone
 import logging
-from elliottlib import exceptions, constants, bzutil
+import unittest
+import xmlrpc.client
+
+import flexmock
+import mock
+
+from elliottlib import bzutil, constants
 
 hostname = "bugzilla.redhat.com"
 
@@ -66,6 +68,181 @@ class TestBZUtil(unittest.TestCase):
         self.assertFalse(bzutil.is_cve_tracker(bug))
         bug.keywords.append("SecurityTracking")
         self.assertTrue(bzutil.is_cve_tracker(bug))
+
+    def test_to_timestamp(self):
+        dt = xmlrpc.client.DateTime("20210615T18:23:22")
+        actual = bzutil.to_timestamp(dt)
+        self.assertEqual(actual, 1623781402.0)
+
+    def test_filter_bugs_by_cutoff_event(self):
+        bzapi = mock.MagicMock()
+        desired_statuses = ["MODIFIED", "ON_QA", "VERIFIED"]
+        sweep_cutoff_timestamp = datetime(2021, 6, 30, 12, 30, 00, 0, tzinfo=timezone.utc).timestamp()
+        bugs = [
+            mock.MagicMock(id=1, status="ON_QA", creation_time=xmlrpc.client.DateTime("20210630T12:29:00")),
+            mock.MagicMock(id=2, status="ON_QA", creation_time=xmlrpc.client.DateTime("20210630T12:30:00")),
+            mock.MagicMock(id=3, status="ON_QA", creation_time=xmlrpc.client.DateTime("20210630T12:31:00")),
+            mock.MagicMock(id=4, status="ON_QA", creation_time=xmlrpc.client.DateTime("20210630T00:00:00")),
+            mock.MagicMock(id=5, status="ON_QA", creation_time=xmlrpc.client.DateTime("20210630T00:00:00")),
+            mock.MagicMock(id=6, status="ON_QA", creation_time=xmlrpc.client.DateTime("20210630T00:00:00")),
+            mock.MagicMock(id=7, status="ON_QA", creation_time=xmlrpc.client.DateTime("20210630T00:00:00")),
+            mock.MagicMock(id=8, status="ON_QA", creation_time=xmlrpc.client.DateTime("20210630T00:00:00")),
+            mock.MagicMock(id=9, status="ON_QA", creation_time=xmlrpc.client.DateTime("20210630T00:00:00")),
+        ]
+        bzapi.bugs_history_raw.return_value = {
+            "bugs": [
+                {
+                    "id": 1,
+                    "history": [],
+                },
+                {
+                    "id": 2,
+                    "history": [],
+                },
+                {
+                    "id": 4,
+                    "history": [
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T01:00:00"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                            ]
+                        },
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T23:59:59"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                            ]
+                        },
+                    ],
+                },
+                {
+                    "id": 5,
+                    "history": [
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T01:00:00"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "NEW", "added": "MODIFIED"},
+                            ]
+                        },
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T23:59:59"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "MODIFIED", "added": "ON_QA"},
+                            ]
+                        },
+                    ],
+                },
+                {
+                    "id": 6,
+                    "history": [
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T01:00:00"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "NEW", "added": "ASSIGNED"},
+                            ]
+                        },
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T23:59:59"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "ASSIGNED", "added": "ON_QA"},
+                            ]
+                        },
+                    ],
+                },
+                {
+                    "id": 7,
+                    "history": [
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T01:00:00"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "NEW", "added": "MODIFIED"},
+                            ]
+                        },
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T23:59:59"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "MODIFIED", "added": "ON_QA"},
+                            ]
+                        },
+                    ],
+                },
+                {
+                    "id": 8,
+                    "history": [
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T01:00:00"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "NEW", "added": "MODIFIED"},
+                            ]
+                        },
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T13:00:00"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "MODIFIED", "added": "ON_QA"},
+                            ]
+                        },
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T23:59:59"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "ON_QA", "added": "VERIFIED"},
+                            ]
+                        },
+                    ],
+                },
+                {
+                    "id": 9,
+                    "history": [
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T01:00:00"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "NEW", "added": "MODIFIED"},
+                            ]
+                        },
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T13:00:00"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "MODIFIED", "added": "ON_QA"},
+                            ]
+                        },
+                        {
+                            "when": xmlrpc.client.DateTime("20210630T23:59:59"),
+                            "changes": [
+                                {"field_name": "irelevant1", "removed": "foo", "added": "bar"},
+                                {"field_name": "irelevant2", "removed": "bar", "added": "foo"},
+                                {"field_name": "status", "removed": "ON_QA", "added": "ASSIGNED"},
+                            ]
+                        },
+                    ],
+                },
+            ]
+        }
+        actual = bzutil.filter_bugs_by_cutoff_event(bzapi, bugs, desired_statuses, sweep_cutoff_timestamp)
+        self.assertListEqual([1, 2, 4, 5, 7, 8], [bug.id for bug in actual])
 
 
 class TestSearchFilter(unittest.TestCase):

@@ -1,19 +1,21 @@
-from __future__ import absolute_import, print_function, unicode_literals
-from typing import List
-
-import elliottlib
-from elliottlib import constants, logutil, Runtime, bzutil, openshiftclient, errata
-LOGGER = logutil.getLogger(__name__)
-from elliottlib.cli import cli_opts
-from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
-from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import green_prefix, green_print, red_print, red_prefix
-from bugzilla import bug as bug_module
-
-import click
-pass_runtime = click.make_pass_decorator(Runtime)
 import datetime
 import re
+from datetime import datetime
+from typing import List
+
+import click
+import koji
+from bugzilla import bug as bug_module
+
+from elliottlib import (Runtime, bzutil, constants, errata, logutil,
+                        openshiftclient)
+from elliottlib.cli import cli_opts
+from elliottlib.cli.common import (cli, find_default_advisory,
+                                   use_default_advisory_option)
+from elliottlib.exceptions import ElliottFatalError
+from elliottlib.util import green_prefix, green_print, red_prefix
+
+pass_runtime = click.make_pass_decorator(Runtime)
 
 
 @cli.command("find-bugs", short_help="Find or add MODIFED/VERIFIED bugs to ADVISORY")
@@ -64,13 +66,15 @@ import re
 @click.option("--into-default-advisories",
               is_flag=True,
               help='attaches bugs found to their correct default advisories, e.g. operator-related bugs go to "extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
+@click.option('--brew-event', type=click.INT, required=False,
+              help='only sweep bugs that have changed to the desired status before the Brew event ID; not applies to list or diff mode')
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id, cve_trackers, from_diff,
-                  flag, report, into_default_advisories, noop):
+                  flag, report, into_default_advisories, brew_event, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
@@ -203,6 +207,16 @@ advisory with the --add option.
         search_flag = 'blocker+' if mode == 'blocker' else None
         bugs = bzutil.search_for_bugs(bz_data, status, flag=search_flag, filter_out_security_bugs=not(cve_trackers),
                                       verbose=runtime.debug)
+
+        if brew_event:
+            brew_api = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
+            sweep_cutoff_timestamp = brew_api.getEvent(brew_event)["ts"]
+
+            green_print(f"Filtering bugs that have changed to one of the desired statuses before the given Brew event {brew_event} ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})...")
+            qualified_bugs = bzutil.filter_bugs_by_cutoff_event(bzapi, bugs, status, sweep_cutoff_timestamp)
+            click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the sweep cutoff Brew event {brew_event} ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
+            bugs = qualified_bugs
+
     elif mode == 'list':
         bugs = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
         mode_list(advisory=advisory, bugs=bugs, flags=flag, report=report, noop=noop)
@@ -335,8 +349,8 @@ def print_report(bugs: type_bug_list) -> None:
     green_print(
         "{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
     for bug in bugs:
-        created_date = datetime.datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
-        days_ago = (datetime.datetime.today() - created_date).days
+        created_date = datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
+        days_ago = (datetime.today() - created_date).days
         click.echo("{:<8d} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.id,
                                                                                 bug.component,
                                                                                 bug.status,
