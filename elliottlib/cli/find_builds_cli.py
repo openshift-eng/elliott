@@ -133,6 +133,7 @@ PRESENT advisory. Here are some examples:
         raise click.BadParameter('Use only one of --payload or --non-payload.')
 
     runtime.initialize(mode='images' if kind == 'image' else 'none')
+    brew_event = brew_event or runtime.assembly_basis_event
     replace_vars = runtime.group_config.vars.primitive() if runtime.group_config.vars else {}
     et_data = runtime.gitdata.load_data(key='erratatool', replace_vars=replace_vars).data
     tag_pv_map = et_data.get('brew_tag_product_version_mapping')

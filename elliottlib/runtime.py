@@ -1,21 +1,17 @@
 import atexit
-import datetime
 import logging
 import os
 import re
 import shutil
-import sys
 import tempfile
-import threading
-import urllib.parse
 from multiprocessing import Lock
-from multiprocessing.dummy import Pool as ThreadPool
-from typing import Optional
+from typing import Optional, Tuple
 
 import click
 import yaml
 
-from elliottlib import assertion, brew, constants, gitdata, logutil, util
+from elliottlib import gitdata, logutil, util
+from elliottlib.assembly import assembly_basis_event, assembly_group_config
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.imagecfg import ImageMetadata
 from elliottlib.model import Missing, Model
@@ -42,7 +38,9 @@ class Runtime(object):
         self.verbose = False
         self.quiet = False
         self.data_path = None
-        self.assembly = 'stream'
+        self.assembly: Optional[str] = 'stream'
+        self.assembly_basis_event: Optional[int] = None
+        self.releases_config: Optional[Model] = None
 
         for key, val in kwargs.items():
             self.__dict__[key] = val
@@ -70,7 +68,7 @@ class Runtime(object):
             tmp_config = Model(yaml.safe_load(group_yml.format(**replace_vars)))
         except KeyError as e:
             raise ValueError('group.yml contains template key `{}` but no value was provided'.format(e.args[0]))
-        return tmp_config
+        return assembly_group_config(self.get_releases_config(), self.assembly, tmp_config)
 
     def initialize(self, mode='none',
                    no_group=False):
@@ -166,6 +164,8 @@ class Runtime(object):
         missed_include = set(image_keys) - set(image_data.keys())
         if len(missed_include) > 0:
             raise ElliottFatalError('The following images or rpms were either missing or filtered out: {}'.format(', '.join(missed_include)))
+
+        self.assembly_basis_event = assembly_basis_event(self.get_releases_config(), self.assembly)
 
     def initialize_logging(self):
         if self.initialized:
@@ -280,7 +280,7 @@ class Runtime(object):
         except gitdata.GitDataException as ex:
             raise ElliottFatalError(ex)
 
-    def get_public_upstream(self, remote_git: str) -> (str, Optional[str]):
+    def get_public_upstream(self, remote_git: str) -> Tuple[str, Optional[str]]:
         """
         Some upstream repo are private in order to allow CVE workflows. While we
         may want to build from a private upstream, we don't necessarily want to confuse
@@ -322,3 +322,15 @@ class Runtime(object):
                 return (f'{target_pub_prefix}{remote_https[len(target_priv_prefix):]}', target_pub_branch)
 
         return (remote_https, None)
+
+    def get_releases_config(self):
+        if self.releases_config is not None:
+            return self.releases_config
+
+        load = self.gitdata.load_data(key='releases')
+        if load:
+            self.releases_config = Model(load.data)
+        else:
+            self.releases_config = Model()
+
+        return self.releases_config

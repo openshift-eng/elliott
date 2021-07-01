@@ -208,6 +208,10 @@ advisory with the --add option.
         bugs = bzutil.search_for_bugs(bz_data, status, flag=search_flag, filter_out_security_bugs=not(cve_trackers),
                                       verbose=runtime.debug)
 
+        if runtime.assembly_basis_event:
+            if not brew_event:
+                raise NotImplementedError("Computing sweep cutoff timestamp from a basis event is not implemented yet.")
+
         if brew_event:
             brew_api = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
             sweep_cutoff_timestamp = brew_api.getEvent(brew_event)["ts"]
