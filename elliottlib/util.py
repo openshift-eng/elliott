@@ -1,10 +1,13 @@
-from __future__ import absolute_import, print_function, unicode_literals
-import click
 import datetime
+import re
+from collections import deque
+from itertools import chain
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
-import re
+from sys import getsizeof, stderr
+from typing import Dict, Iterable, List, Optional
 
+import click
 from errata_tool import Erratum
 from kerberos import GSSError
 
@@ -310,3 +313,203 @@ def get_golang_version_from_root_log(root_log):
     # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang.*module[^ ]*).*[0-9]+.[0-9]+.[0-9]+[^ ]*' ./4.5/*.log | sed 's/\:.*\([^a-z][0-9]\+\.[0-9]\+\.[0-9]\+[^ ]*\)/:\ \1/'
     m = re.search(r'(go-toolset-1[^\s]*|golang-bin).*[0-9]+.[0-9]+.[0-9]+[^\s]*', root_log)
     return m.group(0)
+
+
+def isolate_assembly_in_release(release: str) -> str:
+    """
+    Given a release field, determines whether is contains
+    an assembly name. If it does, it returns the assembly
+    name. If it is not found, None is returned.
+    """
+    # Because RPM releases will have .el? as their suffix, we cannot
+    # assume that endswith(.assembly.<name>).
+    match = re.match(r'.*\.assembly\.([^.]+)(?:\.+|$)', release)
+    if match:
+        return match.group(1)
+
+    return None
+
+
+def isolate_el_version_in_release(release: str) -> Optional[int]:
+    """
+    Given a release field, determines whether is contains
+    a RHEL version. If it does, it returns the version value.
+    If it is not found, None is returned.
+    """
+    match = re.match(r'.*\.el(\d+)(?:\.+|$)', release)
+    if match:
+        return int(match.group(1))
+
+    return None
+
+
+def isolate_el_version_in_brew_tag(tag: str) -> Optional[int]:
+    """
+    Given a brew tag (target) name, determines whether is contains
+    a RHEL version. If it does, it returns the version value.
+    If it is not found, None is returned.
+    """
+    el_version_match = re.search(r"rhel-(\d+)", tag)
+    return int(el_version_match[1]) if el_version_match else None
+
+
+def find_latest_build(builds: List[Dict], assembly: Optional[str]) -> Optional[Dict]:
+    """ Find the latest build specific to the assembly in a list of builds belonging to the same component and brew tag
+    :param brew_builds: a list of build dicts sorted by tagging event in descending order
+    :param assembly: the name of assembly; None if assemblies support is disabled
+    :return: a brew build dict or None
+    """
+    chosen_build = None
+    if not assembly:  # if assembly is not enabled, choose the true latest tagged
+        chosen_build = builds[0] if builds else None
+    else:  # assembly is enabled
+        # find the newest build containing ".assembly.<assembly-name>" in its RELEASE field
+        chosen_build = next((build for build in builds if isolate_assembly_in_release(build["release"]) == assembly), None)
+        if not chosen_build and assembly != "stream":
+            # If no such build, fall back to the newest build containing ".assembly.stream"
+            chosen_build = next((build for build in builds if isolate_assembly_in_release(build["release"]) == "stream"), None)
+        if not chosen_build:
+            # If none of the builds have .assembly.stream in the RELEASE field, fall back to the latest build without .assembly in the RELEASE field
+            chosen_build = next((build for build in builds if isolate_assembly_in_release(build["release"]) is None), None)
+    return chosen_build
+
+
+def find_latest_builds(brew_builds: Iterable[Dict], assembly: Optional[str]) -> Iterable[Dict]:
+    """ Find latest builds specific to the assembly in a list of brew builds.
+    :param brew_builds: a list of build dicts sorted by tagging event in descending order
+    :param assembly: the name of assembly; None if assemblies support is disabled
+    :return: an iterator of latest brew build dicts
+    """
+    # group builds by tag and component name
+    grouped_builds = {}  # key is (tag, component_name), value is a list of Brew build dicts
+    for build in brew_builds:
+        key = (build["tag_name"], build["name"])
+        grouped_builds.setdefault(key, []).append(build)
+
+    for builds in grouped_builds.values():  # builds are ordered from newest tagged to oldest tagged
+        chosen_build = find_latest_build(builds, assembly)
+        if chosen_build:
+            yield chosen_build
+
+
+def split_nvr_epoch(nvre):
+    """Split nvre to N-V-R and E.
+
+    @param nvre: E:N-V-R or N-V-R:E string
+    @type nvre: str
+    @return: (N-V-R, E)
+    @rtype: (str, str)
+    """
+
+    if ":" in nvre:
+        if nvre.count(":") != 1:
+            raise ValueError("Invalid NVRE: %s" % nvre)
+
+        nvr, epoch = nvre.rsplit(":", 1)
+        if "-" in epoch:
+            if "-" not in nvr:
+                # switch nvr with epoch
+                nvr, epoch = epoch, nvr
+            else:
+                # it's probably N-E:V-R format, handle it after the split
+                nvr, epoch = nvre, ""
+    else:
+        nvr, epoch = nvre, ""
+
+    return (nvr, epoch)
+
+
+def parse_nvr(nvre):
+    """Split N-V-R into a dictionary.
+
+    @param nvre: N-V-R:E, E:N-V-R or N-E:V-R string
+    @type nvre: str
+    @return: {name, version, release, epoch}
+    @rtype: dict
+    """
+
+    if "/" in nvre:
+        nvre = nvre.split("/")[-1]
+
+    nvr, epoch = split_nvr_epoch(nvre)
+
+    nvr_parts = nvr.rsplit("-", 2)
+    if len(nvr_parts) != 3:
+        raise ValueError("Invalid NVR: %s" % nvr)
+
+    # parse E:V
+    if epoch == "" and ":" in nvr_parts[1]:
+        epoch, nvr_parts[1] = nvr_parts[1].split(":", 1)
+
+    # check if epoch is empty or numeric
+    if epoch != "":
+        try:
+            int(epoch)
+        except ValueError:
+            raise ValueError("Invalid epoch '%s' in '%s'" % (epoch, nvr))
+
+    result = dict(zip(["name", "version", "release"], nvr_parts))
+    result["epoch"] = epoch
+    return result
+
+
+def to_nvre(build_record: Dict):
+    """
+    From a build record object (such as an entry returned by listTagged),
+    returns the full nvre in the form n-v-r:E.
+    """
+    nvr = build_record['nvr']
+    if 'epoch' in build_record and build_record["epoch"] and build_record["epoch"] != 'None':
+        return f'{nvr}:{build_record["epoch"]}'
+    return nvr
+
+
+def strip_epoch(nvr: str):
+    """
+    If an NVR string is N-V-R:E, returns only the NVR portion. Otherwise
+    returns NVR exactly as-is.
+    """
+    return nvr.split(':')[0]
+
+
+# https://code.activestate.com/recipes/577504/
+def total_size(o, handlers={}, verbose=False):
+    """ Returns the approximate memory footprint an object and all of its contents.
+
+    Automatically finds the contents of the following builtin containers and
+    their subclasses:  tuple, list, deque, dict, set and frozenset.
+    To search other containers, add handlers to iterate over their contents:
+
+        handlers = {SomeContainerClass: iter,
+                    OtherContainerClass: OtherContainerClass.get_elements}
+
+    """
+    dict_handler = lambda d: chain.from_iterable(d.items())
+    all_handlers = {
+        tuple: iter,
+        list: iter,
+        deque: iter,
+        dict: dict_handler,
+        set: iter,
+        frozenset: iter,
+    }
+    all_handlers.update(handlers)  # user handlers take precedence
+    seen = set()  # track which object id's have already been seen
+    default_size = getsizeof(0)  # estimate sizeof object without __sizeof__
+
+    def sizeof(o):
+        if id(o) in seen:  # do not double count the same object
+            return 0
+        seen.add(id(o))
+        s = getsizeof(o, default_size)
+
+        if verbose:
+            print(s, type(o), repr(o), file=stderr)
+
+        for typ, handler in all_handlers.items():
+            if isinstance(o, typ):
+                s += sum(map(sizeof, handler(o)))
+                break
+        return s
+
+    return sizeof(o)
