@@ -241,7 +241,7 @@ class Runtime(object):
         self.logger.addHandler(debug_log_handler)
 
     def image_metas(self):
-        return self.image_map.values()
+        return list(self.image_map.values())
 
     def rpm_metas(self):
         return list(self.rpm_map.values())

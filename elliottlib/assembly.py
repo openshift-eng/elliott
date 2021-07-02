@@ -127,17 +127,36 @@ def assembly_rhcos_config(releases_config: Model, assembly: str) -> Model:
     :param assembly: The name of the assembly to assess
     Returns the a computed rhcos config model for a given assembly.
     """
+    return _assembly_field("rhcos", releases_config, assembly)
+
+
+def assembly_issues_config(releases_config: Model, assembly: str) -> Model:
+    """
+    :param releases_config: The content of releases.yml in Model form.
+    :param assembly: The name of the assembly to assess
+    Returns the a computed issues config model for a given assembly.
+    """
+    return _assembly_field("issues", releases_config, assembly)
+
+
+def _assembly_field(field_name: str, releases_config: Model, assembly: str) -> Model:
+    """
+    :param field_name: the field name
+    :param releases_config: The content of releases.yml in Model form.
+    :param assembly: The name of the assembly to assess
+    Returns the a computed rhcos config model for a given assembly.
+    """
     if not assembly or not isinstance(releases_config, Model):
         return Missing
 
     _check_recursion(releases_config, assembly)
     target_assembly = releases_config.releases[assembly].assembly
-    rhcos_config_dict = target_assembly.get("rhcos", {})
+    config_dict = target_assembly.get(field_name, {})
     if target_assembly.basis.assembly:  # Does this assembly inherit from another?
         # Recursive apply ancestor assemblies
-        basis_rhcos_config = assembly_rhcos_config(releases_config, target_assembly.basis.assembly)
-        rhcos_config_dict = merger(rhcos_config_dict, basis_rhcos_config.primitive())
-    return Model(dict_to_model=rhcos_config_dict)
+        basis_rhcos_config = _assembly_field(field_name, releases_config, target_assembly.basis.assembly)
+        config_dict = merger(config_dict, basis_rhcos_config.primitive())
+    return Model(dict_to_model=config_dict)
 
 
 def assembly_basis_event(releases_config: Model, assembly: str) -> typing.Optional[int]:

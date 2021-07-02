@@ -3,6 +3,8 @@ Utility functions and object abstractions for general interactions
 with Red Hat Bugzilla
 """
 from datetime import datetime, timezone
+from elliottlib.metadata import Metadata
+from elliottlib.util import isolate_timestamp_in_release
 import itertools
 import re
 from typing import Iterable, List
@@ -12,6 +14,7 @@ from time import sleep
 
 import bugzilla
 import click
+from koji import ClientSession
 
 from elliottlib import constants, exceptions, logutil
 
@@ -480,7 +483,7 @@ def filter_bugs_by_cutoff_event(bzapi, bugs: Iterable, desired_statuses: Iterabl
     # Filters out bugs that are created after the sweep cutoff timestamp
     before_cutoff_bugs = [bug for bug in bugs if to_timestamp(bug.creation_time) <= sweep_cutoff_timestamp]
     if len(before_cutoff_bugs) < len(bugs):
-        logger.info(f"{len(bugs) - len(before_cutoff_bugs)} of {len(bugs)} bugs are ignored because they were created before the sweep cutoff timestamp {sweep_cutoff_timestamp} ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
+        logger.info(f"{len(bugs) - len(before_cutoff_bugs)} of {len(bugs)} bugs are ignored because they were created after the sweep cutoff timestamp {sweep_cutoff_timestamp} ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
 
     # Queries bug history
     bugs_history = bzapi.bugs_history_raw([bug.id for bug in before_cutoff_bugs])
@@ -524,10 +527,21 @@ def filter_bugs_by_cutoff_event(bzapi, bugs: Iterable, desired_statuses: Iterabl
         # Per @Justin Pierce: If a BZ seems to qualify for a sweep currently and at the sweep cutoff event, then all state changes after the sweep cutoff event must be to a greater than the state which qualified the BZ at the sweep cutoff event.
         regressed_changes = [change.new for change in after_cutoff_status_changes if constants.VALID_BUG_STATES.index(change.new) <= constants.VALID_BUG_STATES.index(sweep_cutoff_status)]
         if regressed_changes:
-            logger.info(f"BZ {bug.id} is ignored because its status was {sweep_cutoff_status} at the moment of sweep cutoff ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})"
-                        f", however its status changed back to {regressed_changes} afterwards")
+            logger.warning(f"BZ {bug.id} is ignored because its status was {sweep_cutoff_status} at the moment of sweep cutoff ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})"
+                           f", however its status changed back to {regressed_changes} afterwards")
             continue
 
         qualified_bugs.append(bug)
 
     return qualified_bugs
+
+
+def approximate_cutoff_timestamp(basis_event: int, koji_api: ClientSession, metas: Iterable[Metadata]) -> float:
+    """ Calculate an approximate sweep cutoff timestamp from the given basis event
+    """
+    basis_timestamp = koji_api.getEvent(basis_event)["ts"]
+    nvrs = [meta.get_latest_build(koji_api=koji_api, event=basis_event, honor_is=False)["nvr"] for meta in metas]
+    rebase_timestamp_strings = filter(None, [isolate_timestamp_in_release(nvr) for nvr in nvrs])  # the timestamp in the release field of NVR is the approximate rebase time
+    # convert to UNIX timestamps
+    rebase_timestamps = [datetime.strptime(ts, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc).timestamp() for ts in rebase_timestamp_strings]
+    return min(basis_timestamp, max(rebase_timestamps, default=basis_timestamp))

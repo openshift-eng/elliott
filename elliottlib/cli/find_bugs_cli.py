@@ -1,7 +1,9 @@
 import datetime
+from subprocess import run
+from elliottlib.assembly import assembly_issues_config
 import re
 from datetime import datetime
-from typing import List
+from typing import List, Set
 
 import click
 import koji
@@ -13,7 +15,7 @@ from elliottlib.cli import cli_opts
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import green_prefix, green_print, red_prefix
+from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print
 
 pass_runtime = click.make_pass_decorator(Runtime)
 
@@ -73,7 +75,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
               default=False,
               help="Don't change anything")
 @pass_runtime
-def find_bugs_cli(runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id, cve_trackers, from_diff,
+def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id, cve_trackers, from_diff,
                   flag, report, into_default_advisories, brew_event, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
@@ -168,7 +170,7 @@ advisory with the --add option.
         raise click.BadParameter("Mode does not operate on an advisory. Do not specify any of "
                                  "`--use-default-advisory`, `--add`, or `--into-default-advisories`")
 
-    runtime.initialize()
+    runtime.initialize(mode="both")
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     bzapi = bzutil.get_bzapi(bz_data)
 
@@ -208,18 +210,35 @@ advisory with the --add option.
         bugs = bzutil.search_for_bugs(bz_data, status, flag=search_flag, filter_out_security_bugs=not(cve_trackers),
                                       verbose=runtime.debug)
 
-        if runtime.assembly_basis_event:
-            if not brew_event:
-                raise NotImplementedError("Computing sweep cutoff timestamp from a basis event is not implemented yet.")
-
+        sweep_cutoff_timestamp = 0
         if brew_event:
-            brew_api = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
-            sweep_cutoff_timestamp = brew_api.getEvent(brew_event)["ts"]
+            green_print(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
+            sweep_cutoff_timestamp = runtime.build_retrying_koji_client().getEvent(brew_event)["ts"]
+        elif runtime.assembly_basis_event:
+            green_print(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
+            brew_api = runtime.build_retrying_koji_client()
+            sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api, runtime.rpm_metas() + runtime.image_metas())
 
-            green_print(f"Filtering bugs that have changed to one of the desired statuses before the given Brew event {brew_event} ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})...")
+        if sweep_cutoff_timestamp:
+            green_print(f"Filtering bugs that have changed to one of the desired statuses before the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
             qualified_bugs = bzutil.filter_bugs_by_cutoff_event(bzapi, bugs, status, sweep_cutoff_timestamp)
-            click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the sweep cutoff Brew event {brew_event} ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
+            click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
             bugs = qualified_bugs
+
+        # Loads included/excluded bugs from assembly config
+        issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
+        # JIRA issues are not supported yet. Only loads issues with integer IDs.
+        included_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.include if isinstance(issue["id"], int) or issue["id"].isdigit()}
+        excluded_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.exclude if isinstance(issue["id"], int) or issue["id"].isdigit()}
+        if included_bug_ids & excluded_bug_ids:
+            raise ValueError(f"The following bugs are defined in both 'include' and 'exclude': {included_bug_ids & excluded_bug_ids}")
+        if included_bug_ids:
+            yellow_print(f"The following bugs will be additionally included because they are explicitly defined in the assembly config: {included_bug_ids}")
+            included_bugs = bzapi.getbugs(included_bug_ids)
+            bugs.extend(included_bugs)
+        if excluded_bug_ids:
+            yellow_print(f"The following bugs will be excluded because they are explicitly defined in the assembly config: {excluded_bug_ids}")
+            bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
     elif mode == 'list':
         bugs = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
