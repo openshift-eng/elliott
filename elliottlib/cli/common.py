@@ -48,6 +48,9 @@ context_settings = dict(help_option_names=['-h', '--help'])
     default=[], metavar='NAME', multiple=True,
     help='Name of group image member to include in operation (all by default). Can be comma delimited list.')
 @click.option(
+    "-r", "--rpms", default=[], metavar='NAME', multiple=True,
+    help="Name of group rpm member to include in operation (all by default). Can be comma delimited list.")
+@click.option(
     '-x', '--exclude',
     default=[], metavar='NAME', multiple=True,
     help='Name of group image or rpm member to exclude in operation (none by default). Can be comma delimited list.')
@@ -59,6 +62,8 @@ context_settings = dict(help_option_names=['-h', '--help'])
     '--debug',
     default=False, is_flag=True,
     help='Show debug output on console.')
+@click.option("--brew-event", metavar='EVENT', default=None,
+              help="Lock koji clients from runtime to this brew event.")
 @click.pass_context
 def cli(ctx, **kwargs):
     cfg = dotconfig.Config(

@@ -1,4 +1,7 @@
 from __future__ import absolute_import, print_function, unicode_literals
+from elliottlib.assembly import assembly_metadata_config, assembly_rhcos_config
+from elliottlib.imagecfg import ImageMetadata
+from elliottlib.build_finder import BuildFinder
 
 import json
 from typing import Dict, List, Optional, Set, Union
@@ -8,6 +11,7 @@ import koji
 import requests
 from errata_tool import Erratum
 from kerberos import GSSError
+import re
 
 import elliottlib
 from elliottlib import Runtime, brew, constants, errata, logutil
@@ -15,9 +19,9 @@ from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import (ensure_erratatool_auth, exit_unauthenticated,
-                             get_release_version, green_prefix, green_print,
+                             get_release_version, green_prefix, green_print, isolate_el_version_in_brew_tag,
                              parallel_results_with_progress, pbar_header,
-                             progress_func, red_print)
+                             progress_func, red_print, to_nvre, yellow_print)
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -69,12 +73,9 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option(
     '--non-payload', required=False, is_flag=True,
     help='Only attach non-payload images')
-@click.option(
-    '--brew-event', required=False,
-    help='Query brew at this time in the past, defined by the eventID')
 @pass_runtime
-def find_builds_cli(runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached,
-                    remove, clean, no_cdn_repos, payload, non_payload, brew_event):
+def find_builds_cli(runtime: Runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached,
+                    remove, clean, no_cdn_repos, payload, non_payload):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -132,8 +133,7 @@ PRESENT advisory. Here are some examples:
     if payload and non_payload:
         raise click.BadParameter('Use only one of --payload or --non-payload.')
 
-    runtime.initialize(mode='images' if kind == 'image' else 'none')
-    brew_event = brew_event or runtime.assembly_basis_event
+    runtime.initialize(mode='images' if kind == 'image' else 'rpms')
     replace_vars = runtime.group_config.vars.primitive() if runtime.group_config.vars else {}
     et_data = runtime.gitdata.load_data(key='erratatool', replace_vars=replace_vars).data
     tag_pv_map = et_data.get('brew_tag_product_version_mapping')
@@ -145,7 +145,7 @@ PRESENT advisory. Here are some examples:
 
     # get the builds we want to add
     unshipped_nvrps = []
-    brew_session = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
+    brew_session = runtime.build_retrying_koji_client()
     if builds:
         green_prefix('Fetching builds...')
         unshipped_nvrps = _fetch_nvrps_by_nvr_or_id(builds, tag_pv_map, ignore_product_version=remove)
@@ -155,10 +155,10 @@ PRESENT advisory. Here are some examples:
         unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1], tag_pv_map)
     else:
         if kind == 'image':
-            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_event, brew_session, payload,
+            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, payload,
                                                           non_payload)
         elif kind == 'rpm':
-            unshipped_nvrps = _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_event, brew_session)
+            unshipped_nvrps = _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_session)
 
     pbar_header(
         'Fetching builds from Errata: ',
@@ -261,36 +261,6 @@ def _fetch_builds_from_diff(from_payload, to_payload, tag_pv_map):
     return _fetch_nvrps_by_nvr_or_id(nvrs, tag_pv_map)
 
 
-def _find_latest_builds(brew_builds: List[Dict], assembly: Optional[str]) -> List[Dict]:
-    """ Find latest builds specific to the assembly in a list of brew builds.
-    :param brew_builds: a list of build dicts sorted by tagging event in descending order
-    :param assembly: the name of assembly; None if assemblies support is disabled
-    :return: a list of latest brew build dicts
-    """
-
-    # group builds by tag and component name
-    grouped_builds = {}  # key is (tag, component_name), value is a list of Brew build dicts
-    for build in brew_builds:
-        key = (build["tag_name"], build["name"])
-        grouped_builds.setdefault(key, []).append(build)
-
-    for builds in grouped_builds.values():  # builds are ordered from newest tagged to oldest tagged
-        chosen_build = None
-        if not assembly:  # if assembly is not enabled, choose the true latest tagged
-            chosen_build = builds[0] if builds else None
-        else:  # assembly is enabled
-            # find the newest build containing ".assembly.<assembly-name>" in its RELEASE field
-            chosen_build = next((build for build in builds if f".assembly.{assembly}." in f'{build["release"]}.'), None)
-            if not chosen_build and assembly != "stream":
-                # If no such build, fall back to the newest build containing ".assembly.stream"
-                chosen_build = next((build for build in builds if ".assembly.stream." in f'{build["release"]}.'), None)
-            if not chosen_build:
-                # If none of the builds have .assembly.stream in the RELEASE field, fall back to the latest build without .assembly in the RELEASE field
-                chosen_build = next((build for build in builds if ".assembly." not in f'{build["release"]}.'), None)
-        if chosen_build:
-            yield chosen_build
-
-
 def _find_shipped_builds(build_ids: List[Union[str, int]], brew_session: koji.ClientSession) -> Set[Union[str, int]]:
     """ Finds shipped builds
     :param builds: list of Brew build IDs or NVRs
@@ -307,50 +277,122 @@ def _find_shipped_builds(build_ids: List[Union[str, int]], brew_session: koji.Cl
     return shipped_ids
 
 
-def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str], brew_event: Optional[int],
-                                brew_session: koji.ClientSession, p: bool, np: bool):
-    # filter out image like 'openshift-enterprise-base'
-    image_metas = [i for i in runtime.image_metas() if not i.base_only]
-
-    # type judge
-    def tj(image):
-        if not image.is_release:
-            return False
-        if p:
-            return p == image.is_payload
-        if np:
-            # boolean xor.
-            return np != image.is_payload
-        else:
-            return True
-
-    tag_component_tuples = [(tag, image.get_component_name()) for tag in tag_pv_map for image in image_metas if tj(image)]
+def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
+                                brew_session: koji.ClientSession, payload_only: bool, non_payload_only: bool):
+    image_metas: List[ImageMetadata] = []
+    for image in runtime.image_metas():
+        if image.base_only or not image.is_release:
+            continue
+        if (payload_only and not image.is_payload) or (non_payload_only and image.is_payload):
+            continue
+        image_metas.append(image)
 
     pbar_header(
         'Generating list of images: ',
-        f'Hold on a moment, fetching Brew builds for {len(image_metas)} components with tags {", ".join(tag_pv_map.keys())}...',
-        tag_component_tuples)
+        f'Hold on a moment, fetching Brew builds for {len(image_metas)} components...')
 
-    brew_builds = brew.get_tagged_builds(tag_component_tuples, "image", event=brew_event, session=brew_session)
-    brew_latest_builds = list(_find_latest_builds(brew_builds, runtime.assembly))
+    brew_latest_builds: List[Dict] = []
+    for image in image_metas:
+        LOGGER.info("Getting latest build for %s...", image.distgit_key)
+        brew_latest_builds.append(image.get_latest_build(brew_session))
 
     shipped = _find_shipped_builds([b["id"] for b in brew_latest_builds], brew_session)
     unshipped = [b for b in brew_latest_builds if b["id"] not in shipped]
     click.echo(f'Found {len(shipped)+len(unshipped)} builds, of which {len(unshipped)} are new.')
+
+    _ensure_accepted_tags(unshipped, brew_session, tag_pv_map)
     nvrps = _gen_nvrp_tuples(unshipped, tag_pv_map)
     return nvrps
 
 
-def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew_event: Optional[int], brew_session: koji.ClientSession):
+def _ensure_accepted_tags(builds: List[Dict], brew_session: koji.ClientSession, tag_pv_map: Dict[str, str]):
+    """
+    Build dicts returned by koji.listTagged API have their tag names, however other APIs don't set that field.
+    Tag names are required because they are associated with Errata product versions.
+    For those build dicts whose tags are unknown, we need to query from Brew.
+    """
+    builds = [b for b in builds if "tag_name" not in b]  # filters out builds whose accepted tag is already set
+    unknown_tags_builds = [b for b in builds if "_tags" not in b]  # finds builds whose tags are not cached
+    build_tag_lists = brew.get_builds_tags(unknown_tags_builds, brew_session)
+    for build, tags in zip(unknown_tags_builds, build_tag_lists):
+        build["_tags"] = {tag['name'] for tag in tags}
+    # Finds and sets the accepted tag (rhaos-x.y-rhel-z-[candidate|hotfix]) for each build
+    for build in builds:
+        accepted_tag = next(filter(lambda tag: tag in tag_pv_map, build["_tags"]), None)
+        if not accepted_tag:
+            raise IOError(f"Build {build['nvr']} has Brew tags {build['_tags']}, but none of them has an associated Errata product version.")
+        build["tag_name"] = accepted_tag
+
+
+def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew_session: koji.ClientSession):
+    assembly = runtime.assembly
+    if runtime.assembly_basis_event:
+        LOGGER.warning(f'Constraining rpm search to stream assembly due to assembly basis event {runtime.assembly_basis_event}')
+        # If an assembly has a basis event, its latest rpms can only be sourced from
+        # "is:" or the stream assembly.
+        assembly = 'stream'
+
+        # ensures the runtime assembly doesn't include any image member specific or rhcos specific dependencies
+        image_configs = [assembly_metadata_config(runtime.get_releases_config(), runtime.assembly, 'image', image.distgit_key, image.config) for _, image in runtime.image_map.items()]
+        if any(nvr for image_config in image_configs for dep in image_config.dependencies.rpms for _, nvr in dep.items()):
+            raise ElliottFatalError(f"Assembly {runtime.assembly} is not appliable for build sweep because it contains image member specific dependencies for a custom release.")
+        rhcos_config = assembly_rhcos_config(runtime.get_releases_config(), runtime.assembly)
+        if any(nvr for dep in rhcos_config.dependencies.rpms for _, nvr in dep.items()):
+            raise ElliottFatalError(f"Assembly {runtime.assembly} is not appliable for build sweep because it contains RHCOS specific dependencies for a custom release.")
+
     green_prefix('Generating list of rpms: ')
     click.echo('Hold on a moment, fetching Brew builds')
-    tag_component_tuples = [(tag, None) for tag in tag_pv_map]
-    brew_builds = brew.get_tagged_builds(tag_component_tuples, "rpm", event=brew_event, session=brew_session)
-    brew_latest_builds = list(_find_latest_builds(brew_builds, runtime.assembly))
 
-    shipped = _find_shipped_builds([b["id"] for b in brew_latest_builds], brew_session)
-    unshipped = [b for b in brew_latest_builds if b["id"] not in shipped]
+    qualified_builds: Set[int, Dict] = {}  # keys are build ids, values are brew build dicts
+    attachable_components = set()  # a set of RPM component names; "attachable" means the component is whitelisted to attach to OCP advisories.
+    not_attachable_nvrs: Set[str] = set()
+
+    builder = BuildFinder(brew_session, logger=LOGGER)
+    for tag in tag_pv_map:
+        # keys are rpm component names, values are nvres
+        component_builds: Dict[str, Dict] = builder.from_tag("rpm", tag, inherit=True, assembly=assembly, event=runtime.brew_event)
+        attachable_components |= component_builds.keys()  # components from our tag are always attachable
+
+        if runtime.assembly_basis_event:
+            # If an assembly has a basis event, rpms pinned by "is" and group dependencies should take precedence over every build from the tag
+            el_version = isolate_el_version_in_brew_tag(tag)
+            if not el_version:
+                continue  # Only honor pinned rpms if this tag is relevant to a RHEL version
+
+            # Honors pinned NVRs by "is"
+            pinned_by_is = builder.from_pinned_by_is(el_version, runtime.assembly, runtime.get_releases_config(), runtime.rpm_map)
+
+            # Builds pinned by "is" should take precedence over every build from tag
+            for component, pinned_build in pinned_by_is.items():
+                if component in component_builds and pinned_build["id"] != component_builds[component]["id"]:
+                    LOGGER.warning("Swapping stream nvr %s for pinned nvr %s...", component_builds[component]["nvr"], pinned_build["nvr"])
+            attachable_components |= pinned_by_is.keys()  # ART-managed rpms are always attachable
+            component_builds.update(pinned_by_is)  # pinned rpms take precedence over those from tags
+
+            # Honors group dependencies
+            group_deps = builder.from_group_deps(el_version, runtime.group_config, runtime.rpm_map)  # the return value doesn't include any ART managed rpms
+            # Group dependencies should take precedence over anything previously determined except those pinned by "is".
+            for component, dep_build in group_deps.items():
+                if component in component_builds and dep_build["id"] != component_builds[component]["id"]:
+                    LOGGER.warning("Swapping stream nvr %s for group dependency nvr %s...", component_builds[component]["nvr"], dep_build["nvr"])
+            component_builds.update(group_deps)
+
+        for component, build in component_builds.items():
+            if component not in attachable_components:
+                not_attachable_nvrs.add(build["nvr"])
+            elif build["id"] not in qualified_builds:
+                qualified_builds[build["id"]] = build
+
+    if not_attachable_nvrs:
+        yellow_print(f"The following NVRs will not be swept because they don't have allowed tags {list(tag_pv_map.keys())}:")
+        for nvr in not_attachable_nvrs:
+            yellow_print(f"\t{nvr}")
+
+    click.echo("Filtering out shipped builds...")
+    shipped = _find_shipped_builds([b["id"] for b in qualified_builds.values()], brew_session)
+    unshipped = [b for b in qualified_builds.values() if b["id"] not in shipped]
     click.echo(f'Found {len(shipped)+len(unshipped)} builds, of which {len(unshipped)} are new.')
+    _ensure_accepted_tags(unshipped, brew_session, tag_pv_map)
     nvrps = _gen_nvrp_tuples(unshipped, tag_pv_map)
     return nvrps
 

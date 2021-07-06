@@ -5,16 +5,17 @@ import re
 import shutil
 import tempfile
 from multiprocessing import Lock
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import click
 import yaml
 
-from elliottlib import gitdata, logutil, util
+from elliottlib import brew, constants, gitdata, logutil, util
 from elliottlib.assembly import assembly_basis_event, assembly_group_config
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.imagecfg import ImageMetadata
 from elliottlib.model import Missing, Model
+from elliottlib.rpmcfg import RPMMetadata
 
 
 def remove_tmp_working_dir(runtime):
@@ -38,6 +39,7 @@ class Runtime(object):
         self.verbose = False
         self.quiet = False
         self.data_path = None
+        self.brew_event: Optional[int] = None
         self.assembly: Optional[str] = 'stream'
         self.assembly_basis_event: Optional[int] = None
         self.releases_config: Optional[Model] = None
@@ -50,7 +52,10 @@ class Runtime(object):
         self.debug_log_path = None
 
         # Map of dist-git repo name -> ImageMetadata object. Populated when group is set.
-        self.image_map = {}
+        self.image_map: Dict[str, ImageMetadata] = {}
+
+        # Map of dist-git repo name -> RPMMetadata object. Populated when group is set.
+        self.rpm_map: Dict[str, RPMMetadata] = {}
 
         self.initialized = False
 
@@ -142,7 +147,10 @@ class Runtime(object):
             return d.get('mode', 'enabled') == 'enabled'
 
         exclude_keys = flatten_list(self.exclude)
+        image_ex = list(exclude_keys)
+        rpm_ex = list(exclude_keys)
         image_keys = flatten_list(self.images)
+        rpm_keys = flatten_list(self.rpms)
 
         filter_func = filter_enabled
 
@@ -153,7 +161,7 @@ class Runtime(object):
         image_data = {}
         if mode in ['images', 'both']:
             image_data = self.gitdata.load_data(path='images', keys=image_keys,
-                                                exclude=exclude_keys,
+                                                exclude=image_ex,
                                                 filter_funcs=None if len(image_keys) else filter_func,
                                                 replace_vars=replace_vars)
             for i in image_data.values():
@@ -161,11 +169,28 @@ class Runtime(object):
             if not self.image_map:
                 self.logger.warning("No image metadata directories found for given options within: {}".format(self.group_dir))
 
+        if mode in ['rpms', 'both']:
+            rpm_data = self.gitdata.load_data(path='rpms', keys=rpm_keys,
+                                              exclude=rpm_ex,
+                                              replace_vars=replace_vars,
+                                              filter_funcs=None if len(rpm_keys) else filter_func)
+            for r in rpm_data.values():
+                metadata = RPMMetadata(self, r)
+                self.rpm_map[metadata.distgit_key] = metadata
+            if not self.rpm_map:
+                self.logger.warning("No rpm metadata directories found for given options within: {}".format(self.group_dir))
+
         missed_include = set(image_keys) - set(image_data.keys())
         if len(missed_include) > 0:
             raise ElliottFatalError('The following images or rpms were either missing or filtered out: {}'.format(', '.join(missed_include)))
 
         self.assembly_basis_event = assembly_basis_event(self.get_releases_config(), self.assembly)
+        if self.assembly_basis_event:
+            if self.brew_event:
+                raise ElliottFatalError(f'Cannot run with assembly basis event {self.assembly_basis_event} and --brew-event at the same time.')
+            # If the assembly has a basis event, we constrain all brew calls to that event.
+            self.brew_event = self.assembly_basis_event
+            self.logger.warning(f'Constraining brew event to assembly basis for {self.assembly}: {self.brew_event}')
 
     def initialize_logging(self):
         if self.initialized:
@@ -217,6 +242,9 @@ class Runtime(object):
 
     def image_metas(self):
         return self.image_map.values()
+
+    def rpm_metas(self):
+        return list(self.rpm_map.values())
 
     @property
     def remove_tmp_working_dir(self):
@@ -334,3 +362,11 @@ class Runtime(object):
             self.releases_config = Model()
 
         return self.releases_config
+
+    def build_retrying_koji_client(self):
+        """
+        :return: Returns a new koji client instance that will automatically retry
+        methods when it receives common exceptions (e.g. Connection Reset)
+        Honors doozer --brew-event.
+        """
+        return brew.KojiWrapper([self.group_config.urls.brewhub or constants.BREW_HUB], brew_event=self.brew_event)

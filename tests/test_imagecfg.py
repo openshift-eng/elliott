@@ -18,7 +18,8 @@ class TestImageMetadata(unittest.TestCase):
         are not included in a formal release.
         """
 
-        rt = flexmock(logger=flexmock(debug=lambda *_: None))
+        rt = flexmock(logger=flexmock(debug=lambda *_: None), assembly=None)
+        rt.should_receive("get_releases_config")
 
         data_obj = flexmock(name="test",
                             distgit=flexmock(namespace="hello"),
