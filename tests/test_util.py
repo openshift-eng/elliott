@@ -37,3 +37,32 @@ class TestUtil(unittest.TestCase):
 
         actual = util.find_latest_builds(builds, None)
         self.assertEqual([13, 23, 33], [b["id"] for b in actual])
+
+    def test_isolate_timestamp_in_release(self):
+        actual = util.isolate_timestamp_in_release("foo-4.7.0-202107021813.p0.git.01c9f3f.el8")
+        expected = "202107021813"
+        self.assertEqual(actual, expected)
+
+        actual = util.isolate_timestamp_in_release("foo-container-v4.7.0-202107021907.p0.git.8b4b094")
+        expected = "202107021907"
+        self.assertEqual(actual, expected)
+
+        actual = util.isolate_timestamp_in_release("foo-container-v4.7.0-202107021907.p0.git.8b4b094")
+        expected = "202107021907"
+        self.assertEqual(actual, expected)
+
+        actual = util.isolate_timestamp_in_release("foo-container-v4.8.0-202106152230.p0.git.25122f5.assembly.stream")
+        expected = "202106152230"
+        self.assertEqual(actual, expected)
+
+        actual = util.isolate_timestamp_in_release("foo-container-v4.7.0-1.p0.git.8b4b094")
+        expected = None
+        self.assertEqual(actual, expected)
+
+        actual = util.isolate_timestamp_in_release("foo-container-v4.7.0-202199999999.p0.git.8b4b094")
+        expected = None
+        self.assertEqual(actual, expected)
+
+        actual = util.isolate_timestamp_in_release("")
+        expected = None
+        self.assertEqual(actual, expected)

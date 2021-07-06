@@ -244,6 +244,28 @@ class TestBZUtil(unittest.TestCase):
         actual = bzutil.filter_bugs_by_cutoff_event(bzapi, bugs, desired_statuses, sweep_cutoff_timestamp)
         self.assertListEqual([1, 2, 4, 5, 7, 8], [bug.id for bug in actual])
 
+    def test_approximate_cutoff_timestamp(self):
+        koji_api = mock.MagicMock()
+        koji_api.getEvent.return_value = {"ts": datetime(2021, 7, 3, 0, 0, 0, 0, tzinfo=timezone.utc).timestamp()}
+        metas = [
+            mock.MagicMock(),
+            mock.MagicMock(),
+            mock.MagicMock(),
+        ]
+        metas[0].get_latest_build.return_value = {"nvr": "a-4.9.0-202107020000.p0"}
+        metas[1].get_latest_build.return_value = {"nvr": "b-4.9.0-202107020100.p0"}
+        metas[2].get_latest_build.return_value = {"nvr": "c-4.9.0-202107020200.p0"}
+        actual = bzutil.approximate_cutoff_timestamp(mock.ANY, koji_api, metas)
+        self.assertEqual(datetime(2021, 7, 2, 2, 0, 0, 0, tzinfo=timezone.utc).timestamp(), actual)
+
+        koji_api.getEvent.return_value = {"ts": datetime(2021, 7, 1, 0, 0, 0, 0, tzinfo=timezone.utc).timestamp()}
+        actual = bzutil.approximate_cutoff_timestamp(mock.ANY, koji_api, metas)
+        self.assertEqual(datetime(2021, 7, 1, 0, 0, 0, 0, tzinfo=timezone.utc).timestamp(), actual)
+
+        koji_api.getEvent.return_value = {"ts": datetime(2021, 7, 4, 0, 0, 0, 0, tzinfo=timezone.utc).timestamp()}
+        actual = bzutil.approximate_cutoff_timestamp(mock.ANY, koji_api, [])
+        self.assertEqual(datetime(2021, 7, 4, 0, 0, 0, 0, tzinfo=timezone.utc).timestamp(), actual)
+
 
 class TestSearchFilter(unittest.TestCase):
 

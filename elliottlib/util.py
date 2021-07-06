@@ -513,3 +513,21 @@ def total_size(o, handlers={}, verbose=False):
         return s
 
     return sizeof(o)
+
+
+def isolate_timestamp_in_release(release: str) -> Optional[str]:
+    """
+    Given a release field, determines whether is contains
+    a timestamp. If it does, it returns the timestamp.
+    If it is not found, None is returned.
+    """
+    match = re.search(r"(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})", release)  # yyyyMMddHHmm
+    if match:
+        year = int(match.group(1))
+        month = int(match.group(2))
+        day = int(match.group(3))
+        hour = int(match.group(4))
+        minute = int(match.group(5))
+        if year >= 2000 and month >= 1 and month <= 12 and day >= 1 and day <= 31 and hour <= 23 and minute <= 59:
+            return match.group(0)
+    return None
