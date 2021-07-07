@@ -350,7 +350,7 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
     builder = BuildFinder(brew_session, logger=LOGGER)
     for tag in tag_pv_map:
         # keys are rpm component names, values are nvres
-        component_builds: Dict[str, Dict] = builder.from_tag("rpm", tag, inherit=True, assembly=assembly, event=runtime.brew_event)
+        component_builds: Dict[str, Dict] = builder.from_tag("rpm", tag, inherit=False, assembly=assembly, event=runtime.brew_event)
         attachable_components |= component_builds.keys()  # components from our tag are always attachable
 
         if runtime.assembly_basis_event:
