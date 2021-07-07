@@ -380,11 +380,10 @@ def find_latest_builds(brew_builds: Iterable[Dict], assembly: Optional[str]) -> 
     :param assembly: the name of assembly; None if assemblies support is disabled
     :return: an iterator of latest brew build dicts
     """
-    # group builds by tag and component name
-    grouped_builds = {}  # key is (tag, component_name), value is a list of Brew build dicts
+    # group builds by component name
+    grouped_builds = {}  # key is component_name, value is a list of Brew build dicts
     for build in brew_builds:
-        key = (build["tag_name"], build["name"])
-        grouped_builds.setdefault(key, []).append(build)
+        grouped_builds.setdefault(build["name"], []).append(build)
 
     for builds in grouped_builds.values():  # builds are ordered from newest tagged to oldest tagged
         chosen_build = find_latest_build(builds, assembly)
