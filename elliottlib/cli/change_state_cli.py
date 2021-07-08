@@ -114,6 +114,6 @@ Bugzilla Bugs.
         except ErrataException as ex:
             click.echo(f'Error fetching/changing state of {advisory}: {ex}')
             errors.append(ex)
-    
+
     if errors:
         raise Exception(errors)
