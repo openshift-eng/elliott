@@ -46,7 +46,11 @@ unless Bugzilla Bugs or JIRA Issues have been attached.
 See the find-bugs help for additional information on adding
 Bugzilla Bugs.
 
-    Move the advisory 123456 from NEW_FILES to QE state:
+    Move the latest 4.7 release advisories to QE:
+
+    $ elliott -g openshift-4.7 change-state -s QE --default-advisories
+
+    Move the advisory 123456 to QE:
 
     $ elliott change-state --state QE --advisory 123456
 
@@ -73,9 +77,9 @@ Bugzilla Bugs.
         advisories.append(advisory)
 
     if default_advisories:
-        for impetus in ["rpm", "image", "extras"]:
-            advisories.append(runtime.group_config.advisories[impetus])
+        advisories = runtime.group_config.advisories.values()
 
+    errors = []
     for advisory in advisories:
         try:
             e = Erratum(errata_id=advisory)
@@ -108,4 +112,8 @@ Bugzilla Bugs.
                     green_prefix("Changed state: ")
                     click.echo(f"{old_state} ➔ {state}")
         except ErrataException as ex:
-            print(ex)
+            click.echo(f'Error fetching/changing state of {advisory}: {ex}')
+            errors.append(ex)
+    
+    if errors:
+        raise Exception(errors)
