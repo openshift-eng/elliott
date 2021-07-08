@@ -30,6 +30,7 @@ def validate_rhsa_cli(runtime, advisory):
     # Will fail if id invalid, not an RHSA or RHSA has embargoed data
     if resp.status_code != 200:
         print(f"HTTP {resp.status_code}: Could not validate rhsa {advisory} (is it an RHSA? without embargo?)")
+        exit(1)
         return
     alerts = resp.json()
 
@@ -40,5 +41,6 @@ def validate_rhsa_cli(runtime, advisory):
             if howto:
                 print(textwrap.indent(howto, "  > "))
             print()
+            exit(2)
     else:
         print("No issues found")
