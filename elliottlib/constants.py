@@ -131,6 +131,8 @@ RPMDIFF_HUB_URL = "https://rpmdiff-hub.host.prod.eng.bos.redhat.com"
 
 ADVISORY_TYPES = ('rhba', 'rhea', 'rhsa')
 
+SFM2_ERRATA_ALERTS_URL = "http://sfm2.prodsec.redhat.com/api/public/errata/{id}/alerts"
+
 ######################################################################
 # API endpoints with string formatting placeholders as
 # necessary. Index of all available endpoints is available in the
