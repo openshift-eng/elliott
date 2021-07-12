@@ -34,15 +34,14 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
     return [flaw_bug for flaw_bug in blocking_bugs if bzutil.is_flaw_bug(flaw_bug)]
 
 
-def is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids=[]):
+def is_first_fix(bzapi, flaw_bug, current_target_release):
     """
     Check if a flaw bug is considered a first-fix for a target release
     """
-    # get all the tracker bugs for a flaw bug
-    # except the ones already attached to advisory
-    tracker_ids = [t for t in flaw_bug.depends_on if t not in attached_tracker_ids]
+    # get all tracker bugs for a flaw bug
+    tracker_ids = flaw_bug.depends_on
     if len(tracker_ids) == 0:
-        # No other trackers found
+        # No trackers found
         # is a first fix
         return True
 
@@ -52,30 +51,51 @@ def is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids=[
         bug_id=tracker_ids,
     )) if is_tracker_bug(b)]
     if len(tracker_bugs) == 0:
-        # No other OCP trackers found
+        # No OCP trackers found
         # is a first fix
         return True
 
+    # make sure 3.X or 4.X bugs are being compared to each other
     def same_major_release(bug):
         current_major_version = util.minor_version_tuple(current_target_release)[0]
         bug_target_major_version = util.minor_version_tuple(bug.target_release[0])[0]
         return bug_target_major_version == current_major_version
 
     def already_fixed(bug):
-        if bug.status == 'RELEASE_PENDING':
-            return True
-        if bug.status == 'CLOSED' and bug.resolution in ['ERRATA', 'CURRENTRELEASE', 'NEXTRELEASE']:
+        pending = bug.status == 'RELEASE_PENDING'
+        closed = bug.status == 'CLOSED' and bug.resolution in ['ERRATA', 'CURRENTRELEASE', 'NEXTRELEASE']
+        if pending or closed:
             return True
         return False
+
+    # group trackers by components
+    component_tracker_groups = dict()
+    for b in tracker_bugs:
+        component = bzutil.get_whiteboard_component(b)
+        if not component:
+            print("could not find component for bug. cannot reliably determine if bug is first fix or not")
+            return False
+
+        if component not in component_tracker_groups:
+            component_tracker_groups[component] = set()
+        component_tracker_groups[component].add(b)
 
     # if any tracker bug for the flaw bug
     # has been fixed for the same major release version
     # then it is not a first fix
-    for b in tracker_bugs:
-        if same_major_release(b) and already_fixed(b):
-            return False
+    def is_first_fix_group(trackers):
+        for b in trackers:
+            if same_major_release(b) and already_fixed(b):
+                return False
+        return True
 
-    return True
+    # if for any component is_first_fix_group is true
+    # then flaw bug is first fix
+    for _, trackers in component_tracker_groups.items():
+        if is_first_fix_group(trackers):
+            return True
+
+    return False
 
 
 def is_security_advisory(advisory):

@@ -72,10 +72,9 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         first_fix_flaw_bugs = corresponding_flaw_bugs
     else:
         runtime.logger.info("detected GA release, applying first-fix filtering..")
-        attached_tracker_ids = [tracker.id for tracker in attached_tracker_bugs]
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in corresponding_flaw_bugs
-            if is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids)
+            if is_first_fix(bzapi, flaw_bug, current_target_release)
         ]
 
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
