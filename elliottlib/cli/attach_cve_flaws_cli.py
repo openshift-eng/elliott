@@ -3,7 +3,7 @@ from errata_tool import Erratum
 from elliottlib import util
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.attach_cve_flaws import get_attached_tracker_bugs, \
-    get_corresponding_flaw_bugs, is_first_fix, is_security_advisory, \
+    get_corresponding_flaw_bugs, is_first_fix_any, is_security_advisory, \
     get_highest_security_impact, is_advisory_impact_smaller_than
 
 
@@ -74,7 +74,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         runtime.logger.info("detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in corresponding_flaw_bugs
-            if is_first_fix(bzapi, flaw_bug, current_target_release)
+            if is_first_fix_any(bzapi, flaw_bug, current_target_release)
         ]
 
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(

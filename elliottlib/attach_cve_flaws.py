@@ -34,9 +34,10 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
     return [flaw_bug for flaw_bug in blocking_bugs if bzutil.is_flaw_bug(flaw_bug)]
 
 
-def is_first_fix(bzapi, flaw_bug, current_target_release):
+def is_first_fix_any(bzapi, flaw_bug, current_target_release):
     """
     Check if a flaw bug is considered a first-fix for a target release
+    for any of its components
     """
     # get all tracker bugs for a flaw bug
     tracker_ids = flaw_bug.depends_on
