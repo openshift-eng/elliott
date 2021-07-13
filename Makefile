@@ -7,7 +7,6 @@ venv:
 
 lint:
 	flake8
-	mypy .
 
 test: lint
 	py.test --verbose --color=yes tests/
