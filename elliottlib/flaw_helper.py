@@ -1,25 +1,29 @@
-from elliottlib import constants, errata, util
-from elliottlib import bzutil
+from elliottlib import constants, errata, util, bzutil
 
 
-def get_attached_tracker_bugs(bzapi, advisory_id):
-    return bzapi.getbugs([
-        bug['id']
-        for bug in get_all_attached_bugs(advisory_id)
-        if is_tracker_bug(keywords=bug['keywords'])
-    ], permissive=False)  # fail if you cannot get all tracker bugs
+def get_tracker_bugs(bzapi, advisory):
+    """
+    Fetches and returns tracker bug objects from bugzilla
+    for the given advisory object
+    """
+    tracker_ids = advisory.errata_bugs
+    bugs = bzapi.getbugs(tracker_ids, permissive=False)  # fail if you cannot get all tracker bugs
+    return [b for b in bugs if is_tracker_bug(b)]
 
 
 def get_all_attached_bugs(advisory_id):
     return [bug['bug'] for bug in errata.get_raw_erratum(advisory_id)['bugs']['bugs']]
 
 
-def is_tracker_bug(bug=None, keywords=None):
-    if bug is None and keywords is None:
-        raise ValueError("must pass at least 1 param, either bug object or value of bug keywords")
-    if keywords is None:
-        keywords = bug.keywords
-    return 'Security' in keywords and 'SecurityTracking' in keywords
+def is_tracker_bug(bug):
+    """
+    For a given bug object check if it's
+    a tracker bug or not
+    """
+    for k in constants.TRACKER_BUG_KEYWORDS:
+        if k not in bug.keywords:
+            return False
+    return True
 
 
 def get_advisory(advisory_id):
@@ -36,9 +40,14 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
 
 def is_first_fix_any(bzapi, flaw_bug, current_target_release):
     """
-    Check if a flaw bug is considered a first-fix for a target release
-    for any of its components
+    Check if a flaw bug is considered a first-fix for a GA target release
+    for any of its trackers components. A return value of True means it should be
+    attached to an advisory.
     """
+    # all z stream bugs are considered first fix
+    if current_target_release[-1] != '0':
+        return True
+
     # get all tracker bugs for a flaw bug
     tracker_ids = flaw_bug.depends_on
     if len(tracker_ids) == 0:

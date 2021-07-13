@@ -10,7 +10,7 @@ CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
 RESULTSDB_API_URL = "https://resultsdb-api.engineering.redhat.com/api/v2.0"
 
 VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
-
+TRACKER_BUG_KEYWORDS = ['Security', 'SecurityTracking']
 BUG_SEVERITY_NUMBER_MAP = {
     "unspecified": 0,
     "low": 1,
