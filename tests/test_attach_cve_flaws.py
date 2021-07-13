@@ -1,19 +1,19 @@
 import unittest
 from flexmock import flexmock
-from elliottlib import flaw_helper, constants
+from elliottlib import attach_cve_flaws, constants
 
 
-class TestFlawHelper(unittest.TestCase):
+class TestAttachCVEFlaws(unittest.TestCase):
     def test_is_tracker_bug(self):
         bug = flexmock(keywords=constants.TRACKER_BUG_KEYWORDS)
         expected = True
-        actual = flaw_helper.is_tracker_bug(bug)
+        actual = attach_cve_flaws.is_tracker_bug(bug)
         assert expected == actual
 
     def test_is_tracker_bug_fail(self):
         bug = flexmock(keywords=['SomeOtherKeyword'])
         expected = False
-        actual = flaw_helper.is_tracker_bug(bug)
+        actual = attach_cve_flaws.is_tracker_bug(bug)
         assert expected == actual
 
     def test_get_tracker_bugs(self):
@@ -32,7 +32,7 @@ class TestFlawHelper(unittest.TestCase):
          .and_return(bug_objs))
 
         expected = [valid_tracker]
-        actual = flaw_helper.get_tracker_bugs(bzapi, advisory)
+        actual = attach_cve_flaws.get_tracker_bugs(bzapi, advisory)
         assert expected == actual
 
 

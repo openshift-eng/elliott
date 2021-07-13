@@ -1,6 +1,6 @@
 import bugzilla, click, re
 from errata_tool import Erratum
-from elliottlib import util, flaw_helper
+from elliottlib import util, attach_cve_flaws
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 
 
@@ -43,7 +43,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     advisory = Erratum(errata_id=advisory_id)
 
     # get attached bugs from advisory
-    attached_tracker_bugs = flaw_helper.get_tracker_bugs(bzapi, advisory)
+    attached_tracker_bugs = attach_cve_flaws.get_tracker_bugs(bzapi, advisory)
     runtime.logger.info('found {} tracker bugs attached to the advisory: {}'.format(
         len(attached_tracker_bugs), sorted(bug.id for bug in attached_tracker_bugs)
     ))
@@ -57,7 +57,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         exit(1)
     runtime.logger.info('current_target_release: {}'.format(current_target_release))
 
-    corresponding_flaw_bugs = flaw_helper.get_corresponding_flaw_bugs(bzapi, attached_tracker_bugs)
+    corresponding_flaw_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(bzapi, attached_tracker_bugs)
     runtime.logger.info('found {} corresponding flaw bugs: {}'.format(
         len(corresponding_flaw_bugs), sorted(bug.id for bug in corresponding_flaw_bugs)
     ))
@@ -73,7 +73,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         runtime.logger.info("detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in corresponding_flaw_bugs
-            if flaw_helper.is_first_fix_any(bzapi, flaw_bug, current_target_release)
+            if attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, current_target_release)
         ]
 
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
@@ -86,7 +86,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
 
     cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
 
-    if not flaw_helper.is_security_advisory(advisory):
+    if not attach_cve_flaws.is_security_advisory(advisory):
         runtime.logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
         advisory.update(
             errata_type='RHSA',
@@ -106,7 +106,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     advisory.update(cve_names=cve_str)
     runtime.logger.info('List of *new* CVEs: {}'.format(cves))
 
-    highest_impact = flaw_helper.get_highest_security_impact(first_fix_flaw_bugs)
+    highest_impact = attach_cve_flaws.get_highest_security_impact(first_fix_flaw_bugs)
     runtime.logger.info('Adjusting advisory security impact from {} to {}'.format(
         advisory.security_impact, highest_impact
     ))
