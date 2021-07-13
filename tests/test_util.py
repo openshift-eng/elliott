@@ -1,5 +1,5 @@
 import unittest
-
+from flexmock import flexmock
 from elliottlib import util
 
 
@@ -66,3 +66,32 @@ class TestUtil(unittest.TestCase):
         actual = util.isolate_timestamp_in_release("")
         expected = None
         self.assertEqual(actual, expected)
+
+    def test_get_target_release(self):
+        test_cases = [
+            {
+                'bugs': flexmock(id=1, target_release='4.8.0'),
+                'expected': ('', True)
+            },
+            {
+                'bugs': flexmock(id=2, target_release=[]),
+                'expected': ('', True)
+            },
+            {
+                'bugs': flexmock(id=3, target_release=['4.8']),
+                'expected': ('', True)
+            },
+            {
+                'bugs': flexmock(id=4, target_release=['4.8.0']),
+                'expected': ('4.8.0', False)
+            },
+            {
+                'bugs': flexmock(id=5, target_release=['4.8.0', '4.7.z']),
+                'expected': ('4.8.0', False)
+            },
+        ]
+
+        for t in test_cases:
+            target_release, err = util.get_target_release(t['bugs'])
+            actual = (target_release, bool(err))
+            self.assertEqual(t['expected'], actual)

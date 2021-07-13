@@ -31,6 +31,10 @@ def get_advisory(advisory_id):
 
 
 def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
+    """
+    Get corresponding flaw bugs objects for the
+    given tracker bug objects
+    """
     blocking_bugs = bzapi.getbugs(
         unique(flatten([t.blocks for t in tracker_bugs])),
         permissive=False
@@ -53,11 +57,12 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
     if len(tracker_ids) == 0:
         # No trackers found
         # is a first fix
+        # shouldn't happen ideally
         return True
 
     # filter tracker bugs by OCP product
     tracker_bugs = [b for b in bzapi.query(bzapi.build_query(
-        product='OpenShift Container Platform',
+        product=constants.BUGZILLA_PRODUCT_OCP,
         bug_id=tracker_ids,
     )) if is_tracker_bug(b)]
     if len(tracker_bugs) == 0:
