@@ -41,6 +41,6 @@ def validate_rhsa_cli(runtime, advisory):
             if howto:
                 print(textwrap.indent(howto, "  > "))
             print()
-            exit(2)
+        exit(2)
     else:
         print("No issues found")
