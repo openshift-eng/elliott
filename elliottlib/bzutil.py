@@ -294,6 +294,14 @@ def is_cve_tracker(bug_obj):
 
 
 def get_whiteboard_component(bug):
+    """Get whiteboard component value of a bug.
+
+    An OCP cve tracker has a whiteboard value "component:<component_name>"
+    to indicate which component the bug belongs to.
+
+    :param bug: bug object
+    :returns: a string if a value is found, otherwise False
+    """
     marker = r'component:\s*([-\w]+)'
     tmp = re.search(marker, bug.whiteboard)
     if tmp and len(tmp.groups()) == 1:

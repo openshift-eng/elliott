@@ -24,6 +24,18 @@ class TestBZUtil(unittest.TestCase):
         bug = mock.MagicMock(product="foo", component="bar")
         self.assertFalse(bzutil.is_flaw_bug(bug))
 
+    def test_get_whiteboard_component(self):
+        bug = mock.MagicMock(whiteboard="foo")
+        self.assertFalse(bzutil.get_whiteboard_component(bug))
+
+        bug = mock.MagicMock(whiteboard="component: ")
+        self.assertFalse(bzutil.get_whiteboard_component(bug))
+
+        expected = "something"
+        bug = mock.MagicMock(whiteboard=f"component: {expected}")
+        actual = bzutil.get_whiteboard_component(bug)
+        self.assertEqual(actual, expected)
+
     def test_get_bugs(self):
         bug_ids = [1, 2]
         expected = {
