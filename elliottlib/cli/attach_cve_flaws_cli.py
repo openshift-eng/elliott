@@ -43,7 +43,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     advisory = Erratum(errata_id=advisory_id)
 
     # get attached bugs from advisory
-    attached_tracker_bugs = attach_cve_flaws.get_tracker_bugs(bzapi, advisory)
+    attached_tracker_bugs = attach_cve_flaws.get_tracker_bugs(bzapi, advisory, fields=["target_release", "blocks"])
     runtime.logger.info('found {} tracker bugs attached to the advisory: {}'.format(
         len(attached_tracker_bugs), sorted(bug.id for bug in attached_tracker_bugs)
     ))
@@ -57,7 +57,11 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         exit(1)
     runtime.logger.info('current_target_release: {}'.format(current_target_release))
 
-    corresponding_flaw_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(bzapi, attached_tracker_bugs)
+    corresponding_flaw_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
+        bzapi,
+        attached_tracker_bugs,
+        fields=["depends_on", "alias", "severity"]
+    )
     runtime.logger.info('found {} corresponding flaw bugs: {}'.format(
         len(corresponding_flaw_bugs), sorted(bug.id for bug in corresponding_flaw_bugs)
     ))

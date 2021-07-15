@@ -1,14 +1,22 @@
 from elliottlib import constants, errata, util, bzutil
 
 
-def get_tracker_bugs(bzapi, advisory):
+def get_tracker_bugs(bzapi, advisory, fields):
     """
     Fetches and returns tracker bug objects from bugzilla
     for the given advisory object
     """
-    tracker_ids = advisory.errata_bugs
-    bugs = bzapi.getbugs(tracker_ids, permissive=False)  # fail if you cannot get all tracker bugs
-    return [b for b in bugs if is_tracker_bug(b)]
+    bug_ids = advisory.errata_bugs
+    # first quickly filter out non tracker bugs
+    # by fetching just the keywords field
+    tracker_bug_ids = [b.id for b in bzapi.getbugs(
+        bug_ids,
+        include_fields=['keywords'],
+        permissive=False)
+        if is_tracker_bug(b)
+    ]
+    return bzapi.getbugs(tracker_bug_ids, permissive=False, include_fields=fields)
+
 
 
 def get_all_attached_bugs(advisory_id):
@@ -30,15 +38,21 @@ def get_advisory(advisory_id):
     return errata.ErrataConnector()._get(f'/api/v1/erratum/{advisory_id}')
 
 
-def get_corresponding_flaw_bugs(bzapi, tracker_bugs):
+def get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields):
     """
     Get corresponding flaw bugs objects for the
     given tracker bug objects
     """
+    # fields needed for is_flaw_bug()
+    if "product" not in fields:
+        fields.append("product")
+    if "component" not in fields:
+        fields.append("component")
+
     blocking_bugs = bzapi.getbugs(
         unique(flatten([t.blocks for t in tracker_bugs])),
-        permissive=False
-    )
+        include_fields=fields,
+        permissive=False)
     return [flaw_bug for flaw_bug in blocking_bugs if bzutil.is_flaw_bug(flaw_bug)]
 
 
@@ -64,6 +78,7 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
     tracker_bugs = [b for b in bzapi.query(bzapi.build_query(
         product=constants.BUGZILLA_PRODUCT_OCP,
         bug_id=tracker_ids,
+        include_fields=["keywords", "target_release", "status", "resolution", "whiteboard"]
     )) if is_tracker_bug(b)]
     if len(tracker_bugs) == 0:
         # No OCP trackers found
@@ -85,15 +100,23 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
 
     # group trackers by components
     component_tracker_groups = dict()
+    component_not_found = '[NotFound]'
     for b in tracker_bugs:
         component = bzutil.get_whiteboard_component(b)
         if not component:
-            print("could not find component for bug. cannot reliably determine if bug is first fix or not")
-            return False
+            component = component_not_found
 
         if component not in component_tracker_groups:
             component_tracker_groups[component] = set()
         component_tracker_groups[component].add(b)
+
+    if component_not_found in component_tracker_groups:
+        invalid_trackers = sorted([b.id for b in component_tracker_groups[component_not_found]])
+        print(f"For flaw bug {flaw_bug.id} - these tracker bugs do not have a valid "
+              f"whiteboard component value: {invalid_trackers} "
+              "Cannot reliably determine if flaw bug is first "
+              "fix. Check tracker bugs manually")
+        return False
 
     # if any tracker bug for the flaw bug
     # has been fixed for the same major release version
