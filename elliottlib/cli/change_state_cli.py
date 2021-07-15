@@ -3,7 +3,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 from elliottlib import logutil, Runtime
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import green_prefix, green_print
+from elliottlib.util import green_prefix, red_prefix
 
 from errata_tool import Erratum, ErrataException
 import click
@@ -23,13 +23,16 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="New state for the Advisory. NEW_FILES, QE, REL_PREP")
 @click.option("--advisory", "-a", metavar='ADVISORY', type=int,
               help="Change state of ADVISORY")
+@click.option("--default-advisories",
+              is_flag=True,
+              help="Change state of all advisories of specified group")
 @use_default_advisory_option
 @click.option("--noop", "--dry-run",
-              required=False,
-              default=False, is_flag=True,
+              is_flag=True,
+              default=False,
               help="Do not actually change anything")
 @pass_runtime
-def change_state_cli(runtime, state, advisory, default_advisory_type, noop):
+def change_state_cli(runtime, state, advisory, default_advisories, default_advisory_type, noop):
     """Change the state of an ADVISORY. Additional permissions may be
 required to change an advisory to certain states.
 
@@ -43,7 +46,11 @@ unless Bugzilla Bugs or JIRA Issues have been attached.
 See the find-bugs help for additional information on adding
 Bugzilla Bugs.
 
-    Move the advisory 123456 from NEW_FILES to QE state:
+    Move the latest 4.7 release advisories to QE:
+
+    $ elliott -g openshift-4.7 change-state -s QE --default-advisories
+
+    Move the advisory 123456 to QE:
 
     $ elliott change-state --state QE --advisory 123456
 
@@ -56,53 +63,57 @@ Bugzilla Bugs.
 
     $ elliott change-state -s NEW_FILES -a 123456 --noop
 """
-    if not (bool(advisory) ^ bool(default_advisory_type)):
-        raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
+    count_flags = sum(map(bool, [advisory, default_advisory_type, default_advisories]))
+    if count_flags > 1:
+        raise click.BadParameter("Use only one of --use-default-advisory or --advisory or --default-advisories")
 
-    runtime.initialize(no_group=default_advisory_type is None)
+    runtime.initialize(no_group=not (default_advisory_type or default_advisories))
 
+    advisories = []
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    if noop:
-        prefix = "[NOOP] "
-    else:
-        prefix = ""
+    if advisory:
+        advisories.append(advisory)
 
-    try:
-        e = Erratum(errata_id=advisory)
+    if default_advisories:
+        advisories = runtime.group_config.advisories.values()
 
-        if e.errata_state == state:
-            green_prefix("{}No change to make: ".format(prefix))
-            click.echo("Target state is same as current state")
-            return
-        # we have 5 different states we can only change the state if it's in NEW_FILES or QE
-        # "NEW_FILES",
-        # "QE",
-        # "REL_PREP",
-        # "PUSH_READY",
-        # "IN_PUSH"
-        if e.errata_state != 'NEW_FILES' and e.errata_state != 'QE':
-            if default_advisory_type is not None:
-                raise ElliottFatalError("Error: Could not change '{state}' advisory {advs}, group.yml is probably pointing at old one".format(state=e.errata_state, advs=advisory))
+    errors = []
+    for advisory in advisories:
+        try:
+            e = Erratum(errata_id=advisory)
+
+            if e.errata_state == state:
+                green_prefix(f"No Change: {advisory}: ")
+                click.echo(f"Target state is same as current state: {state}")
+            # we have 5 different states we can only change the state if it's in NEW_FILES or QE
+            # "NEW_FILES",
+            # "QE",
+            # "REL_PREP",
+            # "PUSH_READY",
+            # "IN_PUSH"
+            elif e.errata_state != 'NEW_FILES' and e.errata_state != 'QE':
+                red_prefix(f"Error: {advisory}: ")
+                if default_advisory_type is not None:
+                    click.echo(f"Could not change '{e.errata_state}', group.yml is probably pointing at old one")
+                else:
+                    click.echo(f"Can only change the state if it's in NEW_FILES or QE, current state is {e.errata_state}")
             else:
-                raise ElliottFatalError("Error: we can only change the state if it's in NEW_FILES or QE, current state is {s}".format(s=e.errata_state))
-        else:
-            if noop:
-                green_prefix("{}Would have changed state: ".format(prefix))
-                click.echo("{} ➔ {}".format(e.errata_state, state))
-                return
-            else:
-                # Capture current state because `e.commit()` will
-                # refresh the `e.errata_state` attribute
-                old_state = e.errata_state
-                e.setState(state)
-                e.commit()
-                green_prefix("Changed state: ")
-                click.echo("{old_state} ➔ {new_state}".format(
-                    old_state=old_state,
-                    new_state=state))
-    except ErrataException as ex:
-        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
+                if noop:
+                    green_prefix(f"NOOP: {advisory}: ")
+                    click.echo(f"Would have changed state {e.errata_state} ➔ {state}")
+                else:
+                    # Capture current state because `e.commit()` will
+                    # refresh the `e.errata_state` attribute
+                    old_state = e.errata_state
+                    e.setState(state)
+                    e.commit()
+                    green_prefix("Changed state: ")
+                    click.echo(f"{old_state} ➔ {state}")
+        except ErrataException as ex:
+            click.echo(f'Error fetching/changing state of {advisory}: {ex}')
+            errors.append(ex)
 
-    green_print("Successfully changed advisory state")
+    if errors:
+        raise Exception(errors)
