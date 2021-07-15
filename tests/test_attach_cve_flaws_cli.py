@@ -13,19 +13,20 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
             'topic': "some topic {IMPACT}",
             'solution': 'some solution'
         }
-        advisory = mock.MagicMock(
+        advisory = mock.Mock(
             errata_type="RHBA",
             cve_names="something",
-            update=mock.MagicMock()
+            update=mock.Mock(),
+            topic='some topic'
         )
 
         flaw_bugs = [
-            mock.MagicMock(alias=['CVE-123'], severity='urgent'),
-            mock.MagicMock(alias=['CVE-456'], severity='high')
+            mock.Mock(alias=['CVE-123'], severity='urgent'),
+            mock.Mock(alias=['CVE-456'], severity='high')
         ]
 
         attach_cve_flaws_cli.get_updated_advisory_rhsa(
-            mock.MagicMock(),
+            mock.Mock(),
             boilerplate,
             advisory,
             flaw_bugs
