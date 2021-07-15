@@ -18,7 +18,6 @@ def get_tracker_bugs(bzapi, advisory, fields):
     return bzapi.getbugs(tracker_bug_ids, permissive=False, include_fields=fields)
 
 
-
 def get_all_attached_bugs(advisory_id):
     return [bug['bug'] for bug in errata.get_raw_erratum(advisory_id)['bugs']['bugs']]
 
