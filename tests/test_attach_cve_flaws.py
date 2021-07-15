@@ -17,22 +17,29 @@ class TestAttachCVEFlaws(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_get_tracker_bugs(self):
-        bugs = [123, 456]
-        valid_tracker = flexmock(keywords=constants.TRACKER_BUG_KEYWORDS)
+        valid_tracker = flexmock(id=123, keywords=constants.TRACKER_BUG_KEYWORDS)
+        invalid_tracker = flexmock(id=456, keywords=[])
         bug_objs = [
             valid_tracker,
-            flexmock(keywords=[])
+            invalid_tracker
         ]
+        bugs = [valid_tracker.id, invalid_tracker.id]
 
         advisory = flexmock(errata_bugs=bugs)
+        fields = ["somefield"]
         bzapi = flexmock()
         (bzapi
          .should_receive("getbugs")
-         .with_args(bugs, permissive=False)
+         .with_args(bugs, permissive=False, include_fields=['keywords'])
          .and_return(bug_objs))
 
+        (bzapi
+         .should_receive("getbugs")
+         .with_args([valid_tracker.id], permissive=False, include_fields=fields)
+         .and_return([valid_tracker]))
+
         expected = [valid_tracker]
-        actual = attach_cve_flaws.get_tracker_bugs(bzapi, advisory)
+        actual = attach_cve_flaws.get_tracker_bugs(bzapi, advisory, fields)
         self.assertEqual(expected, actual)
 
     def test_get_corresponding_flaw_bugs(self):
@@ -51,14 +58,15 @@ class TestAttachCVEFlaws(unittest.TestCase):
             flexmock(product=product, component='bar')
         ]
 
+        fields = ["somefield"]
         bzapi = flexmock()
         (bzapi
          .should_receive("getbugs")
-         .with_args(bugs, permissive=False)
+         .with_args(bugs, permissive=False, include_fields=["somefield", "product", "component"])
          .and_return(flaw_bugs))
 
         expected = 2
-        actual = len(attach_cve_flaws.get_corresponding_flaw_bugs(bzapi, tracker_bugs))
+        actual = len(attach_cve_flaws.get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields))
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_validate(self):
@@ -82,11 +90,13 @@ class TestAttachCVEFlaws(unittest.TestCase):
         tr = '4.8.0'
         bzapi = flexmock()
 
+        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
         (bzapi
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs))
+                bug_id=bugs,
+                include_fields=fields))
         (bzapi
             .should_receive("query")
             .and_return([flexmock(keywords=['foo'])]))
@@ -97,18 +107,20 @@ class TestAttachCVEFlaws(unittest.TestCase):
 
     def test_is_first_fix_any_missing_component(self):
         bug_objs = [
-            flexmock(keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard='')
+            flexmock(id=1, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard='')
         ]
         bugs = [1, 2]
-        flaw_bug = flexmock(depends_on=bugs)
+        flaw_bug = flexmock(id=5, depends_on=bugs)
         tr = '4.8.0'
 
         bzapi = flexmock()
+        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
         (bzapi
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs))
+                bug_id=bugs,
+                include_fields=fields))
         (bzapi
             .should_receive("query")
             .and_return(bug_objs))
@@ -136,11 +148,13 @@ class TestAttachCVEFlaws(unittest.TestCase):
         tr = '4.8.0'
 
         bzapi = flexmock()
+        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
         (bzapi
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs))
+                bug_id=bugs,
+                include_fields=fields))
         (bzapi
             .should_receive("query")
             .and_return(bug_objs))
@@ -167,11 +181,13 @@ class TestAttachCVEFlaws(unittest.TestCase):
         tr = '4.8.0'
 
         bzapi = flexmock()
+        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
         (bzapi
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs))
+                bug_id=bugs,
+                include_fields=fields))
         (bzapi
             .should_receive("query")
             .and_return(bug_objs))
@@ -203,11 +219,13 @@ class TestAttachCVEFlaws(unittest.TestCase):
         tr = '4.8.0'
 
         bzapi = flexmock()
+        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
         (bzapi
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs))
+                bug_id=bugs,
+                include_fields=fields))
         (bzapi
             .should_receive("query")
             .and_return(bug_objs))
