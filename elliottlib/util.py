@@ -243,7 +243,8 @@ def parallel_results_with_progress(inputs, func, file=None):
 
 def get_target_release(bugs):
     """
-    Pass in a list of bugs attached to an advisory and get the target release version back
+    Pass in a list of bugs attached to an advisory and get
+    the target release version back
     """
     invalid_bugs = []
     target_releases = set()

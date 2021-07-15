@@ -293,6 +293,23 @@ def is_cve_tracker(bug_obj):
     return "SecurityTracking" in bug_obj.keywords and "Security" in bug_obj.keywords
 
 
+def get_whiteboard_component(bug):
+    """Get whiteboard component value of a bug.
+
+    An OCP cve tracker has a whiteboard value "component:<component_name>"
+    to indicate which component the bug belongs to.
+
+    :param bug: bug object
+    :returns: a string if a value is found, otherwise False
+    """
+    marker = r'component:\s*([-\w]+)'
+    tmp = re.search(marker, bug.whiteboard)
+    if tmp and len(tmp.groups()) == 1:
+        component_name = tmp.groups()[0]
+        return component_name
+    return False
+
+
 def get_valid_rpm_cves(bugs):
     """ Get valid rpm cve trackers with their component names
 
@@ -303,16 +320,13 @@ def get_valid_rpm_cves(bugs):
     :returns: A dict of bug object as key and component name as value
     """
 
-    marker = r'component:\s*([-\w]+)'
     rpm_cves = {}
     for b in bugs:
         if is_cve_tracker(b):
-            tmp = re.search(marker, b.whiteboard)
-            if tmp and len(tmp.groups()) == 1:
-                component_name = tmp.groups()[0]
-                # filter out non-rpm suffixes
-                if not re.search(r'-(apb|container)$', component_name):
-                    rpm_cves[b] = component_name
+            component_name = get_whiteboard_component(b)
+            # filter out non-rpm suffixes
+            if component_name and not re.search(r'-(apb|container)$', component_name):
+                rpm_cves[b] = component_name
     return rpm_cves
 
 

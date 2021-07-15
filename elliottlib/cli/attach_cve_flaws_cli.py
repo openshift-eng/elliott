@@ -1,10 +1,7 @@
 import bugzilla, click, re
 from errata_tool import Erratum
-from elliottlib import util
+from elliottlib import util, attach_cve_flaws
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
-from elliottlib.attach_cve_flaws import get_attached_tracker_bugs, \
-    get_corresponding_flaw_bugs, is_first_fix, is_security_advisory, \
-    get_highest_security_impact, is_advisory_impact_smaller_than
 
 
 @cli.command('attach-cve-flaws',
@@ -43,8 +40,10 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     if not advisory_id and default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
+    advisory = Erratum(errata_id=advisory_id)
+
     # get attached bugs from advisory
-    attached_tracker_bugs = get_attached_tracker_bugs(bzapi, advisory_id)
+    attached_tracker_bugs = attach_cve_flaws.get_tracker_bugs(bzapi, advisory, fields=["target_release", "blocks"])
     runtime.logger.info('found {} tracker bugs attached to the advisory: {}'.format(
         len(attached_tracker_bugs), sorted(bug.id for bug in attached_tracker_bugs)
     ))
@@ -58,7 +57,11 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         exit(1)
     runtime.logger.info('current_target_release: {}'.format(current_target_release))
 
-    corresponding_flaw_bugs = get_corresponding_flaw_bugs(bzapi, attached_tracker_bugs)
+    corresponding_flaw_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
+        bzapi,
+        attached_tracker_bugs,
+        fields=["depends_on", "alias", "severity"]
+    )
     runtime.logger.info('found {} corresponding flaw bugs: {}'.format(
         len(corresponding_flaw_bugs), sorted(bug.id for bug in corresponding_flaw_bugs)
     ))
@@ -72,10 +75,9 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         first_fix_flaw_bugs = corresponding_flaw_bugs
     else:
         runtime.logger.info("detected GA release, applying first-fix filtering..")
-        attached_tracker_ids = [tracker.id for tracker in attached_tracker_bugs]
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in corresponding_flaw_bugs
-            if is_first_fix(bzapi, flaw_bug, current_target_release, attached_tracker_ids)
+            if attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, current_target_release)
         ]
 
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
@@ -87,10 +89,34 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         exit(0)
 
     cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
+    advisory = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, first_fix_flaw_bugs)
 
-    advisory = Erratum(errata_id=advisory_id)
-    if not is_security_advisory(advisory):
-        runtime.logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
+    flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
+    runtime.logger.info(f'Request to attach {len(flaw_ids)} bugs to the advisory')
+    existing_bug_ids = advisory.errata_bugs
+    new_bugs = set(flaw_ids) - set(existing_bug_ids)
+    runtime.logger.info(f'Bugs already attached: {len(existing_bug_ids)}')
+    runtime.logger.info(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
+
+    if new_bugs:
+        advisory.addBugs(flaw_ids)
+    if noop:
+        return True
+
+    return advisory.commit()
+
+
+def get_updated_advisory_rhsa(logger, cve_boilerplate, advisory, flaw_bugs):
+    """Given an advisory object, get updated advisory to RHSA
+
+    :param logger: logger object from runtime
+    :param cve_boilerplate: cve template for rhsa
+    :param advisory: advisory object to update
+    :param flaw_bugs: flaw bug objects determined to be attached to the advisory
+    :returns: updated advisory object, that can be committed i.e advisory.commit()
+    """
+    if not attach_cve_flaws.is_security_advisory(advisory):
+        logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
         advisory.update(
             errata_type='RHSA',
             security_reviewer=cve_boilerplate['security_reviewer'],
@@ -101,37 +127,26 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
             security_impact='Low',
         )
 
-    cves = ' '.join([flaw_bug.alias[0] for flaw_bug in first_fix_flaw_bugs])
+    cve_names = [b.alias[0] for b in flaw_bugs]
+    if not advisory.cve_names:
+        cve_str = ' '.join(cve_names)
+        advisory.update(cve_names=cve_str)
+    else:
+        cves_not_in_cve_names = [n for n in cve_names if n not in advisory.cve_names]
+        if cves_not_in_cve_names:
+            s = ' '.join(cves_not_in_cve_names)
+            cve_str = f"{advisory.cve_names} {s}".strip()
+            advisory.update(cve_names=cve_str)
 
-    cve_str = cves
-    if advisory.cve_names and cves not in advisory.cve_names:
-        cve_str = "{} {}".format(advisory.cve_names, cves).strip()
-    advisory.update(cve_names=cve_str)
-    runtime.logger.info('List of *new* CVEs: {}'.format(cves))
-
-    highest_impact = get_highest_security_impact(first_fix_flaw_bugs)
-    runtime.logger.info('Adjusting advisory security impact from {} to {}'.format(
+    highest_impact = attach_cve_flaws.get_highest_security_impact(flaw_bugs)
+    logger.info('Adjusting advisory security impact from {} to {}'.format(
         advisory.security_impact, highest_impact
     ))
     advisory.update(security_impact=highest_impact)
 
     if highest_impact not in advisory.topic:
         topic = cve_boilerplate['topic'].format(IMPACT=highest_impact)
-        runtime.logger.info('Topic updated to include impact of {}'.format(highest_impact))
+        logger.info('Topic updated to include impact of {}'.format(highest_impact))
         advisory.update(topic=topic)
 
-    flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
-
-    runtime.logger.info(f'Request to attach {len(flaw_ids)} bugs to the advisory')
-    existing_bug_ids = advisory.errata_bugs
-    new_bugs = set(flaw_ids) - set(existing_bug_ids)
-    print(f'Bugs already attached: {len(existing_bug_ids)}')
-    print(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
-
-    if new_bugs:
-        advisory.addBugs(flaw_ids)
-
-    if noop:
-        return True
-
-    return advisory.commit()
+    return advisory
