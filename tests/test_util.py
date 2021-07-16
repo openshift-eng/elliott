@@ -10,6 +10,17 @@ class TestUtil(unittest.TestCase):
         self.assertEqual(util.isolate_assembly_in_release('1.2.3-y.p.p1.assembly.x'), 'x')
         self.assertEqual(util.isolate_assembly_in_release('1.2.3-y.p.p1.assembly.xyz'), 'xyz')
         self.assertEqual(util.isolate_assembly_in_release('1.2.3-y.p.p1.assembly.xyz.el7'), 'xyz')
+        self.assertEqual(util.isolate_assembly_in_release('1.2.3-y.p.p1.assembly.4.9.99.el7'), '4.9.99')
+        self.assertEqual(util.isolate_assembly_in_release('1.2.3-y.p.p1.assembly.4.9.el700.hi'), '4.9')
+        self.assertEqual(util.isolate_assembly_in_release('1.2.3-y.p.p1.assembly.art12398.el10'), 'art12398')
+        self.assertEqual(util.isolate_assembly_in_release('1.2.3-y.p.p1.assembly.art12398.el10'), 'art12398')
+
+    def test_isolate_el_version_in_release(self):
+        self.assertEqual(util.isolate_el_version_in_release('1.2.3-y.p.p1.assembly.4.9.99.el7'), 7)
+        self.assertEqual(util.isolate_el_version_in_release('1.2.3-y.p.p1.assembly.4.9.el7'), 7)
+        self.assertEqual(util.isolate_el_version_in_release('1.2.3-y.p.p1.assembly.art12398.el199'), 199)
+        self.assertEqual(util.isolate_el_version_in_release('1.2.3-y.p.p1.assembly.art12398'), None)
+        self.assertEqual(util.isolate_el_version_in_release('1.2.3-y.p.p1.assembly.4.7.e.8'), None)
 
     def test_find_latest_builds(self):
         builds = [
