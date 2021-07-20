@@ -5,7 +5,7 @@ from itertools import chain
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
 from sys import getsizeof, stderr
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import click
 from errata_tool import Erratum
@@ -316,31 +316,47 @@ def get_golang_version_from_root_log(root_log):
     return m.group(0)
 
 
+def split_el_suffix_in_release(release: str) -> Tuple[str, Optional[str]]:
+    """
+    Given a release field, this will method will split out any
+    .el### suffix and return (prefix, el_suffix) where el_suffix
+    is None if there .el### is not detected.
+    """
+
+    el_suffix_match = re.match(r'(.*)\.(el\d+)(?:\.+|$)', release)
+    if el_suffix_match:
+        prefix = el_suffix_match.group(1)
+        el_suffix = el_suffix_match.group(2)
+        return prefix, el_suffix
+    else:
+        return release, None
+
+
 def isolate_assembly_in_release(release: str) -> str:
     """
     Given a release field, determines whether is contains
     an assembly name. If it does, it returns the assembly
     name. If it is not found, None is returned.
     """
-    # Because RPM releases will have .el? as their suffix, we cannot
-    # assume that endswith(.assembly.<name>).
-    match = re.match(r'.*\.assembly\.([^.]+)(?:\.+|$)', release)
-    if match:
-        return match.group(1)
+    # Because RPM release fields will have .el? as their suffix, we cannot
+    # assume that endswith(.assembly.<name>). Strip off .el?
+    prefix, _ = split_el_suffix_in_release(release)
+    asm_pos = prefix.rfind('.assembly.')
+    if asm_pos == -1:
+        return None
 
-    return None
+    return prefix[asm_pos + len('.assembly.'):]
 
 
 def isolate_el_version_in_release(release: str) -> Optional[int]:
     """
     Given a release field, determines whether is contains
-    a RHEL version. If it does, it returns the version value.
+    a RHEL version. If it does, it returns the version value as an int.
     If it is not found, None is returned.
     """
-    match = re.match(r'.*\.el(\d+)(?:\.+|$)', release)
-    if match:
-        return int(match.group(1))
-
+    _, el_suffix = split_el_suffix_in_release(release)
+    if el_suffix:
+        return int(el_suffix[2:])
     return None
 
 
