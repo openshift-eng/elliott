@@ -1,19 +1,14 @@
-import datetime
-import re
+import datetime, re, click
 from collections import deque
 from itertools import chain
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
-<<<<<<< HEAD
 from sys import getsizeof, stderr
 from typing import Dict, Iterable, List, Optional, Tuple
-=======
-import re
+
 from elliottlib import brew
 from elliottlib.exceptions import BrewBuildException
->>>>>>> 2858a43 (initial commit)
 
-import click
 from errata_tool import Erratum
 from kerberos import GSSError
 
