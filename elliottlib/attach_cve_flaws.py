@@ -133,7 +133,8 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
     # then flaw bug is first fix
     for component, trackers in component_tracker_groups.items():
         if is_first_fix_group(trackers):
-            print(f'{flaw_bug.id} considered first-fix for component: {component}')
+            print(f'{flaw_bug.id} considered first-fix for component: {component} for trackers: '
+                  f'{[t.id for t in trackers]}')
             return True
 
     return False
