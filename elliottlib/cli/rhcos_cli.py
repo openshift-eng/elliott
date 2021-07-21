@@ -15,8 +15,8 @@ from elliottlib import rhcos, cincinnati, util
 @click.option('--packages', '-p', 'packages',
               help='Show details only these packages. Comma separated package names')
 @click.option('--arch', 'arch',
-              type=click.Choice(['x86_64', 'ppc64le', 's390x', 'all']),
-              help='Specify architecture. Default is x86_64. "all" to get all arches.')
+              type=click.Choice(util.brew_arches + ['all']),
+              help='Specify architecture. Default is x86_64. "all" to get all arches. aarch64 only works for 4.8+')
 @click.option('--go', '-g', 'go',
               is_flag=True,
               help='Show go version for packages that are go binaries')
@@ -37,7 +37,7 @@ def rhcos_cli(runtime, pullspec, latest, latest_ocp, packages, arch, go):
     $ elliott --group openshift-4.8 rhcos -l --arch ppc64le
 
 \b
-    $ elliott --group openshift-4.8 rhcos -o -p skopeo,podman
+    $ elliott --group openshift-4.8 rhcos -o -p skopeo,podman --arch all
 """
     count_options = sum(map(bool, [pullspec, latest, latest_ocp]))
     if count_options > 1:
@@ -53,13 +53,16 @@ def rhcos_cli(runtime, pullspec, latest, latest_ocp, packages, arch, go):
     arch = 'x86_64' if not arch else arch
 
     if arch == 'all':
-        for a in ['x86_64', 'ppc64le', 's390x']:
+        for a in util.brew_arches:
             _rhcos(version, pullspec, latest, latest_ocp, packages, a, go)
     else:
         _rhcos(version, pullspec, latest, latest_ocp, packages, arch, go)
 
 
 def _rhcos(version, pullspec, latest, latest_ocp, packages, arch, go):
+    if arch == 'aarch64' and version < '4.8':
+        return
+
     build_id = ''
     if latest or latest_ocp:
         if latest:
