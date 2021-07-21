@@ -101,6 +101,9 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
     component_tracker_groups = dict()
     component_not_found = '[NotFound]'
     for b in tracker_bugs:
+        # filter out trackers that don't belong ex. 3.X bugs for 4.X target release
+        if not same_major_release(b):
+            continue
         component = bzutil.get_whiteboard_component(b)
         if not component:
             component = component_not_found
@@ -122,14 +125,16 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
     # then it is not a first fix
     def is_first_fix_group(trackers):
         for b in trackers:
-            if same_major_release(b) and already_fixed(b):
+            if already_fixed(b):
                 return False
         return True
 
     # if for any component is_first_fix_group is true
     # then flaw bug is first fix
-    for _, trackers in component_tracker_groups.items():
+    for component, trackers in component_tracker_groups.items():
         if is_first_fix_group(trackers):
+            print(f'{flaw_bug.id} considered first-fix for component: {component} for trackers: '
+                  f'{[t.id for t in trackers]}')
             return True
 
     return False

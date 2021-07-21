@@ -85,8 +85,9 @@ class TestAttachCVEFlaws(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_no_trackers(self):
-        bugs = [1, 2]
-        flaw_bug = flexmock(depends_on=bugs)
+        tracker_bug_ids = [1, 2]
+        tracker_bug_objs = [flexmock(id=1, keywords=['foo'])]
+        flaw_bug = flexmock(depends_on=tracker_bug_ids)
         tr = '4.8.0'
         bzapi = flexmock()
 
@@ -95,23 +96,23 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs,
+                bug_id=tracker_bug_ids,
                 include_fields=fields))
         (bzapi
             .should_receive("query")
-            .and_return([flexmock(keywords=['foo'])]))
+            .and_return(tracker_bug_objs))
 
         expected = True
         actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_missing_component(self):
-        bug_objs = [
-            flexmock(id=1, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard='')
-        ]
-        bugs = [1, 2]
-        flaw_bug = flexmock(id=5, depends_on=bugs)
         tr = '4.8.0'
+        tracker_bug_objs = [
+            flexmock(id=1, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard='', target_release=[tr])
+        ]
+        tracker_bugs_ids = [1, 2]
+        flaw_bug = flexmock(id=5, depends_on=tracker_bugs_ids)
 
         bzapi = flexmock()
         fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
@@ -119,32 +120,34 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs,
+                bug_id=tracker_bugs_ids,
                 include_fields=fields))
         (bzapi
             .should_receive("query")
-            .and_return(bug_objs))
+            .and_return(tracker_bug_objs))
 
         expected = False
         actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_same_major(self):
-        bug_objs = [
+        tracker_bug_objs = [
             # bug that should be ignored
             flexmock(
+                id=1,
                 keywords=constants.TRACKER_BUG_KEYWORDS,
                 whiteboard='component:runc',
                 target_release=['3.11.z'],
                 status='RELEASE_PENDING'),
             flexmock(
+                id=2,
                 keywords=constants.TRACKER_BUG_KEYWORDS,
                 whiteboard='component:runc',
                 target_release=['4.8.0'],
                 status='ON_QA')
         ]
-        bugs = [1, 2]
-        flaw_bug = flexmock(depends_on=bugs)
+        tracker_bug_ids = [t.id for t in tracker_bug_objs]
+        flaw_bug = flexmock(id=3, depends_on=tracker_bug_ids)
         tr = '4.8.0'
 
         bzapi = flexmock()
@@ -153,31 +156,33 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs,
+                bug_id=tracker_bug_ids,
                 include_fields=fields))
         (bzapi
             .should_receive("query")
-            .and_return(bug_objs))
+            .and_return(tracker_bug_objs))
 
         expected = True
         actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_already_fixed(self):
-        bug_objs = [
+        tracker_bug_objs = [
             flexmock(
+                id=1,
                 keywords=constants.TRACKER_BUG_KEYWORDS,
                 whiteboard='component:runc',
                 target_release=['4.7.z'],
                 status='RELEASE_PENDING'),
             flexmock(
+                id=2,
                 keywords=constants.TRACKER_BUG_KEYWORDS,
                 whiteboard='component:runc',
                 target_release=['4.8.0'],
                 status='ON_QA')
         ]
-        bugs = [1, 2]
-        flaw_bug = flexmock(depends_on=bugs)
+        tracker_bug_ids = [t.id for t in tracker_bug_objs]
+        flaw_bug = flexmock(id=3, depends_on=tracker_bug_ids)
         tr = '4.8.0'
 
         bzapi = flexmock()
@@ -186,36 +191,39 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs,
+                bug_id=tracker_bug_ids,
                 include_fields=fields))
         (bzapi
             .should_receive("query")
-            .and_return(bug_objs))
+            .and_return(tracker_bug_objs))
 
         expected = False
         actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_any(self):
-        bug_objs = [
+        tracker_bug_objs = [
             flexmock(
+                id=1,
                 keywords=constants.TRACKER_BUG_KEYWORDS,
                 whiteboard='component:runc',
                 target_release=['4.7.z'],
                 status='RELEASE_PENDING'),
             flexmock(
+                id=2,
                 keywords=constants.TRACKER_BUG_KEYWORDS,
                 whiteboard='component:runc',
                 target_release=['4.8.0'],
                 status='ON_QA'),
             flexmock(
+                id=3,
                 keywords=constants.TRACKER_BUG_KEYWORDS,
                 whiteboard='component:crio',
                 target_release=['4.8.0'],
                 status='ON_QA')
         ]
-        bugs = [1, 2]
-        flaw_bug = flexmock(depends_on=bugs)
+        tracker_bug_ids = [t.id for t in tracker_bug_objs]
+        flaw_bug = flexmock(id=4, depends_on=tracker_bug_ids)
         tr = '4.8.0'
 
         bzapi = flexmock()
@@ -224,11 +232,11 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .should_receive("build_query")
             .with_args(
                 product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=bugs,
+                bug_id=tracker_bug_ids,
                 include_fields=fields))
         (bzapi
             .should_receive("query")
-            .and_return(bug_objs))
+            .and_return(tracker_bug_objs))
 
         expected = True
         actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
