@@ -87,12 +87,14 @@ Use cases are described below:
 SWEEP: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
 for bugs claimed to be fixed, but not yet attached to advisories.
---check-builds flag forces bug validation with attached builds to rpm advisory. It assumes builds have been attached and only attaches bugs with matching builds.
+--check-builds flag forces bug validation with attached builds to rpm advisory.
+It assumes builds have been attached and only attaches bugs with matching builds.
 default --status: ['MODIFIED', 'ON_QA', 'VERIFIED']
 
-LIST: The --group option is not required if you are specifying bugs
+LIST: The --group option is not required if you are specifying advisory
 manually. Provide one or more --id's for manual bug addition. In LIST
-mode you must provide a list of IDs to attach with the --id option.
+mode you must provide a list of IDs to perform operation on with the --id option.
+Supported operations: report with --report, attach with --attach and --into-default-advisories
 
 DIFF: For this use case, you must provide the --between option using two
 URLs to payloads.
@@ -135,6 +137,12 @@ advisory with the --add option.
 \b
     $ elliott find-bugs --mode list --id 8675309 --id 7001337 --add 123456
 
+    Add given list of bugs to the appropriate advisories. This would apply sweep logic to the given bugs
+    grouping them to be attached to rpm/extras/image advisories
+
+\b
+    $ elliott -g openshift-4.8 find-bugs --mode list --id 8675309,7001337 --into-default-advisories
+
     Automatically find bugs for openshift-4.1 and attach them to the
     rpm advisory defined in ocp-build-data:
 
@@ -156,9 +164,6 @@ advisory with the --add option.
 
     if mode == 'list' and len(id) == 0:
         raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
-
-    if mode == 'list' and into_default_advisories:
-        raise click.BadParameter("Cannot use --into-default-advisories with mode=list")
 
     if mode == 'diff' and not len(from_diff) == 2:
         raise click.BadParameter("If using mode=diff, you must provide two payloads to compare")
@@ -242,8 +247,9 @@ advisory with the --add option.
 
     elif mode == 'list':
         bugs = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
-        mode_list(advisory=advisory, bugs=bugs, flags=flag, report=report, noop=noop)
-        return
+        if not into_default_advisories:
+            mode_list(advisory=advisory, bugs=bugs, flags=flag, report=report, noop=noop)
+            return
     elif mode == 'diff':
         click.echo(runtime.working_dir)
         bug_id_strings = openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
