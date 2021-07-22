@@ -197,6 +197,7 @@ def create_placeholder(bz_data, kind):
         version=version,
         component="Release",
         summary=boilerplate,
+        keywords=["Automation"],
         description=boilerplate)
 
     newbug = bzapi.createbug(createinfo)
