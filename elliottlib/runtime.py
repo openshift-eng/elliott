@@ -192,6 +192,8 @@ class Runtime(object):
             self.brew_event = self.assembly_basis_event
             self.logger.warning(f'Constraining brew event to assembly basis for {self.assembly}: {self.brew_event}')
 
+        self.initialized = True
+
     def initialize_logging(self):
         if self.initialized:
             return
