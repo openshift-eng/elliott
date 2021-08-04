@@ -46,7 +46,7 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
     if count_options > 1:
         raise click.BadParameter("Use only one of --from-spec, --latest, --latest-ocp")
 
-    if arch and ('/' in release):
+    if arch and release and ('/' in release):
         raise click.BadParameter("--arch=all cannot be used with --release <pullspec>")
 
     if latest or latest_ocp:
@@ -106,6 +106,9 @@ def _rhcos(version, release, latest, latest_ocp, packages, arch, go):
             return
         if packages:
             packages = [p.strip() for p in packages.split(',')]
+            if 'openshift' in packages:
+                packages.remove('openshift')
+                packages.append('openshift-hyperkube')
             nvrs = [p for p in nvrs if p[0] in packages]
         if go:
             util.get_golang_rpm_nvrs(nvrs)
