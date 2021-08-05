@@ -11,11 +11,9 @@ from typing import Iterable, List
 import urllib.parse
 import xmlrpc.client
 from time import sleep
-import calendar
 
 import bugzilla
 import click
-from github import Github
 from koji import ClientSession
 
 from elliottlib import constants, exceptions, logutil
@@ -188,20 +186,9 @@ def add_release_comment(bug, major_version, minor_version, noop=False):
     :param noop: Do not do anything
     """
     if noop:
-        logger.info(f"add target planed releae version and release date in comment")
+        logger.info(f"Add comment info that this bug will ship in next {major_version}.{minor_version} release")
         return
-    gitclinet = Github()
-    repo = gitclient.get_repo("openshift/cincinnati-graph-data")
-    content = repo.get_contents("channels/fast-{}.{}.yaml".format(major_version, minor_version), ref="master")
-    fast_channel = yaml.load(content.decoded_content, Loader=yaml.FullLoader) # get latest release in fast channel
-    next_release = int(version['versions'][-1].split('.')[-1]) + 1
-    next_release_version = "{}.{}.{}".format(major_version, minor_version, next_release)
-    today = datetime.date.today()
-    while today.weekday() != calendar.MONDAY:
-        today += datetime.timedelta(days = 1)
-    today += datetime.timedelta(days = 7) #next next monday
-    next_release_date = today.sfttime("%Y-%m-%d")
-    comment = f"This bug will be shipped in {next_release_version} which plan to release at around {next_release_date}."
+    comment = f"When next {major_version}.{minor_version} is constructing this bug will be picked up."
     bug.addcomment(comment=comment, private=True)
 
 
