@@ -313,7 +313,7 @@ def get_golang_version_from_build_log(log):
     # Based on below greps:
     # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang-(bin-|))[0-9]+.[0-9]+.[0-9]+[^ ]*' ./3.11/*.log | sed 's/:.*\([0-9]\+\.[0-9]\+\.[0-9]\+.*\)/: \1/'
     # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang.*module[^ ]*).*[0-9]+.[0-9]+.[0-9]+[^ ]*' ./4.5/*.log | sed 's/\:.*\([^a-z][0-9]\+\.[0-9]\+\.[0-9]\+[^ ]*\)/:\ \1/'
-    m = re.search(r'(go-toolset-1[^\s]*|golang-bin).*[0-9]+.[0-9]+.[0-9]+[^\s]*', log)
+    m = re.search(r'(go-toolset-1\S+-golang\S+|golang-bin).*[0-9]+.[0-9]+.[0-9]+[^\s]*', log)
     s = " ".join(m.group(0).split())
     return s
 

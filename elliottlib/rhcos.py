@@ -2,9 +2,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 import json
 from tenacity import retry, stop_after_attempt, wait_fixed
 from urllib import request
-from elliottlib import util, exectools
-
-BASE_URL = "https://releases-rhcos-art.cloud.privileged.psi.redhat.com/storage/releases"
+from elliottlib import util, exectools, constants
 
 
 def release_url(version, arch="x86_64", private=False):
@@ -17,7 +15,7 @@ def release_url(version, arch="x86_64", private=False):
     @return e.g. "https://releases-rhcos-art...com/storage/releases/rhcos-4.6-s390x"
     """
     # TODO: create private rhcos builds and do something with "private" here
-    return f"{BASE_URL}/rhcos-{version}{util.brew_suffix_for_arch(arch)}"
+    return f"{constants.RHCOS_RELEASES_BASE_URL}/rhcos-{version}{util.brew_suffix_for_arch(arch)}"
 
 
 # this is hard to test with retries, so wrap testable method

@@ -9,7 +9,7 @@ from elliottlib import rhcos, cincinnati, util
               help='Show details of latest RHCOS builds')
 @click.option('--latest-ocp', '-o', 'latest_ocp',
               is_flag=True,
-              help='Show details of RHCOS in latest public OCP release for a given version')
+              help='Show details of RHCOS in latest OCP release (fast channel) for a given version')
 @click.option('--release', '-r', 'release',
               help='Show details for this OCP release. Can be a full pullspec or a named release ex: 4.8.4')
 @click.option('--arch', 'arch',
@@ -82,8 +82,8 @@ def _rhcos(version, release, latest, latest_ocp, packages, arch, go):
             build_id = rhcos.latest_build_id(version, arch)
             print(f'Build id found: {build_id}')
         else:
-            print(f'Looking up last ocp release for {version} {arch}')
-            release = cincinnati.get_latest_candidate_ocp(version, arch)
+            print(f'Looking up last ocp release for {version} {arch} in fast channel')
+            release = cincinnati.get_latest_fast_ocp(version, arch)
             if not release:
                 return
 
@@ -93,7 +93,6 @@ def _rhcos(version, release, latest, latest_ocp, packages, arch, go):
         else:
             print(f'OCP release: {release}-{arch}')
             pullspec = get_pullspec(release, arch)
-
 
     if pullspec:
         print(f"Looking up rhcos build id for {pullspec}")
