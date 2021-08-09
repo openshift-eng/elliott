@@ -188,7 +188,7 @@ def add_release_comment(bug, major_version, minor_version, noop=False):
     if noop:
         logger.info(f"Add comment info that this bug will ship in next {major_version}.{minor_version} release")
         return
-    comment = f"When next {major_version}.{minor_version} is constructing this bug will be picked up."
+    comment = f"This bug will be shipped at next planned release date of {major_version}.{minor_version} if this is not a GA bug."
     bug.addcomment(comment=comment, private=True)
 
 
