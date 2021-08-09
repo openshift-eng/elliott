@@ -110,7 +110,8 @@ def _rhcos(version, release, latest, latest_ocp, packages, arch, go):
                 packages.append('openshift-hyperkube')
             nvrs = [p for p in nvrs if p[0] in packages]
         if go:
-            util.get_golang_rpm_nvrs(nvrs)
+            go_rpm_nvrs = util.get_golang_rpm_nvrs(nvrs)
+            print(go_rpm_nvrs)
             return
         for nvr in nvrs:
             print('{}-{}-{}'.format(*nvr))

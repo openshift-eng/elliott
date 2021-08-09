@@ -551,66 +551,81 @@ def isolate_timestamp_in_release(release: str) -> Optional[str]:
     return None
 
 
-def get_golang_container_nvrs(nvrs):
-    go_fail, brew_fail = 0, 0
+def get_golang_container_nvrs(nvrs, logger):
     all_build_objs = brew.get_build_objects([
         '{}-{}-{}'.format(*n) for n in nvrs
     ])
+    go_container_nvrs = {}
     for build in all_build_objs:
-        golang_version = None
-        name = build.get('name')
+        go_version = None
+        nvr = (build['name'], build['version'], build['release'])
+        name = nvr[0]
+        if 'golang-builder' in name:
+            go_version = golang_builder_version(nvr, logger)
+            go_container_nvrs[name] = {
+                'nvr': nvr,
+                'go': go_version
+            }
+            continue
+
         try:
             parents = build['extra']['image']['parent_image_builds']
         except KeyError:
-            brew_fail += 1
+            logger.debug(f'Could not find parent build image for {nvr}')
             continue
 
         for p, pinfo in parents.items():
             if 'builder' in p:
-                golang_version = pinfo.get('nvr')
+                go_version = pinfo.get('nvr')
 
-        if golang_version:
-            print(f'{name} {golang_version}')
-        elif 'golang-builder' in name:
-            try:
-                for n in nvrs:
-                    if name in n:
-                        build_log = brew.get_nvr_arch_log(*n)
-            except BrewBuildException:
-                brew_fail += 1
-                continue
-            try:
-                golang_version = get_golang_version_from_build_log(build_log)
-            except AttributeError:
-                go_fail += 1
-                continue
-            print(f'{name} {golang_version}')
-        else:
-            go_fail += 1
-    return brew_fail, go_fail
+        go_container_nvrs[name] = {
+            'nvr': nvr,
+            'go': go_version
+        }
+        if not go_version:
+            logger.debug(f'Could not find parent Go builder image for {nvr}')
+
+    return go_container_nvrs
 
 
-def get_golang_rpm_nvrs(nvrs):
-    go_fail, brew_fail = 0, 0
+def golang_builder_version(nvr, logger):
+    try:
+        build_log = brew.get_nvr_arch_log(*nvr)
+    except BrewBuildException:
+        logger.debug(f'Could not brew log for {nvr}')
+    try:
+        golang_version = get_golang_version_from_build_log(build_log)
+    except AttributeError:
+        logger.debug(f'Could not find Go version in build log for {nvr}')
+    return golang_version
+
+
+def get_golang_rpm_nvrs(nvrs, logger):
+    go_rpm_nvrs = {}
     for nvr in nvrs:
         # what we build in brew as openshift
         # is called openshift-hyperkube in rhcos
         if nvr[0] == 'openshift-hyperkube':
             n = 'openshift'
             nvr = (n, nvr[1], nvr[2])
+
         try:
             root_log = brew.get_nvr_root_log(*nvr)
         except BrewBuildException:
-            brew_fail += 1
+            logger.debug(f'Could not find brew log for {nvr}')
             continue
+
         try:
-            golang_version = get_golang_version_from_build_log(root_log)
+            go_version = get_golang_version_from_build_log(root_log)
         except AttributeError:
-            go_fail += 1
+            logger.debug(f'Could not find go version in root log for {nvr}')
             continue
-        nvr_s = '{}-{}-{}'.format(*nvr)
-        print(f'{nvr_s} {golang_version}')
-    return brew_fail, go_fail
+
+        go_rpm_nvrs[nvr[0]] = {
+            'nvr': nvr,
+            'go': go_version
+        }
+    return go_rpm_nvrs
 
 
 # some of our systems refer to golang's architecture nomenclature; translate between that and brew arches
