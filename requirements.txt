@@ -5,7 +5,7 @@ future
 koji >= 1.18
 pygit2 ~= 0.28 ; python_version <= '3.4'
 pygit2 ; python_version >= '3.5'
-python-bugzilla
+python-bugzilla >= 3.0.2
 pyyaml
 requests
 requests_kerberos
