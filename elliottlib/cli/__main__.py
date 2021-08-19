@@ -218,8 +218,10 @@ Fields for the short format: Release date, State, Synopsys, URL
         return
 
     json_data = advisory.get_erratum_data()
-    json_data['errata_builds'] = advisory.errata_builds
+
+    json_data['bugs'] = advisory.errata_bugs
     json_data['current_flags'] = advisory.current_flags
+    json_data['errata_builds'] = advisory.errata_builds
     json_data['rpmdiffs'] = advisory.externalTests(test_type='rpmdiff')
 
     if as_json == "-":
