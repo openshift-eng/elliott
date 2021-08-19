@@ -1,10 +1,35 @@
 import unittest
-
 import mock
+import flexmock
+from bugzilla import Bugzilla
+from errata_tool import Erratum
+from elliottlib.runtime import Runtime
+from click.testing import CliRunner
+from elliottlib.cli.common import cli
 from elliottlib.cli import attach_cve_flaws_cli
 
 
 class TestAttachCVEFlawsCLI(unittest.TestCase):
+    def test_attach_cve_flaws_cli(self):
+        runner = CliRunner()
+        # mock Runtime obj
+        runtime = flexmock(initialize=lambda: None, gitdata=flexmock(bz_server_url=lambda: "bz"))
+        flexmock(Runtime, __new__=runtime)
+
+        # mock bugzilla obj
+        bzapi = flexmock()
+        flexmock(Bugzilla, __new__=bzapi)
+
+        # mock Errata obj
+        errata = flexmock()
+        flexmock(Erratum, __new__=errata)
+
+        result = runner.invoke(cli, ['--group=openshift-17.44', 'attach-cve-flaws', '-a', 'foobar'])
+        #self.assertEqual('', result.stderr)
+        self.assertEqual('', result.exception)
+        self.assertEqual("hello", result.stdout)
+        self.assertEqual(0, result.exit_code)
+
     def test_get_updated_advisory_rhsa(self):
         boilerplate = {
             'security_reviewer': 'some reviewer',
