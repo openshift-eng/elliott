@@ -94,9 +94,13 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     if not bugs:
         return
 
-    cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
+    cve_boilerplate = get_boilerplate(runtime.gitdata)
     advisory = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, bugs)
     return errata.add_bugs(advisory, bugs, noop)
+
+
+def get_boilerplate(gitdata):
+    return gitdata.load_data(key='erratatool').data['boilerplates']['cve']
 
 
 def get_updated_advisory_rhsa(logger, cve_boilerplate, advisory, flaw_bugs):
