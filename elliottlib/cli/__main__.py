@@ -530,7 +530,7 @@ written out to summary_results.json.
             # filter out dropped advisories
             advisories = [ad for ad in build.all_errata if ad["status"] != "DROPPED_NO_SHIP"]
             if not advisories:
-                red_print("Build {nvr} is not attached to any advisories.")
+                red_print(f"Build {nvr} is not attached to any advisories.")
                 continue
             for advisory in advisories:
                 if advisory["status"] == "SHIPPED_LIVE":
