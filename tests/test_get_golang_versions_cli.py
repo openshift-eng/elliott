@@ -8,7 +8,7 @@ class TestGetGolangVersionsCli(unittest.TestCase):
         advisory_id = 123
         content_type = "rpm"
         nvrs = [
-            ('openshift','v1.15','el8'),
+            ('openshift', 'v1.15', 'el8'),
             ('podman', 'v1.4', 'el7')
         ]
         flexmock(errata). \
@@ -20,8 +20,4 @@ class TestGetGolangVersionsCli(unittest.TestCase):
             with_args(advisory_id). \
             and_return(content_type)
 
-
-
         get_golang_versions_cli.get_advisory_golang(advisory_id, "")
-
-

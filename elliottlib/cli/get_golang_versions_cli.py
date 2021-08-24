@@ -1,5 +1,6 @@
 from elliottlib import errata, util
 from elliottlib.cli.common import cli
+from elliottlib.util import green_print
 from kobo.rpmlib import parse_nvr
 import click
 from elliottlib.cli.common import use_default_advisory_option, find_default_advisory
@@ -12,7 +13,7 @@ from elliottlib.cli.common import use_default_advisory_option, find_default_advi
 @click.option('--nvrs', '-n',
               help="Brew nvrs to show go version for. Comma separated")
 @click.option('--components', '-c',
-              help="Only show go versions for these components (rpms/images). Comma separated")
+              help="Only show go versions for these components (rpms/images) in advisory. Comma separated")
 @click.pass_obj
 def get_golang_versions_cli(runtime, advisory_id, default_advisory_type, nvrs, components):
     """
@@ -22,6 +23,11 @@ def get_golang_versions_cli(runtime, advisory_id, default_advisory_type, nvrs, c
 
 \b
     $ elliott go -a 76557
+
+    List go version for brew builds in the given advisory
+
+\b
+    $ elliott go -a 79683 -c ironic-container,ose-ovirt-csi-driver-container
 
     List go version for brew builds in the given advisory
 
@@ -47,13 +53,15 @@ def get_golang_versions_cli(runtime, advisory_id, default_advisory_type, nvrs, c
 
     logger = runtime.logger
     if advisory_id:
+        if components:
+            components = [c.strip() for c in components.split(',')]
         return get_advisory_golang(advisory_id, components, logger)
     if nvrs:
+        nvrs = [n.strip() for n in nvrs.split(',')]
         return get_nvrs_golang(nvrs, logger)
 
 
 def get_nvrs_golang(nvrs, logger):
-    nvrs = [n.strip() for n in nvrs.split(',')]
     container_nvrs, rpm_nvrs = [], []
     for n in nvrs:
         parsed_nvr = parse_nvr(n)
@@ -63,22 +71,21 @@ def get_nvrs_golang(nvrs, logger):
         else:
             rpm_nvrs.append(nvr_tuple)
 
+    nvrs = []
     if rpm_nvrs:
-        nvrs = util.get_golang_rpm_nvrs(rpm_nvrs, logger)
-
+        nvrs.extend(util.get_golang_rpm_nvrs(rpm_nvrs, logger))
     if container_nvrs:
-        nvrs = util.get_golang_container_nvrs(container_nvrs, logger)
-
-    print(nvrs)
+        nvrs.extend(util.get_golang_container_nvrs(container_nvrs, logger))
+    pretty_print(nvrs)
 
 
 def get_advisory_golang(advisory_id, components, logger):
     nvrs = errata.get_all_advisory_nvrs(advisory_id)
+    logger.info(f'{len(nvrs)} builds found in advisory')
     if not nvrs:
-        logger.info('0 builds found')
+        logger.debug('No builds found. exiting')
         return
     if components:
-        components = [c.strip() for c in components.split(',')]
         if 'openshift' in components:
             components.remove('openshift')
             components.append('openshift-hyperkube')
@@ -86,20 +93,32 @@ def get_advisory_golang(advisory_id, components, logger):
 
     content_type = errata.get_erratum_content_type(advisory_id)
     if content_type == 'docker':
-        go_container_nvrs = util.get_golang_container_nvrs(nvrs, logger)
-        # go_groups = {}
-        # if golang_version not in golang_groups:
-        #     golang_groups[golang_version] = []
-        # golang_groups[golang_version].append(name)
-        # for golang_ver, names in golang_groups.items():
-        #     green_print(f'Following nvrs built with {golang_ver}:')
-        #     for n in sorted(names):
-        #         print(n)
-        # else:
-        #     for golang_ver, names in golang_groups.items():
-        #         for n in sorted(names):
-        #             print(f'{n} {golang_ver}')
-        print(go_container_nvrs)
+        nvrs = util.get_golang_container_nvrs(nvrs, logger)
     else:
-        go_rpm_nvrs = util.get_golang_rpm_nvrs(nvrs, logger)
-        print(go_rpm_nvrs)
+        nvrs = util.get_golang_rpm_nvrs(nvrs, logger)
+    pretty_print(nvrs)
+
+
+def pretty_print(nvrs, group_after=5):
+    grouped = False
+    if len(nvrs) >= group_after:
+        grouped = True
+
+    go_groups = {}
+    for component in nvrs.keys():
+        go_version = nvrs[component]['go']
+        nvr = nvrs[component]['nvr']
+        if go_version not in go_groups:
+            go_groups[go_version] = []
+        go_groups[go_version].append(nvr)
+
+    for go_version in sorted(go_groups.keys()):
+        nvrs = go_groups[go_version]
+        if grouped:
+            green_print(f'Following nvrs are built with {go_version}:')
+        for nvr in sorted(nvrs):
+            pretty_nvr = ''.join(nvr)
+            if grouped:
+                print(pretty_nvr)
+            else:
+                print(f'{pretty_nvr} {go_version}')

@@ -557,7 +557,7 @@ def get_golang_container_nvrs(nvrs, logger):
     ])
     go_container_nvrs = {}
     for build in all_build_objs:
-        go_version = None
+        go_version = 'N/A'
         nvr = (build['name'], build['version'], build['release'])
         name = nvr[0]
         if 'golang-builder' in name:
@@ -589,20 +589,23 @@ def get_golang_container_nvrs(nvrs, logger):
 
 
 def golang_builder_version(nvr, logger):
+    go_version = 'N/A'
     try:
         build_log = brew.get_nvr_arch_log(*nvr)
     except BrewBuildException:
         logger.debug(f'Could not brew log for {nvr}')
-    try:
-        golang_version = get_golang_version_from_build_log(build_log)
-    except AttributeError:
-        logger.debug(f'Could not find Go version in build log for {nvr}')
-    return golang_version
+    else:
+        try:
+            go_version = get_golang_version_from_build_log(build_log)
+        except AttributeError:
+            logger.debug(f'Could not find Go version in build log for {nvr}')
+    return go_version
 
 
 def get_golang_rpm_nvrs(nvrs, logger):
     go_rpm_nvrs = {}
     for nvr in nvrs:
+        go_version = 'N/A'
         # what we build in brew as openshift
         # is called openshift-hyperkube in rhcos
         if nvr[0] == 'openshift-hyperkube':
@@ -613,13 +616,11 @@ def get_golang_rpm_nvrs(nvrs, logger):
             root_log = brew.get_nvr_root_log(*nvr)
         except BrewBuildException:
             logger.debug(f'Could not find brew log for {nvr}')
-            continue
-
-        try:
-            go_version = get_golang_version_from_build_log(root_log)
-        except AttributeError:
-            logger.debug(f'Could not find go version in root log for {nvr}')
-            continue
+        else:
+            try:
+                go_version = get_golang_version_from_build_log(root_log)
+            except AttributeError:
+                logger.debug(f'Could not find go version in root log for {nvr}')
 
         go_rpm_nvrs[nvr[0]] = {
             'nvr': nvr,
