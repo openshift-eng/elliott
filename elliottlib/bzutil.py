@@ -185,10 +185,10 @@ def add_release_comment(bug, major_version, minor_version, noop=False):
     :param minor_version: Minor release version, 6
     :param noop: Do not do anything
     """
-    if noop:
-        logger.info(f"Add comment info that this bug will ship in next {major_version}.{minor_version} release")
-        return
     comment = f"This bug will be shipped at next planned release date of {major_version}.{minor_version} if this is not a GA bug."
+    if noop:
+        logger.info(f"[DRY RUN] Would add comment: {comment}")
+        return
     bug.addcomment(comment=comment, private=True)
 
 
