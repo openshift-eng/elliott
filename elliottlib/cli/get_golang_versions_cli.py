@@ -76,12 +76,12 @@ def get_nvrs_golang(nvrs, logger):
         nvrs.extend(util.get_golang_rpm_nvrs(rpm_nvrs, logger))
     if container_nvrs:
         nvrs.extend(util.get_golang_container_nvrs(container_nvrs, logger))
-    pretty_print(nvrs)
+    util.pretty_print(nvrs)
 
 
 def get_advisory_golang(advisory_id, components, logger):
     nvrs = errata.get_all_advisory_nvrs(advisory_id)
-    logger.info(f'{len(nvrs)} builds found in advisory')
+    logger.debug(f'{len(nvrs)} builds found in advisory')
     if not nvrs:
         logger.debug('No builds found. exiting')
         return
@@ -96,29 +96,4 @@ def get_advisory_golang(advisory_id, components, logger):
         nvrs = util.get_golang_container_nvrs(nvrs, logger)
     else:
         nvrs = util.get_golang_rpm_nvrs(nvrs, logger)
-    pretty_print(nvrs)
-
-
-def pretty_print(nvrs, group_after=5):
-    grouped = False
-    if len(nvrs) >= group_after:
-        grouped = True
-
-    go_groups = {}
-    for component in nvrs.keys():
-        go_version = nvrs[component]['go']
-        nvr = nvrs[component]['nvr']
-        if go_version not in go_groups:
-            go_groups[go_version] = []
-        go_groups[go_version].append(nvr)
-
-    for go_version in sorted(go_groups.keys()):
-        nvrs = go_groups[go_version]
-        if grouped:
-            green_print(f'Following nvrs are built with {go_version}:')
-        for nvr in sorted(nvrs):
-            pretty_nvr = ''.join(nvr)
-            if grouped:
-                print(pretty_nvr)
-            else:
-                print(f'{pretty_nvr} {go_version}')
+    util.pretty_print(nvrs, group=True)

@@ -79,7 +79,7 @@ def get_build_from_payload(payload_pullspec):
     image_info = json.loads(out)
     build_id = image_info["config"]["config"]["Labels"]["version"]
     arch = image_info["config"]["config"]["Labels"]["architecture"]
-    return (build_id, arch)
+    return build_id, arch
 
 
 def get_rpm_nvrs(build_id, version, arch, private=''):

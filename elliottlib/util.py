@@ -314,7 +314,7 @@ def get_golang_version_from_build_log(log):
     # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang-(bin-|))[0-9]+.[0-9]+.[0-9]+[^ ]*' ./3.11/*.log | sed 's/:.*\([0-9]\+\.[0-9]\+\.[0-9]\+.*\)/: \1/'
     # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang.*module[^ ]*).*[0-9]+.[0-9]+.[0-9]+[^ ]*' ./4.5/*.log | sed 's/\:.*\([^a-z][0-9]\+\.[0-9]\+\.[0-9]\+[^ ]*\)/:\ \1/'
     m = re.search(r'(go-toolset-1\S+-golang\S+|golang-bin).*[0-9]+.[0-9]+.[0-9]+[^\s]*', log)
-    s = " ".join(m.group(0).split())
+    s = m.group(0).split()
     return s
 
 
@@ -624,9 +624,35 @@ def get_golang_rpm_nvrs(nvrs, logger):
 
         go_rpm_nvrs[nvr[0]] = {
             'nvr': nvr,
-            'go': go_version
+            'go': go_version[2]
         }
     return go_rpm_nvrs
+
+
+def pretty_print_nvrs_go(nvrs, group=False, ignore_na=False):
+    go_groups = {}
+    for component in nvrs.keys():
+        go_version = nvrs[component]['go']
+        nvr = nvrs[component]['nvr']
+        if go_version not in go_groups:
+            go_groups[go_version] = []
+        go_groups[go_version].append(nvr)
+
+    for go_version in sorted(go_groups.keys()):
+        nvrs = go_groups[go_version]
+        if go_version == 'N/A' and ignore_na:
+            continue
+        if group:
+            green_print(f'Following nvrs are built with {go_version}:')
+        else:
+            green_print('NVR | Go Version')
+
+        for nvr in sorted(nvrs):
+            pretty_nvr = '-'.join(nvr)
+            if group:
+                print(pretty_nvr)
+            else:
+                print(f'{pretty_nvr} | {go_version}')
 
 
 # some of our systems refer to golang's architecture nomenclature; translate between that and brew arches

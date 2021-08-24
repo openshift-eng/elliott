@@ -1,4 +1,5 @@
-import click, re
+import click
+import re
 from elliottlib.cli.common import cli
 from elliottlib import rhcos, cincinnati, util
 
@@ -56,21 +57,23 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
         version = f'{major}.{minor}'
     else:
         version = re.search(r'(\d+\.\d+).', release).groups()[0]
+        runtime.initialize(no_group=True)
 
+    logger = runtime.logger
     arch = 'x86_64' if not arch else arch
 
     if arch == 'all':
         for a in util.brew_arches:
-            _rhcos(version, release, latest, latest_ocp, packages, a, go)
+            _rhcos(version, release, latest, latest_ocp, packages, a, go, logger)
     else:
-        _rhcos(version, release, latest, latest_ocp, packages, arch, go)
+        _rhcos(version, release, latest, latest_ocp, packages, arch, go, logger)
 
 
 def get_pullspec(release, arch):
     return f'quay.io/openshift-release-dev/ocp-release:{release}-{arch}'
 
 
-def _rhcos(version, release, latest, latest_ocp, packages, arch, go):
+def _rhcos(version, release, latest, latest_ocp, packages, arch, go, logger):
     if arch == 'aarch64' and version < '4.9':
         return
 
@@ -78,11 +81,11 @@ def _rhcos(version, release, latest, latest_ocp, packages, arch, go):
     pullspec = ''
     if latest or latest_ocp:
         if latest:
-            print(f'Looking up latest rhcos build id for {version} {arch}')
+            logger.info(f'Looking up latest RHCOS Build for {version} {arch}')
             build_id = rhcos.latest_build_id(version, arch)
-            print(f'Build id found: {build_id}')
+            logger.info(f'Build found: {build_id}')
         else:
-            print(f'Looking up last ocp release for {version} {arch} in fast channel')
+            logger.info(f'Looking up last OCP Release for {version} {arch} in fast channel')
             release = cincinnati.get_latest_fast_ocp(version, arch)
             if not release:
                 return
@@ -91,15 +94,16 @@ def _rhcos(version, release, latest, latest_ocp, packages, arch, go):
         if '/' in release:
             pullspec = release
         else:
-            print(f'OCP release: {release}-{arch}')
+            logger.info(f'OCP Release: {release}-{arch}')
             pullspec = get_pullspec(release, arch)
 
     if pullspec:
-        print(f"Looking up rhcos build id for {pullspec}")
+        logger.info(f"Looking up RHCOS Build for {pullspec}")
         build_id, arch = rhcos.get_build_from_payload(pullspec)
-        print(f'Build id found: {build_id}')
+        logger.info(f'Build found: {build_id}')
 
     if build_id:
+        util.green_print(f'Build: {build_id} Arch: {arch}')
         nvrs = rhcos.get_rpm_nvrs(build_id, version, arch)
         if not nvrs:
             return
@@ -110,8 +114,8 @@ def _rhcos(version, release, latest, latest_ocp, packages, arch, go):
                 packages.append('openshift-hyperkube')
             nvrs = [p for p in nvrs if p[0] in packages]
         if go:
-            go_rpm_nvrs = util.get_golang_rpm_nvrs(nvrs)
-            print(go_rpm_nvrs)
+            go_rpm_nvrs = util.get_golang_rpm_nvrs(nvrs, logger)
+            util.pretty_print_nvrs_go(go_rpm_nvrs, ignore_na=True)
             return
-        for nvr in nvrs:
-            print('{}-{}-{}'.format(*nvr))
+        for nvr in sorted(nvrs):
+            print('-'.join(nvr))
