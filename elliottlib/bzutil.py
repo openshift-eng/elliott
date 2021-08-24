@@ -177,6 +177,21 @@ def set_state(bug, desired_state, noop=False):
                   private=True)
 
 
+def add_release_comment(bug, major_version, minor_version, noop=False):
+    """Give a rough idea of when a BZ is going out
+
+    :param bug
+    :param major_version: Major release version, 4
+    :param minor_version: Minor release version, 6
+    :param noop: Do not do anything
+    """
+    comment = f"This bug will be shipped at next planned release date of {major_version}.{minor_version} if this is not a GA bug."
+    if noop:
+        logger.info(f"[DRY RUN] Would add comment: {comment}")
+        return
+    bug.addcomment(comment=comment, private=True)
+
+
 def create_placeholder(bz_data, kind):
     """Create a placeholder bug
 
