@@ -269,9 +269,10 @@ def _find_shipped_builds(build_ids: List[Union[str, int]], brew_session: koji.Cl
     """
     shipped_ids = set()
     tag_lists = brew.get_builds_tags(build_ids, brew_session)
+    released_tag_pattern = re.compile(r"^RH[BSE]A-.+-released$")  # https://issues.redhat.com/browse/ART-3277
     for build_id, tags in zip(build_ids, tag_lists):
         # a shipped build with OCP Errata should have a Brew tag ending with `-released`, like `RHBA-2020:2713-released`
-        shipped = any(map(lambda tag: tag["name"].endswith("-released"), tags))
+        shipped = any(map(lambda tag: released_tag_pattern.match(tag["name"]), tags))
         if shipped:
             shipped_ids.add(build_id)
     return shipped_ids
