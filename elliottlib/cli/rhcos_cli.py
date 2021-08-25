@@ -24,7 +24,8 @@ from elliottlib import rhcos, cincinnati, util
 @click.pass_obj
 def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
     """
-    Show details about rhcos packages
+    Show details of packages contained in OCP RHCOS builds, for either
+    the latest RHCOS build or the machine-os-content included in a release image.
 
     Usage:
 
