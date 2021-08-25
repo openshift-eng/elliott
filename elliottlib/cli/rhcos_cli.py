@@ -17,7 +17,7 @@ from elliottlib import rhcos, cincinnati, util
               type=click.Choice(util.brew_arches + ['all']),
               help='Specify architecture. Default is x86_64. "all" to get all arches. aarch64 only works for 4.8+')
 @click.option('--packages', '-p', 'packages',
-              help='Show details only these packages. Comma separated package names')
+              help='Show details for only these package names (comma-separated)')
 @click.option('--go', '-g', 'go',
               is_flag=True,
               help='Show go version for packages that are go binaries')
