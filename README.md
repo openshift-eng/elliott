@@ -74,10 +74,11 @@ software and bug fixes
 
 ## Dependencies
 
-* [krb5-devel](https://apps.fedoraproject.org/packages/krb5-devel)
-* [python2-devel](https://apps.fedoraproject.org/packages/python2-devel)
-* [python2-rpm](https://apps.fedoraproject.org/packages/python2-rpm)
-* [redhat-rpm-config](https://apps.fedoraproject.org/packages/redhat-rpm-config)
+
+* [krb5-devel](https://pkgs.org/download/krb5-devel)
+* [python3-devel](https://pkgs.org/download/python3-devel)
+* [python3-rpm](https://pkgs.org/download/python3-rpm)
+* [redhat-rpm-config](https://pkgs.org/download/redhat-rpm-config)
 
 ## Authenticating
 

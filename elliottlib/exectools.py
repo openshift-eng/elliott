@@ -10,6 +10,7 @@ import json
 import shlex
 import subprocess
 import time
+import urllib
 
 from . import assertion, logutil, pushd
 
@@ -151,3 +152,16 @@ async def cmd_gather_async(cmd, text_mode=True):
         logger.debug(
             "Process {}: exited with: {}".format(cmd_info, rc))
         return rc, out, err
+
+
+def urlopen_assert(url_or_req, httpcode=200, retries=3):
+    """
+    Retries a URL pull several times before throwing a RetryException
+    :param url_or_req: The URL to open with urllib  or a customized urllib.request.Request
+    :param httpcode: The http numeric code indicating success
+    :param retries: The number of retries to permit
+    :return: The success result of urlopen (or a RetryException will be thrown)
+    """
+    return retry(retries, lambda: urllib.request.urlopen(url_or_req),
+                 check_f=lambda req: req.code == httpcode,
+                 wait_f=lambda x: time.sleep(30))

@@ -9,7 +9,7 @@ lint:
 	flake8
 
 test: lint
-	py.test --verbose --color=yes tests/
+	python -m pytest --verbose --color=yes tests/
 
 # run by CI
 tox:
