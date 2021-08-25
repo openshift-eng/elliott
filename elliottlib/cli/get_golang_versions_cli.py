@@ -96,4 +96,5 @@ def get_advisory_golang(advisory_id, components, logger):
         nvrs = util.get_golang_container_nvrs(nvrs, logger)
     else:
         nvrs = util.get_golang_rpm_nvrs(nvrs, logger)
-    util.pretty_print_nvrs_go(nvrs, group=True)
+
+    util.pretty_print_nvrs_go(nvrs, group=len(nvrs) > 5)
