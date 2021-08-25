@@ -638,15 +638,14 @@ def pretty_print_nvrs_go(nvrs, group=False, ignore_na=False):
             go_groups[go_version] = []
         go_groups[go_version].append(nvr)
 
+    if not group:
+        green_print('NVR | Go Version')
     for go_version in sorted(go_groups.keys()):
         nvrs = go_groups[go_version]
         if go_version == 'N/A' and ignore_na:
             continue
         if group:
             green_print(f'Following nvrs are built with {go_version}:')
-        else:
-            green_print('NVR | Go Version')
-
         for nvr in sorted(nvrs):
             pretty_nvr = '-'.join(nvr)
             if group:

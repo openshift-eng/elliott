@@ -76,7 +76,7 @@ def get_nvrs_golang(nvrs, logger):
         nvrs.extend(util.get_golang_rpm_nvrs(rpm_nvrs, logger))
     if container_nvrs:
         nvrs.extend(util.get_golang_container_nvrs(container_nvrs, logger))
-    util.pretty_print(nvrs)
+    util.pretty_print_nvrs_go(nvrs)
 
 
 def get_advisory_golang(advisory_id, components, logger):
@@ -96,4 +96,4 @@ def get_advisory_golang(advisory_id, components, logger):
         nvrs = util.get_golang_container_nvrs(nvrs, logger)
     else:
         nvrs = util.get_golang_rpm_nvrs(nvrs, logger)
-    util.pretty_print(nvrs, group=True)
+    util.pretty_print_nvrs_go(nvrs, group=True)
