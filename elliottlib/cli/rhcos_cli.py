@@ -4,7 +4,7 @@ from elliottlib.cli.common import cli
 from elliottlib import rhcos, cincinnati, util
 
 
-@cli.command("rhcos", short_help="Show details about RHCOS packages")
+@cli.command("rhcos", short_help="Show details of packages contained in OCP RHCOS builds")
 @click.option('--latest', '-l', 'latest',
               is_flag=True,
               help='Show details of latest RHCOS builds')
