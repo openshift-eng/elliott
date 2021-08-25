@@ -34,3 +34,28 @@ class TestGetGolangVersionsCli(unittest.TestCase):
             with_args(nvrs, logger).and_return(nvrs_with_go)
 
         get_golang_versions_cli.get_advisory_golang(advisory_id, "", logger)
+
+    def test_get_nvr_golang(self):
+        openshift = {'nvr': ('openshift', 'v1.15', 'el8'), 'go': '1.16'}
+        podman = {'nvr': ('podman-container', 'v1.4', 'el7'), 'go': '1.15'}
+        nvrs_list = ['-'.join(x['nvr']) for x in [openshift, podman]]
+        rpm_nvrs = [openshift['nvr']]
+        container_nvrs = [podman['nvr']]
+        rpm_nvrs_go = {'openshift': openshift}
+        container_nvrs_go = {'podman-container': podman}
+        rpm_container_nvrs_go = {
+            'openshift': openshift,
+            'podman-container': podman
+        }
+        logger = flexmock(debug=lambda x: print(x), info=lambda x: print(x))
+        flexmock(utillib). \
+            should_receive("get_golang_rpm_nvrs"). \
+            with_args(rpm_nvrs, logger).and_return(rpm_nvrs_go)
+        flexmock(utillib). \
+            should_receive("get_golang_container_nvrs"). \
+            with_args(container_nvrs, logger).and_return(container_nvrs_go)
+        flexmock(utillib). \
+            should_receive("pretty_print_nvrs_go"). \
+            with_args(rpm_container_nvrs_go)
+
+        get_golang_versions_cli.get_nvrs_golang(nvrs_list, logger)

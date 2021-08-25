@@ -1,6 +1,5 @@
 from elliottlib import errata, util
 from elliottlib.cli.common import cli
-from elliottlib.util import green_print
 from kobo.rpmlib import parse_nvr
 import click
 from elliottlib.cli.common import use_default_advisory_option, find_default_advisory
@@ -71,11 +70,11 @@ def get_nvrs_golang(nvrs, logger):
         else:
             rpm_nvrs.append(nvr_tuple)
 
-    nvrs = []
+    nvrs = {}
     if rpm_nvrs:
-        nvrs.extend(util.get_golang_rpm_nvrs(rpm_nvrs, logger))
+        nvrs.update(util.get_golang_rpm_nvrs(rpm_nvrs, logger))
     if container_nvrs:
-        nvrs.extend(util.get_golang_container_nvrs(container_nvrs, logger))
+        nvrs.update(util.get_golang_container_nvrs(container_nvrs, logger))
     util.pretty_print_nvrs_go(nvrs)
 
 
