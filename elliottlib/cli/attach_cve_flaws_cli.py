@@ -7,7 +7,7 @@ from elliottlib.cli.common import cli, use_default_advisory_option, find_default
 @cli.command('attach-cve-flaws',
              short_help='Attach corresponding flaw bugs for trackers in advisory (first-fix only)')
 @click.option('--advisory', '-a', 'advisory_id',
-              default=False,
+              type=int,
               help='Find tracker bugs in given advisory')
 @click.option("--noop", "--dry-run",
               required=False,
@@ -33,6 +33,8 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     1851422, 1866148, 1858981, 1852331, 1861044, 1857081, 1857977, 1848647,
     1849044, 1856529, 1843575, 1840253]
     """
+    if sum(map(bool, [advisory_id, default_advisory_type])) != 1:
+        raise click.BadParameter("Use one of --use-default-advisory or --advisory")
     runtime.initialize()
     bzurl = runtime.gitdata.bz_server_url()
     bzapi = bugzilla.Bugzilla(bzurl)

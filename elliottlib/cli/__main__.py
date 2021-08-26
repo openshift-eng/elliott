@@ -88,7 +88,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 #
 @cli.command("remove-bugs", short_help="Remove provided BUGS from ADVISORY")
 @click.option('--advisory', '-a', 'advisory',
-              default=False, metavar='ADVISORY',
+              type=int, metavar='ADVISORY',
               help='Remove found bugs from ADVISORY')
 @use_default_advisory_option
 @click.option("--id", metavar='BUGID', default=[],
@@ -126,7 +126,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id):
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    if advisory is not False:
+    if advisory:
         try:
             advs = Erratum(errata_id=advisory)
         except GSSError:
@@ -239,7 +239,7 @@ Fields for the short format: Release date, State, Synopsys, URL
 #
 @cli.command("repair-bugs", short_help="Move bugs attached to ADVISORY from one state to another")
 @click.option("--advisory", "-a",
-              metavar='ADVISORY',
+              type=int, metavar='ADVISORY',
               help="Repair bugs attached to ADVISORY.")
 @click.option("--auto",
               required=False,
@@ -577,7 +577,7 @@ written out to summary_results.json.
               default=15, type=int,
               help="How long to poll before quitting")
 @click.option("--advisory", "-a",
-              metavar='ADVISORY',
+              type=int, metavar='ADVISORY',
               help="Advisory to watch")
 @use_default_advisory_option
 @click.option("--noop", "--dry-run",
