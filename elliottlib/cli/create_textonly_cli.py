@@ -59,18 +59,29 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="Create the advisory (by default only a preview is displayed)")
 @pass_runtime
 @click.pass_context
-def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager,
-        package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes):
-
+def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes):
+    """
+    Create a text only advisory with all required input passed from args, need to manually decide the statement for each release.
+    Also will create the notification bug along with the text only advisory, the bug also need some special comment and title.
+    These args need to be designated manually for text only advisory:
+    - topic
+    - synopsis
+    - description
+    - solution
+    - assigned
+    These args need to be designated manually for text only bug:
+    - bugtitle
+    - bugdescription
+    """
 
     release_date = datetime.datetime.strptime(date, YMD)
 
-    #create textonly bug
+    # create textonly bug
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     newbug = elliottlib.bzutil.create_textonly(bz_data, bugtitle, bugdescription)
     click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
 
-    #create textonly advisory
+    # create textonly advisory
     et_data = runtime.gitdata.load_data(key='erratatool').data
     try:
         erratum = Erratum(
@@ -94,7 +105,7 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager,
     except elliottlib.exceptions.ErrataToolError as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
-    #erratum.addBugs(newbug.id)
+    # erratum.addBugs(newbug.id)
     if yes:
         erratum.commit()
         green_prefix("Created new text only advisory: ")

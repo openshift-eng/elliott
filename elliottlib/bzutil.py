@@ -239,7 +239,6 @@ def create_textonly(bz_data, bugtitle, bugdescription):
     :return: Text only Bug object
     """
 
-
     bzapi = get_bzapi(bz_data)
     version = bz_data['version'][0]
     target_release = bz_data['target_release'][0]
