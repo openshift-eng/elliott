@@ -229,6 +229,42 @@ def create_placeholder(bz_data, kind):
     return newbug
 
 
+def create_textonly(bz_data, bugtitle, bugdescription):
+    """Create a text only bug
+
+    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
+    :param bugtitle: The title of the bug to create
+    :param bugdescription: The description of the bug to create
+
+    :return: Text only Bug object
+    """
+
+
+    bzapi = get_bzapi(bz_data)
+    version = bz_data['version'][0]
+    target_release = bz_data['target_release'][0]
+
+    createinfo = bzapi.build_createbug(
+        product=bz_data['product'],
+        version=version,
+        component="Release",
+        summary=bugtitle,
+        description=bugdescription)
+
+    newbug = bzapi.createbug(createinfo)
+
+    # change state to VERIFIED, set target release
+    try:
+        update = bzapi.build_update(status="VERIFIED", target_release=target_release)
+        bzapi.update_bugs([newbug.id], update)
+    except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
+        sleep(5)
+        bzapi.update_bugs([newbug.id], update)
+        print(ex)
+
+    return newbug
+
+
 def search_for_bugs(bz_data, status, search_filter='default', flag=None, filter_out_security_bugs=True, verbose=False):
     """Search the provided target_release's for bugs in the specified states
 
