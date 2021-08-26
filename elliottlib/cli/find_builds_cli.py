@@ -36,7 +36,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @cli.command('find-builds', short_help='Find or attach builds to ADVISORY')
 @click.option(
     '--attach', '-a', 'advisory',
-    default=False, metavar='ADVISORY',
+    type=int, metavar='ADVISORY',
     help='Attach the builds to ADVISORY (by default only a list of builds are displayed)')
 @use_default_advisory_option
 @click.option(
