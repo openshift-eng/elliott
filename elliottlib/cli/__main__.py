@@ -63,6 +63,7 @@ from elliottlib.cli.attach_cve_flaws_cli import attach_cve_flaws_cli
 from elliottlib.cli.get_golang_versions_cli import get_golang_versions_cli
 from elliottlib.cli.validate_rhsa import validate_rhsa_cli
 from elliottlib.cli.rhcos_cli import rhcos_cli
+from elliottlib.cli.create_textonly_cli import create_textonly_cli
 
 # 3rd party
 import bugzilla
@@ -701,6 +702,7 @@ cli.add_command(advisory_drop_cli)
 cli.add_command(verify_attached_operators_cli)
 cli.add_command(verify_attached_bugs_cli)
 cli.add_command(attach_cve_flaws_cli)
+cli.add_command(create_textonly_cli)
 
 
 # -----------------------------------------------------------------------------
