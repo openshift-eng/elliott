@@ -99,8 +99,10 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
             bug_id=newbug.id,
             text_only=1,
         )
+    except elliottlib.exceptions.ErrataToolUnauthorizedException:
+        exit_unauthorized()
     except elliottlib.exceptions.ErrataToolError as ex:
-        raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
+        raise repr(ex)
 
     if yes:
         erratum.commit()
