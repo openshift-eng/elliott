@@ -64,6 +64,7 @@ from elliottlib.cli.get_golang_versions_cli import get_golang_versions_cli
 from elliottlib.cli.validate_rhsa import validate_rhsa_cli
 from elliottlib.cli.rhcos_cli import rhcos_cli
 from elliottlib.cli.create_textonly_cli import create_textonly_cli
+from elliottlib.cli.advisory_commons_cli import advisory_commons_cli
 
 # 3rd party
 import bugzilla
