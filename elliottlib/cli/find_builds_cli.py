@@ -145,10 +145,10 @@ PRESENT advisory. Here are some examples:
 
     # get the builds we want to add
     unshipped_nvrps = []
-    brew_session = runtime.build_retrying_koji_client()
+    brew_session = runtime.build_retrying_koji_client(caching=True)
     if builds:
         green_prefix('Fetching builds...')
-        unshipped_nvrps = _fetch_nvrps_by_nvr_or_id(builds, tag_pv_map, ignore_product_version=remove)
+        unshipped_nvrps = _fetch_nvrps_by_nvr_or_id(builds, tag_pv_map, ignore_product_version=remove, brew_session=brew_session)
     elif clean:
         unshipped_builds = errata.get_brew_builds(advisory)
     elif from_diff:
@@ -176,7 +176,7 @@ PRESENT advisory. Here are some examples:
             unshipped_nvrps,
             lambda nvrp: elliottlib.errata.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
         )
-        if not (allow_attached or builds):
+        if not allow_attached:
             unshipped_builds = _filter_out_inviable_builds(kind, unshipped_builds, elliottlib.errata)
 
         _json_dump(as_json, unshipped_builds, kind, tag_pv_map)
@@ -212,20 +212,22 @@ PRESENT advisory. Here are some examples:
             click.echo(' ' + b.nvr)
 
 
-def _fetch_nvrps_by_nvr_or_id(ids_or_nvrs, tag_pv_map, ignore_product_version=False):
+def _fetch_nvrps_by_nvr_or_id(ids_or_nvrs, tag_pv_map, ignore_product_version=False, brew_session: koji.ClientSession = None):
     session = koji.ClientSession(constants.BREW_HUB)
     builds = brew.get_build_objects(ids_or_nvrs, session)
     nonexistent_builds = list(filter(lambda b: b[1] is None, zip(ids_or_nvrs, builds)))
     if nonexistent_builds:
         raise ValueError(f"The following builds are not found in Brew: {' '.join(map(lambda b: b[0],nonexistent_builds))}")
+    _ensure_accepted_tags(builds, session, tag_pv_map)
+    shipped = _find_shipped_builds([b["id"] for b in builds], session)
+    unshipped = [b for b in builds if b["id"] not in shipped]
     nvrps = []
     if ignore_product_version:
-        for build in builds:
+        for build in unshipped:
             nvrps.append((build["name"], build["version"], build["release"], None))
         return nvrps
-    for build, tags in zip(builds, brew.get_builds_tags(builds, session)):
-        tag_names = {tag["name"] for tag in tags}
-        product_versions = [pv for tag, pv in tag_pv_map.items() if tag in tag_names]
+    for build in unshipped:
+        product_versions = {pv for tag, pv in tag_pv_map.items() if tag in build["_tags"]}
         if not product_versions:
             raise ValueError(f"Build {build['nvr']} doesn't have any of the following whitelisted tags: {list(tag_pv_map.keys())}")
         for pv in product_versions:
@@ -297,11 +299,11 @@ def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
         LOGGER.info("Getting latest build for %s...", image.distgit_key)
         brew_latest_builds.append(image.get_latest_build(brew_session))
 
+    _ensure_accepted_tags(brew_latest_builds, brew_session, tag_pv_map)
+
     shipped = _find_shipped_builds([b["id"] for b in brew_latest_builds], brew_session)
     unshipped = [b for b in brew_latest_builds if b["id"] not in shipped]
     click.echo(f'Found {len(shipped)+len(unshipped)} builds, of which {len(unshipped)} are new.')
-
-    _ensure_accepted_tags(unshipped, brew_session, tag_pv_map)
     nvrps = _gen_nvrp_tuples(unshipped, tag_pv_map)
     return nvrps
 
