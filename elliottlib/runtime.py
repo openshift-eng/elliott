@@ -365,10 +365,12 @@ class Runtime(object):
 
         return self.releases_config
 
-    def build_retrying_koji_client(self):
+    def build_retrying_koji_client(self, caching: bool = False):
         """
         :return: Returns a new koji client instance that will automatically retry
         methods when it receives common exceptions (e.g. Connection Reset)
         Honors doozer --brew-event.
         """
-        return brew.KojiWrapper([self.group_config.urls.brewhub or constants.BREW_HUB], brew_event=self.brew_event)
+        session = brew.KojiWrapper([self.group_config.urls.brewhub or constants.BREW_HUB], brew_event=self.brew_event)
+        session.force_instance_caching = caching
+        return session

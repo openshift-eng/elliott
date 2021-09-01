@@ -10,7 +10,7 @@ import ssl
 import threading
 import time
 from enum import Enum
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, BinaryIO
 
 # 3rd party
 import koji
@@ -415,13 +415,19 @@ class KojiWrapper(koji.ClientSession):
           will return the cached value.
     """
 
-    koji_wrapper_lock = threading.Lock()
-    koji_call_counter = 0  # Increments atomically to help search logs for koji api calls
-    # Used by the KojiWrapper to cache API calls, when a call's args include a KojiWrapperOpts with caching=True.
-    # The key is either None or a brew event id to which queries are locked. The value is another dict whose
-    # key is a string respresentation of the method to be invoked and the value is the cached value returned
-    # from the server.
-    koji_wrapper_result_cache = {}
+    """
+    If caching should be enabled for all uses of this class. This is generally
+    not recommended unless you are trying to record API calls for testing purposes.
+    """
+    force_global_caching: bool = False
+
+    _koji_wrapper_lock = threading.Lock()
+    _koji_call_counter = 0  # Increments atomically to help search logs for koji api calls
+
+    # Used by the KojiWrapper to cache API calls, when force_global_caching or a call's args include a KojiWrapperOpts with caching=True.
+    # The key is a string a representation of the method (and all arguments) to be invoked and the value is the cached value returned
+    # from the server. This cache is shared among all instances of the wrapper.
+    _koji_wrapper_result_cache = {}
 
     # A list of methods which support receiving an event kwarg. See --brew-event CLI argument.
     methods_with_event = set([
@@ -460,6 +466,7 @@ class KojiWrapper(koji.ClientSession):
         'listArchives',
         'listRPMs',
         'getPackage',
+        'getPackageID',
         'listTags',
         'gssapi_login',
         'sslLogin',
@@ -540,53 +547,63 @@ class KojiWrapper(koji.ClientSession):
         'uploadFile',
     ])
 
-    def __init__(self, koji_session_args, brew_event=None):
+    def __init__(self, koji_session_args, brew_event=None, force_instance_caching=False):
         """
         See class description on what this wrapper provides.
         :param koji_session_args: list to pass as *args to koji.ClientSession superclass
         :param brew_event: If specified, all koji queries (that support event=...) will be called with this
                 event. This allows you to lock all calls to this client in time. Make sure the method is in
                 KojiWrapper.methods_with_event if it is a new koji method (added after 2020-9-22).
+        :param force_instance_caching: Caching normally occurs based on individual koji calls. Setting this value to
+                True will override those api level choices - causing every API call to be cached for this
+                instance (see KojiWrapper.force_global_caching to do this for all instances).
         """
         self.___brew_event = None if not brew_event else int(brew_event)
         super(KojiWrapper, self).__init__(*koji_session_args)
+        self.force_instance_caching = force_instance_caching
+        self._gss_logged_in: bool = False  # Tracks whether this instance has authenticated
         self.___before_timestamp = None
         if brew_event:
             self.___before_timestamp = self.getEvent(self.___brew_event)['ts']
 
     @classmethod
     def clear_global_cache(cls):
-        with cls.koji_wrapper_lock:
-            cls.koji_wrapper_result_cache.clear()
+        with cls._koji_wrapper_lock:
+            cls._koji_wrapper_result_cache.clear()
 
     @classmethod
     def get_cache_size(cls):
-        with cls.koji_wrapper_lock:
-            return total_size(cls.koji_wrapper_result_cache)
+        with cls._koji_wrapper_lock:
+            return total_size(cls._koji_wrapper_result_cache)
 
     @classmethod
     def get_next_call_id(cls):
-        global koji_call_counter, koji_wrapper_lock
-        with cls.koji_wrapper_lock:
-            cid = cls.koji_call_counter
-            cls.koji_call_counter = cls.koji_call_counter + 1
+        with cls._koji_wrapper_lock:
+            cid = cls._koji_call_counter
+            cls._koji_call_counter = cls._koji_call_counter + 1
             return cid
+
+    @classmethod
+    def save_cache(cls, output_filelike: BinaryIO):
+        with KojiWrapper._koji_wrapper_lock:
+            json.dump(KojiWrapper._koji_wrapper_result_cache, output_filelike, indent=2)
+
+    @classmethod
+    def load_cache(cls, input_filelike: BinaryIO):
+        with KojiWrapper._koji_wrapper_lock:
+            KojiWrapper._koji_wrapper_result_cache = json.load(input_filelike)
 
     def _get_cache_bucket_unsafe(self):
         """Call while holding lock!"""
-        cache_bucket = KojiWrapper.koji_wrapper_result_cache.get(self.___brew_event, None)
-        if cache_bucket is None:
-            cache_bucket = {}
-            KojiWrapper.koji_wrapper_result_cache[self.___brew_event] = cache_bucket
-        return cache_bucket
+        return KojiWrapper._koji_wrapper_result_cache
 
     def _cache_result(self, api_repr, result):
-        with KojiWrapper.koji_wrapper_lock:
+        with KojiWrapper._koji_wrapper_lock:
             cache_bucket = self._get_cache_bucket_unsafe()
             cache_bucket[api_repr] = result
 
     def _get_cache_result(self, api_repr, return_on_miss):
-        with KojiWrapper.koji_wrapper_lock:
+        with KojiWrapper._koji_wrapper_lock:
             cache_bucket = self._get_cache_bucket_unsafe()
             return cache_bucket.get(api_repr, return_on_miss)
 
@@ -674,7 +691,7 @@ class KojiWrapper(koji.ClientSession):
         :return: The value returned from the koji API call.
         """
 
-        aggregate_kw_opts: KojiWrapperOpts = KojiWrapperOpts()
+        aggregate_kw_opts: KojiWrapperOpts = KojiWrapperOpts(caching=(KojiWrapper.force_global_caching or self.force_instance_caching))
 
         if name == 'multiCall':
             # If this is a multiCall, we need to search through and modify each bundled invocation
@@ -734,7 +751,7 @@ class KojiWrapper(koji.ClientSession):
 
                 caching_key = None
                 if use_caching:
-                    # We need a reproducible immutable key from a dict with nest dicts. json.dumps
+                    # We need a reproducible immutable key from a dict with nested dicts. json.dumps
                     # and sorting keys is a deterministic way of achieving this.
                     caching_key = json.dumps({
                         'method_name': name,
@@ -758,8 +775,17 @@ class KojiWrapper(koji.ClientSession):
                 return package_result(result, False)
             except requests.exceptions.ConnectionError as ce:
                 if logger:
-                    logger.warning(f'koji-api-call-{my_id}: {method_name}(...) failed="{ce}""; retries remaining {retries - 1}')
+                    logger.warning(f'koji-api-call-{my_id}: {name}(...) failed="{ce}""; retries remaining {retries - 1}')
                 time.sleep(5)
                 retries -= 1
                 if retries == 0:
                     raise
+
+    def gssapi_login(self, principal=None, keytab=None, ccache=None, proxyuser=None):
+        # Prevent redundant logins for shared sessions.
+        if self._gss_logged_in:
+            if logger:
+                logger.warning('Attempted to login to already logged in KojiWrapper instance')
+            return True
+        self._gss_logged_in = super().gssapi_login(principal=principal, keytab=keytab, ccache=ccache, proxyuser=proxyuser)
+        return self._gss_logged_in
