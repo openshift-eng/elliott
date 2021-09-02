@@ -72,8 +72,8 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     - bugtitle
     - bugdescription
     """
-
-    release_date = datetime.datetime.strptime(date, YMD)
+    
+    runtime.initialize()
 
     # create textonly bug
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
@@ -95,8 +95,7 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
             errata_type=errata_type,
             owner_email=package_owner,
             manager_email=manager,
-            date=release_date,
-            bug_id=newbug.id,
+            date=date,
             text_only=1,
         )
     except elliottlib.exceptions.ErrataToolUnauthorizedException:
@@ -104,6 +103,7 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     except elliottlib.exceptions.ErrataToolError as ex:
         raise repr(ex)
 
+    erratum.addBugs(newbug.id)
     if yes:
         erratum.commit()
         green_prefix("Created new text only advisory: ")
