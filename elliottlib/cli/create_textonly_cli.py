@@ -104,6 +104,10 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
         raise repr(ex)
 
     erratum.addBugs(newbug.id)
+    cdn_repos = et_data.get('cdn_repos')
+    if cdn_repos:
+        click.echo(f"Configuring CDN repos {', '.join(cdn_repos)}...")
+        erratum.textOnlyRepos(enable=cdn_repos)
     if yes:
         erratum.commit()
         green_prefix("Created new text only advisory: ")
