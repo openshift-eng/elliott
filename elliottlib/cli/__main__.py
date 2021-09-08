@@ -363,7 +363,7 @@ providing an advisory with the -a/--advisory option.
             changed_bug_count += 1
             elliottlib.bzutil.set_state(bug, new_state, noop=noop)
 
-    green_print("{} bugs successfullly modified (or would have been)".format(changed_bug_count))
+    green_print("{} bugs successfully modified (or would have been)".format(changed_bug_count))
 
 
 #

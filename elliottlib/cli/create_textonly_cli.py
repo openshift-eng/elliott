@@ -72,7 +72,7 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     - bugtitle
     - bugdescription
     """
-    
+
     runtime.initialize()
 
     # create textonly bug

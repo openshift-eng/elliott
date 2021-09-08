@@ -158,38 +158,26 @@ def get_flaw_aliases(flaws):
     return flaw_cve_map
 
 
-def set_state(bug, desired_state, noop=False):
+def set_state(bug, desired_state, noop=False, comment_for_release=None):
     """Change the state of a bug to desired_state
 
     :param bug:
     :param desired_state: Target state
     :param noop: Do not do anything
+    :param comment_for_release: If set (e.g. "4.9") then comment on expected release.
     """
     current_state = bug.status
+    comment = f'Elliott changed bug status from {current_state} to {desired_state}.'
+    if comment_for_release:
+        comment += f"\nThis bug is expected to ship in the next {comment_for_release} release created."
     if noop:
-        logger.info(f"Would have changed BZ#{bug.bug_id} from {current_state} to {desired_state}")
+        logger.info(f"Would have changed BZ#{bug.bug_id} from {current_state} to {desired_state} with comment:\n{comment}")
         return
 
     logger.info(f"Changing BZ#{bug.bug_id} from {current_state} to {desired_state}")
-    comment = f'Elliott changed bug status from {current_state} to {desired_state}.'
     bug.setstatus(status=desired_state,
                   comment=comment,
                   private=True)
-
-
-def add_release_comment(bug, major_version, minor_version, noop=False):
-    """Give a rough idea of when a BZ is going out
-
-    :param bug
-    :param major_version: Major release version, 4
-    :param minor_version: Minor release version, 6
-    :param noop: Do not do anything
-    """
-    comment = f"This bug will be shipped at next planned release date of {major_version}.{minor_version} if this is not a GA bug."
-    if noop:
-        logger.info(f"[DRY RUN] Would add comment: {comment}")
-        return
-    bug.addcomment(comment=comment, private=True)
 
 
 def create_placeholder(bz_data, kind):

@@ -262,8 +262,7 @@ advisory with the --add option.
 
     if mode == 'qe':
         for bug in bugs:
-            bzutil.set_state(bug, 'ON_QA', noop=noop)
-            bzutil.add_release_comment(bug, major_version, minor_version, noop=noop)
+            bzutil.set_state(bug, 'ON_QA', noop=noop, comment_for_release=f"{major_version}.{minor_version}")
 
     if len(flag) > 0:
         add_flags(bugs=bugs, flags=flag, noop=noop)
