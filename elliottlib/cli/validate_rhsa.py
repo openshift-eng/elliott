@@ -1,6 +1,9 @@
 from elliottlib import brew, constants, errata, Runtime
 from elliottlib.cli.common import cli
+from elliottlib.util import exit_unauthenticated
 
+from errata_tool import Erratum
+from kerberos import GSSError
 import click
 import json
 import koji
@@ -20,6 +23,14 @@ def validate_rhsa_cli(runtime, advisory):
 \b
     $ elliott validate-rhsa ID
 """
+
+    try:
+        if Erratum(errata_id=advisory).errata_type != 'RHSA':
+            print(f"Advisory {advisory} is not an RHSA. Nothing to check.")
+            exit(0)
+    except GSSError:
+        exit_unauthenticated()
+
     session = requests.Session()
     url = constants.SFM2_ERRATA_ALERTS_URL.format(id=advisory)
     print(url)
