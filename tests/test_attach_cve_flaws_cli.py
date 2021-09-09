@@ -64,7 +64,7 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
             should_receive("add_bugs"). \
             and_return(None)
 
-        result = runner.invoke(cli, ['--group=openshift-17.44', 'attach-cve-flaws', '-a', 'foobar'])
+        result = runner.invoke(cli, ['--group=openshift-17.44', 'attach-cve-flaws', '-a', '123'])
         expected_output = '''found 1 tracker bugs attached to the advisory: [123]
 current_target_release: 4.8.z
 found 2 corresponding flaw bugs: [1, 2]
