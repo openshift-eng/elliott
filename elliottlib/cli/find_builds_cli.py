@@ -1,27 +1,26 @@
-from __future__ import absolute_import, print_function, unicode_literals
-from elliottlib.assembly import assembly_metadata_config, assembly_rhcos_config
-from elliottlib.imagecfg import ImageMetadata
-from elliottlib.build_finder import BuildFinder
-
 import json
-from typing import Dict, List, Optional, Set, Union
+import re
+from typing import Dict, List, Set, Union
 
 import click
 import koji
 import requests
 from errata_tool import Erratum
 from kerberos import GSSError
-import re
 
 import elliottlib
 from elliottlib import Runtime, brew, constants, errata, logutil
+from elliottlib.assembly import assembly_metadata_config, assembly_rhcos_config
+from elliottlib.build_finder import BuildFinder
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.exceptions import ElliottFatalError
+from elliottlib.imagecfg import ImageMetadata
 from elliottlib.util import (ensure_erratatool_auth, exit_unauthenticated,
-                             get_release_version, green_prefix, green_print, isolate_el_version_in_brew_tag,
+                             get_release_version, green_prefix, green_print,
+                             isolate_el_version_in_brew_tag,
                              parallel_results_with_progress, pbar_header,
-                             progress_func, red_print, to_nvre, yellow_print)
+                             red_print, yellow_print)
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -308,7 +307,7 @@ def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
     return nvrps
 
 
-def _ensure_accepted_tags(builds: List[Dict], brew_session: koji.ClientSession, tag_pv_map: Dict[str, str]):
+def _ensure_accepted_tags(builds: List[Dict], brew_session: koji.ClientSession, tag_pv_map: Dict[str, str], raise_exception: bool = True):
     """
     Build dicts returned by koji.listTagged API have their tag names, however other APIs don't set that field.
     Tag names are required because they are associated with Errata product versions.
@@ -323,7 +322,12 @@ def _ensure_accepted_tags(builds: List[Dict], brew_session: koji.ClientSession, 
     for build in builds:
         accepted_tag = next(filter(lambda tag: tag in tag_pv_map, build["_tags"]), None)
         if not accepted_tag:
-            raise IOError(f"Build {build['nvr']} has Brew tags {build['_tags']}, but none of them has an associated Errata product version.")
+            msg = f"Build {build['nvr']} has Brew tags {build['_tags']}, but none of them has an associated Errata product version."
+            if raise_exception:
+                raise IOError(msg)
+            else:
+                LOGGER.warning(msg)
+                continue
         build["tag_name"] = accepted_tag
 
 
@@ -346,15 +350,10 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
     green_prefix('Generating list of rpms: ')
     click.echo('Hold on a moment, fetching Brew builds')
 
-    qualified_builds: Set[int, Dict] = {}  # keys are build ids, values are brew build dicts
-    attachable_components = set()  # a set of RPM component names; "attachable" means the component is whitelisted to attach to OCP advisories.
-    not_attachable_nvrs: Set[str] = set()
-
     builder = BuildFinder(brew_session, logger=LOGGER)
     for tag in tag_pv_map:
         # keys are rpm component names, values are nvres
         component_builds: Dict[str, Dict] = builder.from_tag("rpm", tag, inherit=False, assembly=assembly, event=runtime.brew_event)
-        attachable_components |= component_builds.keys()  # components from our tag are always attachable
 
         if runtime.assembly_basis_event:
             # If an assembly has a basis event, rpms pinned by "is" and group dependencies should take precedence over every build from the tag
@@ -364,12 +363,13 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
 
             # Honors pinned NVRs by "is"
             pinned_by_is = builder.from_pinned_by_is(el_version, runtime.assembly, runtime.get_releases_config(), runtime.rpm_map)
+            _ensure_accepted_tags(pinned_by_is.values(), brew_session, tag_pv_map)
 
             # Builds pinned by "is" should take precedence over every build from tag
             for component, pinned_build in pinned_by_is.items():
                 if component in component_builds and pinned_build["id"] != component_builds[component]["id"]:
                     LOGGER.warning("Swapping stream nvr %s for pinned nvr %s...", component_builds[component]["nvr"], pinned_build["nvr"])
-            attachable_components |= pinned_by_is.keys()  # ART-managed rpms are always attachable
+
             component_builds.update(pinned_by_is)  # pinned rpms take precedence over those from tags
 
             # Honors group dependencies
@@ -380,11 +380,9 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
                     LOGGER.warning("Swapping stream nvr %s for group dependency nvr %s...", component_builds[component]["nvr"], dep_build["nvr"])
             component_builds.update(group_deps)
 
-        for component, build in component_builds.items():
-            if component not in attachable_components:
-                not_attachable_nvrs.add(build["nvr"])
-            elif build["id"] not in qualified_builds:
-                qualified_builds[build["id"]] = build
+    _ensure_accepted_tags(component_builds.values(), brew_session, tag_pv_map, raise_exception=False)
+    qualified_builds = [b for b in component_builds.values() if "tag_name" in b]
+    not_attachable_nvrs = [b["nvr"] for b in component_builds.values() if "tag_name" not in b]
 
     if not_attachable_nvrs:
         yellow_print(f"The following NVRs will not be swept because they don't have allowed tags {list(tag_pv_map.keys())}:")
@@ -392,10 +390,9 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
             yellow_print(f"\t{nvr}")
 
     click.echo("Filtering out shipped builds...")
-    shipped = _find_shipped_builds([b["id"] for b in qualified_builds.values()], brew_session)
-    unshipped = [b for b in qualified_builds.values() if b["id"] not in shipped]
+    shipped = _find_shipped_builds([b["id"] for b in qualified_builds], brew_session)
+    unshipped = [b for b in qualified_builds if b["id"] not in shipped]
     click.echo(f'Found {len(shipped)+len(unshipped)} builds, of which {len(unshipped)} are new.')
-    _ensure_accepted_tags(unshipped, brew_session, tag_pv_map)
     nvrps = _gen_nvrp_tuples(unshipped, tag_pv_map)
     return nvrps
 
