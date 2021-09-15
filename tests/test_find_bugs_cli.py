@@ -52,7 +52,8 @@ class TestFindBugsCli(unittest.TestCase):
         expected_output = ''
         self.assertEqual('', result.exception)
         self.assertEqual(expected_output, result.stdout)
-        #self.assertEqual(0, result.exit_code)
+        # self.assertEqual(0, result.exit_code)
+
 
 class TestExtrasBugs(unittest.TestCase):
     def test_payload_bug(self):
