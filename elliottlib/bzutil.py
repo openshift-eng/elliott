@@ -407,6 +407,7 @@ def _perform_query(bzapi, query_url, include_fields=None):
 
     query = bzapi.url_to_query(str(query_url))
     query["include_fields"] = include_fields
+    query["limit"] = 0
 
     return bzapi.query(query)
 
