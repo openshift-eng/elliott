@@ -1,14 +1,10 @@
 import datetime
-from subprocess import run
-from elliottlib.assembly import assembly_issues_config
+import click
 import re
 from datetime import datetime
 from typing import List, Set
-
-import click
-import koji
 from bugzilla import bug as bug_module
-
+from elliottlib.assembly import assembly_issues_config
 from elliottlib import (Runtime, bzutil, constants, errata, logutil,
                         openshiftclient)
 from elliottlib.cli import cli_opts
@@ -16,8 +12,6 @@ from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print
-
-pass_runtime = click.make_pass_decorator(Runtime)
 
 
 @cli.command("find-bugs", short_help="Find or add MODIFED/VERIFIED bugs to ADVISORY")
@@ -74,7 +68,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
               is_flag=True,
               default=False,
               help="Don't change anything")
-@pass_runtime
+@click.pass_obj
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id, cve_trackers, from_diff,
                   flag, report, into_default_advisories, brew_event, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
@@ -176,10 +170,9 @@ advisory with the --add option.
                                  "`--use-default-advisory`, `--add`, or `--into-default-advisories`")
 
     runtime.initialize(mode="both")
-    bz_data = runtime.gitdata.load_data(key='bugzilla').data
+    bz_data = runtime.gitdata.bz().data
     bzapi = bzutil.get_bzapi(bz_data)
 
-    # filter out bugs ART does not manage
     m = re.match(r"rhaos-(\d+).(\d+)",
                  runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
     if not m:

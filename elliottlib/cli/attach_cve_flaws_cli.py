@@ -1,4 +1,5 @@
-import bugzilla, click, re
+import bugzilla
+import click
 from errata_tool import Erratum
 from elliottlib import util, attach_cve_flaws, errata
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
