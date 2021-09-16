@@ -402,14 +402,21 @@ def _construct_query_url(bz_data, status, search_filter='default', flag=None):
 
 
 def _perform_query(bzapi, query_url, include_fields=None):
+    BZ_PAGE_SIZE = 1000
     if include_fields is None:
         include_fields = ['id']
 
     query = bzapi.url_to_query(str(query_url))
     query["include_fields"] = include_fields
-    query["limit"] = 0
+    query["limit"] = BZ_PAGE_SIZE
+    query["offset"] = 0
+    results = []
+    while len(partial := bzapi.query(query)) == BZ_PAGE_SIZE:
+        results += partial
+        query["offset"] += BZ_PAGE_SIZE
+    results += partial
 
-    return bzapi.query(query)
+    return results
 
 
 class SearchFilter(object):
