@@ -6,6 +6,7 @@ import elliottlib
 from elliottlib.cli.common import cli
 from elliottlib.cli.add_metadata_cli import add_metadata_cli
 from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
+from elliottlib.exectools import cmd_assert
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import YMD, default_release_date, validate_release_date, \
     validate_email_address, major_from_branch, minor_from_branch, \
@@ -50,6 +51,9 @@ LOGGER = elliottlib.logutil.getLogger(__name__)
 @click.option('--with-placeholder', is_flag=True,
               default=False, type=bool,
               help="Create a placeholder bug and attach it to the advisory. Only valid if also using --yes.")
+@click.option('--with-liveid', is_flag=True,
+              default=True, type=bool,
+              help="Request a Live ID for the advisory. Only valid if also using --yes.")
 @click.option('--yes', '-y', is_flag=True,
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
@@ -57,7 +61,7 @@ LOGGER = elliottlib.logutil.getLogger(__name__)
               help="Bug IDs for attaching to the advisory on creation. Required for creating a security advisory.")
 @pass_runtime
 @click.pass_context
-def create_cli(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, with_placeholder, yes, bugs):
+def create_cli(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, with_placeholder, with_liveid, yes, bugs):
     """Create a new advisory. The kind of advisory must be specified with
 '--kind'. Valid choices are 'rpm' and 'image'.
 
@@ -185,6 +189,16 @@ advisory.
         if with_placeholder:
             click.echo("Creating and attaching placeholder bug...")
             ctx.invoke(create_placeholder_cli, kind=kind, advisory=erratum.errata_id)
+
+        if with_liveid:
+            click.echo("Requesting Live ID...")
+            base_url = "https://errata.devel.redhat.com/errata/set_live_advisory_name"
+            cmd_assert(
+                f"curl -X POST --fail --negotiate -u : {base_url}/{erratum.errata_id}",
+                retries=3,
+                pollrate=10,
+            )
+
     else:
         green_prefix("Would have created advisory: ")
         click.echo("")
