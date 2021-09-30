@@ -1,4 +1,4 @@
-import bugzilla, click, re
+import bugzilla, click
 from errata_tool import Erratum
 from elliottlib import util, attach_cve_flaws
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
@@ -62,7 +62,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     corresponding_flaw_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
         bzapi,
         attached_tracker_bugs,
-        fields=["depends_on", "alias", "severity"]
+        fields=["depends_on", "alias", "severity", "summary"]
     )
     runtime.logger.info('found {} corresponding flaw bugs: {}'.format(
         len(corresponding_flaw_bugs), sorted(bug.id for bug in corresponding_flaw_bugs)
@@ -108,7 +108,7 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     return advisory.commit()
 
 
-def get_updated_advisory_rhsa(logger, cve_boilerplate, advisory, flaw_bugs):
+def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, flaw_bugs: list):
     """Given an advisory object, get updated advisory to RHSA
 
     :param logger: logger object from runtime
@@ -123,7 +123,6 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate, advisory, flaw_bugs):
             errata_type='RHSA',
             security_reviewer=cve_boilerplate['security_reviewer'],
             synopsis=cve_boilerplate['synopsis'],
-            description=cve_boilerplate['description'],
             topic=cve_boilerplate['topic'].format(IMPACT="Low"),
             solution=cve_boilerplate['solution'],
             security_impact='Low',
@@ -150,5 +149,11 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate, advisory, flaw_bugs):
         topic = cve_boilerplate['topic'].format(IMPACT=highest_impact)
         logger.info('Topic updated to include impact of {}'.format(highest_impact))
         advisory.update(topic=topic)
+
+    formatted_cve_list = '\n'.join([
+        f'* {b.summary.replace(b.alias[0],"").strip()} ({b.alias[0]})' for b in flaw_bugs
+    ])
+    formatted_description = cve_boilerplate['description'].format(CVES=formatted_cve_list)
+    advisory.update(description=formatted_description)
 
     return advisory
