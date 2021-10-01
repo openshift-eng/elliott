@@ -9,7 +9,7 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
         boilerplate = {
             'security_reviewer': 'some reviewer',
             'synopsis': 'some synopsis',
-            'description': 'some description',
+            'description': 'some description with {CVES}',
             'topic': "some topic {IMPACT}",
             'solution': 'some solution'
         }
@@ -21,8 +21,8 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
         )
 
         flaw_bugs = [
-            mock.Mock(alias=['CVE-123'], severity='urgent'),
-            mock.Mock(alias=['CVE-456'], severity='high')
+            mock.Mock(alias=['CVE-123'], severity='urgent', summary='CVE-123 foo'),
+            mock.Mock(alias=['CVE-456'], severity='high', summary='CVE-456 bar')
         ]
 
         attach_cve_flaws_cli.get_updated_advisory_rhsa(
@@ -36,7 +36,6 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
             errata_type='RHSA',
             security_reviewer=boilerplate['security_reviewer'],
             synopsis=boilerplate['synopsis'],
-            description=boilerplate['description'],
             topic=boilerplate['topic'].format(IMPACT="Low"),
             solution=boilerplate['solution'],
             security_impact='Low',
@@ -51,4 +50,7 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
         )
         advisory.update.assert_any_call(
             security_impact=impact
+        )
+        advisory.update.assert_any_call(
+            description='some description with * foo (CVE-123)\n* bar (CVE-456)'
         )
