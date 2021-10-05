@@ -29,7 +29,7 @@ LOGGER = elliottlib.logutil.getLogger(__name__)
 @click.option("--impetus",
               type=click.Choice(elliottlib.constants.errata_valid_impetus),
               default='standard',
-              help="Impetus for the advisory creation"
+              help="Impetus for the advisory creation. 'standard' by default")
 @click.option("--date", required=True,
               callback=validate_release_date,
               help="Release date for the advisory. Format: YYYY-Mon-DD.")
