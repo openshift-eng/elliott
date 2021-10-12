@@ -1,4 +1,4 @@
-from unittest import TestCase
+import unittest
 
 import re
 import datetime
@@ -10,7 +10,7 @@ from elliottlib.brew import BuildStates
 from elliottlib.model import Model
 
 
-class TestMetadata(TestCase):
+class TestMetadata(unittest.TestCase):
 
     def setUp(self) -> None:
         data_obj = MagicMock(key="foo", filename="foo.yml", data={"name": "foo"})
@@ -242,3 +242,7 @@ class TestMetadata(TestCase):
         self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[1])  # Latest is el7 by one hour
         self.assertEqual(meta.get_latest_build(koji_mock, default=None, el_target='7'), builds[1])
         self.assertEqual(meta.get_latest_build(koji_mock, default=None, el_target='8'), builds[2])
+
+
+if __name__ == '__main__':
+    unittest.main()

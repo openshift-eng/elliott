@@ -10,7 +10,7 @@ from errata_tool import ErrataException
 import bugzilla
 
 import unittest
-from . import test_structures
+from tests import test_structures
 from elliottlib import errata, constants, brew, exceptions
 
 

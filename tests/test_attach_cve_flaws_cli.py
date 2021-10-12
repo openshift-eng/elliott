@@ -54,3 +54,7 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
         advisory.update.assert_any_call(
             description='some description with * foo (CVE-123)\n* bar (CVE-456)'
         )
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -37,5 +37,5 @@ class TestExtrasBugs(unittest.TestCase):
         self.assertEqual(len(extras_bugs(bugs)), 0)
 
 
-if __name__ == "main":
+if __name__ == '__main__':
     unittest.main()

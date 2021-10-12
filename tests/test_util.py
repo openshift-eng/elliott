@@ -106,3 +106,7 @@ class TestUtil(unittest.TestCase):
             target_release, err = util.get_target_release(t['bugs'])
             actual = (target_release, bool(err))
             self.assertEqual(t['expected'], actual)
+
+
+if __name__ == '__main__':
+    unittest.main()

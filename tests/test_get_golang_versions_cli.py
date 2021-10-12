@@ -61,3 +61,7 @@ class TestGetGolangVersionsCli(unittest.TestCase):
             with_args(rpm_container_nvrs_go)
 
         get_golang_versions_cli.get_nvrs_golang(nvrs_list, logger)
+
+
+if __name__ == '__main__':
+    unittest.main()
