@@ -31,10 +31,11 @@ class TestBZUtil(unittest.TestCase):
         bug = mock.MagicMock(whiteboard="component: ")
         self.assertFalse(bzutil.get_whiteboard_component(bug))
 
-        expected = "something"
-        bug = mock.MagicMock(whiteboard=f"component: {expected}")
-        actual = bzutil.get_whiteboard_component(bug)
-        self.assertEqual(actual, expected)
+        for expected in ["something", "openvswitch2.15", "trailing_blank 	"]:
+            bug = mock.MagicMock(whiteboard=f"component: {expected}")
+            expected = expected.strip()
+            actual = bzutil.get_whiteboard_component(bug)
+            self.assertEqual(actual, expected.strip())
 
     def test_get_bugs(self):
         bug_ids = [1, 2]

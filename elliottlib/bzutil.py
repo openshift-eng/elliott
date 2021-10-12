@@ -341,7 +341,7 @@ def get_whiteboard_component(bug):
     :param bug: bug object
     :returns: a string if a value is found, otherwise False
     """
-    marker = r'component:\s*([-\w]+)'
+    marker = r'component:\s*(\S+)'
     tmp = re.search(marker, bug.whiteboard)
     if tmp and len(tmp.groups()) == 1:
         component_name = tmp.groups()[0]
