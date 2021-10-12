@@ -20,7 +20,7 @@ class TestGetGolangVersionsCli(unittest.TestCase):
                 'nvr': ('podman', 'v1.4', 'el7'), 'go': '1.15'
             }
         }
-        logger = flexmock(debug=lambda x: print(x), info=lambda x: print(x))
+        logger = get_golang_versions_cli.logger
         flexmock(erratalib). \
             should_receive("get_all_advisory_nvrs"). \
             with_args(advisory_id). \
@@ -32,6 +32,8 @@ class TestGetGolangVersionsCli(unittest.TestCase):
         flexmock(utillib). \
             should_receive("get_golang_rpm_nvrs"). \
             with_args(nvrs, logger).and_return(nvrs_with_go)
+        flexmock(utillib). \
+            should_receive("pretty_print_nvrs_go")
 
         get_golang_versions_cli.get_advisory_golang(advisory_id, "", logger)
 
@@ -47,7 +49,7 @@ class TestGetGolangVersionsCli(unittest.TestCase):
             'openshift': openshift,
             'podman-container': podman
         }
-        logger = flexmock(debug=lambda x: print(x), info=lambda x: print(x))
+        logger = get_golang_versions_cli.logger
         flexmock(utillib). \
             should_receive("get_golang_rpm_nvrs"). \
             with_args(rpm_nvrs, logger).and_return(rpm_nvrs_go)
