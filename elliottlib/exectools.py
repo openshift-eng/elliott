@@ -12,7 +12,7 @@ import subprocess
 import time
 import urllib
 
-from . import assertion, logutil, pushd
+from elliottlib import assertion, logutil, pushd
 
 SUCCESS = 0
 
