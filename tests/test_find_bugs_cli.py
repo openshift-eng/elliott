@@ -1,6 +1,7 @@
 import unittest
 from flexmock import flexmock
 import elliottlib.errata as errata_module
+from elliottlib import util
 from elliottlib.cli.find_bugs_cli import mode_list, extras_bugs, filter_bugs
 
 
@@ -12,6 +13,7 @@ class TestFindBugsCli(unittest.TestCase):
         flags = []
         noop = False
 
+        flexmock(util).should_receive('green_prefix')
         flexmock(errata_module).\
             should_receive("add_bugs_with_retry").\
             once()
