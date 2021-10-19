@@ -58,6 +58,8 @@ errata_inactive_advisory_labels = [
     "DROPPED_NO_SHIP"
 ]
 
+errata_states = errata_active_advisory_labels + errata_inactive_advisory_labels
+
 errata_shipped_advisory_label = "SHIPPED_LIVE"
 
 errata_valid_impetus = [
@@ -156,4 +158,3 @@ errata_get_comments_url = errata_url + "/api/v1/comments"
 errata_get_erratum_url = errata_url + "/api/v1/erratum/{id}"
 errata_post_erratum_url = errata_url + "/api/v1/erratum"
 errata_get_advisories_for_bug_url = errata_url + "/bugs/{id}/advisories.json"
-errata_remove_build_url = errata_url + "/api/v1/erratum/{id}/remove_build"

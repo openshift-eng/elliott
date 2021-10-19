@@ -5,7 +5,7 @@ from typing import Dict, List, Set, Union
 import click
 import koji
 import requests
-from errata_tool import Erratum
+from errata_tool import Erratum, ErrataException
 from spnego.exceptions import GSSError
 
 import elliottlib
@@ -142,8 +142,11 @@ PRESENT advisory. Here are some examples:
 
     ensure_erratatool_auth()  # before we waste time looking up builds we can't process
 
-    # get the builds we want to add
     unshipped_nvrps = []
+    unshipped_builds = []
+    to_remove = []
+
+    # get the builds we want to add
     brew_session = runtime.build_retrying_koji_client(caching=True)
     if builds:
         green_prefix('Fetching builds...')
@@ -184,22 +187,7 @@ PRESENT advisory. Here are some examples:
             green_print('No builds needed to be attached.')
             return
 
-    if advisory:
-        if remove:
-            _detach_builds(advisory, [f"{nvrp[0]}-{nvrp[1]}-{nvrp[2]}" for nvrp in unshipped_nvrps])
-        elif clean:
-            _detach_builds(advisory, [b.nvr for b in unshipped_builds])
-        else:  # attach
-            erratum = _update_to_advisory(unshipped_builds, kind, advisory, remove, clean)
-            if not no_cdn_repos and kind == "image" and not (remove or clean):
-                cdn_repos = et_data.get('cdn_repos')
-                if cdn_repos:
-                    # set up CDN repos
-                    click.echo(f"Configuring CDN repos {', '.join(cdn_repos)}...")
-                    erratum.metadataCdnRepos(enable=cdn_repos)
-                    click.echo("Done")
-
-    else:
+    if not advisory:
         click.echo('The following {n} builds '.format(n=len(unshipped_builds)), nl=False)
         if not (remove or clean):
             click.secho('may be attached', bold=True, nl=False)
@@ -209,6 +197,33 @@ PRESENT advisory. Here are some examples:
             click.echo(' from an advisory:')
         for b in sorted(unshipped_builds):
             click.echo(' ' + b.nvr)
+        return
+
+    if not unshipped_builds and not (remove and unshipped_nvrps):
+        # Do not change advisory state unless strictly necessary
+        return
+
+    try:
+        erratum = elliottlib.errata.Advisory(errata_id=advisory)
+        erratum.ensure_state('NEW_FILES')
+        if remove:
+            to_remove = [f"{nvrp[0]}-{nvrp[1]}-{nvrp[2]}" for nvrp in unshipped_nvrps]
+        elif clean:
+            to_remove = [b.nvr for b in unshipped_builds]
+
+        if to_remove:
+            erratum.remove_builds(to_remove)
+        else:  # attach
+            erratum.attach_builds(unshipped_builds, kind)
+            cdn_repos = et_data.get('cdn_repos')
+            if cdn_repos and not no_cdn_repos and kind == "image":
+                erratum.set_cdn_repos(cdn_repos)
+
+    except GSSError:
+        exit_unauthenticated()
+    except ErrataException as e:
+        red_print(f'Cannot change advisory {advisory}: {e}')
+        exit(1)
 
 
 def _fetch_nvrps_by_nvr_or_id(ids_or_nvrs, tag_pv_map, ignore_product_version=False, brew_session: koji.ClientSession = None):
@@ -424,41 +439,3 @@ def _filter_out_inviable_builds(kind, results, errata):
         if not in_same_version:
             unshipped_builds.append(b)
     return unshipped_builds
-
-
-def _update_to_advisory(builds, kind, advisory, remove, clean):
-    click.echo(f"Attaching to advisory {advisory}...")
-    if kind not in {"rpm", "image"}:
-        raise ValueError(f"{kind} should be one of 'rpm' or 'image'")
-    try:
-        erratum = Erratum(errata_id=advisory)
-        file_type = 'tar' if kind == 'image' else 'rpm'
-        product_version_set = {build.product_version for build in builds}
-        for pv in product_version_set:
-            erratum.addBuilds(
-                buildlist=[build.nvr for build in builds if build.product_version == pv],
-                release=pv,
-                file_types={build.nvr: [file_type] for build in builds}
-            )
-            erratum.commit()
-
-        build_nvrs = sorted(build.nvr for build in builds)
-        green_print('Attached build(s) successfully:')
-        for b in build_nvrs:
-            click.echo(' ' + b)
-        return erratum
-
-    except GSSError:
-        exit_unauthenticated()
-    except elliottlib.exceptions.BrewBuildException as ex:
-        raise ElliottFatalError(f'Error attaching/removing builds: {str(ex)}')
-
-
-def _detach_builds(advisory, nvrs):
-    session = requests.Session()
-    click.echo(f"Removing build(s) from advisory {advisory}...")
-    for nvr in nvrs:
-        errata.detach_build(advisory, nvr, session)
-    green_print('Removed build(s) successfully:')
-    for nvr in nvrs:
-        click.echo(' ' + nvr)

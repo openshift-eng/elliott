@@ -5,12 +5,68 @@ import datetime
 import mock
 import json
 from flexmock import flexmock
-from errata_tool import ErrataException
+import errata_tool
 import bugzilla
 
 import unittest
+from unittest.mock import MagicMock, patch, Mock
 from tests import test_structures
 from elliottlib import errata, constants, brew, exceptions
+
+unshipped_builds = [
+    Mock(product_version='OSE-4.7-RHEL-8', build='image1-container-123', nvr='image1-container-123', file_types=['tar']),
+    Mock(product_version='OSE-4.7-RHEL-8', build='image2-container-456', nvr='image2-container-456', file_types=['tar']),
+    Mock(product_version='ANOTHER_PV', build='image3-container-789', nvr='image3-container-789', file_types=['tar'])]
+
+
+class TestAdvisory(unittest.TestCase):
+    def new_init(self, **kwargs):
+        for key in kwargs:
+            setattr(self, key, kwargs[key])
+
+    errata_tool.Erratum.__init__ = new_init
+
+    def test_ensure_state_valid_advisory_state(self):
+        """Verify error is raised if desired state is not a recognized state"""
+        advisory = errata.Advisory(errata_id=123, errata_state='invalid_errata_status')
+        with self.assertRaises(ValueError) as context:
+            advisory.ensure_state('UnknownState')
+        self.assertTrue('UnknownState' in context.exception.__str__())
+
+    @patch('elliottlib.errata.Advisory.setState')
+    def test_ensure_state_untouched_if_not_necessary(self, setState):
+        """Verify that advisory is untouched if desired state equals current state"""
+        advisory = errata.Advisory(errata_id=123, errata_state='QE')
+        advisory.ensure_state('QE')
+        setState.assert_not_called()
+
+    @patch('elliottlib.errata.Advisory.setState')
+    @patch('errata_tool.Erratum.commit')
+    def test_ensure_state_change_if_needed(self, setState, commit):
+        """Verify attempt is made to set advisory state"""
+        advisory = errata.Advisory(errata_id=123, errata_state='QE')
+        advisory.ensure_state('NEW_FILES')
+        setState.assert_called()
+
+    @patch('click.echo')
+    def test_attach_builds_verifies_valid_state(self, echo):
+        """Verify error is raised when requesting unknown kind"""
+        advisory = errata.Advisory(errata_id=123)
+        with self.assertRaises(ValueError) as context:
+            advisory.attach_builds(['build-1-123'], 'unkown_build_type')
+        self.assertTrue("should be one of 'rpm' or 'image'" in context.exception.__str__())
+
+    @patch('elliottlib.errata.green_print')
+    @patch('click.echo')
+    @patch('elliottlib.errata.Advisory.addBuilds')
+    def test_attach_builds(self, addBuilds, echo, green_print):
+        advisory = errata.Advisory(errata_id=123)
+        advisory.attach_builds(unshipped_builds, 'image')
+
+        self.assertEqual(addBuilds.call_count, 2)
+
+        addBuilds.assert_any_call(buildlist=['image1-container-123', 'image2-container-456'], file_types={'image1-container-123': ['tar'], 'image2-container-456': ['tar']}, release='OSE-4.7-RHEL-8')
+        addBuilds.assert_any_call(buildlist=['image3-container-789'], file_types={'image3-container-789': ['tar']}, release='ANOTHER_PV')
 
 
 class TestErrata(unittest.TestCase):
@@ -23,7 +79,7 @@ class TestErrata(unittest.TestCase):
 
     def test_get_filtered_list(self):
         """Ensure we can generate an Erratum List"""
-        flexmock(errata).should_receive("Erratum").and_return(None)
+        flexmock(errata).should_receive("Advisory").and_return(None)
 
         response = flexmock(status_code=200)
         response.should_receive("json").and_return(test_structures.example_erratum_filtered_list)
@@ -35,7 +91,7 @@ class TestErrata(unittest.TestCase):
 
     def test_get_filtered_list_limit(self):
         """Ensure we can generate a trimmed Erratum List"""
-        flexmock(errata).should_receive("Erratum").and_return(None)
+        flexmock(errata).should_receive("Advisory").and_return(None)
 
         response = flexmock(status_code=200)
         response.should_receive("json").and_return(test_structures.example_erratum_filtered_list)
@@ -241,7 +297,7 @@ class testErratum:
     def commit(self):
         if self.retry_times <= self.none_throw_threshold:
             self.retry_times = self.retry_times + 1
-            raise ErrataException("this is an exception from testErratum")
+            raise errata_tool.ErrataException("this is an exception from testErratum")
         else:
             pass
 
