@@ -25,3 +25,7 @@ class FindBuildsTestCase(unittest.TestCase):
             ]
         )
         self.assertIn("may be attached to an advisory", out.decode("utf-8"))
+
+
+if __name__ == '__main__':
+    unittest.main()

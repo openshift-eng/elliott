@@ -24,3 +24,7 @@ class AdvisoryImagesTestCase(unittest.TestCase):
             ]
         )
         self.assertIn("\n#########\n", out.decode("utf-8"))
+
+
+if __name__ == '__main__':
+    unittest.main()

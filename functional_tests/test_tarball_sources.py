@@ -21,3 +21,7 @@ class TarballSourcesTestCase(unittest.TestCase):
             ]
         )
         self.assertIn("All tarball sources are successfully created.", out.decode("utf-8"))
+
+
+if __name__ == '__main__':
+    unittest.main()

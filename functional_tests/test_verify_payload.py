@@ -14,3 +14,7 @@ class VerifyPayloadTestCase(unittest.TestCase):
             ]
         )
         self.assertIn("Summary results:", out.decode("utf-8"))
+
+
+if __name__ == '__main__':
+    unittest.main()
