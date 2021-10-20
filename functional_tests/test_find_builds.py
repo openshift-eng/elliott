@@ -26,6 +26,23 @@ class FindBuildsTestCase(unittest.TestCase):
         )
         self.assertIn("may be attached to an advisory", out.decode("utf-8"))
 
+    def test_change_state(self):
+        """To attach a build to an advisory, it will be attempted to set the
+        advisory to NEW_FILES. This advisory is already SHIPPED_LIVE, and the
+        attempted change should fail"""
+
+        command = constants.ELLIOTT_CMD + [
+            f'--group=openshift-{version}',
+            '--images=openshift-enterprise-cli',
+            'find-builds',
+            '--kind=image',
+            '--attach=57899'
+        ]
+        result = subprocess.run(command, capture_output=True)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('Cannot change state', result.stdout.decode())
+
 
 if __name__ == '__main__':
     unittest.main()
