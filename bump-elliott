@@ -13,6 +13,11 @@ echo "$new_version" >elliottlib/VERSION
 
 git add elliottlib/VERSION
 
-git commit -evm "Prepare for release v$new_version
+git commit -evm "\
+Prepare for release v$new_version
 
-$(git log --oneline --no-merges v${old_version}..)"
+$(git log --oneline --no-merges v${old_version}..)
+"
+
+# _annotated_ tags are displayed when this is a submodule
+git tag -am v$new_version  v$new_version
