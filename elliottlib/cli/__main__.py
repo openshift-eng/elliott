@@ -94,14 +94,14 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help='Remove found bugs from ADVISORY')
 @use_default_advisory_option
 @click.option("--id", metavar='BUGID', default=[],
-              multiple=True, required=True,
+              multiple=True, required=False,
               help="Bugzilla IDs to add.")
-@click.option("--auto",
+@click.option("--all", "remove_all",
               required=False,
               default=False, is_flag=True,
               help="AUTO mode, remove all bugs attached to ADVISORY")
 @pass_runtime
-def remove_bugs(runtime, advisory, default_advisory_type, id, auto):
+def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all):
     """Remove given BUGS from ADVISORY.
 
     Remove bugs that have been attached an advisory:
@@ -117,9 +117,9 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, auto):
 
 
 """
-    if auto and len(id) > 0:
+    if remove_all and id:
         raise click.BadParameter("Combining the automatic and manual bug modification options is not supported")
-    if not auto and len(id) == 0:
+    if not remove_all and not id:
         raise click.BadParameter("If not using --auto then one or more --id's must be provided")
     if bool(advisory) == bool(default_advisory_type):
         raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
@@ -141,15 +141,15 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, auto):
             raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
 
         try:
-            if auto:
-                bug_ids = advs.errate_bugs
+            if remove_all:
+                bug_ids = advs.errata_bugs
             else:
                 bug_ids = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
             green_prefix("Found {} bugs:".format(len(bug_ids)))
-            click.echo(" {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
+            click.echo(" {}".format(", ".join([str(b) for b in bug_ids])))
             green_prefix("Removing {count} bugs from advisory:".format(count=len(bug_ids)))
             click.echo(" {advs}".format(advs=advisory))
-            advs.removeBugs([bug.id for bug in bug_ids])
+            advs.removeBugs([bug for bug in bug_ids])
             advs.commit()
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
@@ -271,7 +271,7 @@ Fields for the short format: Release date, State, Synopsys, URL
 @click.option("--comment", "comment",
               required=False,
               help="Add comment to bug")
-@click.option("--colse-placeholder", "close_placeholder",
+@click.option("--close-placeholder", "close_placeholder",
               required=False,
               default=False, is_flag=True,
               help="When checking bug state, close the bug if it's a placehoder bug.")
