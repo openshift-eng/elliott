@@ -712,8 +712,8 @@ ansible-kubernetes-modules-0.4.0-8.el7.src
 ansible-service-broker-1.1.17-1.el7.src
 apb-1.1.15-1.el7.src
 apb-base-scripts-1.1.5-1.el7.src
-atomic-openshift-3.9.15-1.git.0.3cffafd.el7.src
-atomic-openshift-descheduler-3.9.13-1.git.267.bb59a3f.el7.src
+atomic-openshift-3.9.15-1.g0.3cffafd.el7.src
+atomic-openshift-descheduler-3.9.13-1.g267.bb59a3f.el7.src
 atomic-openshift-dockerregistry-3.9.15-1.git.349.4cf0d1a.el7.src
 atomic-openshift-node-problem-detector-3.9.13-1.git.167.5d6b0d4.el7.src
 atomic-openshift-web-console-3.9.15-1.git.230.9dccb91.el7.src
