@@ -249,6 +249,9 @@ class testErratum:
     def addBugs(self, buglist):
         pass
 
+    def removebugs(self, buglist):
+        pass
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -120,7 +120,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all):
     if remove_all and id:
         raise click.BadParameter("Combining the automatic and manual bug modification options is not supported")
     if not remove_all and not id:
-        raise click.BadParameter("If not using --auto then one or more --id's must be provided")
+        raise click.BadParameter("If not using --all then one or more --id's must be provided")
     if bool(advisory) == bool(default_advisory_type):
         raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
 
