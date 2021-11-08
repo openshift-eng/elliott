@@ -10,7 +10,7 @@ pygit2 == 1.6.*
 python-bugzilla >= 3.0.2
 pyyaml
 requests
-requests_kerberos
+requests_kerberos >= 0.13
 ruamel.yaml
 six
 typing ; python_version <= '3.4'

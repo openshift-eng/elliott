@@ -1,7 +1,7 @@
 import click
 from io import BytesIO
 import koji
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 import re
 import requests
 import yaml

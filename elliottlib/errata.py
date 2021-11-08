@@ -21,7 +21,7 @@ from elliottlib.util import green_prefix, exit_unauthenticated
 import click
 import requests
 from requests_kerberos import HTTPKerberosAuth
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
 
 import xmlrpc.client

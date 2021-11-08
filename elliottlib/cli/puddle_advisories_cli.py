@@ -2,7 +2,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 import click
 import sys
 import elliottlib
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 from elliottlib import logutil, Runtime
 from elliottlib.cli.common import cli
 from elliottlib.exceptions import ElliottFatalError

@@ -6,7 +6,7 @@ import click
 import koji
 import requests
 from errata_tool import Erratum
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 
 import elliottlib
 from elliottlib import Runtime, brew, constants, errata, logutil

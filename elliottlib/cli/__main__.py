@@ -72,7 +72,7 @@ import click
 import requests
 import errata_tool.build
 from errata_tool import Erratum, ErrataException
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 
 
 # -----------------------------------------------------------------------------

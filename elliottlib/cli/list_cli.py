@@ -1,7 +1,7 @@
 from __future__ import absolute_import, print_function, unicode_literals
 import click
 import elliottlib
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 from elliottlib.util import exit_unauthenticated
 from elliottlib.exceptions import ElliottFatalError
 
