@@ -33,6 +33,17 @@ def verify_attached_bugs_cli(runtime, verify_bug_status, advisories):
     validator.validate(bugs, verify_bug_status)
 
 
+@cli.command("verify-bugs", short_help="Same as verify-attached-bugs, but for bugs that are not (yet) attached to advisories")
+@click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
+@click.argument("bug_ids", nargs=-1, type=click.IntRange(1), required=False)
+@pass_runtime
+def verify_bugs_cli(runtime, verify_bug_status, bug_ids):
+    runtime.initialize()
+    validator = BugValidator(runtime)
+    bugs = list(bzutil.get_bugs(validator.bzapi, bug_ids, True).values())
+    validator.validate(bugs, verify_bug_status)
+
+
 class BugValidator:
 
     def __init__(self, runtime):
