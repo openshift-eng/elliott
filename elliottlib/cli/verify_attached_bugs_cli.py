@@ -28,7 +28,9 @@ def verify_attached_bugs_cli(runtime, verify_bug_status, advisories):
     if not advisories:
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
-    BugValidator(runtime).validate(advisories, verify_bug_status)
+    validator = BugValidator(runtime)
+    bugs = validator._get_attached_filtered_bugs(advisories)
+    validator.validate(bugs, verify_bug_status)
 
 
 class BugValidator:
@@ -41,8 +43,7 @@ class BugValidator:
         self.bzapi = bzutil.get_bzapi(self.bz_data)
         self.problems = []
 
-    def validate(self, advisories, verify_bug_status):
-        bugs = self._get_attached_filtered_bugs(advisories)
+    def validate(self, bugs, verify_bug_status):
         blocking_bugs_for = self._get_blocking_bugs_for(bugs)
         self._verify_blocking_bugs(blocking_bugs_for)
 
