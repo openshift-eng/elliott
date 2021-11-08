@@ -1,7 +1,6 @@
 """
 Test errata models/controllers
 """
-from __future__ import unicode_literals
 import datetime
 import mock
 import json

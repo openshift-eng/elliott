@@ -2,7 +2,6 @@
 """
 Test functions related to controlled command execution
 """
-from __future__ import unicode_literals
 
 import asyncio
 import unittest

@@ -7,7 +7,6 @@ associated metadata.
 Classes representing an ERRATUM (a single errata)
 
 """
-from __future__ import absolute_import, print_function, unicode_literals
 from future import standard_library
 standard_library.install_aliases()
 from errata_tool import ErrataConnector

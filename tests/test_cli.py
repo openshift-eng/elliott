@@ -1,7 +1,6 @@
 """
 Test the cli options functions
 """
-from __future__ import unicode_literals
 import unittest
 
 from elliottlib.cli import cli_opts

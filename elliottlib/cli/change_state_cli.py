@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 
 from elliottlib import logutil, Runtime
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
