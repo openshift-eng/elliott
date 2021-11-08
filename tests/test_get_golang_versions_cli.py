@@ -1,4 +1,5 @@
-import unittest, flexmock
+import unittest
+from flexmock import flexmock
 from elliottlib.cli import get_golang_versions_cli
 from elliottlib import errata as erratalib
 from elliottlib import util as utillib

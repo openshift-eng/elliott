@@ -6,7 +6,7 @@ Test functions related to controlled command execution
 import asyncio
 import unittest
 
-import flexmock
+from flexmock import flexmock
 import mock
 
 from elliottlib import exectools

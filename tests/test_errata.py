@@ -4,7 +4,7 @@ Test errata models/controllers
 import datetime
 import mock
 import json
-import flexmock
+from flexmock import flexmock
 from errata_tool import ErrataException
 import bugzilla
 
