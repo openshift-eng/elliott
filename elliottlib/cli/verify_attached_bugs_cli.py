@@ -1,4 +1,5 @@
 import click
+import re
 from spnego.exceptions import GSSError
 
 from errata_tool import Erratum
@@ -107,12 +108,14 @@ class BugValidator:
         v = minor_version_tuple(self.target_releases[0])
         next_version = (v[0], v[1] + 1)
 
+        pattern = re.compile(r'^[0-9]+\.[0-9]+\.(0|z)$')
+
         # retrieve blockers and filter to those with correct product and target version
         blocking_bugs = {
             bug.id: bug
             for bug in bzutil.get_bugs(self.bzapi, list(candidate_blockers)).values()
             # b.target release is a list of size 0 or 1
-            if any(minor_version_tuple(target) == next_version for target in bug.target_release)
+            if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
             and bug.product == self.product
         }
 
