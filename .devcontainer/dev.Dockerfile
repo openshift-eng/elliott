@@ -13,7 +13,7 @@ RUN curl -o /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.crt --fail -L \
 RUN dnf install -y \
     # runtime dependencies
     krb5-workstation python-bugzilla-cli git \
-    python3 python3-certifi python3-rpm \
+    python36 python3-certifi python3-rpm \
     koji brewkoji \
     # development dependencies
     gcc krb5-devel \

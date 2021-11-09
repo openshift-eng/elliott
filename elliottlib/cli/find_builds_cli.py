@@ -6,7 +6,7 @@ import click
 import koji
 import requests
 from errata_tool import Erratum
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 
 import elliottlib
 from elliottlib import Runtime, brew, constants, errata, logutil
@@ -351,6 +351,7 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
     click.echo('Hold on a moment, fetching Brew builds')
 
     builder = BuildFinder(brew_session, logger=LOGGER)
+    builds: List[Dict] = []
     for tag in tag_pv_map:
         # keys are rpm component names, values are nvres
         component_builds: Dict[str, Dict] = builder.from_tag("rpm", tag, inherit=False, assembly=assembly, event=runtime.brew_event)
@@ -379,10 +380,11 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
                 if component in component_builds and dep_build["id"] != component_builds[component]["id"]:
                     LOGGER.warning("Swapping stream nvr %s for group dependency nvr %s...", component_builds[component]["nvr"], dep_build["nvr"])
             component_builds.update(group_deps)
+        builds.extend(component_builds.values())
 
-    _ensure_accepted_tags(component_builds.values(), brew_session, tag_pv_map, raise_exception=False)
-    qualified_builds = [b for b in component_builds.values() if "tag_name" in b]
-    not_attachable_nvrs = [b["nvr"] for b in component_builds.values() if "tag_name" not in b]
+    _ensure_accepted_tags(builds, brew_session, tag_pv_map, raise_exception=False)
+    qualified_builds = [b for b in builds if "tag_name" in b]
+    not_attachable_nvrs = [b["nvr"] for b in builds if "tag_name" not in b]
 
     if not_attachable_nvrs:
         yellow_print(f"The following NVRs will not be swept because they don't have allowed tags {list(tag_pv_map.keys())}:")
@@ -394,6 +396,7 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
     unshipped = [b for b in qualified_builds if b["id"] not in shipped]
     click.echo(f'Found {len(shipped)+len(unshipped)} builds, of which {len(unshipped)} are new.')
     nvrps = _gen_nvrp_tuples(unshipped, tag_pv_map)
+    nvrps = sorted(set(nvrps))  # remove duplicates
     return nvrps
 
 

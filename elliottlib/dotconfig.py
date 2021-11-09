@@ -1,7 +1,6 @@
 # This file is part of dotconfig project <https://github.com/adammhaile/dotconfig>
 # and released under LGPL v3 <https://www.gnu.org/licenses/lgpl-3.0.en.html>
 
-from __future__ import absolute_import, print_function, unicode_literals
 from future.utils import string_types
 import yaml
 import os

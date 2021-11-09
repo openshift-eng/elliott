@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 from . import logutil
 import os
 from io import BytesIO

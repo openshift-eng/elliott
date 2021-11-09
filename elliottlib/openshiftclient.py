@@ -2,7 +2,6 @@
 Utility functions and object abstractions for general interactions
 with oc cli
 """
-from __future__ import absolute_import, print_function, unicode_literals
 
 # stdlib
 from subprocess import check_output, CalledProcessError

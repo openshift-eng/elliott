@@ -3,7 +3,6 @@ This module contains a set of functions for managing shell commands
 consistently. It adds some logging and some additional capabilties to the
 ordinary subprocess behaviors.
 """
-from __future__ import absolute_import, print_function, unicode_literals
 
 import asyncio
 import json
@@ -12,7 +11,7 @@ import subprocess
 import time
 import urllib
 
-from . import assertion, logutil, pushd
+from elliottlib import assertion, logutil, pushd
 
 SUCCESS = 0
 

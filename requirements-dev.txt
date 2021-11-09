@@ -4,7 +4,7 @@ setuptools~=41.6.0
 -rrequirements.txt
 
 # test reqs
-flexmock~=0.10.4
+flexmock
 mock~=4.0.3
 
 # tox reqs
