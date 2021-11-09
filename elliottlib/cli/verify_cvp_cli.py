@@ -3,7 +3,7 @@ import json
 import pathlib
 import re
 import sys
-from typing import Iterator, List
+from typing import Iterator, List, Optional
 from urllib.parse import urldefrag
 
 import aiohttp
@@ -74,7 +74,8 @@ async def verify_cvp_cli(runtime: Runtime, all_images, nvrs, optional_checks, al
     builds = []
     if all_images:
         runtime.logger.info("Getting latest image builds from Brew...")
-        builds = get_latest_image_builds(brew_session, tag_pv_map.keys(), runtime.image_metas)
+        # TODO: This does not honor overrides
+        builds = get_latest_image_builds(brew_session, tag_pv_map.keys(), runtime.image_metas, event=runtime.brew_event)
     elif nvrs:
         runtime.logger.info(f"Finding {len(builds)} builds from Brew...")
         builds = brew.get_build_objects(nvrs, brew_session)
@@ -153,7 +154,10 @@ async def verify_cvp_cli(runtime: Runtime, all_images, nvrs, optional_checks, al
         yellow_print(f"Build {nvr} (https://brewweb.engineering.redhat.com/brew/buildinfo?buildID={nvr_to_builds[nvr]['id']}) has {len(bad_checks)} problematic CVP optional checks:")
         for check in bad_checks:
             yellow_print(f"* {check['name']} {check['status']}")
-            amd64_result = list(filter(lambda item: item.get("arch") == "amd64", check["logs"][-1]))
+            try:
+                amd64_result = list(filter(lambda item: item.get("arch") == "amd64", check["logs"][-1]))
+            except AttributeError:
+                red_print("CVP result malformed.")
             if len(amd64_result) != 1:
                 red_print("WHAT?! This build doesn't include an amd64 image? This shouldn't happen. Check Brew and CVP logs with the CVP team!")
                 continue
@@ -201,7 +205,7 @@ async def verify_cvp_cli(runtime: Runtime, all_images, nvrs, optional_checks, al
                     brew_repos = await find_repos_for_rpms(amd64_not_covered_rpms, build)
                     yellow_print(f"Those repos shown in Brew logs might be a good hint: {brew_repos}")
                     runtime.logger.info("Looking for parent image's content_sets...")
-                    parent = get_parant_build_ids([build])[0]
+                    parent = get_parent_build_ids([build])[0]
                     if parent:
                         parent_build = brew.get_build_objects([parent])[0]
                         parent_cs = await get_content_sets_for_build(parent_build)
@@ -251,7 +255,7 @@ async def verify_cvp_cli(runtime: Runtime, all_images, nvrs, optional_checks, al
         runtime.gitdata.commit(message)
 
 
-def get_parant_build_ids(builds):
+def get_parent_build_ids(builds):
     parents = []
     for b in builds:
         if b.get("extra") is None:
@@ -349,9 +353,9 @@ def fix_redundant_content_set(runtime: Runtime, distgit_key: str, redundant_repo
     data_obj.save()
 
 
-def get_latest_image_builds(brew_session: koji.ClientSession, tags: Iterator[str], image_metas: Iterator[ImageMetadata]):
+def get_latest_image_builds(brew_session: koji.ClientSession, tags: Iterator[str], image_metas: Iterator[ImageMetadata], event: Optional[int] = None):
     tag_component_tuples = [(tag, image.get_component_name()) for tag in tags for image in image_metas()]
-    builds = brew.get_latest_builds(tag_component_tuples, brew_session)
+    builds = brew.get_latest_builds(tag_component_tuples, brew_session, event=event)
     return [b[0] for b in builds if b]
 
 
