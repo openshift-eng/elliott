@@ -30,7 +30,7 @@ def verify_attached_bugs_cli(runtime, verify_bug_status, advisories):
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
     validator = BugValidator(runtime)
-    bugs = validator._get_attached_filtered_bugs(advisories)
+    bugs = validator.get_attached_filtered_bugs(advisories)
     validator.validate(bugs, verify_bug_status)
 
 
@@ -41,7 +41,7 @@ def verify_attached_bugs_cli(runtime, verify_bug_status, advisories):
 def verify_bugs_cli(runtime, verify_bug_status, bug_ids):
     runtime.initialize()
     validator = BugValidator(runtime)
-    bugs = validator._filter_bugs_by_product(list(bzutil.get_bugs(validator.bzapi, bug_ids, True).values()))
+    bugs = validator.filter_bugs_by_product(list(bzutil.get_bugs(validator.bzapi, bug_ids, True).values()))
     validator.validate(bugs, verify_bug_status)
 
 
@@ -79,9 +79,9 @@ class BugValidator:
 
         return list(bzutil.get_bugs(self.bzapi, list(bugs)).values())
 
-    def _get_attached_filtered_bugs(self, advisories):
+    def get_attached_filtered_bugs(self, advisories):
         # get bugs from advisories that are for the expected product and version
-        candidates = self._filter_bugs_by_product(self._get_attached_bugs(advisories))
+        candidates = self.filter_bugs_by_product(self._get_attached_bugs(advisories))
 
         # filter out bugs with an invalid target release (and complain)
         filtered_bugs = []
@@ -97,7 +97,7 @@ class BugValidator:
 
         return filtered_bugs
 
-    def _filter_bugs_by_product(self, bugs):
+    def filter_bugs_by_product(self, bugs):
         # filter out bugs for different product (presumably security flaw bugs)
         return [b for b in bugs if b.product == self.product]
 
