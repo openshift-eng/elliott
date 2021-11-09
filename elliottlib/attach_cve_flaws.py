@@ -1,4 +1,6 @@
-from elliottlib import constants, errata, util, bzutil
+from elliottlib import constants, errata, util, bzutil, logutil
+
+logger = logutil.getLogger(__name__)
 
 
 def get_tracker_bugs(bzapi, advisory, fields):
@@ -114,10 +116,10 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
 
     if component_not_found in component_tracker_groups:
         invalid_trackers = sorted([b.id for b in component_tracker_groups[component_not_found]])
-        print(f"For flaw bug {flaw_bug.id} - these tracker bugs do not have a valid "
-              f"whiteboard component value: {invalid_trackers} "
-              "Cannot reliably determine if flaw bug is first "
-              "fix. Check tracker bugs manually")
+        logger.info(f"For flaw bug {flaw_bug.id} - these tracker bugs do not have a valid "
+                    f"whiteboard component value: {invalid_trackers} "
+                    "Cannot reliably determine if flaw bug is first "
+                    "fix. Check tracker bugs manually")
         return False
 
     # if any tracker bug for the flaw bug
@@ -133,8 +135,8 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
     # then flaw bug is first fix
     for component, trackers in component_tracker_groups.items():
         if is_first_fix_group(trackers):
-            print(f'{flaw_bug.id} considered first-fix for component: {component} for trackers: '
-                  f'{[t.id for t in trackers]}')
+            logger.info(f'{flaw_bug.id} considered first-fix for component: {component} for trackers: '
+                        f'{[t.id for t in trackers]}')
             return True
 
     return False

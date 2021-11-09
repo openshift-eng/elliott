@@ -8,7 +8,7 @@ import unittest
 import mock
 
 from elliottlib import exceptions, constants, brew, errata
-from . import test_structures
+from tests import test_structures
 
 
 class TestBrew(unittest.TestCase):

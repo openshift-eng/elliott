@@ -54,3 +54,7 @@ class TestRPMDiffClient(unittest.TestCase):
         self.client.session.get.return_value.json.return_value = response
         actual = self.client.list_waivers("foo", 123)
         self.assertEqual(actual, response["results"])
+
+
+if __name__ == '__main__':
+    unittest.main()
