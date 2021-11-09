@@ -81,10 +81,7 @@ class BugValidator:
 
     def _get_attached_filtered_bugs(self, advisories):
         # get bugs from advisories that are for the expected product and version
-        candidates = self._get_attached_bugs(advisories)
-
-        # filter out bugs for different product (presumably security flaw bugs)
-        candidates = [b for b in candidates if b.product == self.product]
+        candidates = self._filter_bugs_by_product(self._get_attached_bugs(advisories))
 
         # filter out bugs with an invalid target release (and complain)
         filtered_bugs = []
@@ -99,6 +96,10 @@ class BugValidator:
                 )
 
         return filtered_bugs
+
+    def _filter_bugs_by_product(self, bugs):
+        # filter out bugs for different product (presumably security flaw bugs)
+        return [b for b in bugs if b.product == self.product]
 
     def _get_blocking_bugs_for(self, bugs):
         # get blocker bugs in the next version for all bugs we are examining
