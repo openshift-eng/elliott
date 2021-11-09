@@ -41,7 +41,7 @@ def verify_attached_bugs_cli(runtime, verify_bug_status, advisories):
 def verify_bugs_cli(runtime, verify_bug_status, bug_ids):
     runtime.initialize()
     validator = BugValidator(runtime)
-    bugs = list(bzutil.get_bugs(validator.bzapi, bug_ids, True).values())
+    bugs = validator._filter_bugs_by_product(list(bzutil.get_bugs(validator.bzapi, bug_ids, True).values()))
     validator.validate(bugs, verify_bug_status)
 
 
