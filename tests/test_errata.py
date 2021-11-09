@@ -1,11 +1,10 @@
 """
 Test errata models/controllers
 """
-from __future__ import unicode_literals
 import datetime
 import mock
 import json
-import flexmock
+from flexmock import flexmock
 from errata_tool import ErrataException
 import bugzilla
 

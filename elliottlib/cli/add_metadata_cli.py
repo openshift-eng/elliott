@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 import json
 
 import elliottlib
@@ -9,7 +8,7 @@ from elliottlib.util import exit_unauthenticated, exit_unauthorized, ensure_erra
 from elliottlib.util import release_from_branch, green_prefix, green_print, red_print
 
 from errata_tool import Erratum, ErrataException
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 import requests
 import click
 

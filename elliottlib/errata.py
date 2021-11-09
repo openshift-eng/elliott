@@ -7,7 +7,6 @@ associated metadata.
 Classes representing an ERRATUM (a single errata)
 
 """
-from __future__ import absolute_import, print_function, unicode_literals
 from future import standard_library
 standard_library.install_aliases()
 from errata_tool import ErrataConnector
@@ -21,7 +20,7 @@ from elliottlib.util import green_prefix, exit_unauthenticated
 import click
 import requests
 from requests_kerberos import HTTPKerberosAuth
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
 
 import xmlrpc.client

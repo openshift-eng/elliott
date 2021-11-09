@@ -2,10 +2,9 @@
 """
 Test the ImageMetadata class
 """
-from __future__ import unicode_literals
 import unittest
 
-import flexmock
+from flexmock import flexmock
 
 from elliottlib import imagecfg
 

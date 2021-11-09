@@ -1,4 +1,3 @@
-from __future__ import unicode_literals, absolute_import, print_function, with_statement
 import unittest
 import mock
 import json
