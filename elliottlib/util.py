@@ -10,7 +10,7 @@ from elliottlib import brew
 from elliottlib.exceptions import BrewBuildException
 
 from errata_tool import Erratum
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 
 # -----------------------------------------------------------------------------
 # Constants and defaults

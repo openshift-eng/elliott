@@ -1,7 +1,6 @@
 """
 This file contains constants that are used to manage OCP Image and RPM builds
 """
-from __future__ import absolute_import, print_function, unicode_literals
 
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 BREW_DOWNLOAD_URL = "http://download.eng.bos.redhat.com/brewroot"

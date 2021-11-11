@@ -1,4 +1,3 @@
-from __future__ import unicode_literals, print_function
 import unittest
 import mock
 import json
@@ -28,5 +27,5 @@ class TarballSourcesTestCase(unittest.TestCase):
             self.assertEqual(actual, expected)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

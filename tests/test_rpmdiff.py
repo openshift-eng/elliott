@@ -1,4 +1,3 @@
-from __future__ import unicode_literals, absolute_import, print_function, with_statement
 import unittest
 import mock
 import json
@@ -55,3 +54,7 @@ class TestRPMDiffClient(unittest.TestCase):
         self.client.session.get.return_value.json.return_value = response
         actual = self.client.list_waivers("foo", 123)
         self.assertEqual(actual, response["results"])
+
+
+if __name__ == '__main__':
+    unittest.main()

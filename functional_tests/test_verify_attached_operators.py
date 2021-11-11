@@ -32,7 +32,7 @@ class TestVerifyAttachedOperators(TestCase):
 
         spec = "ose-csi-external-provisioner@sha256:cb191fcfe71ce6da60e73697aaa9b3164c1f0566150d3bffb8004598284d767a"
         self.assertEqual(
-            "csi-provisioner-container-v4.9.0-202109302317.p0.git.7736e72.assembly.stream",
+            "csi-provisioner-container-v4.9.0-202109302317.p0.g7736e72.assembly.stream",
             verify_attached_operators_cli._nvr_for_operand_pullspec(runtime, spec)
         )
 
@@ -53,5 +53,5 @@ class TestVerifyAttachedOperators(TestCase):
             capture_output=True,
             encoding='utf-8',
         )
-        self.assertIn("csi-provisioner-container-v4.9.0-202109302317.p0.git.7736e72.assembly.stream", out.stdout)
+        self.assertIn("csi-provisioner-container-v4.9.0-202109302317.p0.g7736e72.assembly.stream", out.stdout)
         self.assertEqual(1, out.returncode)

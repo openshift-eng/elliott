@@ -1,4 +1,4 @@
-from unittest import TestCase
+import unittest
 
 from mock import MagicMock, Mock
 from mock.mock import patch
@@ -7,7 +7,7 @@ from elliottlib.model import Model
 from elliottlib.build_finder import BuildFinder
 
 
-class TestPlashetBuilder(TestCase):
+class TestPlashetBuilder(unittest.TestCase):
     @patch("elliottlib.build_finder.get_build_objects")
     def test_get_builds(self, get_build_objects: Mock):
         finder = BuildFinder(MagicMock())
@@ -179,3 +179,7 @@ class TestPlashetBuilder(TestCase):
         self.assertEqual([b["nvr"] for b in actual.values()], ["fake1-1.2.3-1.el8", "fake2-1.2.3-1.el8", "fake3-1.2.3-1.el8"])
         finder._get_builds.assert_called_once_with(["fake1-1.2.3-1.el8", "fake2-1.2.3-1.el8", "fake3-1.2.3-1.el8"])
         assembly_rhcos_config.assert_called_once()
+
+
+if __name__ == '__main__':
+    unittest.main()

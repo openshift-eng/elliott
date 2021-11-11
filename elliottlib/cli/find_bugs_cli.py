@@ -19,6 +19,8 @@ from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print
 
 pass_runtime = click.make_pass_decorator(Runtime)
 
+LOGGER = logutil.getLogger(__name__)
+
 
 @cli.command("find-bugs", short_help="Find or add MODIFED/VERIFIED bugs to ADVISORY")
 @click.option("--add", "-a", 'advisory',
@@ -408,8 +410,8 @@ def print_report(bugs: type_bug_list) -> None:
 
 
 def mode_list(advisory: str, bugs: type_bug_list, report: bool, flags: List[str], noop: bool) -> None:
-    green_prefix(f"Found {len(bugs)} bugs: ")
-    click.echo(", ".join(sorted(str(b.bug_id) for b in bugs)))
+    LOGGER.info(f"Found {len(bugs)} bugs: ")
+    LOGGER.info(", ".join(sorted(str(b.bug_id) for b in bugs)))
     if report:
         print_report(bugs)
 

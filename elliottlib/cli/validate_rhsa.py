@@ -3,7 +3,7 @@ from elliottlib.cli.common import cli
 from elliottlib.util import exit_unauthenticated
 
 from errata_tool import Erratum
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 import click
 import json
 import koji

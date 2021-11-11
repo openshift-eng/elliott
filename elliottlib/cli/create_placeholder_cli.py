@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 import json
 
 import elliottlib
@@ -9,7 +8,7 @@ from elliottlib.util import exit_unauthenticated, ensure_erratatool_auth
 from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header
 
 from errata_tool import Erratum, ErrataException
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 import requests
 import click
 
