@@ -54,7 +54,7 @@ def tag_builds_cli(runtime: Runtime, advisories: Tuple[int], default_advisory_ty
 
     Example 3: Tag specified builds into rhaos-4.3-rhel-8-image-build
 
-    $ elliott --group=openshift-4.3 tag-builds --build buildah-1.11.6-6.rhaos4.3.el8 --build openshift-4.3.23-202005230952.git.1.b596217.el8 --tag rhaos-4.3-rhel-8-image-build
+    $ elliott --group=openshift-4.3 tag-builds --build buildah-1.11.6-6.rhaos4.3.el8 --build openshift-4.3.23-202005230952.g1.b596217.el8 --tag rhaos-4.3-rhel-8-image-build
     """
     if advisories and builds:
         raise click.BadParameter('Use only one of --build or --advisory/-a.')

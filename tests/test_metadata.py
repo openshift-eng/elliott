@@ -60,7 +60,7 @@ class TestMetadata(unittest.TestCase):
             release += f'.{p}'
 
         if git_commit:
-            release += f'.git.{git_commit[:7]}'
+            release += f'.g{git_commit[:7]}'
 
         if assembly is not None:
             release += f'.assembly.{assembly}{release_suffix}'
@@ -196,12 +196,12 @@ class TestMetadata(unittest.TestCase):
         # Check whether extra pattern matching works
         builds = [
             self.build_record(now - datetime.timedelta(hours=5), assembly='stream'),
-            self.build_record(now - datetime.timedelta(hours=25), assembly='stream', release_prefix='99999.git.1234567', release_suffix='.el8'),
+            self.build_record(now - datetime.timedelta(hours=25), assembly='stream', release_prefix='99999.g1234567', release_suffix='.el8'),
             self.build_record(now - datetime.timedelta(hours=5), assembly=runtime.assembly),
             self.build_record(now, assembly='not_ours'),
             self.build_record(now - datetime.timedelta(hours=8), assembly=f'{runtime.assembly}')
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None, extra_pattern='*.git.1234567.*'), builds[1])
+        self.assertEqual(meta.get_latest_build(koji_mock, default=None, extra_pattern='*.g1234567.*'), builds[1])
 
     def test_get_latest_build_multi_target(self):
         meta = self.meta
