@@ -78,7 +78,7 @@ class VerifyBugs(TestCase):
         # having acquired these bugs, might as well use them to test verification
         bv._verify_blocking_bugs(bbf)
         self.assertIn(
-            "Regression possible: bug 1869790 is a backport of bug 1868735 which was CLOSED DUPLICATE",
+            "Regression possible: bug 1869790 is a backport of bug 1868735 which was CLOSED WONTFIX",
             bv.problems
         )
         for bug in [1875258, 1878798, 1881212, 1840719]:
