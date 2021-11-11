@@ -1,6 +1,6 @@
 import unittest
 from flexmock import flexmock
-from elliottlib import attach_cve_flaws, constants
+from elliottlib import attach_cve_flaws, constants, exceptions
 
 
 class TestAttachCVEFlaws(unittest.TestCase):
@@ -44,18 +44,17 @@ class TestAttachCVEFlaws(unittest.TestCase):
 
     def test_get_corresponding_flaw_bugs(self):
         tracker_bugs = [
-            flexmock(blocks=[1, 2]),
-            flexmock(blocks=[2, 3]),
-            flexmock(blocks=[4])
+            flexmock(blocks=[1, 2], id=10),
+            flexmock(blocks=[2, 3, 4], id=11),
         ]
         bugs = [1, 2, 3, 4]
         product = 'Security Response'
         component = 'vulnerability'
         flaw_bugs = [
-            flexmock(product=product, component=component),
-            flexmock(product=product, component=component),
-            flexmock(product='foo', component=component),
-            flexmock(product=product, component='bar')
+            flexmock(product=product, component=component, id=1),
+            flexmock(product=product, component=component, id=2),
+            flexmock(product='foo', component=component, id=3),
+            flexmock(product=product, component='bar', id=4)
         ]
 
         fields = ["somefield"]
@@ -68,6 +67,31 @@ class TestAttachCVEFlaws(unittest.TestCase):
         expected = 2
         actual = len(attach_cve_flaws.get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields))
         self.assertEqual(expected, actual)
+
+    def test_validate_tracker_has_flaw(self):
+        tracker_bugs = [
+            flexmock(blocks=[1, 2], id=10),
+            flexmock(blocks=[2, 3], id=11),
+            flexmock(blocks=[], id=12)
+        ]
+        product = 'Security Response'
+        component = 'vulnerability'
+        flaw_bugs = [
+            flexmock(product=product, component='wrong_component', id=1),
+            flexmock(product='wrong_product', component=component, id=2),
+            flexmock(product=product, component=component, id=3)
+        ]
+
+        bzapi = flexmock()
+        (bzapi
+         .should_receive("getbugs")
+         .and_return(flaw_bugs))
+
+        self.assertRaisesRegex(
+            exceptions.ElliottFatalError,
+            r'^No flaw bugs could be found for these trackers: {10, 12}$',
+            attach_cve_flaws.get_corresponding_flaw_bugs,
+            bzapi, tracker_bugs, ['some_field'], strict=True)
 
     def test_is_first_fix_any_validate(self):
         bzapi = None

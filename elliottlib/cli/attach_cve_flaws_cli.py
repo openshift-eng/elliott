@@ -62,7 +62,8 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     corresponding_flaw_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
         bzapi,
         attached_tracker_bugs,
-        fields=["depends_on", "alias", "severity", "summary"]
+        fields=["depends_on", "alias", "severity", "summary"],
+        strict=True
     )
     runtime.logger.info('found {} corresponding flaw bugs: {}'.format(
         len(corresponding_flaw_bugs), sorted(bug.id for bug in corresponding_flaw_bugs)

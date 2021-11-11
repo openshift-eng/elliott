@@ -1,4 +1,4 @@
-from elliottlib import constants, errata, util, bzutil, logutil
+from elliottlib import constants, errata, exceptions, util, bzutil, logutil
 
 logger = logutil.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def get_advisory(advisory_id):
     return errata.ErrataConnector()._get(f'/api/v1/erratum/{advisory_id}')
 
 
-def get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields):
+def get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields, strict=False):
     """
     Get corresponding flaw bugs objects for the
     given tracker bug objects
@@ -54,7 +54,22 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields):
         unique(flatten([t.blocks for t in tracker_bugs])),
         include_fields=fields,
         permissive=False)
-    return [flaw_bug for flaw_bug in blocking_bugs if bzutil.is_flaw_bug(flaw_bug)]
+
+    flaw_bugs = [flaw_bug for flaw_bug in blocking_bugs if bzutil.is_flaw_bug(flaw_bug)]
+
+    # Validate that each tracker has a corresponding flaw bug
+    flaw_ids = set([b.id for b in flaw_bugs])
+    no_flaws = set()
+    for tracker in tracker_bugs:
+        if not set(tracker.blocks).intersection(flaw_ids):
+            no_flaws.add(tracker.id)
+    if no_flaws:
+        msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
+        if strict:
+            raise exceptions.ElliottFatalError(msg)
+        else:
+            logger.warn(msg)
+    return flaw_bugs
 
 
 def is_first_fix_any(bzapi, flaw_bug, current_target_release):
@@ -69,7 +84,7 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
 
     # get all tracker bugs for a flaw bug
     tracker_ids = flaw_bug.depends_on
-    if len(tracker_ids) == 0:
+    if not tracker_ids:
         # No trackers found
         # is a first fix
         # shouldn't happen ideally
@@ -81,7 +96,7 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
         bug_id=tracker_ids,
         include_fields=["keywords", "target_release", "status", "resolution", "whiteboard"]
     )) if is_tracker_bug(b)]
-    if len(tracker_bugs) == 0:
+    if not tracker_bugs:
         # No OCP trackers found
         # is a first fix
         return True
