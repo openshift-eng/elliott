@@ -1,4 +1,5 @@
 import click
+import re
 from spnego.exceptions import GSSError
 
 from errata_tool import Erratum
@@ -28,7 +29,20 @@ def verify_attached_bugs_cli(runtime, verify_bug_status, advisories):
     if not advisories:
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
-    BugValidator(runtime).validate(advisories, verify_bug_status)
+    validator = BugValidator(runtime)
+    bugs = validator.get_attached_filtered_bugs(advisories)
+    validator.validate(bugs, verify_bug_status)
+
+
+@cli.command("verify-bugs", short_help="Same as verify-attached-bugs, but for bugs that are not (yet) attached to advisories")
+@click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
+@click.argument("bug_ids", nargs=-1, type=click.IntRange(1), required=False)
+@pass_runtime
+def verify_bugs_cli(runtime, verify_bug_status, bug_ids):
+    runtime.initialize()
+    validator = BugValidator(runtime)
+    bugs = validator.filter_bugs_by_product(list(bzutil.get_bugs(validator.bzapi, bug_ids, True).values()))
+    validator.validate(bugs, verify_bug_status)
 
 
 class BugValidator:
@@ -41,8 +55,7 @@ class BugValidator:
         self.bzapi = bzutil.get_bzapi(self.bz_data)
         self.problems = []
 
-    def validate(self, advisories, verify_bug_status):
-        bugs = self._get_attached_filtered_bugs(advisories)
+    def validate(self, bugs, verify_bug_status):
         blocking_bugs_for = self._get_blocking_bugs_for(bugs)
         self._verify_blocking_bugs(blocking_bugs_for)
 
@@ -66,12 +79,9 @@ class BugValidator:
 
         return list(bzutil.get_bugs(self.bzapi, list(bugs)).values())
 
-    def _get_attached_filtered_bugs(self, advisories):
+    def get_attached_filtered_bugs(self, advisories):
         # get bugs from advisories that are for the expected product and version
-        candidates = self._get_attached_bugs(advisories)
-
-        # filter out bugs for different product (presumably security flaw bugs)
-        candidates = [b for b in candidates if b.product == self.product]
+        candidates = self.filter_bugs_by_product(self._get_attached_bugs(advisories))
 
         # filter out bugs with an invalid target release (and complain)
         filtered_bugs = []
@@ -87,6 +97,10 @@ class BugValidator:
 
         return filtered_bugs
 
+    def filter_bugs_by_product(self, bugs):
+        # filter out bugs for different product (presumably security flaw bugs)
+        return [b for b in bugs if b.product == self.product]
+
     def _get_blocking_bugs_for(self, bugs):
         # get blocker bugs in the next version for all bugs we are examining
         candidate_blockers = [b.depends_on for b in bugs if b.depends_on]
@@ -95,12 +109,14 @@ class BugValidator:
         v = minor_version_tuple(self.target_releases[0])
         next_version = (v[0], v[1] + 1)
 
+        pattern = re.compile(r'^[0-9]+\.[0-9]+\.(0|z)$')
+
         # retrieve blockers and filter to those with correct product and target version
         blocking_bugs = {
             bug.id: bug
             for bug in bzutil.get_bugs(self.bzapi, list(candidate_blockers)).values()
             # b.target release is a list of size 0 or 1
-            if any(minor_version_tuple(target) == next_version for target in bug.target_release)
+            if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
             and bug.product == self.product
         }
 
