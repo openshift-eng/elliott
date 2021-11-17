@@ -1,7 +1,8 @@
 import click
 import re
+import json
 from elliottlib.cli.common import cli
-from elliottlib import rhcos, cincinnati, util
+from elliottlib import rhcos, cincinnati, util, exectools
 
 
 @cli.command("rhcos", short_help="Show details of packages contained in OCP RHCOS builds")
@@ -14,6 +15,7 @@ from elliottlib import rhcos, cincinnati, util
 @click.option('--release', '-r', 'release',
               help='Show details for this OCP release. Can be a full pullspec or a named release ex: 4.8.4')
 @click.option('--arch', 'arch',
+              default=None,
               type=click.Choice(util.brew_arches + ['all']),
               help='Specify architecture. Default is x86_64. "all" to get all arches. aarch64 only works for 4.8+')
 @click.option('--packages', '-p', 'packages',
@@ -29,94 +31,156 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
 
     Usage:
 
-\b
+\b Pullspec
     $ elliott rhcos -r registry.ci.openshift.org/ocp-s390x/release-s390x:4.8.0-0.nightly-s390x-2021-07-31-070046
 
-\b
+\b Nightly
+    $ elliott rhcos -r registry.ci.openshift.org/ocp-s390x/release-s390x:4.8.0-0.nightly-s390x-2021-07-31-070046
+
+\b Named Release
     $ elliott rhcos -r 4.6.31 -p runc --go --arch all
 
-\b
-    $ elliott --group openshift-4.8 rhcos -l -p runc
+\b Assembly Definition
+    $ elliott --group openshift-4.8 --assembly 4.8.21 rhcos -p container-selinux
 
-\b
-    $ elliott --group openshift-4.8 rhcos -l --arch ppc64le
+\b Latest RHCOS Build
+    $ elliott --group openshift-4.8 rhcos -l -p runc --arch s390x
 
-\b
+\b Latest Named Release
     $ elliott --group openshift-4.8 rhcos -o -p skopeo,podman --arch all
 """
-    count_options = sum(map(bool, [release, latest, latest_ocp]))
-    if count_options > 1:
-        raise click.BadParameter("Use only one of --from-spec, --latest, --latest-ocp")
+    version = ''
+    named_assembly = runtime.assembly != 'stream'
+    count_options = sum(map(bool, [named_assembly, release, latest, latest_ocp]))
+    if count_options != 1:
+        raise click.BadParameter("Use one of --assembly, --release, --latest, --latest-ocp")
 
-    if arch and release and ('/' in release):
-        raise click.BadParameter("--arch=all cannot be used with --release <pullspec>")
+    def _via_release():
+        nonlocal arch, version
+        nightly = 'nightly' in release
+        if arch and release and ('/' in release or nightly):
+            raise click.BadParameter("--arch=all cannot be used with --release <pullspec> or <*nightly*>")
 
-    if latest or latest_ocp:
+        runtime.initialize(no_group=True)
+        version = re.search(r'(\d+\.\d+).', release).groups()[0]
+        if nightly:
+            for a in util.go_arches:
+                if a in release:
+                    arch = a
+
+    def _via_latest():
+        nonlocal version
         runtime.initialize()
         major = runtime.group_config.vars.MAJOR
         minor = runtime.group_config.vars.MINOR
         version = f'{major}.{minor}'
+
+    rhcos_pullspec = ''
+    def _via_assembly():
+        nonlocal arch, rhcos_pullspec, version
+        if not arch:
+            raise click.BadParameter("--assembly needs --arch <>")
+
+        runtime.initialize()
+        major = runtime.group_config.vars.MAJOR
+        minor = runtime.group_config.vars.MINOR
+        version = f'{major}.{minor}'
+        rhcos_def = runtime.releases_config.releases[runtime.assembly].assembly.rhcos
+        if not rhcos_def:
+            raise click.BadParameter("only named assemblies with valid rhcos values are supported. If an assembly is "
+                                     "based on another, try using the original assembly")
+
+        rhcos_pullspec = rhcos_def['machine-os-content']['images'][arch]
+
+    if release:
+        _via_release()
+    elif runtime.assembly:
+        _via_assembly()
     else:
-        version = re.search(r'(\d+\.\d+).', release).groups()[0]
-        runtime.initialize(no_group=True)
+        _via_latest()
 
     logger = runtime.logger
     arch = 'x86_64' if not arch else arch
 
     if arch == 'all':
-        for a in util.brew_arches:
-            _rhcos(version, release, latest, latest_ocp, packages, a, go, logger)
+        for local_arch in util.brew_arches:
+            build_id = get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, local_arch, logger)
+            _via_build_id(build_id, local_arch, version, packages, go)
     else:
-        _rhcos(version, release, latest, latest_ocp, packages, arch, go, logger)
+        build_id = get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, arch, logger)
+        _via_build_id(build_id, arch, version, packages, go)
 
 
 def get_pullspec(release, arch):
     return f'quay.io/openshift-release-dev/ocp-release:{release}-{arch}'
 
 
-def _rhcos(version, release, latest, latest_ocp, packages, arch, go, logger):
+def get_nightly_pullspec(release, arch):
+    suffix = util.go_suffix_for_arch(arch)
+    return f'registry.ci.openshift.org/ocp{suffix}/release{suffix}:{release}'
+
+
+def get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, arch, logger):
     if arch == 'aarch64' and version < '4.9':
         return
 
     build_id = ''
-    pullspec = ''
-    if latest or latest_ocp:
-        if latest:
-            logger.info(f'Looking up latest RHCOS Build for {version} {arch}')
-            build_id = rhcos.latest_build_id(version, arch)
-            logger.info(f'Build found: {build_id}')
-        else:
-            logger.info(f'Looking up last OCP Release for {version} {arch} in fast channel')
-            release = cincinnati.get_latest_fast_ocp(version, arch)
-            if not release:
-                return
+    if latest:
+        logger.info(f'Looking up latest RHCOS Build for {version} {arch}')
+        build_id = rhcos.latest_build_id(version, arch)
+        logger.info(f'Build found: {build_id}')
+        return build_id
 
+    if latest_ocp:
+        logger.info(f'Looking up last OCP Release for {version} {arch} in fast channel')
+        release = cincinnati.get_latest_fast_ocp(version, arch)
+        if not release:
+            return
+
+    payload_pullspec = ''
     if release:
         if '/' in release:
-            pullspec = release
+            payload_pullspec = release
         else:
-            logger.info(f'OCP Release: {release}-{arch}')
-            pullspec = get_pullspec(release, arch)
+            if 'nightly' in release:
+                logger.info(f'OCP Nightly: {release}-{arch}')
+                payload_pullspec = get_nightly_pullspec(release, arch)
+            else:
+                logger.info(f'OCP Release: {release}-{arch}')
+                payload_pullspec = get_pullspec(release, arch)
 
-    if pullspec:
-        logger.info(f"Looking up RHCOS Build for {pullspec}")
-        build_id, arch = rhcos.get_build_from_payload(pullspec)
+        logger.info(f"Looking up RHCOS Build for {payload_pullspec}")
+        build_id, arch = rhcos.get_build_from_payload(payload_pullspec)
         logger.info(f'Build found: {build_id}')
+        return build_id
 
-    if build_id:
-        util.green_print(f'Build: {build_id} Arch: {arch}')
-        nvrs = rhcos.get_rpm_nvrs(build_id, version, arch)
-        if not nvrs:
-            return
-        if packages:
-            packages = [p.strip() for p in packages.split(',')]
-            if 'openshift' in packages:
-                packages.remove('openshift')
-                packages.append('openshift-hyperkube')
-            nvrs = [p for p in nvrs if p[0] in packages]
-        if go:
-            go_rpm_nvrs = util.get_golang_rpm_nvrs(nvrs, logger)
-            util.pretty_print_nvrs_go(go_rpm_nvrs, ignore_na=True)
-            return
-        for nvr in sorted(nvrs):
-            print('-'.join(nvr))
+    if rhcos_pullspec:
+        image_info_str, _ = exectools.cmd_assert(f'oc image info -o json {rhcos_pullspec}', retries=3)
+        image_info = json.loads(image_info_str)
+        build_id = image_info['config']['config']['Labels']['version']
+        if not build_id:
+            raise Exception(
+                f'Unable to determine build_id from: {rhcos_pullspec}. Retrieved image info: {image_info_str}')
+        return build_id
+
+
+def _via_build_id(build_id, arch, version, packages, go):
+    if not build_id:
+        Exception('Cannot find build_id')
+
+    util.green_print(f'Build: {build_id} Arch: {arch}')
+    nvrs = rhcos.get_rpm_nvrs(build_id, version, arch)
+    if not nvrs:
+        return
+    if packages:
+        packages = [p.strip() for p in packages.split(',')]
+        if 'openshift' in packages:
+            packages.remove('openshift')
+            packages.append('openshift-hyperkube')
+        nvrs = [p for p in nvrs if p[0] in packages]
+    if go:
+        go_rpm_nvrs = util.get_golang_rpm_nvrs(nvrs, logger)
+        util.pretty_print_nvrs_go(go_rpm_nvrs, ignore_na=True)
+        return
+    for nvr in sorted(nvrs):
+        print('-'.join(nvr))
