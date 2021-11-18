@@ -75,9 +75,14 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
         minor = runtime.group_config.vars.MINOR
         version = f'{major}.{minor}'
 
-    rhcos_pullspec = ''
+    rhcos_pullspecs = {}
+    if arch == 'all':
+        target_arches = util.brew_arches
+    else:
+        target_arches = [arch]
+
     def _via_assembly():
-        nonlocal arch, rhcos_pullspec, version
+        nonlocal arch, rhcos_pullspecs, version
         if not arch:
             raise click.BadParameter("--assembly needs --arch <>")
 
@@ -90,7 +95,11 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
             raise click.BadParameter("only named assemblies with valid rhcos values are supported. If an assembly is "
                                      "based on another, try using the original assembly")
 
-        rhcos_pullspec = rhcos_def['machine-os-content']['images'][arch]
+        images = rhcos_def['machine-os-content']['images']
+
+        for a in target_arches:
+            if a in images:
+                rhcos_pullspecs[a] = images[a]
 
     if release:
         _via_release()
@@ -102,13 +111,10 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
     logger = runtime.logger
     arch = 'x86_64' if not arch else arch
 
-    if arch == 'all':
-        for local_arch in util.brew_arches:
-            build_id = get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, local_arch, logger)
-            _via_build_id(build_id, local_arch, version, packages, go)
-    else:
-        build_id = get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, arch, logger)
-        _via_build_id(build_id, arch, version, packages, go)
+    for local_arch in target_arches:
+        build_id = get_build_id(version, release, latest, latest_ocp, rhcos_pullspecs.get(local_arch), local_arch,
+                                logger)
+        _via_build_id(build_id, local_arch, version, packages, go, logger)
 
 
 def get_pullspec(release, arch):
@@ -124,7 +130,6 @@ def get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, arch, log
     if arch == 'aarch64' and version < '4.9':
         return
 
-    build_id = ''
     if latest:
         logger.info(f'Looking up latest RHCOS Build for {version} {arch}')
         build_id = rhcos.latest_build_id(version, arch)
@@ -137,7 +142,6 @@ def get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, arch, log
         if not release:
             return
 
-    payload_pullspec = ''
     if release:
         if '/' in release:
             payload_pullspec = release
@@ -164,7 +168,7 @@ def get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, arch, log
         return build_id
 
 
-def _via_build_id(build_id, arch, version, packages, go):
+def _via_build_id(build_id, arch, version, packages, go, logger):
     if not build_id:
         Exception('Cannot find build_id')
 
