@@ -99,7 +99,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("--all", "remove_all",
               required=False,
               default=False, is_flag=True,
-              help="AUTO mode, remove all bugs attached to ADVISORY")
+              help="Remove all bugs attached to ADVISORY")
 @pass_runtime
 def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all):
     """Remove given BUGS from ADVISORY.
@@ -376,13 +376,14 @@ providing an advisory with the -a/--advisory option.
     green_print("Got bugs for advisory")
     for bug in attached_bugs:
         if bug.status in original_state:
+            if close_placeholder and "Placeholder" in bug.summary:
+                elliottlib.bzutil.set_state(bug, "CLOSED", noop=noop)
+            else:
+                elliottlib.bzutil.set_state(bug, new_state, noop=noop)
+                # only add comments for non-placeholder bug
+                if comment and not noop:
+                    bug.setstatus(comment=comment, private=False)
             changed_bug_count += 1
-            elliottlib.bzutil.set_state(bug, new_state, noop=noop)
-        if close_placeholder and "Placeholder" in bug.summary:
-            changed_bug_count += 1
-            elliottlib.bzutil.set_state(bug, "CLOSED", noop=noop)
-        if comment and not noop:
-            bug.setstatus(comment=comment, private=False)
 
     green_print("{} bugs successfully modified (or would have been)".format(changed_bug_count))
 
