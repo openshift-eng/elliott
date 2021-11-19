@@ -12,3 +12,7 @@ class ListTestCase(unittest.TestCase):
             ]
         )
         self.assertIn(constants.ERRATA_TOOL_URL, out.decode("utf-8"))
+
+
+if __name__ == '__main__':
+    unittest.main()

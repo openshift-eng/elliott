@@ -1,4 +1,4 @@
-from unittest import TestCase
+import unittest
 from mock import MagicMock, patch
 from functional_tests import constants
 import subprocess
@@ -7,7 +7,7 @@ from elliottlib.cli.verify_attached_bugs_cli import BugValidator
 from elliottlib import bzutil
 
 
-class VerifyBugs(TestCase):
+class VerifyBugs(unittest.TestCase):
 
     def setUp(self):
         self.patchers = [
@@ -103,3 +103,7 @@ class VerifyBugs(TestCase):
         )
         self.assertIn("bug 1856529 target release ['4.5.z'] is not in", out.stdout)
         self.assertEqual(1, out.returncode)
+
+
+if __name__ == '__main__':
+    unittest.main()

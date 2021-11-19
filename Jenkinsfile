@@ -14,7 +14,7 @@ pipeline {
                 script {
                     catchError(stageResult: 'FAILURE') {
                         sh """
-                            tox_args="\$(git diff --name-only HEAD~5 | grep -Fxq -e requirements.txt -e requirements-dev.txt -e MANIFEST.in -e setup.py && echo '--recreate' || true)"
+                            tox_args="\$(git diff --name-only HEAD~10 | grep -Fxq -e requirements.txt -e requirements-dev.txt -e MANIFEST.in -e setup.py && echo '--recreate' || true)"
                             tox \$tox_args > results.txt 2>&1
                         """
                     }

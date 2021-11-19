@@ -7,15 +7,12 @@ associated metadata.
 Classes representing an ERRATUM (a single errata)
 
 """
-from future import standard_library
-standard_library.install_aliases()
-from errata_tool import ErrataConnector
 import datetime
 import json
 import ssl
 import re
 from elliottlib import exceptions, constants, brew, logutil, bzutil
-from elliottlib.util import green_prefix, exit_unauthenticated
+from elliottlib.util import green_prefix, green_print, exit_unauthenticated
 
 import click
 import requests
@@ -29,6 +26,70 @@ logger = logutil.getLogger(__name__)
 
 ErrataConnector._url = constants.errata_url
 errata_xmlrpc = xmlrpc.client.ServerProxy(constants.errata_xmlrpc_url)
+
+
+class Advisory(Erratum):
+    """
+    Wrapper class of errata_tool.Erratum
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def ensure_state(self, target_state):
+        """
+        Ensures that an Advisory is in a given state
+        :param target_state: Desired target state
+        :raises ValueError: ValueError if target_state is not a recognized state
+        :raises ErrataException:
+        """
+        if target_state not in constants.errata_states:
+            raise ValueError(f'Desired state {target_state} is not a valid Errata state {constants.errata_states}')
+        if self.errata_state != target_state:
+            self.setState(target_state)
+            self.commit()
+
+    def attach_builds(self, builds, kind):
+        """
+        Attach a list of builds to Advisory
+        :param builds: List of brew builds
+        :param kind: rpm or image
+        :raises ValueError: When wrong kind
+        :raises ErrataException:
+        """
+        click.echo(f"Attaching to advisory {self.errata_id}...")
+        if kind not in {"rpm", "image"}:
+            raise ValueError(f"{kind} should be one of 'rpm' or 'image'")
+
+        file_type = 'tar' if kind == 'image' else 'rpm'
+        product_version_set = {build.product_version for build in builds}
+        for pv in product_version_set:
+            self.addBuilds(
+                buildlist=[build.nvr for build in builds if build.product_version == pv],
+                release=pv,
+                file_types={build.nvr: [file_type] for build in builds if build.product_version == pv}
+            )
+
+        build_nvrs = sorted(build.nvr for build in builds)
+        green_print('Attached build(s) successfully:')
+        click.echo(' '.join(build_nvrs))
+
+    def set_cdn_repos(self, cdn_repos):
+        """
+        Configures CDN repos for Advisory
+        :param cdn_repos: List of cdn repositories
+        """
+        click.echo(f"Configuring CDN repos {' '.join(cdn_repos)}")
+        self.metadataCdnRepos(enable=cdn_repos)
+        click.echo("Configured CDN repos successfully")
+
+    def remove_builds(self, to_remove):
+        """
+        Remove list of builds from Advisory
+        :param to_remove: List of NVRs to remove
+        """
+        click.echo(f"Removing build(s) from advisory {self.errata_id}: {' '.join(to_remove)}")
+        self.removeBuilds(to_remove)
+        green_print('Removed build(s) successfully')
 
 
 def get_raw_erratum(advisory_id):
@@ -84,7 +145,7 @@ def new_erratum(et_data, errata_type=None, boilerplate_name=None, kind=None, rel
     :param impact: The security impact. Only applies to RHSA
     :param cves: The CVE(s) to attach to the advisory. Separate multiple CVEs with a space. Only applies to RHSA
 
-    :return: An Erratum object
+    :return: An Advisory object
     :raises: exceptions.ErrataToolUnauthenticatedException if the user is not authenticated to make the request
     """
     if not release_date:
@@ -107,7 +168,7 @@ def new_erratum(et_data, errata_type=None, boilerplate_name=None, kind=None, rel
             "solution": et_data["solution"],
         }
 
-    e = Erratum(
+    e = Advisory(
         product=et_data['product'],
         release=et_data['release'],
         errata_type=errata_type,
@@ -138,9 +199,8 @@ def build_signed(build):
     """return boolean: is the build signed or not
 
     :param string build: The build nvr or id
-"""
-    filter_endpoint = constants.errata_get_build_url.format(
-        id=build)
+    """
+    filter_endpoint = constants.errata_get_build_url.format(id=build)
     res = requests.get(filter_endpoint,
                        verify=ssl.get_default_verify_paths().openssl_cafile,
                        auth=HTTPKerberosAuth())
@@ -155,20 +215,19 @@ def build_signed(build):
 
 
 def get_filtered_list(filter_id=constants.errata_default_filter, limit=5):
-    """return a list of Erratum() objects from results using the provided
-filter_id
+    """return a list of Advisory() objects from results using the provided
+    filter_id
 
     :param filter_id: The ID number of the pre-defined filter
     :param int limit: How many erratum to list
-    :return: A list of Erratum objects
+    :return: A list of Advisory objects
 
     :raises exceptions.ErrataToolUnauthenticatedException: If the user is not authenticated to make the request
     :raises exceptions.ErrataToolError: If the given filter does not exist, and, any other unexpected error
 
     Note: Errata filters are defined in the ET web interface
     """
-    filter_endpoint = constants.errata_filter_list_url.format(
-        id=filter_id)
+    filter_endpoint = constants.errata_filter_list_url.format(id=filter_id)
     res = requests.get(filter_endpoint,
                        verify=ssl.get_default_verify_paths().openssl_cafile,
                        auth=HTTPKerberosAuth())
@@ -180,7 +239,7 @@ filter_id
         # successfully parsing the response as a JSONinfo object indicates
         # a successful API call.
         try:
-            return [Erratum(errata_id=advs['id']) for advs in res.json()][:limit]
+            return [Advisory(errata_id=advs['id']) for advs in res.json()][:limit]
         except Exception:
             raise exceptions.ErrataToolError("Could not locate the given advisory filter: {fid}".format(
                 fid=filter_id))
@@ -539,23 +598,6 @@ def get_advisory_images(image_advisory_id, raw=False):
     ]
 
     return '#########\n{}\n#########'.format('\n'.join(image_list))
-
-
-def detach_build(advisory_id: int, nvr: str, session=None):
-    """ Remove a build from advisory
-    :param advisory_id: advisory number
-    :param nvr: build NVR
-    :param session: Errata session
-
-    POST /api/v1/erratum/{id}/remove_build
-    """
-    if not session:
-        session = requests.Session()
-    url = constants.errata_remove_build_url.format(id=int(advisory_id))
-    with session.post(url, json={"nvr": nvr}, auth=HTTPKerberosAuth()) as response:
-        response.raise_for_status()
-        result = response.json()
-        return result
 
 
 def get_advisory_nvrs(advisory):

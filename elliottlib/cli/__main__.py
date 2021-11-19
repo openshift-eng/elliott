@@ -70,7 +70,7 @@ import bugzilla
 import click
 import requests
 import errata_tool.build
-from errata_tool import Erratum, ErrataException
+from errata_tool import ErrataException
 from spnego.exceptions import GSSError
 
 
@@ -129,7 +129,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id):
 
     if advisory:
         try:
-            advs = Erratum(errata_id=advisory)
+            advs = elliottlib.errata.Advisory(errata_id=advisory)
         except GSSError:
             exit_unauthenticated()
 
@@ -202,7 +202,7 @@ Fields for the short format: Release date, State, Synopsys, URL
         return
 
     try:
-        advisory = Erratum(errata_id=advisory)
+        advisory = elliottlib.errata.Advisory(errata_id=advisory)
     except GSSError:
         exit_unauthenticated()
 
@@ -331,8 +331,8 @@ providing an advisory with the -a/--advisory option.
 
     raw_bug_list = []
     if auto:
-        click.echo("Fetching Erratum(errata_id={})".format(advisory))
-        e = Erratum(errata_id=advisory)
+        click.echo("Fetching Advisory(errata_id={})".format(advisory))
+        e = elliottlib.errata.Advisory(errata_id=advisory)
         raw_bug_list = e.errata_bugs
     else:
         click.echo("Bypassed fetching erratum, using provided BZs")
@@ -630,7 +630,7 @@ unsigned builds.
         click.echo("Polling up to {} minutes for all RPMs to be signed".format(minutes))
 
     try:
-        e = Erratum(errata_id=advisory)
+        e = elliottlib.errata.Advisory(errata_id=advisory)
         all_builds = set([])
         all_signed = False
         # `errata_builds` is a dict with brew tags as keys, values are
