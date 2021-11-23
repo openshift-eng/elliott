@@ -560,7 +560,7 @@ def get_golang_container_nvrs(nvrs, logger):
         go_version = 'N/A'
         nvr = (build['name'], build['version'], build['release'])
         name = nvr[0]
-        if 'golang-builder' in name:
+        if 'golang-builder' in name or 'go-toolset' in name:
             go_version = golang_builder_version(nvr, logger)
             go_container_nvrs[name] = {
                 'nvr': nvr,
@@ -575,7 +575,7 @@ def get_golang_container_nvrs(nvrs, logger):
             continue
 
         for p, pinfo in parents.items():
-            if 'builder' in p:
+            if 'builder' in p or 'go-toolset' in p:
                 go_version = pinfo.get('nvr')
 
         go_container_nvrs[name] = {
