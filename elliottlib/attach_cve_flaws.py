@@ -1,23 +1,25 @@
-from elliottlib import constants, errata, exceptions, util, bzutil, logutil
+from typing import Dict, List
+
+from bugzilla.bug import Bug
+
+from elliottlib import bzutil, constants, errata, exceptions, logutil, util
 
 logger = logutil.getLogger(__name__)
 
 
-def get_tracker_bugs(bzapi, advisory, fields):
+def get_tracker_bugs(bzapi, advisory, fields) -> List[Bug]:
     """
     Fetches and returns tracker bug objects from bugzilla
     for the given advisory object
     """
     bug_ids = advisory.errata_bugs
-    # first quickly filter out non tracker bugs
-    # by fetching just the keywords field
-    tracker_bug_ids = [b.id for b in bzapi.getbugs(
+    bug_objs = [b for b in bzapi.getbugs(
         bug_ids,
-        include_fields=['keywords'],
-        permissive=False)
+        permissive=False,
+        include_fields=fields)
         if is_tracker_bug(b)
     ]
-    return bzapi.getbugs(tracker_bug_ids, permissive=False, include_fields=fields)
+    return bug_objs
 
 
 def get_all_attached_bugs(advisory_id):
@@ -43,6 +45,8 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields, strict=False):
     """
     Get corresponding flaw bugs objects for the
     given tracker bug objects
+    :return (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw bug id as value,
+                                        flaw_bugs is a dict with flaw bug id as key and flaw bug object as value
     """
     # fields needed for is_flaw_bug()
     if "product" not in fields:
@@ -50,15 +54,11 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields, strict=False):
     if "component" not in fields:
         fields.append("component")
 
-    blocking_bugs = bzapi.getbugs(
-        unique(flatten([t.blocks for t in tracker_bugs])),
-        include_fields=fields,
-        permissive=False)
-
-    flaw_bugs = [flaw_bug for flaw_bug in blocking_bugs if bzutil.is_flaw_bug(flaw_bug)]
+    blocking_bugs = bzutil.get_bugs(bzapi, unique(flatten([t.blocks for t in tracker_bugs])), include_fields=fields)
+    flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs.values() if bzutil.is_flaw_bug(bug)}
 
     # Validate that each tracker has a corresponding flaw bug
-    flaw_ids = set([b.id for b in flaw_bugs])
+    flaw_ids = set(flaw_id_bugs.keys())
     no_flaws = set()
     for tracker in tracker_bugs:
         if not set(tracker.blocks).intersection(flaw_ids):
@@ -69,7 +69,12 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields, strict=False):
             raise exceptions.ElliottFatalError(msg)
         else:
             logger.warn(msg)
-    return flaw_bugs
+
+    tracker_flaws: Dict[int, List[int]] = {
+        tracker.id: [blocking for blocking in tracker.blocks if blocking in flaw_id_bugs]
+        for tracker in tracker_bugs
+    }
+    return tracker_flaws, flaw_id_bugs
 
 
 def is_first_fix_any(bzapi, flaw_bug, current_target_release):

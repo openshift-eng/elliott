@@ -26,17 +26,12 @@ class TestAttachCVEFlaws(unittest.TestCase):
         bugs = [valid_tracker.id, invalid_tracker.id]
 
         advisory = flexmock(errata_bugs=bugs)
-        fields = ["somefield"]
+        fields = ["keywords"]
         bzapi = flexmock()
         (bzapi
          .should_receive("getbugs")
          .with_args(bugs, permissive=False, include_fields=['keywords'])
          .and_return(bug_objs))
-
-        (bzapi
-         .should_receive("getbugs")
-         .with_args([valid_tracker.id], permissive=False, include_fields=fields)
-         .and_return([valid_tracker]))
 
         expected = [valid_tracker]
         actual = attach_cve_flaws.get_tracker_bugs(bzapi, advisory, fields)
@@ -65,7 +60,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
          .and_return(flaw_bugs))
 
         expected = 2
-        actual = len(attach_cve_flaws.get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields))
+        actual = len(attach_cve_flaws.get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields)[1])
         self.assertEqual(expected, actual)
 
     def test_validate_tracker_has_flaw(self):

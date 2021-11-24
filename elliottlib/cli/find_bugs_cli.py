@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import List, Set
 
 import click
-import koji
 from bugzilla import bug as bug_module
 
 from elliottlib import (Runtime, bzutil, constants, errata, logutil,

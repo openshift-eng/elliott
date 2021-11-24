@@ -1,20 +1,26 @@
-import click
+import asyncio
 import re
+from typing import Any, Dict, Iterable, List, Set, Tuple
+
+import click
+from bugzilla.bug import Bug
 from spnego.exceptions import GSSError
 
-from errata_tool import Erratum
-
-from elliottlib import bzutil, errata
-from elliottlib.cli.common import cli, pass_runtime
-from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import (exit_unauthenticated, red_print, green_print, minor_version_tuple)
+from elliottlib import attach_cve_flaws, bzutil, constants, util
+from elliottlib.cli.common import cli, click_coroutine, pass_runtime
+from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
+from elliottlib.runtime import Runtime
+from elliottlib.util import (exit_unauthenticated, green_print,
+                             minor_version_tuple, red_print)
 
 
 @cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
 @click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
+@click.option("--verify-flaws", is_flag=True, help="Check that flaw bugs are attached and associated with specific builds", type=bool, default=False)
 @click.argument("advisories", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
-def verify_attached_bugs_cli(runtime, verify_bug_status, advisories):
+@click_coroutine
+async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool):
     """
     Verify the bugs in the advisories (specified as arguments or in group.yml) for a release.
     Requires a runtime to ensure that all bugs in the advisories match the runtime version.
@@ -30,76 +36,159 @@ def verify_attached_bugs_cli(runtime, verify_bug_status, advisories):
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
     validator = BugValidator(runtime)
-    bugs = validator.get_attached_filtered_bugs(advisories)
-    validator.validate(bugs, verify_bug_status)
+    try:
+        await validator.errata_api.login()
+        advisory_bugs = await validator.get_attached_bugs(advisories)
+        non_flaw_bugs = validator.filter_bugs_by_product({b for bugs in advisory_bugs.values() for b in bugs})
+        validator.validate(non_flaw_bugs, verify_bug_status)
+        if verify_flaws:
+            await validator.verify_attached_flaws(advisory_bugs)
+    except GSSError:
+        exit_unauthenticated()
+    finally:
+        await validator.close()
 
 
 @cli.command("verify-bugs", short_help="Same as verify-attached-bugs, but for bugs that are not (yet) attached to advisories")
 @click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
 @click.argument("bug_ids", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
-def verify_bugs_cli(runtime, verify_bug_status, bug_ids):
+@click_coroutine
+async def verify_bugs_cli(runtime, verify_bug_status, bug_ids):
     runtime.initialize()
     validator = BugValidator(runtime)
-    bugs = validator.filter_bugs_by_product(list(bzutil.get_bugs(validator.bzapi, bug_ids, True).values()))
-    validator.validate(bugs, verify_bug_status)
+    bugs = validator.filter_bugs_by_product(bzutil.get_bugs(validator.bzapi, bug_ids).values())
+    try:
+        validator.validate(bugs, verify_bug_status)
+    finally:
+        await validator.close()
 
 
 class BugValidator:
 
-    def __init__(self, runtime):
+    def __init__(self, runtime: Runtime):
         self.runtime = runtime
-        self.bz_data = runtime.gitdata.load_data(key='bugzilla').data
-        self.target_releases = self.bz_data['target_release']
-        self.product = self.bz_data['product']
+        self.bz_data: Dict[str, Any] = runtime.gitdata.load_data(key='bugzilla').data
+        self.target_releases: List[str] = self.bz_data['target_release']
+        self.product: str = self.bz_data['product']
         self.bzapi = bzutil.get_bzapi(self.bz_data)
-        self.problems = []
+        self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
+        self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
+        self.problems: List[str] = []
 
-    def validate(self, bugs, verify_bug_status):
-        blocking_bugs_for = self._get_blocking_bugs_for(bugs)
+    async def close(self):
+        await self.errata_api.close()
+
+    def validate(self, non_flaw_bugs: Iterable[Bug], verify_bug_status: bool,):
+        non_flaw_bugs = self.filter_bugs_by_release(non_flaw_bugs, complain=True)
+        blocking_bugs_for = self._get_blocking_bugs_for(non_flaw_bugs)
         self._verify_blocking_bugs(blocking_bugs_for)
 
         if verify_bug_status:
-            self._verify_bug_status(bugs)
+            self._verify_bug_status(non_flaw_bugs)
+
         if self.problems:
             red_print("Some bug problems were listed above. Please investigate.")
             exit(1)
         green_print("All bugs were verified.")
 
-    def _get_attached_bugs(self, advisories):
-        # get bugs attached to all advisories
-        bugs = set()
-        try:
-            for advisory in advisories:
-                green_print(f"Retrieving bugs for advisory {advisory}")
-                bugs.update(errata.get_bug_ids(advisory))
-        except GSSError:
-            exit_unauthenticated()
-        green_print(f"Found {len(bugs)} bugs")
+    async def verify_attached_flaws(self, advisory_bugs: Dict[int, List[Bug]]):
+        futures = []
+        for advisory_id, attached_bugs in advisory_bugs.items():
+            attached_trackers = [b for b in attached_bugs if bzutil.is_cve_tracker(b)]
+            attached_flaws = [b for b in attached_bugs if bzutil.is_flaw_bug(b)]
+            futures.append(self._verify_attached_flaws_for(advisory_id, attached_trackers, attached_flaws))
+        await asyncio.gather(*futures)
 
-        return list(bzutil.get_bugs(self.bzapi, list(bugs)).values())
+    async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
+        # Retrieve flaw bugs in Bugzilla for attached_tracker_bugs
+        tracker_flaws, flaw_id_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
+            self.bzapi,
+            attached_trackers,
+            fields=["depends_on", "alias", "severity", "summary"]
+        )
 
-    def get_attached_filtered_bugs(self, advisories):
-        # get bugs from advisories that are for the expected product and version
-        candidates = self.filter_bugs_by_product(self._get_attached_bugs(advisories))
+        # Find first-fix flaws
+        current_target_release, err = util.get_target_release(attached_trackers)
+        if err:
+            self._complain(f"Couldn't determine target release for attached trackers: {err}")
+            return
+        if current_target_release[-1] == 'z':
+            first_fix_flaw_ids = flaw_id_bugs.keys()
+        else:
+            first_fix_flaw_ids = {
+                flaw_bug.id for flaw_bug in flaw_id_bugs.values()
+                if attach_cve_flaws.is_first_fix_any(self.bzapi, flaw_bug, current_target_release)
+            }
 
-        # filter out bugs with an invalid target release (and complain)
-        filtered_bugs = []
-        for b in candidates:
-            # b.target release is a list of size 0 or 1
-            if any(target in self.target_releases for target in b.target_release):
-                filtered_bugs.append(b)
-            else:
-                self._complain(
-                    f"bug {b.id} target release {b.target_release} is not in "
-                    f"{self.target_releases}. Does it belong in this release?"
-                )
+        # Check if attached flaws match attached trackers
+        attached_flaw_ids = {b.id for b in attached_flaws}
+        missing_flaw_ids = attached_flaw_ids - first_fix_flaw_ids
+        if missing_flaw_ids:
+            self._complain(f"{len(missing_flaw_ids)} flaw bugs are missing: {', '.join(sorted(map(str, missing_flaw_ids)))}")
+        extra_flaw_ids = first_fix_flaw_ids - attached_flaw_ids
+        if extra_flaw_ids:
+            self._complain(f"{len(extra_flaw_ids)} flaw bugs are redundant: {', '.join(sorted(map(str, extra_flaw_ids)))}")
 
-        return filtered_bugs
+        # Check if flaw bugs are associated with specific builds
+        cve_components_mapping: Dict[str, Set[str]] = {}
+        for tracker in attached_trackers:
+            component_name = bzutil.get_whiteboard_component(tracker)
+            if not component_name:
+                raise ValueError(f"Bug {tracker.id} doesn't have a valid component name in its whiteboard field.")
+            flaw_ids = tracker_flaws[tracker.id]
+            for flaw_id in flaw_ids:
+                if len(flaw_id_bugs[flaw_id].alias) != 1:
+                    raise ValueError(f"Bug {flaw_id} should have exact 1 alias.")
+                cve = flaw_id_bugs[flaw_id].alias[0]
+                cve_components_mapping.setdefault(cve, set()).add(component_name)
+        current_cve_package_exclusions = await AsyncErrataUtils.get_advisory_cve_package_exclusions(self.errata_api, advisory_id)
+        attached_builds = await self.errata_api.get_builds_flattened(advisory_id)
+        expected_cve_packages_exclusions = AsyncErrataUtils.compute_cve_package_exclusions(attached_builds, cve_components_mapping)
+        extra_cve_package_exclusions, missing_cve_package_exclusions = AsyncErrataUtils.diff_cve_package_exclusions(current_cve_package_exclusions, expected_cve_packages_exclusions)
+        for cve, cve_package_exclusions in extra_cve_package_exclusions.items():
+            if cve_package_exclusions:
+                self._complain(f"{cve} is not associated with Brew components {', '.join(sorted(cve_package_exclusions))}")
+        for cve, cve_package_exclusions in missing_cve_package_exclusions.items():
+            if cve_package_exclusions:
+                self._complain(f"{cve} is associated with Brew components {', '.join(sorted(cve_package_exclusions))} without tracker bugs. You may need to explictly exclude those Brew components from the CVE mapping.")
+
+        # Check if flaw bugs match the CVE field of the advisory
+        advisory_cves = await self.errata_api.get_cves(advisory_id)
+        extra_cves = cve_components_mapping.keys() - advisory_cves
+        if extra_cves:
+            self._complain(f"The following CVEs are not associated with advisory {advisory_id}: {', '.join(sorted(extra_cves))}")
+        missing_cves = advisory_cves - cve_components_mapping.keys()
+        if missing_cves:
+            self._complain(f"Tracker bugs for the following CVEs associated with advisory {advisory_id} are not attached: {', '.join(sorted(extra_cves))}")
+
+    async def get_attached_bugs(self, advisory_ids: Iterable[int]) -> Dict[int, Set[Bug]]:
+        """ Get bugs attached to specified advisories
+        :return: a dict with advisory id as key and set of bug objects as value
+        """
+        green_print(f"Retrieving bugs for advisory {advisory_ids}")
+        advisories = await asyncio.gather(*[self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids])
+        bug_objects = bzutil.get_bugs(self.bzapi, list({b["bug"]["id"] for ad in advisories for b in ad["bugs"]["bugs"]}))
+        result = {ad["content"]["content"]["errata_id"]: {bug_objects[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad in advisories}
+        return result
 
     def filter_bugs_by_product(self, bugs):
         # filter out bugs for different product (presumably security flaw bugs)
         return [b for b in bugs if b.product == self.product]
+
+    def filter_bugs_by_release(self, bugs: Iterable[Bug], complain: bool = False) -> List[Bug]:
+        # filter out bugs with an invalid target release
+        filtered_bugs = []
+        for b in bugs:
+            # b.target release is a list of size 0 or 1
+            if any(target in self.target_releases for target in b.target_release):
+                filtered_bugs.append(b)
+            elif complain:
+                self._complain(
+                    f"bug {b.id} target release {b.target_release} is not in "
+                    f"{self.target_releases}. Does it belong in this release?"
+                )
+        return filtered_bugs
 
     def _get_blocking_bugs_for(self, bugs):
         # get blocker bugs in the next version for all bugs we are examining
@@ -151,6 +240,6 @@ class BugValidator:
                 status = f"{bug.status}: {bug.resolution}"
             self._complain(f"Bug {bug.id} has status {status}")
 
-    def _complain(self, problem):
+    def _complain(self, problem: str):
         red_print(problem)
         self.problems.append(problem)

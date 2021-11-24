@@ -2,21 +2,22 @@
 Utility functions and object abstractions for general interactions
 with Red Hat Bugzilla
 """
-from datetime import datetime, timezone
-from elliottlib.metadata import Metadata
-from elliottlib.util import isolate_timestamp_in_release
 import itertools
 import re
-from typing import Iterable, List
 import urllib.parse
 import xmlrpc.client
+from datetime import datetime, timezone
 from time import sleep
+from typing import Dict, Iterable, List
 
 import bugzilla
 import click
+from bugzilla.bug import Bug
 from koji import ClientSession
 
 from elliottlib import constants, exceptions, logutil
+from elliottlib.metadata import Metadata
+from elliottlib.util import isolate_timestamp_in_release
 
 logger = logutil.getLogger(__name__)
 
@@ -94,12 +95,13 @@ def get_tracker_flaws_map(bzapi, trackers):
     return tracker_flaws_map
 
 
-def get_bugs(bzapi, ids, raise_on_error=True):
+def get_bugs(bzapi: bugzilla.Bugzilla, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
     """ Get a map of bug ids and bug objects.
 
     :param bzapi: An instance of the python-bugzilla Bugzilla class
     :param ids: The IDs of the bugs you want to get the Bug objects for
     :param raise_on_error: If True, raise an error if failing to find bugs
+    :param include_fields: A list of fields to include
 
     :return: A map of bug ids and bug objects
 
@@ -108,16 +110,10 @@ def get_bugs(bzapi, ids, raise_on_error=True):
         use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
         session has expired.
     """
-    id_bug_map = {}
-    bugs = bzapi.getbugs(ids)  # type: list
+    id_bug_map: Dict[int, Bug] = {}
+    bugs: List[Bug] = bzapi.getbugs(ids, permissive=not raise_on_error, **kwargs)
     for i, bug in enumerate(bugs):
-        bug_id = ids[i]
-        if not bug:
-            msg = "Couldn't find bug {}.".format(bug_id)
-            if raise_on_error:
-                raise exceptions.BugzillaFatalError(msg)
-            logger.warning(msg)
-        id_bug_map[bug_id] = bug
+        id_bug_map[ids[i]] = bug
     return id_bug_map
 
 
