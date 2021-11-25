@@ -44,7 +44,7 @@ class TestBZUtil(unittest.TestCase):
         bzutil.set_state(bug, "CLOSED")
         bug.setstatus.assert_called()
         newstate = mock.setstatus.call_args[0]
-        self.assertEqual(newstatus, "CLOSED")
+        self.assertEqual(newstate, "CLOSED")
 
     def test_get_bugs(self):
         bug_ids = [1, 2]
