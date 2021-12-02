@@ -43,7 +43,7 @@ class TestBZUtil(unittest.TestCase):
         bug.setstatus = mock.MagicMock(return_value="CLOSED")
         bzutil.set_state(bug, "CLOSED")
         bug.setstatus.assert_called()
-        newstate = mock.setstatus.call_args[0]
+        newstate = bug.setstatus.call_args[1]['status']
         self.assertEqual(newstate, "CLOSED")
 
     def test_get_bugs(self):
