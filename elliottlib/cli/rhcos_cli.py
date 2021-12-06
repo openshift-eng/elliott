@@ -15,7 +15,7 @@ from elliottlib import rhcos, cincinnati, util, exectools
 @click.option('--release', '-r', 'release',
               help='Show details for this OCP release. Can be a full pullspec or a named release ex: 4.8.4')
 @click.option('--arch', 'arch',
-              default=None,
+              default='x86_64',
               type=click.Choice(util.brew_arches + ['all']),
               help='Specify architecture. Default is x86_64. "all" to get all arches. aarch64 only works for 4.8+')
 @click.option('--packages', '-p', 'packages',
@@ -55,18 +55,35 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
     if count_options != 1:
         raise click.BadParameter("Use one of --assembly, --release, --latest, --latest-ocp")
 
-    def _via_release():
-        nonlocal arch, version
-        nightly = 'nightly' in release
-        if arch and release and ('/' in release or nightly):
-            raise click.BadParameter("--arch=all cannot be used with --release <pullspec> or <*nightly*>")
+    nightly = 'nightly' in release
+    pullspec = '/' in release
+    if arch == "all" and (pullspec or nightly):
+        raise click.BadParameter("--arch=all cannot be used with --release <pullspec> or <*nightly*>")
 
+    if arch == 'all':
+        target_arches = util.brew_arches
+    else:
+        target_arches = [arch]
+
+    rhcos_pullspecs = {}
+    payload_pullspec = ''
+
+    def _via_release():
+        nonlocal arch, version, nightly, payload_pullspec, target_arches
         runtime.initialize(no_group=True)
         version = re.search(r'(\d+\.\d+).', release).groups()[0]
         if nightly:
             for a in util.go_arches:
                 if a in release:
                     arch = a
+            target_arches = [arch]
+
+        if pullspec:
+            payload_pullspec = release
+        elif nightly:
+            payload_pullspec = get_nightly_pullspec(release, arch)
+        else:
+            payload_pullspec = get_pullspec(release, arch)
 
     def _via_latest():
         nonlocal version
@@ -75,17 +92,8 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
         minor = runtime.group_config.vars.MINOR
         version = f'{major}.{minor}'
 
-    rhcos_pullspecs = {}
-    if arch == 'all':
-        target_arches = util.brew_arches
-    else:
-        target_arches = [arch]
-
     def _via_assembly():
         nonlocal arch, rhcos_pullspecs, version
-        if not arch:
-            raise click.BadParameter("--assembly needs --arch <>")
-
         runtime.initialize()
         major = runtime.group_config.vars.MAJOR
         minor = runtime.group_config.vars.MINOR
@@ -96,7 +104,6 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
                                      "based on another, try using the original assembly")
 
         images = rhcos_def['machine-os-content']['images']
-
         for a in target_arches:
             if a in images:
                 rhcos_pullspecs[a] = images[a]
@@ -109,10 +116,9 @@ def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
         _via_latest()
 
     logger = runtime.logger
-    arch = 'x86_64' if not arch else arch
-
+    print(payload_pullspec, target_arches, arch)
     for local_arch in target_arches:
-        build_id = get_build_id(version, release, latest, latest_ocp, rhcos_pullspecs.get(local_arch), local_arch,
+        build_id = get_build_id(version, payload_pullspec, latest, latest_ocp, rhcos_pullspecs.get(local_arch), local_arch,
                                 logger)
         _via_build_id(build_id, local_arch, version, packages, go, logger)
 
@@ -126,7 +132,7 @@ def get_nightly_pullspec(release, arch):
     return f'registry.ci.openshift.org/ocp{suffix}/release{suffix}:{release}'
 
 
-def get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, arch, logger):
+def get_build_id(version, payload_pullspec, latest, latest_ocp, rhcos_pullspec, arch, logger):
     if arch == 'aarch64' and version < '4.9':
         return
 
@@ -138,21 +144,11 @@ def get_build_id(version, release, latest, latest_ocp, rhcos_pullspec, arch, log
 
     if latest_ocp:
         logger.info(f'Looking up last OCP Release for {version} {arch} in fast channel')
-        release = cincinnati.get_latest_fast_ocp(version, arch)
-        if not release:
+        payload_pullspec = cincinnati.get_latest_fast_ocp(version, arch)
+        if not payload_pullspec:
             return
 
-    if release:
-        if '/' in release:
-            payload_pullspec = release
-        else:
-            if 'nightly' in release:
-                logger.info(f'OCP Nightly: {release}-{arch}')
-                payload_pullspec = get_nightly_pullspec(release, arch)
-            else:
-                logger.info(f'OCP Release: {release}-{arch}')
-                payload_pullspec = get_pullspec(release, arch)
-
+    if payload_pullspec:
         logger.info(f"Looking up RHCOS Build for {payload_pullspec}")
         build_id, arch = rhcos.get_build_from_payload(payload_pullspec)
         logger.info(f'Build found: {build_id}')
