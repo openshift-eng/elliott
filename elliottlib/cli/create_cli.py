@@ -112,7 +112,7 @@ advisory.
             " ".join(map(str, bugs))))
         bug_objects = bzapi.getbugs(bugs)
         # assert bugs are viable for a new advisory.
-        _assert_bugs_are_viable(errata_type, bugs, bug_objects)
+        _assert_bugs_are_viable(bugs, bug_objects)
 
     ######################################################################
 
