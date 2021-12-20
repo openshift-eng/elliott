@@ -168,6 +168,7 @@ def _via_build_id(build_id, arch, version, packages, go, logger):
     if not build_id:
         Exception('Cannot find build_id')
 
+    arch = util.brew_arch_for_go_arch(arch)
     util.green_print(f'Build: {build_id} Arch: {arch}')
     nvrs = rhcos.get_rpm_nvrs(build_id, version, arch)
     if not nvrs:
