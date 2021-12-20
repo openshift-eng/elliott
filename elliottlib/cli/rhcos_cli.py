@@ -6,12 +6,6 @@ from elliottlib import rhcos, cincinnati, util, exectools
 
 
 @cli.command("rhcos", short_help="Show details of packages contained in OCP RHCOS builds")
-@click.option('--latest', '-l', 'latest',
-              is_flag=True,
-              help='Show details of latest RHCOS builds')
-@click.option('--latest-ocp', '-o', 'latest_ocp',
-              is_flag=True,
-              help='Show details of RHCOS in latest OCP release (fast channel) for a given version')
 @click.option('--release', '-r', 'release',
               help='Show details for this OCP release. Can be a full pullspec or a named release ex: 4.8.4')
 @click.option('--arch', 'arch',
@@ -24,103 +18,89 @@ from elliottlib import rhcos, cincinnati, util, exectools
               is_flag=True,
               help='Show go version for packages that are go binaries')
 @click.pass_obj
-def rhcos_cli(runtime, latest, latest_ocp, release, packages, arch, go):
+def rhcos_cli(runtime, release, packages, arch, go):
     """
-    Show details of packages contained in OCP RHCOS builds, for either
-    the latest RHCOS build or the machine-os-content included in a release image.
+    Show packages in an RHCOS build in a payload image.
+    There are several ways to specify the location of the RHCOS build.
 
     Usage:
 
-\b Pullspec
-    $ elliott rhcos -r registry.ci.openshift.org/ocp-s390x/release-s390x:4.8.0-0.nightly-s390x-2021-07-31-070046
-
 \b Nightly
-    $ elliott rhcos -r registry.ci.openshift.org/ocp-s390x/release-s390x:4.8.0-0.nightly-s390x-2021-07-31-070046
+    $ elliott rhcos -r 4.8.0-0.nightly-s390x-2021-07-31-070046
 
 \b Named Release
-    $ elliott rhcos -r 4.6.31 -p runc --go --arch all
+    $ elliott rhcos -r 4.6.31
+
+\b Any Pullspec
+    $ elliott rhcos -r <pullspec>
 
 \b Assembly Definition
-    $ elliott --group openshift-4.8 --assembly 4.8.21 rhcos -p container-selinux
+    $ elliott --group openshift-4.8 --assembly 4.8.21 rhcos
 
-\b Latest RHCOS Build
-    $ elliott --group openshift-4.8 rhcos -l -p runc --arch s390x
+\b Only lookup specified package(s)
+    $ elliott rhcos -r 4.6.31 -p "openshift,runc,cri-o,selinux-policy"
 
-\b Latest Named Release
-    $ elliott --group openshift-4.8 rhcos -o -p skopeo,podman --arch all
+\b Also lookup go build version (if available)
+    $ elliott rhcos -r 4.6.31 -p openshift --go
+
+\b Specify arch (default being x64)
+    $ elliott rhcos -r 4.6.31 --arch s390x -p openshift
+
+\b Get all arches (supported only for named release and assembly)
+    $ elliott rhcos -r 4.6.31 --arch all -p openshift
 """
-    version = ''
-    named_assembly = runtime.assembly != 'stream'
-    count_options = sum(map(bool, [named_assembly, release, latest, latest_ocp]))
+    named_assembly = runtime.assembly not in ['stream', 'test']
+    count_options = sum(map(bool, [named_assembly, release]))
     if count_options != 1:
-        raise click.BadParameter("Use one of --assembly, --release, --latest, --latest-ocp")
+        raise click.BadParameter("Use one of --assembly or --release")
 
-    nightly = 'nightly' in release
-    pullspec = '/' in release
+    nightly = release and 'nightly' in release
+    pullspec = release and '/' in release
+    named_release = not (nightly or pullspec or named_assembly)
     if arch == "all" and (pullspec or nightly):
         raise click.BadParameter("--arch=all cannot be used with --release <pullspec> or <*nightly*>")
 
-    if arch == 'all':
-        target_arches = util.brew_arches
-    else:
-        target_arches = [arch]
-
-    rhcos_pullspecs = {}
-    payload_pullspec = ''
-
-    def _via_release():
-        nonlocal arch, version, nightly, payload_pullspec, target_arches
+    if release:
         runtime.initialize(no_group=True)
-        version = re.search(r'(\d+\.\d+).', release).groups()[0]
+        major, minor = re.search(r'(\d+)\.(\d+).', release).groups()
+        major, minor = int(major), int(minor)
         if nightly:
             for a in util.go_arches:
                 if a in release:
                     arch = a
-            target_arches = [arch]
-
-        if pullspec:
-            payload_pullspec = release
-        elif nightly:
-            payload_pullspec = get_nightly_pullspec(release, arch)
-        else:
-            payload_pullspec = get_pullspec(release, arch)
-
-    def _via_latest():
-        nonlocal version
-        runtime.initialize()
-        major = runtime.group_config.vars.MAJOR
-        minor = runtime.group_config.vars.MINOR
-        version = f'{major}.{minor}'
-
-    def _via_assembly():
-        nonlocal arch, rhcos_pullspecs, version
-        runtime.initialize()
-        major = runtime.group_config.vars.MAJOR
-        minor = runtime.group_config.vars.MINOR
-        version = f'{major}.{minor}'
-        rhcos_def = runtime.releases_config.releases[runtime.assembly].assembly.rhcos
-        if not rhcos_def:
-            raise click.BadParameter("only named assemblies with valid rhcos values are supported. If an assembly is "
-                                     "based on another, try using the original assembly")
-
-        images = rhcos_def['machine-os-content']['images']
-        for a in target_arches:
-            if a in images:
-                rhcos_pullspecs[a] = images[a]
-
-    if release:
-        _via_release()
-    elif runtime.assembly:
-        _via_assembly()
     else:
-        _via_latest()
+        runtime.initialize()
+        major = runtime.group_config.vars.MAJOR
+        minor = runtime.group_config.vars.MINOR
 
+    version = f'{major}.{minor}'
     logger = runtime.logger
-    print(payload_pullspec, target_arches, arch)
-    for local_arch in target_arches:
-        build_id = get_build_id(version, payload_pullspec, latest, latest_ocp, rhcos_pullspecs.get(local_arch), local_arch,
-                                logger)
-        _via_build_id(build_id, local_arch, version, packages, go, logger)
+
+    if arch == 'all':
+        target_arches = util.brew_arches
+        if major == 4 and minor < 9:
+            target_arches.remove("aarch64")
+    else:
+        target_arches = [arch]
+
+    payload_pullspecs = []
+    if release:
+        if pullspec:
+            payload_pullspecs.append(release)
+        elif nightly:
+            payload_pullspecs.append(get_nightly_pullspec(release, arch))
+        elif named_release:
+            for local_arch in target_arches:
+                p = get_pullspec(release, local_arch)
+                payload_pullspecs.append(p)
+        build_ids = [get_build_id_from_image_pullspec(p) for p in payload_pullspecs]
+    elif named_assembly:
+        rhcos_pullspecs = get_rhcos_pullspecs_from_assembly(runtime)
+        build_ids = [(get_build_id_from_rhcos_pullspec(p, logger), arch) for arch, p in rhcos_pullspecs.items() if
+                     arch in target_arches]
+
+    for build, local_arch in build_ids:
+        _via_build_id(build, local_arch, version, packages, go, logger)
 
 
 def get_pullspec(release, arch):
@@ -132,36 +112,31 @@ def get_nightly_pullspec(release, arch):
     return f'registry.ci.openshift.org/ocp{suffix}/release{suffix}:{release}'
 
 
-def get_build_id(version, payload_pullspec, latest, latest_ocp, rhcos_pullspec, arch, logger):
-    if arch == 'aarch64' and version < '4.9':
-        return
+def get_rhcos_pullspecs_from_assembly(runtime):
+    rhcos_def = runtime.releases_config.releases[runtime.assembly].assembly.rhcos
+    if not rhcos_def:
+        raise click.BadParameter("only named assemblies with valid rhcos values are supported. If an assembly is "
+                                 "based on another, try using the original assembly")
 
-    if latest:
-        logger.info(f'Looking up latest RHCOS Build for {version} {arch}')
-        build_id = rhcos.latest_build_id(version, arch)
-        logger.info(f'Build found: {build_id}')
-        return build_id
+    images = rhcos_def['machine-os-content']['images']
+    return images
 
-    if latest_ocp:
-        logger.info(f'Looking up last OCP Release for {version} {arch} in fast channel')
-        payload_pullspec = cincinnati.get_latest_fast_ocp(version, arch)
-        if not payload_pullspec:
-            return
 
-    if payload_pullspec:
-        logger.info(f"Looking up RHCOS Build for {payload_pullspec}")
-        build_id, arch = rhcos.get_build_from_payload(payload_pullspec)
-        logger.info(f'Build found: {build_id}')
-        return build_id
+def get_build_id_from_image_pullspec(pullspec):
+    util.green_print(f"Image pullspec: {pullspec}")
+    build_id, arch = rhcos.get_build_from_payload(pullspec)
+    return build_id, arch
 
-    if rhcos_pullspec:
-        image_info_str, _ = exectools.cmd_assert(f'oc image info -o json {rhcos_pullspec}', retries=3)
-        image_info = json.loads(image_info_str)
-        build_id = image_info['config']['config']['Labels']['version']
-        if not build_id:
-            raise Exception(
-                f'Unable to determine build_id from: {rhcos_pullspec}. Retrieved image info: {image_info_str}')
-        return build_id
+
+def get_build_id_from_rhcos_pullspec(pullspec, logger):
+    logger.info(f"Looking up BuildID from RHCOS pullspec: {pullspec}")
+    image_info_str, _ = exectools.cmd_assert(f'oc image info -o json {pullspec}', retries=3)
+    image_info = json.loads(image_info_str)
+    build_id = image_info['config']['config']['Labels']['version']
+    if not build_id:
+        raise Exception(
+            f'Unable to determine build_id from: {pullspec}. Retrieved image info: {image_info_str}')
+    return build_id
 
 
 def _via_build_id(build_id, arch, version, packages, go, logger):

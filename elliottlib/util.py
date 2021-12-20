@@ -582,7 +582,7 @@ def get_golang_container_nvrs(nvrs, logger):
             'nvr': nvr,
             'go': go_version
         }
-        if not go_version:
+        if not go_version or go_version == 'N/A':
             logger.debug(f'Could not find parent Go builder image for {nvr}')
 
     return go_container_nvrs
@@ -618,13 +618,13 @@ def get_golang_rpm_nvrs(nvrs, logger):
             logger.debug(f'Could not find brew log for {nvr}')
         else:
             try:
-                go_version = get_golang_version_from_build_log(root_log)
+                go_version = get_golang_version_from_build_log(root_log)[2]
             except AttributeError:
                 logger.debug(f'Could not find go version in root log for {nvr}')
 
         go_rpm_nvrs[nvr[0]] = {
             'nvr': nvr,
-            'go': go_version[2]
+            'go': go_version
         }
     return go_rpm_nvrs
 
