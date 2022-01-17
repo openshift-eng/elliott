@@ -116,18 +116,18 @@ def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, f
                     LOGGER.info(
                         "Excluded {} from source tarball.".format(full_name))
                     continue
-                if entry.type == "tree":
+                if entry.type_str == "tree":
                     stack.append((repo.get(entry.id), full_name + "/"))
                     continue
                 info = tarfile.TarInfo(prefix + full_name)
                 info.mtime = git_commit.committer.time
                 info.uname = info.gname = 'root'  # Git does this!
-                if entry.type == "commit":
+                if entry.type_str == "commit":
                     info.type = tarfile.DIRTYPE
                     archive.addfile(info)
                     LOGGER.warning("Created placeholder dir for submodule {}: {}. Dist-git repos usually don't use submodules!".format(
                         full_name, entry.id))
-                elif entry.type == "blob":
+                elif entry.type_str == "blob":
                     blob = repo.get(entry.id)  # type: pygit2.Blob
                     if entry.filemode == pygit2.GIT_FILEMODE_LINK:
                         info.type = tarfile.SYMTYPE
