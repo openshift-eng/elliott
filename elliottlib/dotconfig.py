@@ -1,5 +1,6 @@
 # This file is part of dotconfig project <https://github.com/adammhaile/dotconfig>
 # and released under LGPL v3 <https://www.gnu.org/licenses/lgpl-3.0.en.html>
+import itertools
 
 from future.utils import string_types
 import yaml
@@ -57,7 +58,7 @@ class Config(object):
             if not os.path.isdir(self.base_dir):
                 os.makedirs(self.base_dir)
 
-            for ext in [ext for t in zip(VALID_EXT, [item.upper() for item in VALID_EXT]) for ext in t]:
+            for ext in itertools.chain(VALID_EXT, map(str.upper, VALID_EXT)):
                 filename = f'{name}.{ext}'
                 cfg = os.path.join(self.base_dir, filename)
                 if os.path.isfile(cfg):
