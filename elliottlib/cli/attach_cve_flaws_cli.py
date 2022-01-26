@@ -1,7 +1,15 @@
-import bugzilla, click
+from typing import Dict, List, Set
+
+import bugzilla
+import click
+from bugzilla.bug import Bug
 from errata_tool import Erratum
-from elliottlib import util, attach_cve_flaws
-from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
+
+from elliottlib import attach_cve_flaws, bzutil, constants, util
+from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
+                                   use_default_advisory_option)
+from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
+from elliottlib.runtime import Runtime
 
 
 @cli.command('attach-cve-flaws',
@@ -15,7 +23,8 @@ from elliottlib.cli.common import cli, use_default_advisory_option, find_default
               help="Print what would change, but don't change anything")
 @use_default_advisory_option
 @click.pass_obj
-def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
+@click_coroutine
+async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, default_advisory_type: str):
     """Attach corresponding flaw bugs for trackers in advisory (first-fix only).
 
     Also converts advisory to RHSA, if not already.
@@ -42,10 +51,12 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     if not advisory_id and default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
+    runtime.logger.info("Getting advisory %s", advisory_id)
     advisory = Erratum(errata_id=advisory_id)
 
     # get attached bugs from advisory
-    attached_tracker_bugs = attach_cve_flaws.get_tracker_bugs(bzapi, advisory, fields=["target_release", "blocks"])
+    runtime.logger.info("Querying Bugzilla for CVE trackers")
+    attached_tracker_bugs = attach_cve_flaws.get_tracker_bugs(bzapi, advisory, fields=["target_release", "blocks", 'whiteboard', 'keywords'])
     runtime.logger.info('found {} tracker bugs attached to the advisory: {}'.format(
         len(attached_tracker_bugs), sorted(bug.id for bug in attached_tracker_bugs)
     ))
@@ -59,14 +70,14 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
         exit(1)
     runtime.logger.info('current_target_release: {}'.format(current_target_release))
 
-    corresponding_flaw_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
+    tracker_flaws, flaw_id_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
         bzapi,
         attached_tracker_bugs,
         fields=["depends_on", "alias", "severity", "summary"],
         strict=True
     )
     runtime.logger.info('found {} corresponding flaw bugs: {}'.format(
-        len(corresponding_flaw_bugs), sorted(bug.id for bug in corresponding_flaw_bugs)
+        len(flaw_id_bugs), sorted(flaw_id_bugs.keys())
     ))
 
     # current_target_release is digit.digit.[z|0]
@@ -75,23 +86,24 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     # for z-stream every flaw bug is considered first-fix
     if current_target_release[-1] == 'z':
         runtime.logger.info("detected z-stream target release, every flaw bug is considered first-fix")
-        first_fix_flaw_bugs = corresponding_flaw_bugs
+        first_fix_flaw_bugs = list(flaw_id_bugs.values())
     else:
         runtime.logger.info("detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
-            flaw_bug for flaw_bug in corresponding_flaw_bugs
+            flaw_bug for flaw_bug in flaw_id_bugs.values()
             if attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, current_target_release)
         ]
 
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
-        len(first_fix_flaw_bugs), len(corresponding_flaw_bugs),
+        len(first_fix_flaw_bugs), len(flaw_id_bugs),
     ))
 
     if not first_fix_flaw_bugs:
         runtime.logger.info('No "first-fix" bugs found, exiting')
         exit(0)
 
-    cve_boilerplate = runtime.gitdata.load_data(key='erratatool').data['boilerplates']['cve']
+    errata_config = runtime.gitdata.load_data(key='erratatool').data
+    cve_boilerplate = errata_config['boilerplates']['cve']
     advisory = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, first_fix_flaw_bugs)
 
     flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
@@ -101,12 +113,37 @@ def attach_cve_flaws_cli(runtime, advisory_id, noop, default_advisory_type):
     runtime.logger.info(f'Bugs already attached: {len(existing_bug_ids)}')
     runtime.logger.info(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
 
-    if new_bugs:
-        advisory.addBugs(flaw_ids)
-    if noop:
-        return True
+    if not noop:
+        if new_bugs:
+            runtime.logger.info('Attaching bugs %s', flaw_ids)
+            advisory.addBugs(flaw_ids)
+        runtime.logger.info("Updating advisory %s", advisory_id)
+        advisory.commit()
 
-    return advisory.commit()
+    runtime.logger.info('Associating CVEs with builds')
+    errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
+    try:
+        await errata_api.login()
+        await associate_builds_with_cves(errata_api, advisory, attached_tracker_bugs, tracker_flaws, flaw_id_bugs, noop)
+    finally:
+        await errata_api.close()
+
+
+async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, attached_tracker_bugs: List[Bug], tracker_flaws: Dict[int, List[int]], flaw_id_bugs: Dict[int, Bug], dry_run: bool):
+    attached_builds = [b for pv in advisory.errata_builds.values() for b in pv]
+    cve_components_mapping: Dict[str, Set[str]] = {}
+    for tracker in attached_tracker_bugs:
+        component_name = bzutil.get_whiteboard_component(tracker)
+        if not component_name:
+            raise ValueError(f"Bug {tracker.id} doesn't have a valid component name in its whiteboard field.")
+        flaw_ids = tracker_flaws[tracker.id]
+        for flaw_id in flaw_ids:
+            if len(flaw_id_bugs[flaw_id].alias) != 1:
+                raise ValueError(f"Bug {flaw_id} should have exact 1 alias.")
+            cve = flaw_id_bugs[flaw_id].alias[0]
+            cve_components_mapping.setdefault(cve, set()).add(component_name)
+
+    await AsyncErrataUtils.associate_builds_with_cves(errata_api, advisory.errata_id, attached_builds, cve_components_mapping, dry_run=dry_run)
 
 
 def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, flaw_bugs: list):

@@ -1,7 +1,11 @@
 import unittest
+from asyncio import get_event_loop
 
-import mock
+from bugzilla.bug import Bug
+from mock import AsyncMock, Mock, patch
+
 from elliottlib.cli import attach_cve_flaws_cli
+from elliottlib.errata_async import AsyncErrataAPI
 
 
 class TestAttachCVEFlawsCLI(unittest.TestCase):
@@ -13,20 +17,20 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
             'topic': "some topic {IMPACT}",
             'solution': 'some solution'
         }
-        advisory = mock.Mock(
+        advisory = Mock(
             errata_type="RHBA",
             cve_names="something",
-            update=mock.Mock(),
+            update=Mock(),
             topic='some topic'
         )
 
         flaw_bugs = [
-            mock.Mock(alias=['CVE-123'], severity='urgent', summary='CVE-123 foo'),
-            mock.Mock(alias=['CVE-456'], severity='high', summary='CVE-456 bar')
+            Mock(alias=['CVE-123'], severity='urgent', summary='CVE-123 foo'),
+            Mock(alias=['CVE-456'], severity='high', summary='CVE-456 bar')
         ]
 
         attach_cve_flaws_cli.get_updated_advisory_rhsa(
-            mock.Mock(),
+            Mock(),
             boilerplate,
             advisory,
             flaw_bugs
@@ -54,6 +58,48 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
         advisory.update.assert_any_call(
             description='some description with * foo (CVE-123)\n* bar (CVE-456)'
         )
+
+    @patch("elliottlib.errata_async.AsyncErrataUtils.associate_builds_with_cves", autospec=True)
+    def test_associate_builds_with_cves(self, fake_urils_associate_builds_with_cves: AsyncMock):
+        errata_api = AsyncMock(spec=AsyncErrataAPI)
+        advisory = Mock(
+            errata_id=12345,
+            errata_builds={
+                "Fake-Product-Version1": {
+                    "a-1.0.0-1.el8": {},
+                    "b-1.0.0-1.el8": {},
+                    "c-1.0.0-1.el8": {},
+                    "d-1.0.0-1.el8": {},
+                },
+                "Fake-Product-Version2": {
+                    "a-1.0.0-1.el7": {},
+                    "e-1.0.0-1.el7": {},
+                    "f-1.0.0-1.el7": {},
+                }
+            }
+        )
+        tracker_flaws = {
+            1: [101, 103],
+            2: [101, 103],
+            3: [102, 103],
+            4: [101, 103],
+            5: [102],
+        }
+        attached_tracker_bugs = [
+            Mock(spec=Bug, id=1, keywords=["Security", "SecurityTracking"], whiteboard="component: a"),
+            Mock(spec=Bug, id=2, keywords=["Security", "SecurityTracking"], whiteboard="component: b"),
+            Mock(spec=Bug, id=3, keywords=["Security", "SecurityTracking"], whiteboard="component: c"),
+            Mock(spec=Bug, id=4, keywords=["Security", "SecurityTracking"], whiteboard="component: d"),
+            Mock(spec=Bug, id=5, keywords=["Security", "SecurityTracking"], whiteboard="component: e"),
+        ]
+        flaw_id_bugs = {
+            101: Mock(spec=Bug, id=101, keywords=["Security"], alias=["CVE-2099-1"]),
+            102: Mock(spec=Bug, id=102, keywords=["Security"], alias=["CVE-2099-2"]),
+            103: Mock(spec=Bug, id=103, keywords=["Security"], alias=["CVE-2099-3"]),
+        }
+        actual = get_event_loop().run_until_complete(attach_cve_flaws_cli.associate_builds_with_cves(errata_api, advisory, attached_tracker_bugs, tracker_flaws, flaw_id_bugs, dry_run=False))
+        fake_urils_associate_builds_with_cves.assert_awaited_once_with(errata_api, 12345, ['a-1.0.0-1.el8', 'b-1.0.0-1.el8', 'c-1.0.0-1.el8', 'd-1.0.0-1.el8', 'a-1.0.0-1.el7', 'e-1.0.0-1.el7', 'f-1.0.0-1.el7'], {'CVE-2099-1': {'a', 'd', 'b'}, 'CVE-2099-3': {'a', 'd', 'b', 'c'}, 'CVE-2099-2': {'c', 'e'}}, dry_run=False)
+        self.assertEqual(actual, None)
 
 
 if __name__ == '__main__':
