@@ -472,7 +472,7 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=100):
+def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=constants.BUG_ATTACH_CHUNK_SIZE):
     """
     adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original

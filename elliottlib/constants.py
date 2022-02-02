@@ -21,6 +21,9 @@ BUG_SEVERITY_NUMBER_MAP = {
     "urgent": 4,
 }
 
+BUG_LOOKUP_CHUNK_SIZE = 500
+BUG_ATTACH_CHUNK_SIZE = 100
+
 # When severity isn't set on all tracking and flaw bugs, default to "Low"
 # https://jira.coreos.com/browse/ART-1192
 SECURITY_IMPACT = ["Low", "Low", "Moderate", "Important", "Critical"]
