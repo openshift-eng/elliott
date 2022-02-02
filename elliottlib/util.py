@@ -4,7 +4,7 @@ from itertools import chain
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
 from sys import getsizeof, stderr
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Sequence, Any
 
 from elliottlib import brew
 from elliottlib.exceptions import BrewBuildException
@@ -689,6 +689,6 @@ def brew_suffix_for_arch(arch: str) -> str:
     return brew_arch_suffixes[brew_arches.index(arch)]
 
 
-def chunk(a_list, chunk_size):
-    for i in range(0, len(a_list), chunk_size):
-        yield a_list[i:i + chunk_size]
+def chunk(a_sequence: Sequence[Any], chunk_size: int) -> list[Any]:
+    for i in range(0, len(a_sequence), chunk_size):
+        yield a_sequence[i:i + chunk_size]
