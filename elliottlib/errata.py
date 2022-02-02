@@ -504,7 +504,6 @@ def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=100):
     bugs = list(new_bugs)
     green_prefix(f"Adding bugs in batches of {batch_size}")
     for chunk_of_bugs in chunk(bugs, batch_size):
-        print(f"Attaching Batch {i+1}")
         if noop:
             print('Dry run: Would have attached bugs')
             continue

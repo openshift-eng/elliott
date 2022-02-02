@@ -689,6 +689,6 @@ def brew_suffix_for_arch(arch: str) -> str:
     return brew_arch_suffixes[brew_arches.index(arch)]
 
 
-def chunk(l, n):
-    for i in range(0, len(l), n):
-        yield l[i:i+n]
+def chunk(a_list, chunk_size):
+    for i in range(0, len(a_list), chunk_size):
+        yield a_list[i:i + chunk_size]
