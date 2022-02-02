@@ -226,8 +226,18 @@ advisory with the --add option.
             sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api, runtime.rpm_metas() + runtime.image_metas())
 
         if sweep_cutoff_timestamp:
-            green_print(f"Filtering bugs that have changed to one of the desired statuses before the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
-            qualified_bugs = bzutil.filter_bugs_by_cutoff_event(bzapi, bugs, status, sweep_cutoff_timestamp)
+            green_print(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
+                        f"cutoff time"
+                        f" {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
+            qualified_bugs = []
+            batch_size = 500
+            batches = list(range(0, len(bugs), batch_size))
+            if len(bugs) % batch_size != 0:
+                batches.append(len(bugs))
+            for i in range(len(batches) - 1):
+                start, end = batches[i], batches[i + 1]
+                qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bzapi, bugs[start:end], status,
+                                                                         sweep_cutoff_timestamp))
             click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
             bugs = qualified_bugs
 
