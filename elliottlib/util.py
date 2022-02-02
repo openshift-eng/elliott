@@ -689,6 +689,6 @@ def brew_suffix_for_arch(arch: str) -> str:
     return brew_arch_suffixes[brew_arches.index(arch)]
 
 
-def chunk(a_sequence: Sequence[Any], chunk_size: int) -> list[Any]:
+def chunk(a_sequence: Sequence[Any], chunk_size: int) -> List[Any]:
     for i in range(0, len(a_sequence), chunk_size):
         yield a_sequence[i:i + chunk_size]
