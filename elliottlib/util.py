@@ -687,3 +687,8 @@ def go_suffix_for_arch(arch: str) -> str:
 def brew_suffix_for_arch(arch: str) -> str:
     arch = brew_arch_for_go_arch(arch)  # translate either incoming arch style
     return brew_arch_suffixes[brew_arches.index(arch)]
+
+
+def chunk(l, n):
+    for i in range(0, len(l), n):
+        yield l[i:i+n]

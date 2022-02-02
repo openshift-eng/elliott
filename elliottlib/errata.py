@@ -11,8 +11,8 @@ import datetime
 import json
 import ssl
 import re
-from elliottlib import exceptions, constants, brew, logutil, bzutil
-from elliottlib.util import green_prefix, green_print, exit_unauthenticated
+from elliottlib import exceptions, constants, brew, logutil
+from elliottlib.util import green_prefix, green_print, exit_unauthenticated, chunk
 
 import click
 import requests
@@ -502,24 +502,19 @@ def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=100):
         return
 
     bugs = list(new_bugs)
-    batches = list(range(0, len(bugs), batch_size))
-    if len(bugs) % batch_size != 0:
-        batches.append(len(bugs))
-
-    green_prefix(f"Adding bugs in batches of {batch_size}. Number of batches: {len(batches)-1}\n")
-    for i in range(len(batches) - 1):
-        start, end = batches[i], batches[i + 1]
+    green_prefix(f"Adding bugs in batches of {batch_size}")
+    for chunk_of_bugs in chunk(bugs, batch_size):
         print(f"Attaching Batch {i+1}")
         if noop:
             print('Dry run: Would have attached bugs')
             continue
         try:
-            advs.addBugs(bugs[start:end])
+            advs.addBugs(chunk_of_bugs)
             advs.commit()
         except ErrataException as e:
             print("ErrataException Message: {}, retry it again".format(e))
             block_list = parse_exception_error_message(e)
-            retry_list = [x for x in bugs[start:end] if x not in block_list]
+            retry_list = [x for x in chunk_of_bugs if x not in block_list]
             if len(retry_list) == 0:
                 continue
 

@@ -1,5 +1,4 @@
 import datetime
-from subprocess import run
 from elliottlib.assembly import assembly_issues_config
 import re
 from datetime import datetime
@@ -14,7 +13,7 @@ from elliottlib.cli import cli_opts
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print
+from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print, chunk
 
 pass_runtime = click.make_pass_decorator(Runtime)
 
@@ -230,13 +229,8 @@ advisory with the --add option.
                         f"cutoff time"
                         f" {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
             qualified_bugs = []
-            batch_size = 500
-            batches = list(range(0, len(bugs), batch_size))
-            if len(bugs) % batch_size != 0:
-                batches.append(len(bugs))
-            for i in range(len(batches) - 1):
-                start, end = batches[i], batches[i + 1]
-                qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bzapi, bugs[start:end], status,
+            for chunk_of_bugs in chunk(bugs, 500):
+                qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bzapi, chunk_of_bugs, status,
                                                                          sweep_cutoff_timestamp))
             click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
             bugs = qualified_bugs
