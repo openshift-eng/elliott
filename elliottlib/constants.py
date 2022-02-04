@@ -21,7 +21,7 @@ BUG_SEVERITY_NUMBER_MAP = {
     "urgent": 4,
 }
 
-BUG_LOOKUP_CHUNK_SIZE = 500
+BUG_LOOKUP_CHUNK_SIZE = 100
 BUG_ATTACH_CHUNK_SIZE = 100
 
 # When severity isn't set on all tracking and flaw bugs, default to "Low"

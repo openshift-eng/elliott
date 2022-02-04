@@ -502,7 +502,7 @@ def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=constants.BUG_ATT
         return
 
     bugs = list(new_bugs)
-    green_prefix(f"Adding bugs in batches of {batch_size}")
+    green_prefix(f"Adding bugs in batches of {batch_size}\n")
     for chunk_of_bugs in chunk(bugs, batch_size):
         if noop:
             print('Dry run: Would have attached bugs')
@@ -511,7 +511,7 @@ def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=constants.BUG_ATT
             advs.addBugs(chunk_of_bugs)
             advs.commit()
         except ErrataException as e:
-            print("ErrataException Message: {}, retry it again".format(e))
+            print(f"ErrataException Message: {e}\nRetrying...")
             block_list = parse_exception_error_message(e)
             retry_list = [x for x in chunk_of_bugs if x not in block_list]
             if len(retry_list) == 0:

@@ -232,6 +232,8 @@ advisory with the --add option.
             for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
                 qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bzapi, chunk_of_bugs, status,
                                                                          sweep_cutoff_timestamp))
+                print('.',end='')
+            print()
             click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
             bugs = qualified_bugs
 
