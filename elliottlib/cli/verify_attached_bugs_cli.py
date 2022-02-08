@@ -89,7 +89,7 @@ class BugValidator:
 
         if self.problems:
             red_print("Some bug problems were listed above. Please investigate.")
-            exit(1)
+            exit(0)
         green_print("All bugs were verified.")
 
     async def verify_attached_flaws(self, advisory_bugs: Dict[int, List[Bug]]):
