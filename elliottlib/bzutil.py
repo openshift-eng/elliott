@@ -17,7 +17,7 @@ from koji import ClientSession
 
 from elliottlib import constants, exceptions, logutil
 from elliottlib.metadata import Metadata
-from elliottlib.util import isolate_timestamp_in_release
+from elliottlib.util import isolate_timestamp_in_release, red_print
 
 logger = logutil.getLogger(__name__)
 
@@ -371,6 +371,9 @@ def get_bzapi(bz_data, interactive_login=False):
         print("elliott requires cached login credentials for {}".format(bz_data['server']))
         if interactive_login:
             bzapi.interactive_login()
+        else:
+            red_print("Login using 'bugzilla login --api-key'")
+            exit(1)
     return bzapi
 
 
