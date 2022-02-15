@@ -1,4 +1,6 @@
 import datetime
+import json
+
 from elliottlib.assembly import assembly_issues_config
 import re
 from datetime import datetime
@@ -65,6 +67,11 @@ LOGGER = logutil.getLogger(__name__)
               required=False,
               is_flag=True,
               help="Output a detailed report of the found bugs")
+@click.option('--output', '-o',
+              required=False,
+              type=click.Choice(['text', 'json', 'slack']),
+              default='text',
+              help='Applies chosen format to --report output')
 @click.option("--into-default-advisories",
               is_flag=True,
               help='attaches bugs found to their correct default advisories, e.g. operator-related bugs go to "extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
@@ -75,8 +82,8 @@ LOGGER = logutil.getLogger(__name__)
               default=False,
               help="Don't change anything")
 @pass_runtime
-def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id, cve_trackers, from_diff,
-                  flag, report, into_default_advisories, brew_event, noop):
+def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id,
+                  cve_trackers, from_diff, flag, report, output, into_default_advisories, brew_event, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
@@ -208,8 +215,9 @@ advisory with the --add option.
         if mode != 'qe' and exclude_status:
             status = set(status) - set(exclude_status)
 
-        green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
-        click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
+        if output == 'text':
+            green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
+            click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
 
         search_flag = 'blocker+' if mode == 'blocker' else None
         bugs = bzutil.search_for_bugs(bz_data, status, flag=search_flag, filter_out_security_bugs=not(cve_trackers),
@@ -261,9 +269,10 @@ advisory with the --add option.
         bugs = [bzapi.getbug(i) for i in bug_id_strings]
 
     filtered_bugs = filter_bugs(bugs, major_version, minor_version, runtime)
-    green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
+    if output == 'text':
+        green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
+        click.echo(", ".join(sorted(str(b.bug_id) for b in filtered_bugs)))
     bugs = filtered_bugs
-    click.echo(", ".join(sorted(str(b.bug_id) for b in bugs)))
 
     if mode == 'qe':
         for bug in bugs:
@@ -273,7 +282,7 @@ advisory with the --add option.
         add_flags(bugs=bugs, flags=flag, noop=noop)
 
     if report:
-        print_report(bugs)
+        print_report(bugs, output)
 
     if advisory and not default_advisory_type:  # `--add ADVISORY_NUMBER` should respect the user's wish and attach all available bugs to whatever advisory is specified.
         errata.add_bugs_with_retry(advisory, bugs, noop=noop)
@@ -397,19 +406,40 @@ def add_flags(bugs: type_bug_list, flags: List[str], noop: bool) -> None:
             bug.updateflags({f: "+"})
 
 
-def print_report(bugs: type_bug_list) -> None:
-    green_print(
-        "{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
-    for bug in bugs:
-        created_date = datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
-        days_ago = (datetime.today() - created_date).days
-        click.echo("{:<8d} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.id,
-                                                                                bug.component,
-                                                                                bug.status,
-                                                                                bug.cf_pm_score if hasattr(bug,
-                                                                                                           "cf_pm_score") else '?',
-                                                                                days_ago,
-                                                                                bug.summary[:60]))
+def print_report(bugs: type_bug_list, output: str = 'text') -> None:
+    if output == 'slack':
+        for bug in bugs:
+            click.echo("[{}]({:<12s}) {:<25s} ".format(bug.id, bug.weburl, bug.component))
+
+    elif output == 'json':
+        print(json.dumps(
+            [
+                {
+                    "id": bug.id,
+                    "component": bug.component,
+                    "status": bug.status,
+                    "date": str(datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')),
+                    "summary": bug.summary[:60],
+                    "url": bug.weburl
+                }
+                for bug in bugs
+            ],
+            indent=4
+        ))
+
+    else:  # output == 'text'
+        green_print(
+            "{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
+        for bug in bugs:
+            created_date = datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
+            days_ago = (datetime.today() - created_date).days
+            click.echo("{:<8d} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.id,
+                                                                                    bug.component,
+                                                                                    bug.status,
+                                                                                    bug.cf_pm_score if hasattr(bug,
+                                                                                                               "cf_pm_score") else '?',
+                                                                                    days_ago,
+                                                                                    bug.summary[:60]))
 
 
 def mode_list(advisory: str, bugs: type_bug_list, report: bool, flags: List[str], noop: bool) -> None:

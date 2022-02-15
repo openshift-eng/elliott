@@ -4,7 +4,7 @@ errata-tool >= 1.22
 future
 koji >= 1.18
 kobo ~= 0.19.0
-rpm
+rpm-py-installer
 semver
 pygit2 == 1.6.*
 python-bugzilla >= 3.2
