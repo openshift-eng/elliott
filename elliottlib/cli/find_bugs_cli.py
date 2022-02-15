@@ -69,7 +69,7 @@ LOGGER = logutil.getLogger(__name__)
               help="Output a detailed report of the found bugs")
 @click.option('--output',
               required=False,
-              type=click.Choice(['text', 'json']),
+              type=click.Choice(['text', 'json', 'slack']),
               default='text',
               help='Applies chosen format to --report output')
 @click.option("--into-default-advisories",
@@ -407,7 +407,11 @@ def add_flags(bugs: type_bug_list, flags: List[str], noop: bool) -> None:
 
 
 def print_report(bugs: type_bug_list, output: str = 'text') -> None:
-    if output == 'json':
+    if output == 'slack':
+        for bug in bugs:
+            click.echo("[{}]({:<12s}) {:<25s} ".format(bug.id, bug.weburl, bug.component))
+
+    elif output == 'json':
         print(json.dumps(
             [
                 {
@@ -422,7 +426,8 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
             ],
             indent=4
         ))
-    else:
+
+    else:  # output == 'text'
         green_print(
             "{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
         for bug in bugs:
