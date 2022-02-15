@@ -67,7 +67,7 @@ LOGGER = logutil.getLogger(__name__)
               required=False,
               is_flag=True,
               help="Output a detailed report of the found bugs")
-@click.option('--output',
+@click.option('--output', '-o',
               required=False,
               type=click.Choice(['text', 'json', 'slack']),
               default='text',
