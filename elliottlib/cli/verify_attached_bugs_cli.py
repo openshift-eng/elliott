@@ -90,7 +90,7 @@ class BugValidator:
         if self.problems:
             red_print("Some bug problems were listed above. Please investigate.")
             exit(1)
-        green_print("All bugs were verified.")
+        green_print("All bugs were verified. This check doesn't cover CVE flaw bugs.")
 
     async def verify_attached_flaws(self, advisory_bugs: Dict[int, List[Bug]]):
         futures = []
@@ -99,6 +99,10 @@ class BugValidator:
             attached_flaws = [b for b in attached_bugs if bzutil.is_flaw_bug(b)]
             futures.append(self._verify_attached_flaws_for(advisory_id, attached_trackers, attached_flaws))
         await asyncio.gather(*futures)
+        if self.problems:
+            red_print("Some bug problems were listed above. Please investigate.")
+            exit(1)
+        green_print("All CVE flaw bugs were verified.")
 
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
         # Retrieve flaw bugs in Bugzilla for attached_tracker_bugs
