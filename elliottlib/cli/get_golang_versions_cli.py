@@ -1,8 +1,10 @@
-from elliottlib import errata, util
+from elliottlib import errata, util, logutil
 from elliottlib.cli.common import cli
 from kobo.rpmlib import parse_nvr
 import click
 from elliottlib.cli.common import use_default_advisory_option, find_default_advisory
+
+logger = logutil.getLogger(__name__)
 
 
 @cli.command("go", short_help="Get version of Go for advisory builds")
@@ -50,7 +52,6 @@ def get_golang_versions_cli(runtime, advisory_id, default_advisory_type, nvrs, c
     else:
         runtime.initialize(no_group=True)
 
-    logger = runtime.logger
     if advisory_id:
         if components:
             components = [c.strip() for c in components.split(',')]

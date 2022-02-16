@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 import unittest
 import subprocess
 from functional_tests import constants
@@ -15,3 +14,7 @@ class VerifyPayloadTestCase(unittest.TestCase):
             ]
         )
         self.assertIn("Summary results:", out.decode("utf-8"))
+
+
+if __name__ == '__main__':
+    unittest.main()

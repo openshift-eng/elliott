@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 import unittest
 import subprocess
 import six
@@ -23,3 +22,7 @@ class RPMDiffTestCase(unittest.TestCase):
             ]
         )
         six.assertRegex(self, out.decode("utf-8"), "good: \\d+, bad: \\d+, incomplete: \\d+")
+
+
+if __name__ == '__main__':
+    unittest.main()

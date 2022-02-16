@@ -1,15 +1,14 @@
 """
 Test the brew related functions/classes
 """
-from __future__ import unicode_literals
 
-import flexmock
+from flexmock import flexmock
 import platform
 import unittest
 import mock
 
 from elliottlib import exceptions, constants, brew, errata
-from . import test_structures
+from tests import test_structures
 
 
 class TestBrew(unittest.TestCase):

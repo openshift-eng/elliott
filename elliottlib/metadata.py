@@ -149,7 +149,7 @@ class Metadata(object):
         :param extra_pattern: An extra glob pattern that must be matched in the middle of the
                          build's release field. Pattern must match release timestamp and components
                          like p? and git commit (up to, but not including ".assembly.<name>" release
-                         component). e.g. "*.git.<commit>.*   or '*.p1.*'
+                         component). e.g. "*.g<commit>.*   or '*.p1.*'
         :param build_state: 0=BUILDING, 1=COMPLETE, 2=DELETED, 3=FAILED, 4=CANCELED
         :param el_target: In the case of an RPM, which can build for multiple targets, you can specify
                             '7' for el7, '8' for el8, etc. You can also pass in a brew target that
@@ -172,10 +172,10 @@ class Metadata(object):
         rpm_suffix = ''  # By default, find the latest RPM build - regardless of el7, el8, ...
 
         if self.meta_type == 'image':
-            ver_prefix = 'v'  # openshift-enterprise-console-container-v4.7.0-202106032231.p0.git.d9f4379
+            ver_prefix = 'v'  # openshift-enterprise-console-container-v4.7.0-202106032231.p0.gd9f4379
         else:
             # RPMs do not have a 'v' in front of their version; images do.
-            ver_prefix = ''  # openshift-clients-4.7.0-202106032231.p0.git.e29b355.el8
+            ver_prefix = ''  # openshift-clients-4.7.0-202106032231.p0.ge29b355.el8
             if el_target:
                 el_target = f'-rhel-{el_target}'  # Whether the incoming value is an int, decimal str, or a target, normalize for regex
                 target_match = re.match(r'.*-rhel-(\d+)(?:-|$)', str(el_target))  # tolerate incoming int with str()

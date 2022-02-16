@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 import json
 from tenacity import retry, stop_after_attempt, wait_fixed
 from urllib import request

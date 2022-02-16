@@ -1,5 +1,4 @@
-from __future__ import absolute_import, print_function, unicode_literals
-from unittest import TestCase
+import unittest
 from mock import MagicMock, patch
 from functional_tests import constants
 import subprocess
@@ -8,7 +7,7 @@ from elliottlib.cli.verify_attached_bugs_cli import BugValidator
 from elliottlib import bzutil
 
 
-class VerifyBugs(TestCase):
+class VerifyBugs(unittest.TestCase):
 
     def setUp(self):
         self.patchers = [
@@ -79,7 +78,7 @@ class VerifyBugs(TestCase):
         # having acquired these bugs, might as well use them to test verification
         bv._verify_blocking_bugs(bbf)
         self.assertIn(
-            "Regression possible: bug 1869790 is a backport of bug 1868735 which was CLOSED DUPLICATE",
+            "Regression possible: bug 1869790 is a backport of bug 1868735 which was CLOSED WONTFIX",
             bv.problems
         )
         for bug in [1875258, 1878798, 1881212, 1840719]:
@@ -104,3 +103,7 @@ class VerifyBugs(TestCase):
         )
         self.assertIn("bug 1856529 target release ['4.5.z'] is not in", out.stdout)
         self.assertEqual(1, out.returncode)
+
+
+if __name__ == '__main__':
+    unittest.main()

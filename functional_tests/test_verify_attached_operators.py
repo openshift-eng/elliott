@@ -1,4 +1,4 @@
-from unittest import TestCase
+import unittest
 from mock import MagicMock, patch
 from functional_tests import constants
 import subprocess
@@ -7,7 +7,7 @@ from elliottlib.cli import verify_attached_operators_cli
 from elliottlib.runtime import Runtime
 
 
-class TestVerifyAttachedOperators(TestCase):
+class TestVerifyAttachedOperators(unittest.TestCase):
 
     def setUp(self):
         self.patchers = [
@@ -55,3 +55,7 @@ class TestVerifyAttachedOperators(TestCase):
         )
         self.assertIn("csi-provisioner-container-v4.9.0-202109302317.p0.git.7736e72.assembly.stream", out.stdout)
         self.assertEqual(1, out.returncode)
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 import unittest
 import subprocess
 import six
@@ -14,3 +13,7 @@ class PollSignedTestCase(unittest.TestCase):
             ]
         )
         six.assertRegex(self, out.decode("utf-8"), "All builds signed|Signing incomplete")
+
+
+if __name__ == '__main__':
+    unittest.main()

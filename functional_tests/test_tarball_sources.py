@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 import unittest
 import subprocess
 import shutil
@@ -22,3 +21,7 @@ class TarballSourcesTestCase(unittest.TestCase):
             ]
         )
         self.assertIn("All tarball sources are successfully created.", out.decode("utf-8"))
+
+
+if __name__ == '__main__':
+    unittest.main()

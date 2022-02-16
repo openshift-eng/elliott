@@ -10,6 +10,7 @@ services:
     volumes:
     - ../:/workspaces/elliott:cached,z
     - ${HOME:-}${USERPROFILE:-}/.ssh:/home/dev/.ssh:ro,cached,z
+    - ${HOME:-}${USERPROFILE:-}/.config/python-bugzilla:/home/dev/.config/python-bugzilla:ro,cached,z
     - ./settings.yaml:/home/dev/.config/elliott/settings.yaml:ro,cached,z
     - ./krb5-redhat.conf:/etc/krb5.conf.d/krb5-redhat.conf:ro,cached,z
     - ./brewkoji.conf:/etc/koji.conf.d/brewkoji.conf:ro,cached,z

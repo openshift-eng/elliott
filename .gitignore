@@ -26,3 +26,6 @@ cover
 
 # Ignore ocp-build-data
 ocp-build-data/
+
+# Ignore functional tests artifacts
+summary_results.json

@@ -1,7 +1,7 @@
 import datetime
 
 from errata_tool import Erratum, ErrataException
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 import click
 
 from elliottlib.cli.common import cli

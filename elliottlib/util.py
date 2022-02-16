@@ -4,13 +4,13 @@ from itertools import chain
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
 from sys import getsizeof, stderr
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Sequence, Any
 
 from elliottlib import brew
 from elliottlib.exceptions import BrewBuildException
 
 from errata_tool import Erratum
-from kerberos import GSSError
+from spnego.exceptions import GSSError
 
 # -----------------------------------------------------------------------------
 # Constants and defaults
@@ -560,7 +560,7 @@ def get_golang_container_nvrs(nvrs, logger):
         go_version = 'N/A'
         nvr = (build['name'], build['version'], build['release'])
         name = nvr[0]
-        if 'golang-builder' in name:
+        if 'golang-builder' in name or 'go-toolset' in name:
             go_version = golang_builder_version(nvr, logger)
             go_container_nvrs[name] = {
                 'nvr': nvr,
@@ -575,14 +575,14 @@ def get_golang_container_nvrs(nvrs, logger):
             continue
 
         for p, pinfo in parents.items():
-            if 'builder' in p:
+            if 'builder' in p or 'go-toolset' in p:
                 go_version = pinfo.get('nvr')
 
         go_container_nvrs[name] = {
             'nvr': nvr,
             'go': go_version
         }
-        if not go_version:
+        if not go_version or go_version == 'N/A':
             logger.debug(f'Could not find parent Go builder image for {nvr}')
 
     return go_container_nvrs
@@ -618,13 +618,13 @@ def get_golang_rpm_nvrs(nvrs, logger):
             logger.debug(f'Could not find brew log for {nvr}')
         else:
             try:
-                go_version = get_golang_version_from_build_log(root_log)
+                go_version = get_golang_version_from_build_log(root_log)[2]
             except AttributeError:
                 logger.debug(f'Could not find go version in root log for {nvr}')
 
         go_rpm_nvrs[nvr[0]] = {
             'nvr': nvr,
-            'go': go_version[2]
+            'go': go_version
         }
     return go_rpm_nvrs
 
@@ -687,3 +687,8 @@ def go_suffix_for_arch(arch: str) -> str:
 def brew_suffix_for_arch(arch: str) -> str:
     arch = brew_arch_for_go_arch(arch)  # translate either incoming arch style
     return brew_arch_suffixes[brew_arches.index(arch)]
+
+
+def chunk(a_sequence: Sequence[Any], chunk_size: int) -> List[Any]:
+    for i in range(0, len(a_sequence), chunk_size):
+        yield a_sequence[i:i + chunk_size]

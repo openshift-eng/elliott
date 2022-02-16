@@ -1,4 +1,3 @@
-from __future__ import absolute_import, print_function, unicode_literals
 import click
 import datetime
 import elliottlib
@@ -113,7 +112,7 @@ advisory.
             " ".join(map(str, bugs))))
         bug_objects = bzapi.getbugs(bugs)
         # assert bugs are viable for a new advisory.
-        _assert_bugs_are_viable(errata_type, bugs, bug_objects)
+        _assert_bugs_are_viable(bugs, bug_objects)
 
     ######################################################################
 

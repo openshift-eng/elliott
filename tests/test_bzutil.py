@@ -3,7 +3,7 @@ import logging
 import unittest
 import xmlrpc.client
 
-import flexmock
+from flexmock import flexmock
 import mock
 
 from elliottlib import bzutil, constants

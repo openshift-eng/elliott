@@ -1,4 +1,4 @@
-from unittest import TestCase
+import unittest
 
 import yaml
 
@@ -8,7 +8,7 @@ from elliottlib.assembly import (assembly_basis_event, assembly_group_config,
 from elliottlib.model import Missing, Model
 
 
-class TestAssembly(TestCase):
+class TestAssembly(unittest.TestCase):
 
     def setUp(self) -> None:
         releases_yml = """
@@ -356,3 +356,7 @@ releases:
     def test_assembly_rhcos_config(self):
         rhcos_config = assembly_rhcos_config(self.releases_config, "ART_8")
         self.assertEqual(len(rhcos_config.dependencies.rpms), 3)
+
+
+if __name__ == '__main__':
+    unittest.main()

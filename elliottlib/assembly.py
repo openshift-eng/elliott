@@ -86,7 +86,6 @@ def assembly_group_config(releases_config: Model, assembly: str, group_config: M
     target_assembly_group = target_assembly.group
     if not target_assembly_group:
         return group_config
-
     return Model(dict_to_model=merger(target_assembly_group.primitive(), group_config.primitive()))
 
 
