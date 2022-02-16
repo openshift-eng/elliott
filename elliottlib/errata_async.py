@@ -14,7 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 class AsyncErrataAPI:
     def __init__(self, url: str):
         self._errata_url = urlparse(url).geturl()
-        self._session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32))
+        self._session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True))
         self._gssapi_client_ctx = None
         self._headers = {
             "Content-Type": "application/json",
