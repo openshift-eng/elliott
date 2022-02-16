@@ -113,17 +113,19 @@ class BugValidator:
         )
 
         # Find first-fix flaws
-        current_target_release, err = util.get_target_release(attached_trackers)
-        if err:
-            self._complain(f"Couldn't determine target release for attached trackers: {err}")
-            return
-        if current_target_release[-1] == 'z':
-            first_fix_flaw_ids = flaw_id_bugs.keys()
-        else:
-            first_fix_flaw_ids = {
-                flaw_bug.id for flaw_bug in flaw_id_bugs.values()
-                if attach_cve_flaws.is_first_fix_any(self.bzapi, flaw_bug, current_target_release)
-            }
+        first_fix_flaw_ids = set()
+        if attached_trackers:
+            current_target_release, err = util.get_target_release(attached_trackers)
+            if err:
+                self._complain(f"Couldn't determine target release for attached trackers: {err}")
+                return
+            if current_target_release[-1] == 'z':
+                first_fix_flaw_ids = flaw_id_bugs.keys()
+            else:
+                first_fix_flaw_ids = {
+                    flaw_bug.id for flaw_bug in flaw_id_bugs.values()
+                    if attach_cve_flaws.is_first_fix_any(self.bzapi, flaw_bug, current_target_release)
+                }
 
         # Check if attached flaws match attached trackers
         attached_flaw_ids = {b.id for b in attached_flaws}
