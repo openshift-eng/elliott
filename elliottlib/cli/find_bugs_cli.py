@@ -409,7 +409,7 @@ def add_flags(bugs: type_bug_list, flags: List[str], noop: bool) -> None:
 def print_report(bugs: type_bug_list, output: str = 'text') -> None:
     if output == 'slack':
         for bug in bugs:
-            click.echo("[{}]({:<12s}) {:<25s} ".format(bug.id, bug.weburl, bug.component))
+            click.echo("<{}|{}> - {:<25s} ".format(bug.weburl, bug.id, bug.component))
 
     elif output == 'json':
         print(json.dumps(
