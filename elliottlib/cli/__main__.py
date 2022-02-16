@@ -143,7 +143,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all):
             if remove_all:
                 bug_ids = advs.errata_bugs
             else:
-                bug_ids = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
+                bug_ids = [bzapi.getbug(i).bug_id for i in cli_opts.id_convert(id)]
             green_prefix("Found {} bugs:".format(len(bug_ids)))
             click.echo(" {}".format(", ".join([str(b) for b in bug_ids])))
             green_prefix("Removing {count} bugs from advisory:".format(count=len(bug_ids)))
@@ -375,7 +375,7 @@ providing an advisory with the -a/--advisory option.
     green_print("Got bugs for advisory")
     for bug in attached_bugs:
         if bug.status in original_state:
-            if close_placeholder and "Placeholder" in bug.summary:
+            if close_placeholder or "Placeholder" in bug.summary:
                 elliottlib.bzutil.set_state(bug, "CLOSED", noop=noop)
             else:
                 elliottlib.bzutil.set_state(bug, new_state, noop=noop)
