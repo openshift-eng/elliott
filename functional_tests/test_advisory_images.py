@@ -11,7 +11,7 @@ class AdvisoryImagesTestCase(unittest.TestCase):
         out = subprocess.check_output(
             constants.ELLIOTT_CMD
             + [
-                "--group=openshift-4.6", "advisory-images"
+                "--group=openshift-4.2", "advisory-images"
             ]
         )
         self.assertIn("\n#########\n", out.decode("utf-8"))
