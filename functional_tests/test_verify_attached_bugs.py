@@ -52,11 +52,25 @@ class VerifyBugs(unittest.TestCase):
         rt.gitdata.load_data = mock_gitdata
         return rt
 
-    def _test_get_attached_bugs(self):
-        bugs = BugValidator(self.runtime_fixture())._get_attached_bugs([60085])
+    def test_get_attached_bugs(self):
+        # Create event loop
+        loop = asyncio.get_event_loop()
+
+        # Login with errata tool
+        bv = BugValidator(self.runtime_fixture())
+        loop.run_until_complete(loop.create_task(bv.errata_api.login()))
+
+        # Get attached bugs
+        result = loop.run_until_complete(
+            asyncio.gather(
+                loop.create_task(
+                    bv.get_attached_bugs([60085]), )
+            )
+        )
+        bugs = result[0][60085]
+
         self.assertEqual(20, len(bugs))
         self.assertIn(1812663, {bug.id for bug in bugs})
-        print(f"{list(bugs)[0].product}")
 
     def test_get_attached_filtered_bugs(self):
         # Create event loop
