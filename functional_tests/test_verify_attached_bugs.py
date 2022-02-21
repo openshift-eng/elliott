@@ -57,17 +57,11 @@ class VerifyBugs(unittest.TestCase):
 
         # Login with errata tool
         bv = BugValidator(self.runtime_fixture())
-        loop.run_until_complete(loop.create_task(bv.errata_api.login()))
+        loop.run_until_complete(bv.errata_api.login())
 
         # Get attached bugs
-        result = loop.run_until_complete(
-            asyncio.gather(
-                loop.create_task(
-                    bv.get_attached_bugs([60085]),
-                )
-            )
-        )
-        bugs = result[0][60085]
+        result = loop.run_until_complete(bv.get_attached_bugs([60085]))
+        bugs = result[60085]
 
         self.assertEqual(20, len(bugs))
         self.assertIn(1812663, {bug.id for bug in bugs})
@@ -82,18 +76,12 @@ class VerifyBugs(unittest.TestCase):
         bv.target_releases = ['4.5.0', '4.5.z']
 
         # Login with errata tool
-        loop.run_until_complete(loop.create_task(bv.errata_api.login()))
+        loop.run_until_complete(bv.errata_api.login())
 
         # Get attached bugs
-        result = loop.run_until_complete(
-            asyncio.gather(
-                loop.create_task(
-                    bv.get_attached_bugs([60089]),  # SHIPPED_LIVE RHSA
-                )
-            )
-        )
+        result = loop.run_until_complete(bv.get_attached_bugs([60089]))
         self.assertTrue(result, "Should find attached bugs")
-        advisory_bugs = result[0][60089]
+        advisory_bugs = result[60089]
 
         # Filter bugs by release and product
         bugs = bv.filter_bugs_by_release(advisory_bugs)
@@ -114,18 +102,12 @@ class VerifyBugs(unittest.TestCase):
         bv.target_releases = ['4.5.0', '4.5.z']
 
         # Login with errata tool
-        loop.run_until_complete(loop.create_task(bv.errata_api.login()))
+        loop.run_until_complete(bv.errata_api.login())
 
         # Get attached bugs
-        result = loop.run_until_complete(
-            asyncio.gather(
-                loop.create_task(
-                    bv.get_attached_bugs([60089]),  # SHIPPED_LIVE RHSA
-                )
-            )
-        )
+        result = loop.run_until_complete(bv.get_attached_bugs([60089]))
         self.assertTrue(result, "Should find attached bugs")
-        advisory_bugs = result[0][60089]
+        advisory_bugs = result[60089]
 
         # Filter bugs by release and product
         bv.filter_bugs_by_release(advisory_bugs, True)
