@@ -2,7 +2,6 @@ import asyncio
 import unittest
 from mock import MagicMock, patch
 
-from elliottlib.errata_async import AsyncErrataAPI
 from functional_tests import constants
 import subprocess
 
@@ -64,7 +63,8 @@ class VerifyBugs(unittest.TestCase):
         result = loop.run_until_complete(
             asyncio.gather(
                 loop.create_task(
-                    bv.get_attached_bugs([60085]), )
+                    bv.get_attached_bugs([60085]),
+                )
             )
         )
         bugs = result[0][60085]
@@ -88,7 +88,8 @@ class VerifyBugs(unittest.TestCase):
         result = loop.run_until_complete(
             asyncio.gather(
                 loop.create_task(
-                    bv.get_attached_bugs([60089]), )  # SHIPPED_LIVE RHSA
+                    bv.get_attached_bugs([60089]),  # SHIPPED_LIVE RHSA
+                )
             )
         )
         self.assertTrue(result, "Should find attached bugs")
@@ -119,7 +120,8 @@ class VerifyBugs(unittest.TestCase):
         result = loop.run_until_complete(
             asyncio.gather(
                 loop.create_task(
-                    bv.get_attached_bugs([60089]),)  # SHIPPED_LIVE RHSA
+                    bv.get_attached_bugs([60089]),  # SHIPPED_LIVE RHSA
+                )
             )
         )
         self.assertTrue(result, "Should find attached bugs")
