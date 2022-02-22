@@ -1,5 +1,9 @@
+import asyncio
 import unittest
+from collections import namedtuple
+
 from mock import MagicMock, patch
+
 from functional_tests import constants
 import subprocess
 
@@ -23,39 +27,97 @@ class VerifyBugs(unittest.TestCase):
             p.stop()
 
     def runtime_fixture(self):
-        # fixture because it does have a real BZ server. everything else is dummy content to be overridden.
+        GitData = namedtuple('GitData', ['data'])
+
+        def mock_gitdata(**kwargs):
+            if kwargs['key'] == 'bugzilla':
+                return GitData(
+                    dict(
+                        target_release=[],
+                        product="dummy product",
+                        server="bugzilla.redhat.com"
+                    )
+                )
+            elif kwargs['key'] == 'erratatool':
+                return GitData(
+                    dict(
+                        target_release=[],
+                        product="dummy product",
+                        server="https://errata.devel.redhat.com"
+                    )
+                )
+
         rt = MagicMock()
-        rt.gitdata.load_data().data = dict(
-            target_release=[],
-            product="dummy product",
-            server="bugzilla.redhat.com",
-        )
+        rt.gitdata.load_data = mock_gitdata
         return rt
 
-    def _test_get_attached_bugs(self):
-        bugs = BugValidator(self.runtime_fixture())._get_attached_bugs([60085])
+    def test_get_attached_bugs(self):
+        # Create event loop
+        loop = asyncio.get_event_loop()
+
+        # Login with errata tool
+        bv = BugValidator(self.runtime_fixture())
+        loop.run_until_complete(bv.errata_api.login())
+
+        # Get attached bugs
+        result = loop.run_until_complete(bv.get_attached_bugs([60085]))
+        bugs = result[60085]
+
         self.assertEqual(20, len(bugs))
         self.assertIn(1812663, {bug.id for bug in bugs})
-        print(f"{list(bugs)[0].product}")
 
     def test_get_attached_filtered_bugs(self):
+        # Create event loop
+        loop = asyncio.get_event_loop()
+
+        # Initialize validator
         bv = BugValidator(self.runtime_fixture())
         bv.product = "OpenShift Container Platform"
         bv.target_releases = ['4.5.0', '4.5.z']
-        bugs = {bug.id for bug in bv._get_attached_filtered_bugs([60089])}  # SHIPPED_LIVE RHSA
-        self.assertIn(1856529, bugs)  # security tracker
-        self.assertNotIn(1858981, bugs)  # flaw bug
-        self.assertFalse(bv.problems, "There should be no problems")
+
+        # Login with errata tool
+        loop.run_until_complete(bv.errata_api.login())
+
+        # Get attached bugs
+        result = loop.run_until_complete(bv.get_attached_bugs([60089]))
+        self.assertTrue(result, "Should find attached bugs")
+        advisory_bugs = result[60089]
+
+        # Filter bugs by release and product
+        bugs = bv.filter_bugs_by_release(advisory_bugs)
+        bugs = bv.filter_bugs_by_product(bugs)
+        bug_ids = {bug.id for bug in bugs}
+
+        # Check filtered bug IDs
+        self.assertIn(1856529, bug_ids)  # security tracker
+        self.assertNotIn(1858981, bug_ids)  # flaw bug
 
     def test_get_attached_filtered_bugs_problems(self):
+        # Create event loop
+        loop = asyncio.get_event_loop()
+
+        # Initialize validator
         bv = BugValidator(self.runtime_fixture())
         bv.product = "OpenShift Container Platform"
-        bv.target_releases = ['4.6.0', '4.6.z']
-        bv._get_attached_filtered_bugs([60089])  # SHIPPED_LIVE RHSA
+        bv.target_releases = ['4.5.0', '4.5.z']
+
+        # Login with errata tool
+        loop.run_until_complete(bv.errata_api.login())
+
+        # Get attached bugs
+        result = loop.run_until_complete(bv.get_attached_bugs([60089]))
+        self.assertTrue(result, "Should find attached bugs")
+        advisory_bugs = result[60089]
+
+        # Filter bugs by release and product
+        bv.filter_bugs_by_release(advisory_bugs, True)
+        bv.filter_bugs_by_product(advisory_bugs)
+
+        # Check validation problems
         self.assertTrue(bv.problems, "Should find version mismatch")
         self.assertTrue(
-            any("1856529" in problem for problem in bv.problems),
-            "Should find version mismatch for 1856529"
+            any("1858981" in problem for problem in bv.problems),
+            "Should find version mismatch for 1858981"
         )
 
     def test_get_and_verify_blocking_bugs(self):
@@ -78,7 +140,7 @@ class VerifyBugs(unittest.TestCase):
         # having acquired these bugs, might as well use them to test verification
         bv._verify_blocking_bugs(bbf)
         self.assertIn(
-            "Regression possible: bug 1869790 is a backport of bug 1868735 which was CLOSED WONTFIX",
+            "Regression possible: bug 1869790 is a backport of bug 1881143 which was CLOSED WONTFIX",
             bv.problems
         )
         for bug in [1875258, 1878798, 1881212, 1840719]:
