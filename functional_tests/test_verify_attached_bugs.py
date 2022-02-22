@@ -1,5 +1,7 @@
 import asyncio
 import unittest
+from collections import namedtuple
+
 from mock import MagicMock, patch
 
 from functional_tests import constants
@@ -25,9 +27,7 @@ class VerifyBugs(unittest.TestCase):
             p.stop()
 
     def runtime_fixture(self):
-        class GitData:
-            def __init__(self, data_in: dict):
-                self.data = data_in
+        GitData = namedtuple('GitData', ['data'])
 
         def mock_gitdata(**kwargs):
             if kwargs['key'] == 'bugzilla':
