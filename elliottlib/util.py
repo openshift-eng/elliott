@@ -313,9 +313,24 @@ def get_golang_version_from_build_log(log):
     # Based on below greps:
     # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang-(bin-|))[0-9]+.[0-9]+.[0-9]+[^ ]*' ./3.11/*.log | sed 's/:.*\([0-9]\+\.[0-9]\+\.[0-9]\+.*\)/: \1/'
     # $ grep -m1 -o -E '(go-toolset-1[^ ]*|golang.*module[^ ]*).*[0-9]+.[0-9]+.[0-9]+[^ ]*' ./4.5/*.log | sed 's/\:.*\([^a-z][0-9]\+\.[0-9]\+\.[0-9]\+[^ ]*\)/:\ \1/'
-    m = re.search(r'(go-toolset-1\S+-golang\S+|golang-bin).*[0-9]+.[0-9]+.[0-9]+[^\s]*', log)
+    m = re.search(r'(go-toolset-1\S+-golang\S+|golang-bin).*[0-9]+\.[0-9]+\.[0-9]+[^\s]*', log)
     s = m.group(0).split()
-    return s
+
+    # if we get a result like:
+    #   "golang-bin               x86_64  1.14.12-1.module+el8.3.0+8784+380394dc"
+    if len(s) > 1:
+        go_version = s[2]
+    else:
+        # if we get a result like (more common for RHEL7 build logs):
+        #   "go-toolset-1.14-golang-1.14.9-2.el7.x86_64"
+        go_version = s[0]
+        # extract version and release
+        m = re.search(r'[0-9a-zA-z\.]+-[0-9a-zA-z\.]+$', s[0])
+        s = m.group(0).split()
+        if len(s) == 1:
+            go_version = s[0]
+
+    return go_version
 
 
 def split_el_suffix_in_release(release: str) -> Tuple[str, Optional[str]]:
@@ -618,7 +633,7 @@ def get_golang_rpm_nvrs(nvrs, logger):
             logger.debug(f'Could not find brew log for {nvr}')
         else:
             try:
-                go_version = get_golang_version_from_build_log(root_log)[2]
+                go_version = get_golang_version_from_build_log(root_log)
             except AttributeError:
                 logger.debug(f'Could not find go version in root log for {nvr}')
 
