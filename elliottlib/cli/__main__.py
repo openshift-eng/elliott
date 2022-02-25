@@ -93,10 +93,14 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help='Remove found bugs from ADVISORY')
 @use_default_advisory_option
 @click.option("--id", metavar='BUGID', default=[],
-              multiple=True, required=True,
+              multiple=True, required=False,
               help="Bugzilla IDs to add.")
+@click.option("--all", "remove_all",
+              required=False,
+              default=False, is_flag=True,
+              help="Remove all bugs attached to Advisory")
 @pass_runtime
-def remove_bugs(runtime, advisory, default_advisory_type, id):
+def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all):
     """Remove given BUGS from ADVISORY.
 
     Remove bugs that have been attached an advisory:
@@ -112,17 +116,16 @@ def remove_bugs(runtime, advisory, default_advisory_type, id):
 
 
 """
+    if remove_all and id:
+        raise click.BadParameter("Combining the automatic and manual bug modification options is not supported")
+    if not remove_all and not id:
+        raise click.BadParameter("If not using --all then one or more --id's must be provided")
     if bool(advisory) == bool(default_advisory_type):
         raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
 
     runtime.initialize()
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
     bzapi = elliottlib.bzutil.get_bzapi(bz_data)
-
-    bug_ids = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
-
-    green_prefix("Found {} bugs:".format(len(bug_ids)))
-    click.echo(" {}".format(", ".join([str(b.bug_id) for b in bug_ids])))
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -137,9 +140,15 @@ def remove_bugs(runtime, advisory, default_advisory_type, id):
             raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
 
         try:
+            if remove_all:
+                bug_ids = advs.errata_bugs
+            else:
+                bug_ids = [bzapi.getbug(i).bug_id for i in cli_opts.id_convert(id)]
+            green_prefix("Found {} bugs:".format(len(bug_ids)))
+            click.echo(" {}".format(", ".join([str(b) for b in bug_ids])))
             green_prefix("Removing {count} bugs from advisory:".format(count=len(bug_ids)))
             click.echo(" {advs}".format(advs=advisory))
-            advs.removeBugs([bug.id for bug in bug_ids])
+            advs.removeBugs([bug for bug in bug_ids])
             advs.commit()
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
@@ -258,13 +267,20 @@ Fields for the short format: Release date, State, Synopsys, URL
               default='ON_QA',
               type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
               help="Final state of the bugs (default: ON_QA)")
+@click.option("--comment", "comment",
+              required=False,
+              help="Add comment to bug")
+@click.option("--close-placeholder", "close_placeholder",
+              required=False,
+              default=False, is_flag=True,
+              help="When checking bug state, close the bug if it's a placehoder bug.")
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
               help="Check bugs attached, print what would change, but don't change anything")
 @use_default_advisory_option
 @pass_runtime
-def repair_bugs(runtime, advisory, auto, id, original_state, new_state, noop, default_advisory_type):
+def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop, default_advisory_type):
     """Move bugs attached to the advisory from one state to another
 state. This is useful if the bugs have changed states *after* they
 were attached. Similar to `find-bugs` but in reverse. `repair-bugs`
@@ -359,8 +375,14 @@ providing an advisory with the -a/--advisory option.
     green_print("Got bugs for advisory")
     for bug in attached_bugs:
         if bug.status in original_state:
+            if close_placeholder and "Placeholder" in bug.summary:
+                elliottlib.bzutil.set_state(bug, "CLOSED", noop=noop)
+            else:
+                elliottlib.bzutil.set_state(bug, new_state, noop=noop)
+                # only add comments for non-placeholder bug
+                if comment and not noop:
+                    bug.setstatus(comment=comment, private=False)
             changed_bug_count += 1
-            elliottlib.bzutil.set_state(bug, new_state, noop=noop)
 
     green_print("{} bugs successfully modified (or would have been)".format(changed_bug_count))
 
