@@ -136,10 +136,10 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
 
     if component_not_found in component_tracker_groups:
         invalid_trackers = sorted([b.id for b in component_tracker_groups[component_not_found]])
-        logger.info(f"For flaw bug {flaw_bug.id} - these tracker bugs do not have a valid "
-                    f"whiteboard component value: {invalid_trackers} "
-                    "Cannot reliably determine if flaw bug is first "
-                    "fix. Check tracker bugs manually")
+        logger.warning(f"For flaw bug {flaw_bug.id} - these tracker bugs do not have a valid "
+                       f"whiteboard component value: {invalid_trackers} "
+                       "Cannot reliably determine if flaw bug is first "
+                       "fix. Check tracker bugs manually")
         return False
 
     # if any tracker bug for the flaw bug
