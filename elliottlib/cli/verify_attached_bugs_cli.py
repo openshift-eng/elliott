@@ -131,21 +131,23 @@ class BugValidator:
         attached_flaw_ids = {b.id for b in attached_flaws}
         missing_flaw_ids = attached_flaw_ids - first_fix_flaw_ids
         if missing_flaw_ids:
-            self._complain(f"{len(missing_flaw_ids)} flaw bugs are missing: {', '.join(sorted(map(str, missing_flaw_ids)))}")
+            self._complain(f"On advisory {advisory_id}, {len(missing_flaw_ids)} flaw bugs are not attached but they are referenced by attached tracker bugs: {', '.join(sorted(map(str, missing_flaw_ids)))}."
+                           " You probabbly need to attach those flaw bugs or drop the corresponding tracker bugs.")
         extra_flaw_ids = first_fix_flaw_ids - attached_flaw_ids
         if extra_flaw_ids:
-            self._complain(f"{len(extra_flaw_ids)} flaw bugs are redundant: {', '.join(sorted(map(str, extra_flaw_ids)))}")
+            self._complain(f"On advisory {advisory_id}, {len(extra_flaw_ids)} flaw bugs are attached but there are no tracker bugs referencing them: {', '.join(sorted(map(str, extra_flaw_ids)))}."
+                           " You probabbly need to drop those flaw bugs or attach the corresponding tracker bugs.")
 
         # Check if flaw bugs are associated with specific builds
         cve_components_mapping: Dict[str, Set[str]] = {}
         for tracker in attached_trackers:
             component_name = bzutil.get_whiteboard_component(tracker)
             if not component_name:
-                raise ValueError(f"Bug {tracker.id} doesn't have a valid component name in its whiteboard field.")
+                raise ValueError(f"Tracker bug {tracker.id} doesn't have a valid component name in its whiteboard field.")
             flaw_ids = tracker_flaws[tracker.id]
             for flaw_id in flaw_ids:
                 if len(flaw_id_bugs[flaw_id].alias) != 1:
-                    raise ValueError(f"Bug {flaw_id} should have exact 1 alias.")
+                    raise ValueError(f"Flaw bug {flaw_id} should have exact 1 alias.")
                 cve = flaw_id_bugs[flaw_id].alias[0]
                 cve_components_mapping.setdefault(cve, set()).add(component_name)
         current_cve_package_exclusions = await AsyncErrataUtils.get_advisory_cve_package_exclusions(self.errata_api, advisory_id)
@@ -154,19 +156,21 @@ class BugValidator:
         extra_cve_package_exclusions, missing_cve_package_exclusions = AsyncErrataUtils.diff_cve_package_exclusions(current_cve_package_exclusions, expected_cve_packages_exclusions)
         for cve, cve_package_exclusions in extra_cve_package_exclusions.items():
             if cve_package_exclusions:
-                self._complain(f"{cve} is not associated with Brew components {', '.join(sorted(cve_package_exclusions))}")
+                self._complain(f"On advisory {advisory_id}, {cve} is not associated with Brew components {', '.join(sorted(cve_package_exclusions))}."
+                               " You may need to associate the CVE with the components in the CVE mapping or drop the tracker bugs.")
         for cve, cve_package_exclusions in missing_cve_package_exclusions.items():
             if cve_package_exclusions:
-                self._complain(f"{cve} is associated with Brew components {', '.join(sorted(cve_package_exclusions))} without tracker bugs. You may need to explictly exclude those Brew components from the CVE mapping.")
+                self._complain(f"On advisory {advisory_id}, {cve} is associated with Brew components {', '.join(sorted(cve_package_exclusions))} without a tracker bug."
+                               " You may need to explictly exclude those Brew components from the CVE mapping or attach the corresponding tracker bugs.")
 
         # Check if flaw bugs match the CVE field of the advisory
         advisory_cves = await self.errata_api.get_cves(advisory_id)
         extra_cves = cve_components_mapping.keys() - advisory_cves
         if extra_cves:
-            self._complain(f"The following CVEs are not associated with advisory {advisory_id}: {', '.join(sorted(extra_cves))}")
+            self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are already attached but they are not listed in advisory's `CVE Names` field: {', '.join(sorted(extra_cves))}")
         missing_cves = advisory_cves - cve_components_mapping.keys()
         if missing_cves:
-            self._complain(f"Tracker bugs for the following CVEs associated with advisory {advisory_id} are not attached: {', '.join(sorted(extra_cves))}")
+            self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in in advisory's `CVE Names` field: {', '.join(sorted(extra_cves))}")
 
     async def get_attached_bugs(self, advisory_ids: Iterable[int]) -> Dict[int, Set[Bug]]:
         """ Get bugs attached to specified advisories
