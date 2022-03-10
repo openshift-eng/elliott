@@ -45,9 +45,13 @@ unless Bugzilla Bugs or JIRA Issues have been attached.
 See the find-bugs help for additional information on adding
 Bugzilla Bugs.
 
-    Move the latest 4.7 release advisories to QE:
+    Move assembly release advisories to QE
 
-    $ elliott -g openshift-4.7 change-state -s QE --default-advisories
+    $ elliott -g openshift-4.10 --assembly 4.10.4 change-state -s QE
+
+    Move group release advisories to QE:
+
+    $ elliott -g openshift-4.5 change-state -s QE --default-advisories
 
     Move the advisory 123456 to QE:
 
@@ -66,7 +70,7 @@ Bugzilla Bugs.
     if count_flags > 1:
         raise click.BadParameter("Use only one of --use-default-advisory or --advisory or --default-advisories")
 
-    runtime.initialize(no_group=not (default_advisory_type or default_advisories))
+    runtime.initialize(no_group=bool(advisory))
 
     advisories = []
     if default_advisory_type is not None:
@@ -75,16 +79,17 @@ Bugzilla Bugs.
     if advisory:
         advisories.append(advisory)
 
-    if default_advisories:
-        advisories = runtime.group_config.advisories.values()
+    if not advisories:
+        advisories = list(runtime.group_config.advisories.values())
 
+    click.echo(f"Attempting to move advisories {advisories} to {state}")
     errors = []
     for advisory in advisories:
         try:
             e = Erratum(errata_id=advisory)
 
             if e.errata_state == state:
-                green_prefix(f"No Change: {advisory}: ")
+                green_prefix(f"No Change ({advisory}): ")
                 click.echo(f"Target state is same as current state: {state}")
             # we have 5 different states we can only change the state if it's in NEW_FILES or QE
             # "NEW_FILES",
@@ -93,14 +98,14 @@ Bugzilla Bugs.
             # "PUSH_READY",
             # "IN_PUSH"
             elif e.errata_state != 'NEW_FILES' and e.errata_state != 'QE':
-                red_prefix(f"Error: {advisory}: ")
+                red_prefix(f"Error ({advisory}): ")
                 if default_advisory_type is not None:
                     click.echo(f"Could not change '{e.errata_state}', group.yml is probably pointing at old one")
                 else:
                     click.echo(f"Can only change the state if it's in NEW_FILES or QE, current state is {e.errata_state}")
             else:
                 if noop:
-                    green_prefix(f"NOOP: {advisory}: ")
+                    green_prefix(f"NOOP ({advisory}): ")
                     click.echo(f"Would have changed state {e.errata_state} ➔ {state}")
                 else:
                     # Capture current state because `e.commit()` will
@@ -108,7 +113,7 @@ Bugzilla Bugs.
                     old_state = e.errata_state
                     e.setState(state)
                     e.commit()
-                    green_prefix("Changed state: ")
+                    green_prefix(f"Changed state ({advisory}): ")
                     click.echo(f"{old_state} ➔ {state}")
         except ErrataException as ex:
             click.echo(f'Error fetching/changing state of {advisory}: {ex}')
