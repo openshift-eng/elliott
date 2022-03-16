@@ -51,12 +51,17 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
 
 @cli.command("verify-bugs", short_help="Same as verify-attached-bugs, but for bugs that are not (yet) attached to advisories")
 @click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
+@click.option('--output', '-o',
+              required=False,
+              type=click.Choice(['text', 'json', 'slack']),
+              default='text',
+              help='Applies chosen format to command output')
 @click.argument("bug_ids", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
-async def verify_bugs_cli(runtime, verify_bug_status, bug_ids):
+async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
-    validator = BugValidator(runtime)
+    validator = BugValidator(runtime, output)
     bugs = validator.filter_bugs_by_product(bzutil.get_bugs(validator.bzapi, bug_ids).values())
     try:
         validator.validate(bugs, verify_bug_status)
@@ -66,7 +71,7 @@ async def verify_bugs_cli(runtime, verify_bug_status, bug_ids):
 
 class BugValidator:
 
-    def __init__(self, runtime: Runtime):
+    def __init__(self, runtime: Runtime, output: str):
         self.runtime = runtime
         self.bz_data: Dict[str, Any] = runtime.gitdata.load_data(key='bugzilla').data
         self.target_releases: List[str] = self.bz_data['target_release']
@@ -75,6 +80,7 @@ class BugValidator:
         self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
+        self.output = output
 
     async def close(self):
         await self.errata_api.close()
@@ -88,7 +94,8 @@ class BugValidator:
             self._verify_bug_status(non_flaw_bugs)
 
         if self.problems:
-            red_print("Some bug problems were listed above. Please investigate.")
+            if self.output != 'slack':
+                red_print("Some bug problems were listed above. Please investigate.")
             exit(1)
         green_print("All bugs were verified. This check doesn't cover CVE flaw bugs.")
 
@@ -219,22 +226,29 @@ class BugValidator:
             and bug.product == self.product
         }
 
-        return {bug.id: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
+        return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
 
     def _verify_blocking_bugs(self, blocking_bugs_for):
         # complain about blocker bugs that aren't verified or shipped
         for bug, blockers in blocking_bugs_for.items():
             for blocker in blockers:
+                message = str()
                 if blocker.status not in ['VERIFIED', 'RELEASE_PENDING', 'CLOSED']:
-                    self._complain(
-                        f"Regression possible: bug {bug} is a backport of bug "
-                        f"{blocker.id} which has status {blocker.status}"
-                    )
+                    if self.output == 'text':
+                        message = f"Regression possible: bug {bug.id} is a backport of bug " \
+                            f"{blocker.id} which has status {blocker.status}"
+                    elif self.output == 'slack':
+                        message = f"bug <{bug.weburl}|{bug.id}> is a backport of bug " \
+                                  f"<{blocker.weburl}|{blocker.id}> which has status {blocker.status}"
+                    self._complain(message)
                 if blocker.status == 'CLOSED' and blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG']:
-                    self._complain(
-                        f"Regression possible: bug {bug} is a backport of bug "
-                        f"{blocker.id} which was CLOSED {blocker.resolution}"
-                    )
+                    if self.output == 'text':
+                        message = f"Regression possible: bug {bug.id} is a backport of bug " \
+                            f"{blocker.id} which was CLOSED {blocker.resolution}"
+                    elif self.output == 'slack':
+                        message = f"bug <{bug.weburl}|{bug.id}> is a backport of bug " \
+                            f"<{blocker.weburl}|{blocker.id}> which was CLOSED {blocker.resolution}"
+                    self._complain(message)
 
     def _verify_bug_status(self, bugs):
         # complain about bugs that are not yet VERIFIED or more.
