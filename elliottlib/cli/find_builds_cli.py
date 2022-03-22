@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from typing import Dict, List, Set, Union
@@ -10,6 +11,7 @@ from spnego.exceptions import GSSError
 
 import elliottlib
 from elliottlib import Runtime, brew, constants, errata, logutil
+from elliottlib import exectools
 from elliottlib.assembly import assembly_metadata_config, assembly_rhcos_config
 from elliottlib.build_finder import BuildFinder
 from elliottlib.cli.common import (cli, find_default_advisory,
@@ -19,7 +21,7 @@ from elliottlib.imagecfg import ImageMetadata
 from elliottlib.util import (ensure_erratatool_auth, exit_unauthenticated,
                              get_release_version, green_prefix, green_print,
                              isolate_el_version_in_brew_tag,
-                             parallel_results_with_progress, pbar_header,
+                             parallel_results_with_progress, pbar_header, progress_func,
                              red_print, yellow_print)
 
 LOGGER = logutil.getLogger(__name__)
@@ -308,10 +310,10 @@ def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
         'Generating list of images: ',
         f'Hold on a moment, fetching Brew builds for {len(image_metas)} components...')
 
-    brew_latest_builds: List[Dict] = []
-    for image in image_metas:
-        LOGGER.info("Getting latest build for %s...", image.distgit_key)
-        brew_latest_builds.append(image.get_latest_build(brew_session))
+    brew_latest_builds: List[Dict] = asyncio.get_event_loop().run_until_complete(asyncio.gather(*[exectools.to_thread(progress_func, image.get_latest_build) for image in image_metas]))
+    # for image in image_metas:
+    #     LOGGER.info("Getting latest build for %s...", image.distgit_key)
+    #     brew_latest_builds.append(image.get_latest_build())
 
     _ensure_accepted_tags(brew_latest_builds, brew_session, tag_pv_map)
 

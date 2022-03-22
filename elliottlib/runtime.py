@@ -1,10 +1,12 @@
 import atexit
+from contextlib import contextmanager
 import logging
 import os
 import re
 import shutil
 import tempfile
-from multiprocessing import Lock
+from multiprocessing import Lock, RLock
+import time
 from typing import Dict, Optional, Tuple
 
 import click
@@ -31,6 +33,12 @@ def remove_tmp_working_dir(runtime):
 
 
 class Runtime(object):
+    # Use any time it is necessary to synchronize feedback from multiple threads.
+    mutex = RLock()
+
+    # Serialize access to the shared koji session
+    koji_lock = RLock()
+
     # Serialize access to the console, and record log
     log_lock = Lock()
 
@@ -56,6 +64,12 @@ class Runtime(object):
 
         # Map of dist-git repo name -> RPMMetadata object. Populated when group is set.
         self.rpm_map: Dict[str, RPMMetadata] = {}
+
+        # Shared koji.ClientSession instance
+        self._koji_client_session = None
+        #
+        self.session_pool = {}
+        self.session_pool_available = {}
 
         self.initialized = False
 
@@ -374,3 +388,60 @@ class Runtime(object):
         session = brew.KojiWrapper([self.group_config.urls.brewhub or constants.BREW_HUB], brew_event=self.brew_event)
         session.force_instance_caching = caching
         return session
+
+    @contextmanager
+    def shared_koji_client_session(self):
+        """
+        Context manager which offers a shared koji client session. You hold a koji specific lock in this context
+        manager giving your thread exclusive access. The lock is reentrant, so don't worry about
+        call a method that acquires the same lock while you hold it.
+        Honors doozer --brew-event.
+        Do not rerun gssapi_login on this client. We've observed client instability when this happens.
+        """
+        with self.koji_lock:
+            if self._koji_client_session is None:
+                self._koji_client_session = self.build_retrying_koji_client()
+                self._koji_client_session.gssapi_login()
+            yield self._koji_client_session
+
+    @contextmanager
+    def pooled_koji_client_session(self, caching: bool = False):
+        """
+        Context manager which offers a koji client session from a limited pool. You hold a lock on this
+        session until you return. It is not recommended to call other methods that acquire their
+        own pooled sessions, because that may lead to deadlock if the pool is exhausted.
+        Honors doozer --brew-event.
+        :param caching: Set to True in order for your instance to place calls/results into
+                        the global KojiWrapper cache. This is equivalent to passing
+                        KojiWrapperOpts(caching=True) in each call within the session context.
+        """
+        session = None
+        session_id = None
+        while True:
+            with self.mutex:
+                if len(self.session_pool_available) == 0:
+                    if len(self.session_pool) < 30:
+                        # pool has not grown to max size;
+                        new_session = self.build_retrying_koji_client()
+                        session_id = len(self.session_pool)
+                        self.session_pool[session_id] = new_session
+                        session = new_session  # This is what we wil hand to the caller
+                        break
+                    else:
+                        # Caller is just going to have to wait and try again
+                        pass
+                else:
+                    session_id, session = self.session_pool_available.popitem()
+                    break
+
+            time.sleep(5)
+
+        # Arriving here, we have a session to use.
+        try:
+            session.force_instance_caching = caching
+            yield session
+        finally:
+            session.force_instance_caching = False
+            # Put it back into the pool
+            with self.mutex:
+                self.session_pool_available[session_id] = session
