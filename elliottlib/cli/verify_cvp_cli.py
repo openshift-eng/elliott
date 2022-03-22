@@ -1,27 +1,26 @@
 import asyncio
 import json
-import pathlib
+import logging
 import re
-import sys
-from typing import Iterator, List, Optional
+from ast import Dict
+from typing import Iterable, List
 from urllib.parse import urldefrag
 
 import aiohttp
 import click
 import koji
-import requests
 from ruamel.yaml import YAML
 
-import elliottlib
-from elliottlib import Runtime, brew, constants
-from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
-                                   pass_runtime, use_default_advisory_option)
+from elliottlib import Runtime, brew, constants, exectools
+from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.imagecfg import ImageMetadata
 from elliottlib.resultsdb import ResultsDBAPI
-from elliottlib.util import (green_prefix, parallel_results_with_progress,
-                             red_prefix, red_print, yellow_print)
+from elliottlib.util import (green_prefix, pbar_header, progress_func, red_prefix, red_print,
+                             yellow_print)
 
 yaml = YAML()
+
+LOGGER = logging.getLogger(__name__)
 
 
 @cli.command("verify-cvp", short_help="Verify CVP test results")
@@ -68,14 +67,12 @@ async def verify_cvp_cli(runtime: Runtime, all_images, nvrs, optional_checks, al
         raise click.BadParameter('Use only one of --all-optional-checks or --include-optional-check.')
 
     runtime.initialize(mode='images')
-    tag_pv_map = runtime.gitdata.load_data(key='erratatool', replace_vars=runtime.group_config.vars.primitive() if runtime.group_config.vars else {}).data.get('brew_tag_product_version_mapping')
     brew_session = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
 
     builds = []
     if all_images:
-        runtime.logger.info("Getting latest image builds from Brew...")
-        # TODO: This does not honor overrides
-        builds = get_latest_image_builds(brew_session, tag_pv_map.keys(), runtime.image_metas, event=runtime.brew_event)
+        image_metas = runtime.image_metas()
+        builds = await get_latest_image_builds(image_metas)
     elif nvrs:
         runtime.logger.info(f"Finding {len(builds)} builds from Brew...")
         builds = brew.get_build_objects(nvrs, brew_session)
@@ -353,10 +350,12 @@ def fix_redundant_content_set(runtime: Runtime, distgit_key: str, redundant_repo
     data_obj.save()
 
 
-def get_latest_image_builds(brew_session: koji.ClientSession, tags: Iterator[str], image_metas: Iterator[ImageMetadata], event: Optional[int] = None):
-    tag_component_tuples = [(tag, image.get_component_name()) for tag in tags for image in image_metas()]
-    builds = brew.get_latest_builds(tag_component_tuples, brew_session, event=event)
-    return [b[0] for b in builds if b]
+async def get_latest_image_builds(image_metas: Iterable[ImageMetadata]):
+    pbar_header(
+        'Generating list of images: ',
+        f'Hold on a moment, fetching Brew builds for {len(image_metas)} components...')
+    builds: List[Dict] = await asyncio.gather(*[exectools.to_thread(progress_func, image.get_latest_build) for image in image_metas])
+    return builds
 
 
 async def get_latest_cvp_results(runtime: Runtime, resultsdb_api: ResultsDBAPI, nvrs: List[str]):
@@ -367,7 +366,6 @@ async def get_latest_cvp_results(runtime: Runtime, resultsdb_api: ResultsDBAPI, 
             futures.append(resultsdb_api.async_get_latest_results(["rhproduct.default.sanity"], [nvr], session))
         results = await asyncio.gather(*futures)
 
-    # results = parallel_results_with_progress(nvrs, lambda nvr: resultsdb_api.get_latest_results(["rhproduct.default.sanity"], [nvr]), file=sys.stderr)
     for nvr, result in zip(nvrs, results):
         data = result.get("data")
         if not data:  # Couldn't find a CVP test result for the given Brew build
