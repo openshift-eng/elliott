@@ -311,9 +311,6 @@ def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
         f'Hold on a moment, fetching Brew builds for {len(image_metas)} components...')
 
     brew_latest_builds: List[Dict] = asyncio.get_event_loop().run_until_complete(asyncio.gather(*[exectools.to_thread(progress_func, image.get_latest_build) for image in image_metas]))
-    # for image in image_metas:
-    #     LOGGER.info("Getting latest build for %s...", image.distgit_key)
-    #     brew_latest_builds.append(image.get_latest_build())
 
     _ensure_accepted_tags(brew_latest_builds, brew_session, tag_pv_map)
 
