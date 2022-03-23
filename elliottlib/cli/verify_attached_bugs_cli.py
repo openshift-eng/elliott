@@ -35,7 +35,7 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
     if not advisories:
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
-    validator = BugValidator(runtime)
+    validator = BugValidator(runtime, output="text")
     try:
         await validator.errata_api.login()
         advisory_bugs = await validator.get_attached_bugs(advisories)
