@@ -1,14 +1,14 @@
 import datetime
 import json
-
-from elliottlib.assembly import assembly_issues_config
 import re
+import click
+import os
 from datetime import datetime
 from typing import List, Set
-
-import click
 from bugzilla import bug as bug_module
 
+from elliottlib.assembly import assembly_issues_config
+from elliottlib.jira import JIRAClient
 from elliottlib import (Runtime, bzutil, constants, errata, logutil,
                         openshiftclient)
 from elliottlib.cli import cli_opts
@@ -77,13 +77,17 @@ LOGGER = logutil.getLogger(__name__)
               help='attaches bugs found to their correct default advisories, e.g. operator-related bugs go to "extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
 @click.option('--brew-event', type=click.INT, required=False,
               help='only sweep bugs that have changed to the desired status before the Brew event ID; not applies to list or diff mode')
+@click.option("--jira",
+              is_flag=True,
+              default=False,
+              help="Use jira instead of bugzilla (https://issues.redhat.com/browse/ART-3818)")
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id,
-                  cve_trackers, from_diff, flag, report, output, into_default_advisories, brew_event, noop):
+                  cve_trackers, from_diff, flag, report, output, into_default_advisories, brew_event, jira, noop):
     """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
 "swept" into the advisory either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
@@ -184,7 +188,16 @@ advisory with the --add option.
 
     runtime.initialize(mode="both")
     bz_data = runtime.gitdata.load_data(key='bugzilla').data
-    bzapi = bzutil.get_bzapi(bz_data)
+    if jira:
+        jira_token = os.environ.get("JIRA_TOKEN")
+        if not jira_token:
+            raise ValueError("JIRA_TOKEN environment variable is not set")
+
+        jira_server = 'https://issues.stage.redhat.com'
+        jira_project = 'OCPBUGS'
+        jira_client = JIRAClient.from_url(jira_server, token_auth=jira_token)
+    else:
+        bzapi = bzutil.get_bzapi(bz_data)
 
     # filter out bugs ART does not manage
     m = re.match(r"rhaos-(\d+).(\d+)",
@@ -217,10 +230,25 @@ advisory with the --add option.
 
         if output == 'text':
             green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
-            click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
+            click.echo(f" {', '.join(bz_data['target_release'])}")
 
         search_flag = 'blocker+' if mode == 'blocker' else None
-        bugs = bzutil.search_for_bugs(bz_data, status, flag=search_flag, filter_out_security_bugs=not(cve_trackers),
+        if jira:
+            # z doesn't exist as fixVersion yet
+            target_release = [v for v in bz_data['target_release'] if v[-1] != 'z']
+
+            bugs = jira_client.search_for_bugs(jira_project, target_release=target_release, exclude_labels=[
+                'SecurityTracking'])  #
+            # flag=search_flag,
+            # filter_out_security_bugs=not(
+            # cve_trackers)
+            print(bugs)
+            for b in bugs:
+                f = jira_client.get_issue(b.key)
+                print(f.fields.labels)
+            return
+        else:
+            bugs = bzutil.search_for_bugs(bz_data, status, flag=search_flag, filter_out_security_bugs=not(cve_trackers),
                                       verbose=runtime.debug)
 
         sweep_cutoff_timestamp = 0
