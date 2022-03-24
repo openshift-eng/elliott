@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
-import bugzilla
 import os
 import sys
+
+import bugzilla
+from packaging import version
 
 
 api_key = None
@@ -37,7 +39,24 @@ def _get_flaw_cve(flaw):
         return None
 
 
-y_stream_trackers = bz.query(query)
+def parse_version(v):
+    try:
+        return version.parse(v)
+    except:
+        return v
+
+
+BZ_PAGE_SIZE = 1000
+query["limit"] = BZ_PAGE_SIZE
+y_stream_trackers = []
+partial = bz.query(query)
+while len(partial) == BZ_PAGE_SIZE:
+    print(len(partial))
+    y_stream_trackers += partial
+    query["offset"] += BZ_PAGE_SIZE
+    partial = bz.query(query)
+y_stream_trackers += partial
+
 for y_stream_tracker in y_stream_trackers:
     component = y_stream_tracker.summary.split(":")[0].split(" ")[-1]
     blocking_bugs = bz.getbugs(y_stream_tracker.blocks)
@@ -51,16 +70,17 @@ for y_stream_tracker in y_stream_trackers:
     trackers = bz.getbugs(flaw_tracker_ids)
 
     def filter_tracker(tracker):
+        tracker_tr = tracker.target_release[0].replace(".z", ".0")
         if all([
             tracker.product == PRODUCT_NAME,
             component + ":" in tracker.summary,
-            tracker.target_release[0] <= TARGET_RELEASE,
-            tracker.target_release[0] > "4.0.0",
+            version.parse(tracker_tr) <= version.parse(TARGET_RELEASE),
+            version.parse(tracker_tr) > version.parse("4.0.0"),
         ]):
             return True
         return False
 
-    sorted_trackers = sorted(trackers, key=lambda x: x.target_release, reverse=True)
+    sorted_trackers = sorted(trackers, key=lambda x: version.parse(x.target_release[0]), reverse=True)
     filtered_trackers = filter(filter_tracker, sorted_trackers)
 
     print("{} {}".format(" ".join(tracker_cves), component))
