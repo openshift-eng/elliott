@@ -2,6 +2,7 @@
 Utility functions and object abstractions for general interactions
 with Red Hat Bugzilla
 """
+import asyncio
 import itertools
 import re
 import urllib.parse
@@ -15,7 +16,7 @@ import click
 from bugzilla.bug import Bug
 from koji import ClientSession
 
-from elliottlib import constants, exceptions, logutil
+from elliottlib import constants, exceptions, exectools, logutil
 from elliottlib.metadata import Metadata
 from elliottlib.util import isolate_timestamp_in_release, red_print
 
@@ -604,7 +605,8 @@ def approximate_cutoff_timestamp(basis_event: int, koji_api: ClientSession, meta
     """ Calculate an approximate sweep cutoff timestamp from the given basis event
     """
     basis_timestamp = koji_api.getEvent(basis_event)["ts"]
-    nvrs = [meta.get_latest_build(koji_api=koji_api, event=basis_event, honor_is=False)["nvr"] for meta in metas]
+    builds: List[Dict] = asyncio.get_event_loop().run_until_complete(asyncio.gather(*[exectools.to_thread(meta.get_latest_build, complete_before_event=basis_event, honor_is=False) for meta in metas]))
+    nvrs = [b["nvr"] for b in builds]
     rebase_timestamp_strings = filter(None, [isolate_timestamp_in_release(nvr) for nvr in nvrs])  # the timestamp in the release field of NVR is the approximate rebase time
     # convert to UNIX timestamps
     rebase_timestamps = [datetime.strptime(ts, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc).timestamp() for ts in rebase_timestamp_strings]

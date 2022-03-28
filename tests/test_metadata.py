@@ -119,14 +119,14 @@ class TestMetadata(unittest.TestCase):
 
         # If listBuilds returns nothing, no build should be returned
         builds = []
-        self.assertIsNone(meta.get_latest_build(koji_mock, default=None))
+        self.assertIsNone(meta.get_latest_build(default=None))
 
         # If listBuilds returns a build from an assembly that is not ours
         # get_latest_builds should not return it.
         builds = [
             self.build_record(now, assembly='not_ours')
         ]
-        self.assertIsNone(meta.get_latest_build(koji_mock, default=None))
+        self.assertIsNone(meta.get_latest_build(default=None))
 
         # If there is a build from the 'stream' assembly, it should be
         # returned.
@@ -134,13 +134,13 @@ class TestMetadata(unittest.TestCase):
             self.build_record(now, assembly='not_ours'),
             self.build_record(now, assembly='stream')
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[1])
+        self.assertEqual(meta.get_latest_build(default=None), builds[1])
 
         # If there is a build for our assembly, it should be returned
         builds = [
             self.build_record(now, assembly=runtime.assembly)
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[0])
+        self.assertEqual(meta.get_latest_build(default=None), builds[0])
 
         # If there is a build for our assembly and stream, our assembly
         # should be preferred even if stream is more recent.
@@ -149,7 +149,7 @@ class TestMetadata(unittest.TestCase):
             self.build_record(now, assembly='not_ours'),
             self.build_record(now, assembly=runtime.assembly)
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[2])
+        self.assertEqual(meta.get_latest_build(default=None), builds[2])
 
         # The most recent assembly build should be preferred.
         builds = [
@@ -158,7 +158,7 @@ class TestMetadata(unittest.TestCase):
             self.build_record(now, assembly='not_ours'),
             self.build_record(now, assembly=runtime.assembly)
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[3])
+        self.assertEqual(meta.get_latest_build(default=None), builds[3])
 
         # Make sure that just matching the prefix of an assembly is not sufficient.
         builds = [
@@ -167,7 +167,7 @@ class TestMetadata(unittest.TestCase):
             self.build_record(now, assembly='not_ours'),
             self.build_record(now, assembly=f'{runtime.assembly}b')
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[1])
+        self.assertEqual(meta.get_latest_build(default=None), builds[1])
 
         # But, a proper suffix like '.el8' should still match.
         builds = [
@@ -176,14 +176,14 @@ class TestMetadata(unittest.TestCase):
             self.build_record(now, assembly='not_ours'),
             self.build_record(now, assembly=f'{runtime.assembly}', release_suffix='.el8')
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[3])
+        self.assertEqual(meta.get_latest_build(default=None), builds[3])
 
         # By default, we should only be finding COMPLETE builds
         builds = [
             self.build_record(now - datetime.timedelta(hours=5), assembly='stream', build_state=BuildStates.COMPLETE),
             self.build_record(now, assembly='stream', build_state=BuildStates.FAILED),
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[0])
+        self.assertEqual(meta.get_latest_build(default=None), builds[0])
 
         # By default, we should only be finding COMPLETE builds
         builds = [
@@ -191,7 +191,7 @@ class TestMetadata(unittest.TestCase):
             self.build_record(now, assembly=None, build_state=BuildStates.FAILED),
             self.build_record(now, assembly=None, build_state=BuildStates.COMPLETE),
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None, assembly=''), builds[2])
+        self.assertEqual(meta.get_latest_build(default=None, assembly=''), builds[2])
 
         # Check whether extra pattern matching works
         builds = [
@@ -201,7 +201,7 @@ class TestMetadata(unittest.TestCase):
             self.build_record(now, assembly='not_ours'),
             self.build_record(now - datetime.timedelta(hours=8), assembly=f'{runtime.assembly}')
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None, extra_pattern='*.g1234567.*'), builds[1])
+        self.assertEqual(meta.get_latest_build(default=None, extra_pattern='*.g1234567.*'), builds[1])
 
     def test_get_latest_build_multi_target(self):
         meta = self.meta
@@ -215,7 +215,7 @@ class TestMetadata(unittest.TestCase):
 
         # If listBuilds returns nothing, no build should be returned
         builds = []
-        self.assertIsNone(meta.get_latest_build(koji_mock, default=None))
+        self.assertIsNone(meta.get_latest_build(default=None))
 
         meta.meta_type = 'rpm'
 
@@ -224,24 +224,24 @@ class TestMetadata(unittest.TestCase):
             self.build_record(now, assembly='not_ours', is_rpm=True),
             self.build_record(now, assembly='stream', is_rpm=True)
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[1])
+        self.assertEqual(meta.get_latest_build(default=None), builds[1])
 
         builds = [
             self.build_record(now, assembly='not_ours', is_rpm=True),
             self.build_record(now, assembly='stream', is_rpm=True, release_suffix='.el8')
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[1])  # No target should find el7 or el8
-        self.assertIsNone(meta.get_latest_build(koji_mock, default=None, el_target='7'))
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None, el_target='8'), builds[1])
+        self.assertEqual(meta.get_latest_build(default=None), builds[1])  # No target should find el7 or el8
+        self.assertIsNone(meta.get_latest_build(default=None, el_target='rhel-7'))
+        self.assertEqual(meta.get_latest_build(default=None, el_target='rhel-8'), builds[1])
 
         builds = [
             self.build_record(now, assembly='not_ours', is_rpm=True),
             self.build_record(now, assembly='stream', is_rpm=True, release_suffix='.el7'),
             self.build_record(now - datetime.timedelta(hours=1), assembly='stream', is_rpm=True, release_suffix='.el8')
         ]
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None), builds[1])  # Latest is el7 by one hour
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None, el_target='7'), builds[1])
-        self.assertEqual(meta.get_latest_build(koji_mock, default=None, el_target='8'), builds[2])
+        self.assertEqual(meta.get_latest_build(default=None), builds[1])  # Latest is el7 by one hour
+        self.assertEqual(meta.get_latest_build(default=None, el_target='rhel-7'), builds[1])
+        self.assertEqual(meta.get_latest_build(default=None, el_target='rhel-8'), builds[2])
 
 
 if __name__ == '__main__':
