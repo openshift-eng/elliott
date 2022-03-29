@@ -6,7 +6,8 @@ from urllib.parse import quote, urlparse
 
 import aiohttp
 import gssapi
-from kobo.rpmlib import parse_nvr
+
+from elliottlib.rpm_utils import parse_nvr
 
 _LOGGER = logging.getLogger(__name__)
 
