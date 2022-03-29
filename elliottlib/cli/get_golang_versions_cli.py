@@ -1,8 +1,9 @@
-from elliottlib import errata, util, logutil
-from elliottlib.cli.common import cli
-from kobo.rpmlib import parse_nvr
 import click
-from elliottlib.cli.common import use_default_advisory_option, find_default_advisory
+
+from elliottlib import errata, logutil, util
+from elliottlib.cli.common import (cli, find_default_advisory,
+                                   use_default_advisory_option)
+from elliottlib.rpm_utils import parse_nvr
 
 logger = logutil.getLogger(__name__)
 
