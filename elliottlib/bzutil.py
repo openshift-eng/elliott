@@ -23,6 +23,58 @@ from elliottlib.util import isolate_timestamp_in_release, red_print
 logger = logutil.getLogger(__name__)
 
 
+class BugzillaBugTracker:
+    def __init__(self, config, interactive_login=False):
+        self.config = config
+        self.server = self.config['server']
+        self._client = bugzilla.Bugzilla(self.server)
+        if not self._client.logged_in:
+            print(f"elliott requires cached login credentials for {self.server}")
+            if interactive_login:
+                self._client.interactive_login()
+            else:
+                red_print("Login using 'bugzilla login --api-key'")
+                exit(1)
+
+    def target_release(self):
+        return self.config['target_release']
+
+    def get_bug(self, **kwargs):
+        return self._client.get_bug(kwargs)
+
+    def get_bugs(self, **kwargs):
+        return self._client.getbugs(kwargs)
+
+    def client(self):
+        return self._client
+
+    def search(self, status, search_filter='default', flag=None, filter_out_security_bugs=True, verbose=False):
+        """Search the provided target_release's for bugs in the specified states
+
+        :param status: The status(es) of bugs to search for
+        :param search_filter: Which search filter from bz_data to use if multiple are specified
+        :param flag: The Bugzilla flag (string) of bugs to search for. Flags are similar to status but are categorically
+        different. https://bugzilla.readthedocs.io/en/latest/using/understanding.html#flags
+        :param filter_out_security_bugs: Boolean on whether to filter out bugs tagged with the SecurityTracking keyword.
+
+        :return: A list of Bug objects
+        """
+        query_url = _construct_query_url(self.config, status, search_filter, flag=flag)
+
+        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
+
+        if filter_out_security_bugs:
+            query_url.addKeyword('SecurityTracking', 'nowords')
+        else:
+            fields.extend(['whiteboard', 'keywords'])
+
+        # TODO: Expose this for debugging
+        if verbose:
+            click.echo(query_url)
+
+        return _perform_query(self._client, query_url, include_fields=fields)
+
+
 def get_highest_impact(trackers, tracker_flaws_map):
     """Get the hightest impact of security bugs
 
@@ -247,35 +299,6 @@ def create_textonly(bz_data, bugtitle, bugdescription):
         print(ex)
 
     return newbug
-
-
-def search_for_bugs(bz_data, status, search_filter='default', flag=None, filter_out_security_bugs=True, verbose=False):
-    """Search the provided target_release's for bugs in the specified states
-
-    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
-    :param status: The status(es) of bugs to search for
-    :param search_filter: Which search filter from bz_data to use if multiple are specified
-    :param flag: The Bugzilla flag (string) of bugs to search for. Flags are similar to status but are categorically
-    different. https://bugzilla.readthedocs.io/en/latest/using/understanding.html#flags
-    :param filter_out_security_bugs: Boolean on whether to filter out bugs tagged with the SecurityTracking keyword.
-
-    :return: A list of Bug objects
-    """
-    bzapi = get_bzapi(bz_data)
-    query_url = _construct_query_url(bz_data, status, search_filter, flag=flag)
-
-    fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
-
-    if filter_out_security_bugs:
-        query_url.addKeyword('SecurityTracking', 'nowords')
-    else:
-        fields.extend(['whiteboard', 'keywords'])
-
-    # TODO: Expose this for debugging
-    if verbose:
-        click.echo(query_url)
-
-    return _perform_query(bzapi, query_url, include_fields=fields)
 
 
 def search_for_security_bugs(bz_data, status=None, search_filter='security', cve=None, verbose=False):
