@@ -238,16 +238,16 @@ class BugValidator:
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which has status {blocker.status}"
                     elif self.output == 'slack':
-                        message = f"{bug.status} bug <{bug.weburl}|{bug.id}> is a backport of bug " \
-                                  f"<{blocker.weburl}|{blocker.id}> which has status {blocker.status}"
+                        message = f"`{bug.status}` bug <{bug.weburl}|{bug.id}> is a backport of " \
+                                  f"`{blocker.status}` bug <{blocker.weburl}|{blocker.id}>"
                     self._complain(message)
                 if blocker.status == 'CLOSED' and blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG']:
                     if self.output == 'text':
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which was CLOSED {blocker.resolution}"
                     elif self.output == 'slack':
-                        message = f"{bug.status} bug <{bug.weburl}|{bug.id}> is a backport of bug " \
-                            f"<{blocker.weburl}|{blocker.id}> which was CLOSED {blocker.resolution}"
+                        message = f"`{bug.status}` bug <{bug.weburl}|{bug.id}> is a backport of bug " \
+                            f"<{blocker.weburl}|{blocker.id}> which was CLOSED `{blocker.resolution}`"
                     self._complain(message)
 
     def _verify_bug_status(self, bugs):
