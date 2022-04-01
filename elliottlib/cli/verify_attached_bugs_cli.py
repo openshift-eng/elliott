@@ -62,7 +62,7 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
     validator = BugValidator(runtime, output)
-    bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs(bug_ids).values())
+    bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs_map(bug_ids).values())
     try:
         validator.validate(bugs, verify_bug_status)
     finally:
@@ -186,7 +186,7 @@ class BugValidator:
         """
         green_print(f"Retrieving bugs for advisory {advisory_ids}")
         advisories = await asyncio.gather(*[self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids])
-        bug_objects = self.bug_tracker.get_bugs(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"][
+        bug_objects = self.bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"][
             "bugs"]}))
         result = {ad["content"]["content"]["errata_id"]: {bug_objects[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad in advisories}
         return result
@@ -222,7 +222,7 @@ class BugValidator:
         # retrieve blockers and filter to those with correct product and target version
         blocking_bugs = {
             bug.id: bug
-            for bug in self.bug_tracker.get_bugs(list(candidate_blockers)).values()
+            for bug in self.bug_tracker.get_bugs_map(list(candidate_blockers)).values()
             # b.target release is a list of size 0 or 1
             if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
             and bug.product == self.product

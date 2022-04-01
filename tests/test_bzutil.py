@@ -71,7 +71,7 @@ class TestBZUtil(unittest.TestCase):
             1: [flaws[11], flaws[12]],
             2: [flaws[21], flaws[22]],
         }
-        with mock.patch("elliottlib.bzutil.BugzillaBugTracker.get_bugs") as mock_get_bugs:
+        with mock.patch("elliottlib.bzutil.BugzillaBugTracker.get_bugs_map") as mock_get_bugs:
             mock_get_bugs.return_value = flaws
             bug_tracker = bzutil.BugzillaBugTracker(None)
             actual = bzutil.get_tracker_flaws_map(bug_tracker, trackers.values())

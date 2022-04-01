@@ -47,9 +47,6 @@ class BugzillaBugTracker:
     def get_bug(self, **kwargs):
         return self._client.get_bug(kwargs)
 
-    def get_bugs(self, **kwargs):
-        return self._client.getbugs(kwargs)
-
     def client(self):
         return self._client
 
@@ -77,7 +74,7 @@ class BugzillaBugTracker:
 
         return _perform_query(self._client, query_url, include_fields=fields)
 
-    def get_bugs(self, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
+    def get_bugs_map(self, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
         """ Get a map of bug ids and bug objects.
 
         :param ids: The IDs of the bugs you want to get the Bug objects for
@@ -99,7 +96,7 @@ class BugzillaBugTracker:
 
 
 def get_highest_impact(trackers, tracker_flaws_map):
-    """Get the hightest impact of security bugs
+    """Get the highest impact of security bugs
 
     :param trackers: The list of tracking bugs you want to compare to get the highest severity
     :param tracker_flaws_map: A dict with tracking bug IDs as keys and lists of flaw bugs as values
@@ -158,7 +155,7 @@ def get_tracker_flaws_map(bz_bug_tracker: BugzillaBugTracker, trackers: List):
     }
 
     flaw_ids = [flaw_id for _, flaw_ids in tracker_flaw_ids_map.items() for flaw_id in flaw_ids]
-    flaw_id_bug_map = bz_bug_tracker.get_bugs(flaw_ids)
+    flaw_id_bug_map = bz_bug_tracker.get_bugs_map(flaw_ids)
 
     tracker_flaws_map = {tracker.id: [] for tracker in trackers}
     for tracker_id, flaw_ids in tracker_flaw_ids_map.items():
