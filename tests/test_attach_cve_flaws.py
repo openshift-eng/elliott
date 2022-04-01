@@ -45,17 +45,17 @@ class TestAttachCVEFlaws(unittest.TestCase):
         bugs = [1, 2, 3, 4]
         product = 'Security Response'
         component = 'vulnerability'
-        flaw_bugs = {
-            1: flexmock(product=product, component=component, id=1),
-            2: flexmock(product=product, component=component, id=2),
-            3: flexmock(product='foo', component=component, id=3),
-            4: flexmock(product=product, component='bar', id=4)
-        }
+        flaw_bugs = [
+            flexmock(product=product, component=component, id=1),
+            flexmock(product=product, component=component, id=2),
+            flexmock(product='foo', component=component, id=3),
+            flexmock(product=product, component='bar', id=4)
+        ]
 
         fields = ["somefield"]
         bzapi = flexmock()
         (bzapi
-         .should_receive("get_bugs_map")
+         .should_receive("get_bugs")
          .with_args(bugs, include_fields=["somefield", "product", "component"])
          .and_return(flaw_bugs))
 
@@ -71,15 +71,15 @@ class TestAttachCVEFlaws(unittest.TestCase):
         ]
         product = 'Security Response'
         component = 'vulnerability'
-        flaw_bugs = {
-            1: flexmock(product=product, component='wrong_component', id=1),
-            2: flexmock(product='wrong_product', component=component, id=2),
-            3: flexmock(product=product, component=component, id=3)
-        }
+        flaw_bugs = [
+            flexmock(product=product, component='wrong_component', id=1),
+            flexmock(product='wrong_product', component=component, id=2),
+            flexmock(product=product, component=component, id=3)
+        ]
 
         bzapi = flexmock()
         (bzapi
-         .should_receive("get_bugs_map")
+         .should_receive("get_bugs")
          .and_return(flaw_bugs))
 
         self.assertRaisesRegex(

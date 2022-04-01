@@ -27,10 +27,10 @@ class BugzillaBugTracker:
     @classmethod
     def from_config(self, config, interactive_login=False):
         self.config = config
-        self.server = self.config.get('server')
-        client = bugzilla.Bugzilla(self.server)
+        self._server = self.config.get('server')
+        client = bugzilla.Bugzilla(self._server)
         if not client.logged_in:
-            print(f"elliott requires cached login credentials for {self.server}")
+            print(f"elliott requires cached login credentials for {self._server}")
             if interactive_login:
                 client.interactive_login()
             else:
@@ -42,10 +42,13 @@ class BugzillaBugTracker:
         self._client = client
 
     def target_release(self):
-        return self.config['target_release']
+        return self.config.get('target_release')
 
     def get_bug(self, **kwargs):
-        return self._client.get_bug(kwargs)
+        return self._client.get_bug(**kwargs)
+
+    def get_bugs(self, **kwargs):
+        return self._client.get_bugs(**kwargs)
 
     def client(self):
         return self._client

@@ -255,7 +255,7 @@ advisory with the --add option.
             raise ValueError(f"The following bugs are defined in both 'include' and 'exclude': {included_bug_ids & excluded_bug_ids}")
         if included_bug_ids:
             yellow_print(f"The following bugs will be additionally included because they are explicitly defined in the assembly config: {included_bug_ids}")
-            included_bugs = bugzilla.getbugs(included_bug_ids)
+            included_bugs = bugzilla.get_bugs(included_bug_ids)
             bugs.extend(included_bugs)
         if excluded_bug_ids:
             yellow_print(f"The following bugs will be excluded because they are explicitly defined in the assembly config: {excluded_bug_ids}")

@@ -54,8 +54,8 @@ def get_corresponding_flaw_bugs(bug_tracker: bzutil.BugzillaBugTracker, tracker_
     if "component" not in fields:
         fields.append("component")
 
-    blocking_bugs = bug_tracker.get_bugs_map(unique(flatten([t.blocks for t in tracker_bugs])), include_fields=fields)
-    flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs.values() if bzutil.is_flaw_bug(bug)}
+    blocking_bugs = bug_tracker.get_bugs(unique(flatten([t.blocks for t in tracker_bugs])), include_fields=fields)
+    flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs if bzutil.is_flaw_bug(bug)}
 
     # Validate that each tracker has a corresponding flaw bug
     flaw_ids = set(flaw_id_bugs.keys())
