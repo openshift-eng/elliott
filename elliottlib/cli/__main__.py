@@ -388,41 +388,6 @@ providing an advisory with the -a/--advisory option.
 
 
 #
-# Search for CVE tracker bugs
-#
-@cli.command("find-cve-trackers", short_help="Find and list CVE tracker bugs for Security issues.")
-@click.option('--cve',
-              required=False,
-              default=None,
-              help="CVE number to filter on. (ex. CVE-2011-1000000)")
-@click.option('--status', 'status',
-              multiple=True,
-              required=False,
-              default=['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING'],
-              type=click.Choice(elliottlib.constants.VALID_BUG_STATES),
-              help="Status the bugs can be in.")
-@pass_runtime
-def find_cve_trackers(runtime, cve, status):
-    """Find Red Hat Bugzilla security bugs and list them out. Automatic attachment of these
-    bugs is not supported because security issues generally need to be hand crafted to make
-    sure all requirements are met.
-
-    Usage:
-\b
-    $ elliott --group openshift-3.7 find-cve-trackers
-"""
-    runtime.initialize()
-    bz_data = runtime.gitdata.load_data(key='bugzilla').data
-
-    click.echo("Searching for bugs with target release(s): {tr}".format(tr=", ".join(bz_data['target_release'])))
-
-    bug_list = elliottlib.bzutil.search_for_security_bugs(bz_data, status, cve=cve, verbose=runtime.debug)
-
-    click.echo("Found {} bugs:".format(len(bug_list)))
-    for b in bug_list:
-        click.echo("{}\t{:15s}\t{}".format(b.bug_id, b.status, b.summary))
-
-#
 # Verify images in a payload match the corresponding advisory
 # verify-payload
 #

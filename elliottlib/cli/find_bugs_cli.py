@@ -185,7 +185,7 @@ advisory with the --add option.
     runtime.initialize(mode="both")
 
     bz_config = runtime.gitdata.load_data(key='bugzilla').data
-    bugzilla = bzutil.BugzillaBugTracker(bz_config)
+    bugzilla = bzutil.BugzillaBugTracker.from_config(bz_config)
 
     # filter out bugs ART does not manage
     m = re.match(r"rhaos-(\d+).(\d+)",

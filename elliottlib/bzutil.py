@@ -24,17 +24,22 @@ logger = logutil.getLogger(__name__)
 
 
 class BugzillaBugTracker:
-    def __init__(self, config, interactive_login=False):
+    @classmethod
+    def from_config(self, config, interactive_login=False):
         self.config = config
-        self.server = self.config['server']
-        self._client = bugzilla.Bugzilla(self.server)
-        if not self._client.logged_in:
+        self.server = self.config.get('server')
+        client = bugzilla.Bugzilla(self.server)
+        if not client.logged_in:
             print(f"elliott requires cached login credentials for {self.server}")
             if interactive_login:
-                self._client.interactive_login()
+                client.interactive_login()
             else:
                 red_print("Login using 'bugzilla login --api-key'")
                 exit(1)
+        return BugzillaBugTracker(client)
+
+    def __init__(self, client):
+        self._client = client
 
     def target_release(self):
         return self.config['target_release']
@@ -60,7 +65,6 @@ class BugzillaBugTracker:
         :return: A list of Bug objects
         """
         query_url = _construct_query_url(self.config, status, search_filter, flag=flag)
-
         fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
 
         if filter_out_security_bugs:
@@ -68,11 +72,30 @@ class BugzillaBugTracker:
         else:
             fields.extend(['whiteboard', 'keywords'])
 
-        # TODO: Expose this for debugging
         if verbose:
             click.echo(query_url)
 
         return _perform_query(self._client, query_url, include_fields=fields)
+
+    def get_bugs(self, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
+        """ Get a map of bug ids and bug objects.
+
+        :param ids: The IDs of the bugs you want to get the Bug objects for
+        :param raise_on_error: If True, raise an error if failing to find bugs
+        :param include_fields: A list of fields to include
+
+        :return: A map of bug ids and bug objects
+
+        :raises:
+            BugzillaFatalError: If bugs contains invalid bug ids, or if some other error occurs trying to
+            use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
+            session has expired.
+        """
+        id_bug_map: Dict[int, Bug] = {}
+        bugs: List[Bug] = self._client.getbugs(ids, permissive=not raise_on_error, **kwargs)
+        for i, bug in enumerate(bugs):
+            id_bug_map[ids[i]] = bug
+        return id_bug_map
 
 
 def get_highest_impact(trackers, tracker_flaws_map):
@@ -121,11 +144,11 @@ def get_flaw_bugs(trackers):
     return flaw_ids
 
 
-def get_tracker_flaws_map(bzapi, trackers):
+def get_tracker_flaws_map(bz_bug_tracker: BugzillaBugTracker, trackers: List):
     """Get flaw bugs blocked by tracking bugs. For a definition of these terms see
     https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
 
-    :param bzapi: An instance of the python-bugzilla Bugzilla class
+    :param bz_bug_tracker: An instance of the BugzillaBugTracker class
     :param trackers: A list of tracking bugs
 
     :return: A dict with tracking bug IDs as keys and lists of flaw bugs as values
@@ -135,7 +158,7 @@ def get_tracker_flaws_map(bzapi, trackers):
     }
 
     flaw_ids = [flaw_id for _, flaw_ids in tracker_flaw_ids_map.items() for flaw_id in flaw_ids]
-    flaw_id_bug_map = get_bugs(bzapi, flaw_ids)
+    flaw_id_bug_map = bz_bug_tracker.get_bugs(flaw_ids)
 
     tracker_flaws_map = {tracker.id: [] for tracker in trackers}
     for tracker_id, flaw_ids in tracker_flaw_ids_map.items():
@@ -146,28 +169,6 @@ def get_tracker_flaws_map(bzapi, trackers):
                 continue
             tracker_flaws_map[tracker_id].append(flaw_bug)
     return tracker_flaws_map
-
-
-def get_bugs(bzapi: bugzilla.Bugzilla, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
-    """ Get a map of bug ids and bug objects.
-
-    :param bzapi: An instance of the python-bugzilla Bugzilla class
-    :param ids: The IDs of the bugs you want to get the Bug objects for
-    :param raise_on_error: If True, raise an error if failing to find bugs
-    :param include_fields: A list of fields to include
-
-    :return: A map of bug ids and bug objects
-
-    :raises:
-        BugzillaFatalError: If bugs contains invalid bug ids, or if some other error occurs trying to
-        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
-        session has expired.
-    """
-    id_bug_map: Dict[int, Bug] = {}
-    bugs: List[Bug] = bzapi.getbugs(ids, permissive=not raise_on_error, **kwargs)
-    for i, bug in enumerate(bugs):
-        id_bug_map[ids[i]] = bug
-    return id_bug_map
 
 
 def is_flaw_bug(bug):
@@ -299,34 +300,6 @@ def create_textonly(bz_data, bugtitle, bugdescription):
         print(ex)
 
     return newbug
-
-
-def search_for_security_bugs(bz_data, status=None, search_filter='security', cve=None, verbose=False):
-    """Search for CVE tracker bugs
-
-    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
-    :param status: The status(es) of bugs to search for
-    :param search_filter: Which search filter from bz_data to use if multiple are specified
-    :param cve: The CVE number to filter against
-
-    :return: A list of CVE trackers
-    """
-    if status is None:
-        status = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING']
-
-    bzapi = get_bzapi(bz_data, True)
-    query_url = _construct_query_url(bz_data, status, search_filter)
-    query_url.addKeyword('SecurityTracking')
-
-    if verbose:
-        click.echo(query_url)
-
-    bug_list = _perform_query(bzapi, query_url, include_fields=['id', 'status', 'summary', 'blocks'])
-
-    if cve:
-        bug_list = [bug for bug in bug_list if cve in bug.summary]
-
-    return bug_list
 
 
 def is_viable_bug(bug_obj):

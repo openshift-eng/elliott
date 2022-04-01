@@ -124,7 +124,8 @@ class VerifyBugs(unittest.TestCase):
         bv = BugValidator(self.runtime_fixture())
         bv.product = "OpenShift Container Platform"
         bv.target_releases = ['4.4.0', '4.4.z']
-        bugs = bzutil.get_bugs(bv.bzapi, [1875258, 1878798, 1881212, 1869790, 1840719])
+        bug_tracker = bzutil.BugzillaBugTracker(bv.bzapi)
+        bugs = bug_tracker.get_bugs([1875258, 1878798, 1881212, 1869790, 1840719])
 
         bbf = bv._get_blocking_bugs_for(list(bugs.values()))
         self.assertTrue(bbf[1875258], "CVE tracker with blocking bug")
