@@ -24,31 +24,29 @@ logger = logutil.getLogger(__name__)
 
 
 class BugzillaBugTracker:
-    @classmethod
-    def from_config(self, config, interactive_login=False):
-        self.config = config
-        self._server = self.config.get('server')
-        client = bugzilla.Bugzilla(self._server)
-        if not client.logged_in:
+    def login(self, interactive_login):
+        if not self._client.logged_in:
             print(f"elliott requires cached login credentials for {self._server}")
             if interactive_login:
-                client.interactive_login()
+                self._client.interactive_login()
             else:
                 red_print("Login using 'bugzilla login --api-key'")
                 exit(1)
-        return BugzillaBugTracker(client)
 
-    def __init__(self, client):
-        self._client = client
+    def __init__(self, config, interactive_login=False):
+        self.config = config
+        self._server = config.get('server')
+        self._client = bugzilla.Bugzilla(self._server)
+        self.login(interactive_login)
 
     def target_release(self):
         return self.config.get('target_release')
 
-    def get_bug(self, **kwargs):
-        return self._client.get_bug(**kwargs)
+    def get_bug(self, bugid, **kwargs):
+        return self._client.getbug(bugid, **kwargs)
 
-    def get_bugs(self, **kwargs):
-        return self._client.get_bugs(**kwargs)
+    def get_bugs(self, idlist, **kwargs):
+        return self._client.getbugs(idlist, **kwargs)
 
     def client(self):
         return self._client
@@ -78,19 +76,6 @@ class BugzillaBugTracker:
         return _perform_query(self._client, query_url, include_fields=fields)
 
     def get_bugs_map(self, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
-        """ Get a map of bug ids and bug objects.
-
-        :param ids: The IDs of the bugs you want to get the Bug objects for
-        :param raise_on_error: If True, raise an error if failing to find bugs
-        :param include_fields: A list of fields to include
-
-        :return: A map of bug ids and bug objects
-
-        :raises:
-            BugzillaFatalError: If bugs contains invalid bug ids, or if some other error occurs trying to
-            use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
-            session has expired.
-        """
         id_bug_map: Dict[int, Bug] = {}
         bugs: List[Bug] = self._client.getbugs(ids, permissive=not raise_on_error, **kwargs)
         for i, bug in enumerate(bugs):

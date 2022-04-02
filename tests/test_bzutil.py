@@ -71,10 +71,10 @@ class TestBZUtil(unittest.TestCase):
             1: [flaws[11], flaws[12]],
             2: [flaws[21], flaws[22]],
         }
-        with mock.patch("elliottlib.bzutil.BugzillaBugTracker.get_bugs_map") as mock_get_bugs:
-            mock_get_bugs.return_value = flaws
-            bug_tracker = bzutil.BugzillaBugTracker(None)
-            actual = bzutil.get_tracker_flaws_map(bug_tracker, trackers.values())
+        with mock.patch("elliottlib.bzutil.BugzillaBugTracker.__new__") as mock_bz:
+            mock_bug_tracker = mock.MagicMock(get_bugs_map=mock.MagicMock(return_value=flaws))
+            mock_bz.return_value = mock_bug_tracker
+            actual = bzutil.get_tracker_flaws_map(mock_bug_tracker, trackers.values())
             self.assertEqual(expected, actual)
 
     def test_is_viable_bug(self):

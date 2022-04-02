@@ -76,7 +76,7 @@ class BugValidator:
         self.bz_data: Dict[str, Any] = runtime.gitdata.load_data(key='bugzilla').data
         self.target_releases: List[str] = self.bz_data['target_release']
         self.product: str = self.bz_data['product']
-        self.bug_tracker = bzutil.BugzillaBugTracker.from_config(self.bz_data)
+        self.bug_tracker = bzutil.BugzillaBugTracker(self.bz_data)
         self.bzapi = self.bug_tracker.client()
         self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))

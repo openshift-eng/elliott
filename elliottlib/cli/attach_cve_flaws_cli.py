@@ -46,7 +46,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         raise click.BadParameter("Use one of --use-default-advisory or --advisory")
     runtime.initialize()
     bz_config = runtime.gitdata.load_data(key='bugzilla').data
-    bug_tracker_bz = bzutil.BugzillaBugTracker.from_config(bz_config)
+    bug_tracker_bz = bzutil.BugzillaBugTracker(bz_config)
 
     if not advisory_id and default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)

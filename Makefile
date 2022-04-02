@@ -11,6 +11,9 @@ lint:
 test: lint
 	./venv/bin/python -m pytest --verbose --color=yes tests/
 
+test-functional: lint
+	./venv/bin/python -m pytest --verbose --color=yes functional_tests/
+
 # run by CI
 tox:
 	tox --recreate
