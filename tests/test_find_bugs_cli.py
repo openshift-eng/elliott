@@ -10,7 +10,6 @@ class TestFindBugsCli(unittest.TestCase):
         advisory = 'foo'
         bugs = [flexmock(bug_id='bar')]
         report = False
-        flags = []
         noop = False
 
         flexmock(util).should_receive('green_prefix')
@@ -18,7 +17,7 @@ class TestFindBugsCli(unittest.TestCase):
             should_receive("add_bugs_with_retry").\
             once()
 
-        mode_list(advisory, bugs, report, flags, noop)
+        mode_list(advisory, bugs, report, noop)
 
 
 class TestExtrasBugs(unittest.TestCase):

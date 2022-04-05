@@ -9,8 +9,7 @@ from typing import List, Set
 import click
 from bugzilla import bug as bug_module
 
-from elliottlib import (Runtime, bzutil, constants, errata, logutil,
-                        openshiftclient)
+from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
@@ -23,38 +22,37 @@ LOGGER = logutil.getLogger(__name__)
 
 
 class FindBugsMode:
-    def __init__(self):
-        self.cve_trackers = False
-        self.status = []
+    def __init__(self, cve_trackers=False, status=[], search_flag=None):
+        self.cve_trackers = cve_trackers
+        self.status = status
+        self.search_flag = search_flag
 
-
-class FindBugsList(FindBugsMode):
-    def __init__(self):
-        super().__init__()
+    def search(self, bug_tracker_obj, verbose=False):
+        return bug_tracker_obj.search(
+            self.status,
+            flag=self.search_flag,
+            filter_out_security_bugs=not self.cve_trackers,
+            verbose=verbose
+        )
 
 
 class FindBugsSweep(FindBugsMode):
     def __init__(self):
-        super().__init__()
-        self.status = ['MODIFIED', 'ON_QA', 'VERIFIED']
-
-
-class FindBugsDiff(FindBugsMode):
-    def __init__(self):
-        super().__init__()
+        super().__init__(status=['MODIFIED', 'ON_QA', 'VERIFIED'])
 
 
 class FindBugsQE(FindBugsMode):
     def __init__(self):
-        super().__init__()
-        self.status = ['MODIFIED']
+        super().__init__(status=['MODIFIED'])
 
 
 class FindBugsBlocker(FindBugsMode):
     def __init__(self):
-        super().__init__()
-        self.cve_trackers = True
-        self.status = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
+        super().__init__(
+            cve_trackers=True,
+            status=['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'],
+            search_flag='blocker+'
+        )
 
 
 @cli.command("find-bugs", short_help="Find or add MODIFIED/VERIFIED bugs to ADVISORY")
@@ -217,73 +215,61 @@ advisory with the --add option.
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    if mode in ['sweep', 'qe', 'blocker']:
-        if not cve_trackers:
-            if mode == 'blocker':
-                cve_trackers = True
-            else:
-                cve_trackers = False
-
-        if not status:  # use default status filter according to mode
-            if mode == 'sweep':
-                status = ['MODIFIED', 'ON_QA', 'VERIFIED']
-            if mode == 'qe':
-                status = ['MODIFIED']
-            if mode == 'blocker':
-                status = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
-
-        status = set(status) - set(exclude_status)
-
-        if output == 'text':
-            green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
-            click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
-
-        search_flag = 'blocker+' if mode == 'blocker' else None
-        bugs = bugzilla.search(status,
-                               flag=search_flag,
-                               filter_out_security_bugs=not cve_trackers,
-                               verbose=runtime.debug)
-
-        sweep_cutoff_timestamp = 0
-        if brew_event:
-            green_print(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
-            sweep_cutoff_timestamp = runtime.build_retrying_koji_client().getEvent(brew_event)["ts"]
-        elif runtime.assembly_basis_event:
-            green_print(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
-            brew_api = runtime.build_retrying_koji_client()
-            sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api, runtime.rpm_metas() + runtime.image_metas())
-
-        if sweep_cutoff_timestamp:
-            green_print(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
-                        f"cutoff time"
-                        f" {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
-            qualified_bugs = []
-            for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
-                qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bugzilla.client(), chunk_of_bugs, status,
-                                                                         sweep_cutoff_timestamp))
-            click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
-            bugs = qualified_bugs
-
-        # Loads included/excluded bugs from assembly config
-        issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
-        # JIRA issues are not supported yet. Only loads issues with integer IDs.
-        included_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.include if isinstance(issue["id"], int) or issue["id"].isdigit()}
-        excluded_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.exclude if isinstance(issue["id"], int) or issue["id"].isdigit()}
-        if included_bug_ids & excluded_bug_ids:
-            raise ValueError(f"The following bugs are defined in both 'include' and 'exclude': {included_bug_ids & excluded_bug_ids}")
-        if included_bug_ids:
-            yellow_print(f"The following bugs will be additionally included because they are explicitly defined in the assembly config: {included_bug_ids}")
-            included_bugs = bugzilla.get_bugs(included_bug_ids)
-            bugs.extend(included_bugs)
-        if excluded_bug_ids:
-            yellow_print(f"The following bugs will be excluded because they are explicitly defined in the assembly config: {excluded_bug_ids}")
-            bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
-
-    elif mode == 'list':
+    if mode == 'list':
         bugs = [bugzilla.getbug(i) for i in cli_opts.id_convert(id)]
         if not into_default_advisories:
             mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop)
             return
+
+    if mode == 'sweep':
+        find_bugs_obj = FindBugsSweep()
+    elif mode == 'qe':
+        find_bugs_obj = FindBugsQE()
+    elif mode == 'blocker':
+        find_bugs_obj = FindBugsBlocker()
+
+    find_bugs_obj.status = set(find_bugs_obj.status) - set(exclude_status)
+
+    if output == 'text':
+        green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
+        click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
+
+    bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
+
+    sweep_cutoff_timestamp = 0
+    if brew_event:
+        green_print(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
+        sweep_cutoff_timestamp = runtime.build_retrying_koji_client().getEvent(brew_event)["ts"]
+    elif runtime.assembly_basis_event:
+        green_print(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
+        brew_api = runtime.build_retrying_koji_client()
+        sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api, runtime.rpm_metas() + runtime.image_metas())
+
+    if sweep_cutoff_timestamp:
+        green_print(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
+                    f"cutoff time"
+                    f" {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
+        qualified_bugs = []
+        for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
+            qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bugzilla.client(), chunk_of_bugs, status,
+                                                                     sweep_cutoff_timestamp))
+        click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
+        bugs = qualified_bugs
+
+    # Loads included/excluded bugs from assembly config
+    issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
+    # JIRA issues are not supported yet. Only loads issues with integer IDs.
+    included_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.include if isinstance(issue["id"], int) or issue["id"].isdigit()}
+    excluded_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.exclude if isinstance(issue["id"], int) or issue["id"].isdigit()}
+    if included_bug_ids & excluded_bug_ids:
+        raise ValueError(f"The following bugs are defined in both 'include' and 'exclude': {included_bug_ids & excluded_bug_ids}")
+    if included_bug_ids:
+        yellow_print(f"The following bugs will be additionally included because they are explicitly defined in the assembly config: {included_bug_ids}")
+        included_bugs = bugzilla.get_bugs(included_bug_ids)
+        bugs.extend(included_bugs)
+    if excluded_bug_ids:
+        yellow_print(f"The following bugs will be excluded because they are explicitly defined in the assembly config: {excluded_bug_ids}")
+        bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
     filtered_bugs = filter_bugs(bugs, major_version, minor_version, runtime)
     if output == 'text':
