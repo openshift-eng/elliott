@@ -127,7 +127,7 @@ class VerifyBugs(unittest.TestCase):
         bugs = bv.bug_tracker.get_bugs([1875258, 1878798, 1881212, 1869790, 1840719])
         bug_blocking_map = bv._get_blocking_bugs_for(bugs)
         id_bug_map = {b.id: b for b in bug_blocking_map}
-        bbf = lambda bugid : bug_blocking_map[id_bug_map[bugid]]
+        bbf = lambda bugid: bug_blocking_map[id_bug_map[bugid]]
 
         self.assertTrue(bbf(1875258), "CVE tracker with blocking bug")
         self.assertTrue(any(bug.id == 1875259 for bug in bbf(1875258)), "1875259 blocks 1875258")
