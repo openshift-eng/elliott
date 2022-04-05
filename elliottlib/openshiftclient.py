@@ -11,34 +11,6 @@ import json
 from elliottlib.exceptions import ElliottFatalError
 
 
-def get_bug_list(working_dir, old, new):
-    """
-    Get fixed bugzilla IDs between two payloads. Needs to clone
-    the entire okd repo, so it can be quite slow.
-
-    :param str working_dir: file location to clone okd repo
-    :param str old: URL to the previous payload
-    :param str new: URL to the current payload
-
-    :return: A list of BZ IDs
-    :raises exceptions.CalledProcessError: When oc returns a non-zero exit
-
-    """
-    bug_list = []
-    try:
-        bug_list = check_output([
-            'oc', 'adm', 'release', 'info',
-            '-o', 'name',  # only output BZ IDs
-            '--bugs={}/origin'.format(working_dir),  # clone origin to working dir
-            '--changes-from={}'.format(old),
-            new  # payloads to compare
-        ]).splitlines()
-    except CalledProcessError as e:
-        raise ElliottFatalError("command '{}' return with error (code {}): {}".format(e.cmd, e.returncode, e.output))
-
-    return bug_list
-
-
 def get_build_list(old, new):
     """
     Get changed container builds between two payloads.
