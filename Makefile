@@ -6,10 +6,13 @@ venv:
 	# source venv/bin/activate
 
 lint:
-	flake8
+	./venv/bin/python -m flake8
 
 test: lint
-	python -m pytest --verbose --color=yes tests/
+	./venv/bin/python -m pytest --verbose --color=yes tests/
+
+test-functional: lint
+	./venv/bin/python -m pytest --verbose --color=yes functional_tests/
 
 # run by CI
 tox:

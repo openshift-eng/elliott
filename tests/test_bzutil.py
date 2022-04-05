@@ -46,16 +46,16 @@ class TestBZUtil(unittest.TestCase):
         newstate = bug.setstatus.call_args[1]['status']
         self.assertEqual(newstate, "CLOSED")
 
-    def test_get_bugs(self):
-        bug_ids = [1, 2]
-        expected = {
-            1: mock.MagicMock(id=1),
-            2: mock.MagicMock(id=2),
-        }
-        bzapi = mock.MagicMock()
-        bzapi.getbugs.return_value = [expected[bug_id] for bug_id in bug_ids]
-        actual = bzutil.get_bugs(bzapi, bug_ids)
-        self.assertEqual(expected, actual)
+    # def test_get_bugs(self):
+    #     bug_ids = [1, 2]
+    #     expected = {
+    #         1: mock.MagicMock(id=1),
+    #         2: mock.MagicMock(id=2),
+    #     }
+    #     bzapi = mock.MagicMock()
+    #     bzapi.getbugs.return_value = [expected[bug_id] for bug_id in bug_ids]
+    #     actual = bzutil.get_bugs(bzapi, bug_ids)
+    #     self.assertEqual(expected, actual)
 
     def test_get_tracker_flaws_map(self):
         trackers = {
@@ -71,9 +71,10 @@ class TestBZUtil(unittest.TestCase):
             1: [flaws[11], flaws[12]],
             2: [flaws[21], flaws[22]],
         }
-        with mock.patch("elliottlib.bzutil.get_bugs") as mock_get_bugs:
-            mock_get_bugs.return_value = flaws
-            actual = bzutil.get_tracker_flaws_map(None, trackers.values())
+        with mock.patch("elliottlib.bzutil.BugzillaBugTracker.__new__") as mock_bz:
+            mock_bug_tracker = mock.MagicMock(get_bugs_map=mock.MagicMock(return_value=flaws))
+            mock_bz.return_value = mock_bug_tracker
+            actual = bzutil.get_tracker_flaws_map(mock_bug_tracker, trackers.values())
             self.assertEqual(expected, actual)
 
     def test_is_viable_bug(self):

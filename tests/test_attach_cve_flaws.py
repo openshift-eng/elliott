@@ -55,8 +55,8 @@ class TestAttachCVEFlaws(unittest.TestCase):
         fields = ["somefield"]
         bzapi = flexmock()
         (bzapi
-         .should_receive("getbugs")
-         .with_args(bugs, permissive=False, include_fields=["somefield", "product", "component"])
+         .should_receive("get_bugs")
+         .with_args(bugs, include_fields=["somefield", "product", "component"])
          .and_return(flaw_bugs))
 
         expected = 2
@@ -79,7 +79,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
 
         bzapi = flexmock()
         (bzapi
-         .should_receive("getbugs")
+         .should_receive("get_bugs")
          .and_return(flaw_bugs))
 
         self.assertRaisesRegex(

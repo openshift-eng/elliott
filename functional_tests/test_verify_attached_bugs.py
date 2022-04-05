@@ -124,29 +124,31 @@ class VerifyBugs(unittest.TestCase):
         bv = BugValidator(self.runtime_fixture())
         bv.product = "OpenShift Container Platform"
         bv.target_releases = ['4.4.0', '4.4.z']
-        bugs = bzutil.get_bugs(bv.bzapi, [1875258, 1878798, 1881212, 1869790, 1840719])
+        bugs = bv.bug_tracker.get_bugs([1875258, 1878798, 1881212, 1869790, 1840719])
+        bug_blocking_map = bv._get_blocking_bugs_for(bugs)
+        id_bug_map = {b.id: b for b in bug_blocking_map}
+        bbf = lambda bugid: bug_blocking_map[id_bug_map[bugid]]
 
-        bbf = bv._get_blocking_bugs_for(list(bugs.values()))
-        self.assertTrue(bbf[1875258], "CVE tracker with blocking bug")
-        self.assertTrue(any(bug.id == 1875259 for bug in bbf[1875258]), "1875259 blocks 1875258")
-        self.assertTrue(bbf[1878798], "regular bug with blocking bug")
-        self.assertTrue(any(bug.id == 1872337 for bug in bbf[1878798]), "1872337 blocks 1878798")
-        self.assertFalse(bbf[1881212], "placeholder bug w/o blocking")
-        self.assertTrue(bbf[1869790], "bug with several blocking bugs, one DUPLICATE")
-        self.assertTrue(any(bug.id == 1868735 for bug in bbf[1869790]), "DUPLICATE 1868735 blocks 1869790")
-        self.assertTrue(all(bug.id != 1868158 for bug in bbf[1869790]), "4.6 1868158 blocks 1869790")
-        self.assertFalse(bbf[1840719], "bug with 4.6 blocking bug")
+        self.assertTrue(bbf(1875258), "CVE tracker with blocking bug")
+        self.assertTrue(any(bug.id == 1875259 for bug in bbf(1875258)), "1875259 blocks 1875258")
+        self.assertTrue(bbf(1878798), "regular bug with blocking bug")
+        self.assertTrue(any(bug.id == 1872337 for bug in bbf(1878798)), "1872337 blocks 1878798")
+        self.assertFalse(bbf(1881212), "placeholder bug w/o blocking")
+        self.assertTrue(bbf(1869790), "bug with several blocking bugs, one DUPLICATE")
+        self.assertTrue(any(bug.id == 1868735 for bug in bbf(1869790)), "DUPLICATE 1868735 blocks 1869790")
+        self.assertTrue(all(bug.id != 1868158 for bug in bbf(1869790)), "4.6 1868158 blocks 1869790")
+        self.assertFalse(bbf(1840719), "bug with 4.6 blocking bug")
 
         # having acquired these bugs, might as well use them to test verification
-        bv._verify_blocking_bugs(bbf)
+        bv._verify_blocking_bugs(bug_blocking_map)
         self.assertIn(
-            "Regression possible: bug 1869790 is a backport of bug 1881143 which was CLOSED WONTFIX",
+            "Regression possible: CLOSED bug 1869790 is a backport of bug 1881143 which was CLOSED WONTFIX",
             bv.problems
         )
-        for bug in [1875258, 1878798, 1881212, 1840719]:
+        for bugid in [1875258, 1878798, 1881212, 1840719]:
             self.assertFalse(
-                any(str(bug) in problem for problem in bv.problems),
-                f"{bug} blocker status {bbf[bug]}"
+                any(str(bugid) in problem for problem in bv.problems),
+                f"{bugid} blocker status {bbf(bugid)}"
             )
 
     def test_verify_attached_bugs_ok(self):

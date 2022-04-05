@@ -45,8 +45,8 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     if sum(map(bool, [advisory_id, default_advisory_type])) != 1:
         raise click.BadParameter("Use one of --use-default-advisory or --advisory")
     runtime.initialize()
-    bzurl = runtime.gitdata.bz_server_url()
-    bzapi = bugzilla.Bugzilla(bzurl)
+    bz_config = runtime.gitdata.load_data(key='bugzilla').data
+    bug_tracker_bz = bzutil.BugzillaBugTracker(bz_config)
 
     if not advisory_id and default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
@@ -56,7 +56,8 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
 
     # get attached bugs from advisory
     runtime.logger.info("Querying Bugzilla for CVE trackers")
-    attached_tracker_bugs = attach_cve_flaws.get_tracker_bugs(bzapi, advisory, fields=["target_release", "blocks", 'whiteboard', 'keywords'])
+    fields = ["target_release", "blocks", 'whiteboard', 'keywords']
+    attached_tracker_bugs = attach_cve_flaws.get_tracker_bugs(bug_tracker_bz.client(), advisory, fields=fields)
     runtime.logger.info('found {} tracker bugs attached to the advisory: {}'.format(
         len(attached_tracker_bugs), sorted(bug.id for bug in attached_tracker_bugs)
     ))
@@ -71,7 +72,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     runtime.logger.info('current_target_release: {}'.format(current_target_release))
 
     tracker_flaws, flaw_id_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
-        bzapi,
+        bug_tracker_bz,
         attached_tracker_bugs,
         fields=["depends_on", "alias", "severity", "summary"],
         strict=True
@@ -91,7 +92,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         runtime.logger.info("detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in flaw_id_bugs.values()
-            if attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, current_target_release)
+            if attach_cve_flaws.is_first_fix_any(bug_tracker_bz.client(), flaw_bug, current_target_release)
         ]
 
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(

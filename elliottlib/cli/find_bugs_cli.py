@@ -183,8 +183,9 @@ advisory with the --add option.
                                  "`--use-default-advisory`, `--add`, or `--into-default-advisories`")
 
     runtime.initialize(mode="both")
-    bz_data = runtime.gitdata.load_data(key='bugzilla').data
-    bzapi = bzutil.get_bzapi(bz_data)
+
+    bz_config = runtime.gitdata.load_data(key='bugzilla').data
+    bugzilla = bzutil.BugzillaBugTracker(bz_config)
 
     # filter out bugs ART does not manage
     m = re.match(r"rhaos-(\d+).(\d+)",
@@ -217,11 +218,13 @@ advisory with the --add option.
 
         if output == 'text':
             green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
-            click.echo(" {tr}".format(tr=", ".join(bz_data['target_release'])))
+            click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
 
         search_flag = 'blocker+' if mode == 'blocker' else None
-        bugs = bzutil.search_for_bugs(bz_data, status, flag=search_flag, filter_out_security_bugs=not(cve_trackers),
-                                      verbose=runtime.debug)
+        bugs = bugzilla.search(status,
+                               flag=search_flag,
+                               filter_out_security_bugs=not cve_trackers,
+                               verbose=runtime.debug)
 
         sweep_cutoff_timestamp = 0
         if brew_event:
@@ -238,7 +241,7 @@ advisory with the --add option.
                         f" {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
             qualified_bugs = []
             for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
-                qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bzapi, chunk_of_bugs, status,
+                qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bugzilla.client(), chunk_of_bugs, status,
                                                                          sweep_cutoff_timestamp))
             click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
             bugs = qualified_bugs
@@ -252,21 +255,21 @@ advisory with the --add option.
             raise ValueError(f"The following bugs are defined in both 'include' and 'exclude': {included_bug_ids & excluded_bug_ids}")
         if included_bug_ids:
             yellow_print(f"The following bugs will be additionally included because they are explicitly defined in the assembly config: {included_bug_ids}")
-            included_bugs = bzapi.getbugs(included_bug_ids)
+            included_bugs = bugzilla.get_bugs(included_bug_ids)
             bugs.extend(included_bugs)
         if excluded_bug_ids:
             yellow_print(f"The following bugs will be excluded because they are explicitly defined in the assembly config: {excluded_bug_ids}")
             bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
     elif mode == 'list':
-        bugs = [bzapi.getbug(i) for i in cli_opts.id_convert(id)]
+        bugs = [bugzilla.getbug(i) for i in cli_opts.id_convert(id)]
         if not into_default_advisories:
             mode_list(advisory=advisory, bugs=bugs, flags=flag, report=report, noop=noop)
             return
     elif mode == 'diff':
         click.echo(runtime.working_dir)
         bug_id_strings = openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
-        bugs = [bzapi.getbug(i) for i in bug_id_strings]
+        bugs = [bugzilla.getbug(i) for i in bug_id_strings]
 
     filtered_bugs = filter_bugs(bugs, major_version, minor_version, runtime)
     if output == 'text':

@@ -62,7 +62,7 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
     validator = BugValidator(runtime, output)
-    bugs = validator.filter_bugs_by_product(bzutil.get_bugs(validator.bzapi, bug_ids).values())
+    bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs(bug_ids))
     try:
         validator.validate(bugs, verify_bug_status)
     finally:
@@ -71,12 +71,13 @@ async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
 
 class BugValidator:
 
-    def __init__(self, runtime: Runtime, output: str):
+    def __init__(self, runtime: Runtime, output: str = 'text'):
         self.runtime = runtime
         self.bz_data: Dict[str, Any] = runtime.gitdata.load_data(key='bugzilla').data
         self.target_releases: List[str] = self.bz_data['target_release']
         self.product: str = self.bz_data['product']
-        self.bzapi = bzutil.get_bzapi(self.bz_data)
+        self.bug_tracker = bzutil.BugzillaBugTracker(self.bz_data)
+        self.bzapi = self.bug_tracker.client()
         self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
@@ -114,7 +115,7 @@ class BugValidator:
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
         # Retrieve flaw bugs in Bugzilla for attached_tracker_bugs
         tracker_flaws, flaw_id_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
-            self.bzapi,
+            self.bug_tracker,
             attached_trackers,
             fields=["depends_on", "alias", "severity", "summary"]
         )
@@ -185,8 +186,10 @@ class BugValidator:
         """
         green_print(f"Retrieving bugs for advisory {advisory_ids}")
         advisories = await asyncio.gather(*[self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids])
-        bug_objects = bzutil.get_bugs(self.bzapi, list({b["bug"]["id"] for ad in advisories for b in ad["bugs"]["bugs"]}))
-        result = {ad["content"]["content"]["errata_id"]: {bug_objects[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad in advisories}
+        bug_map = self.bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"][
+            "bugs"]}))
+        result = {ad["content"]["content"]["errata_id"]: {bug_map[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad
+                  in advisories}
         return result
 
     def filter_bugs_by_product(self, bugs):
@@ -220,7 +223,7 @@ class BugValidator:
         # retrieve blockers and filter to those with correct product and target version
         blocking_bugs = {
             bug.id: bug
-            for bug in bzutil.get_bugs(self.bzapi, list(candidate_blockers)).values()
+            for bug in self.bug_tracker.get_bugs(list(candidate_blockers))
             # b.target release is a list of size 0 or 1
             if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
             and bug.product == self.product

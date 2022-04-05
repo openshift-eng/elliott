@@ -41,7 +41,7 @@ def get_advisory(advisory_id):
     return errata.ErrataConnector()._get(f'/api/v1/erratum/{advisory_id}')
 
 
-def get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields, strict=False):
+def get_corresponding_flaw_bugs(bug_tracker: bzutil.BugzillaBugTracker, tracker_bugs: List, fields: List, strict: bool = False):
     """
     Get corresponding flaw bugs objects for the
     given tracker bug objects
@@ -54,8 +54,8 @@ def get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields, strict=False):
     if "component" not in fields:
         fields.append("component")
 
-    blocking_bugs = bzutil.get_bugs(bzapi, unique(flatten([t.blocks for t in tracker_bugs])), include_fields=fields)
-    flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs.values() if bzutil.is_flaw_bug(bug)}
+    blocking_bugs = bug_tracker.get_bugs(unique(flatten([t.blocks for t in tracker_bugs])), include_fields=fields)
+    flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs if bzutil.is_flaw_bug(bug)}
 
     # Validate that each tracker has a corresponding flaw bug
     flaw_ids = set(flaw_id_bugs.keys())
