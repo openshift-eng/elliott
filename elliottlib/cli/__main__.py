@@ -337,8 +337,8 @@ providing an advisory with the -a/--advisory option.
 
     # Load bugzilla infomation and get a reference to the api
     runtime.initialize()
-    bz_data = runtime.gitdata.load_data(key='bugzilla').data
-    bzapi = elliottlib.bzutil.get_bzapi(bz_data)
+    bz_config = runtime.gitdata.load_data(key='bugzilla').data
+    bug_tracker_bz = elliottlib.bzutil.BugzillaBugTracker(bz_config)
     changed_bug_count = 0
     attached_bugs = []
 
@@ -365,7 +365,7 @@ providing an advisory with the -a/--advisory option.
     click.secho("[", nl=False)
 
     attached_bugs = pool.map(
-        lambda bug: progress_func(lambda: bzapi.getbug(bug), '*'),
+        lambda bug: progress_func(lambda: bug_tracker_bz.get_bug(bug), '*'),
         raw_bug_list)
     # Wait for results
     pool.close()
