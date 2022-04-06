@@ -25,7 +25,6 @@ class FindBugsMode:
     def __init__(self, status=set(), cve_trackers=False, search_flag=None):
         self.status = status
         self.cve_trackers = cve_trackers
-        self.status = status
         self.search_flag = search_flag
 
     def include_status(self, status):
