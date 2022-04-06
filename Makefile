@@ -9,10 +9,10 @@ lint:
 	./venv/bin/python -m flake8
 
 test: lint
-	./venv/bin/python -m pytest --verbose --color=yes tests/
+	./venv/bin/python -m pytest --verbose --color=yes --disable-pytest-warnings tests/
 
 test-functional: lint
-	./venv/bin/python -m pytest --verbose --color=yes functional_tests/
+	./venv/bin/python -m pytest --verbose --color=yes --disable-pytest-warnings functional_tests/
 
 # run by CI
 tox:

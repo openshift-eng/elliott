@@ -33,10 +33,13 @@ class TestFindBugsCli(unittest.TestCase):
             'server': "server"
         }
         bug_tracker = BugzillaBugTracker(config)
-        find_bugs = FindBugsMode(status=['some_status'])
+        find_bugs = FindBugsMode(status=['foo', 'bar'])
+        find_bugs.include_status(['alpha'])
+        find_bugs.exclude_status(['foo'])
         bugs = find_bugs.search(bug_tracker_obj=bug_tracker)
-        self.assertEqual(mock_search.return_value, bugs)
-        mock_search.assert_called_once()
+        self.assertEqual([1, 2], bugs)
+        mock_search.assert_called_once_with(bug_tracker, {'bar', 'alpha'}, flag=None, filter_out_security_bugs=True,
+                                            verbose=False)
 
 
 class TestExtrasBugs(unittest.TestCase):
