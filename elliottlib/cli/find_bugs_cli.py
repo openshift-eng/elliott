@@ -22,8 +22,8 @@ LOGGER = logutil.getLogger(__name__)
 
 
 class FindBugsMode:
-    def __init__(self, status=set(), cve_trackers=False, search_flag=None):
-        self.status = status
+    def __init__(self, status, cve_trackers=False, search_flag=None):
+        self.status = set(status)
         self.cve_trackers = cve_trackers
         self.search_flag = search_flag
 
