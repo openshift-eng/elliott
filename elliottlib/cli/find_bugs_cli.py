@@ -22,10 +22,16 @@ LOGGER = logutil.getLogger(__name__)
 
 
 class FindBugsMode:
-    def __init__(self, cve_trackers=False, status=[], search_flag=None):
-        self.cve_trackers = cve_trackers
+    def __init__(self, status=set(), cve_trackers=False, search_flag=None):
         self.status = status
+        self.cve_trackers = cve_trackers
         self.search_flag = search_flag
+
+    def include_status(self, status):
+        self.status |= set(status)
+
+    def exclude_status(self, status):
+        self.status -= set(status)
 
     def search(self, bug_tracker_obj, verbose=False):
         return bug_tracker_obj.search(
@@ -38,19 +44,19 @@ class FindBugsMode:
 
 class FindBugsSweep(FindBugsMode):
     def __init__(self):
-        super().__init__(status=['MODIFIED', 'ON_QA', 'VERIFIED'])
+        super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'})
 
 
 class FindBugsQE(FindBugsMode):
     def __init__(self):
-        super().__init__(status=['MODIFIED'])
+        super().__init__(status={'MODIFIED'})
 
 
 class FindBugsBlocker(FindBugsMode):
     def __init__(self):
         super().__init__(
             cve_trackers=True,
-            status=['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'],
+            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'},
             search_flag='blocker+'
         )
 
@@ -69,7 +75,7 @@ class FindBugsBlocker(FindBugsMode):
               required=False,
               is_flag=True,
               help='In sweep mode, add bugs only if corresponding builds attached to advisory')
-@click.option("--status", 'status',
+@click.option("--include-status", 'include_status',
               multiple=True,
               default=None,
               required=False,
@@ -80,7 +86,7 @@ class FindBugsBlocker(FindBugsMode):
               default=None,
               required=False,
               type=click.Choice(constants.VALID_BUG_STATES),
-              help="Exclude bugs of this status. Useful when using default statuses")
+              help="Exclude bugs of this status")
 @click.option("--id", metavar='BUGID', default=None,
               multiple=True, required=False,
               help="Bug IDs to add, required for LIST mode.")
@@ -110,8 +116,8 @@ class FindBugsBlocker(FindBugsMode):
               default=False,
               help="Don't change anything")
 @pass_runtime
-def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id,
-                  cve_trackers, report, output, into_default_advisories, brew_event, noop):
+def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, include_status, exclude_status,
+                  id, cve_trackers, report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY. Bugs can be
 "swept" into advisories either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
@@ -228,31 +234,25 @@ advisory with the --add option.
     elif mode == 'blocker':
         find_bugs_obj = FindBugsBlocker()
 
-    find_bugs_obj.status = set(find_bugs_obj.status) - set(exclude_status)
+    find_bugs_obj.include_status(include_status)
+    find_bugs_obj.exclude_status(exclude_status)
 
     if output == 'text':
-        green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
+        green_prefix(f"Searching for bugs with status {' '.join(find_bugs_obj.status)} and target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
 
-    sweep_cutoff_timestamp = 0
-    if brew_event:
-        green_print(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
-        sweep_cutoff_timestamp = runtime.build_retrying_koji_client().getEvent(brew_event)["ts"]
-    elif runtime.assembly_basis_event:
-        green_print(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
-        brew_api = runtime.build_retrying_koji_client()
-        sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api, runtime.rpm_metas() + runtime.image_metas())
-
+    sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
     if sweep_cutoff_timestamp:
         green_print(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
                     f"cutoff time"
                     f" {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
         qualified_bugs = []
         for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
-            qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bugzilla.client(), chunk_of_bugs, status,
-                                                                     sweep_cutoff_timestamp))
+            b = bzutil.filter_bugs_by_cutoff_event(bugzilla.client(), chunk_of_bugs, find_bugs_obj.status,
+                                                   sweep_cutoff_timestamp)
+            qualified_bugs.extend(b)
         click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
         bugs = qualified_bugs
 
@@ -442,3 +442,17 @@ def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool) -> N
     if advisory:
         errata.add_bugs_with_retry(advisory, bugs, noop=noop)
     return
+
+
+def get_sweep_cutoff_timestamp(runtime, cli_brew_event):
+    sweep_cutoff_timestamp = 0
+    if cli_brew_event:
+        green_print(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
+        sweep_cutoff_timestamp = runtime.build_retrying_koji_client().getEvent(cli_brew_event)["ts"]
+    elif runtime.assembly_basis_event:
+        green_print(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
+        brew_api = runtime.build_retrying_koji_client()
+        sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api,
+                                                                     runtime.rpm_metas() + runtime.image_metas())
+
+    return sweep_cutoff_timestamp
