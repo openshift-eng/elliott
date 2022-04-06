@@ -9,8 +9,7 @@ from typing import List, Set
 import click
 from bugzilla import bug as bug_module
 
-from elliottlib import (Runtime, bzutil, constants, errata, logutil,
-                        openshiftclient)
+from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
@@ -22,14 +21,48 @@ pass_runtime = click.make_pass_decorator(Runtime)
 LOGGER = logutil.getLogger(__name__)
 
 
-@cli.command("find-bugs", short_help="Find or add MODIFED/VERIFIED bugs to ADVISORY")
+class FindBugsMode:
+    def __init__(self, cve_trackers=False, status=[], search_flag=None):
+        self.cve_trackers = cve_trackers
+        self.status = status
+        self.search_flag = search_flag
+
+    def search(self, bug_tracker_obj, verbose=False):
+        return bug_tracker_obj.search(
+            self.status,
+            flag=self.search_flag,
+            filter_out_security_bugs=not self.cve_trackers,
+            verbose=verbose
+        )
+
+
+class FindBugsSweep(FindBugsMode):
+    def __init__(self):
+        super().__init__(status=['MODIFIED', 'ON_QA', 'VERIFIED'])
+
+
+class FindBugsQE(FindBugsMode):
+    def __init__(self):
+        super().__init__(status=['MODIFIED'])
+
+
+class FindBugsBlocker(FindBugsMode):
+    def __init__(self):
+        super().__init__(
+            cve_trackers=True,
+            status=['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'],
+            search_flag='blocker+'
+        )
+
+
+@cli.command("find-bugs", short_help="Find or add MODIFIED/VERIFIED bugs to ADVISORY")
 @click.option("--add", "-a", 'advisory',
               type=int, metavar='ADVISORY',
-              help="Add found bugs to ADVISORY. Applies to bug flags as well (by default only a list of discovered bugs are displayed)")
+              help="Add found/listed bugs to ADVISORY")
 @use_default_advisory_option
 @click.option("--mode",
               required=True,
-              type=click.Choice(['list', 'sweep', 'diff', 'qe', 'blocker']),
+              type=click.Choice(['list', 'sweep', 'qe', 'blocker']),
               default='list',
               help='Mode to use to find bugs')
 @click.option("--check-builds",
@@ -50,19 +83,12 @@ LOGGER = logutil.getLogger(__name__)
               help="Exclude bugs of this status. Useful when using default statuses")
 @click.option("--id", metavar='BUGID', default=None,
               multiple=True, required=False,
-              help="Bugzilla IDs to add, required for LIST mode.")
+              help="Bug IDs to add, required for LIST mode.")
 @click.option("--cve-trackers",
               required=False,
               default=None,
               is_flag=True,
-              help='Include CVE trackers')
-@click.option("--from-diff", "--between",
-              required=False,
-              nargs=2,
-              help="Two payloads to compare against")
-@click.option("--flag", metavar='FLAG',
-              required=False, multiple=True,
-              help="Optional flag to apply to found bugs [MULTIPLE]")
+              help='Include CVE trackers when searching for bugs')
 @click.option("--report",
               required=False,
               is_flag=True,
@@ -74,22 +100,22 @@ LOGGER = logutil.getLogger(__name__)
               help='Applies chosen format to --report output')
 @click.option("--into-default-advisories",
               is_flag=True,
-              help='attaches bugs found to their correct default advisories, e.g. operator-related bugs go to "extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
+              help='Attaches bugs found to their correct default advisories, e.g. operator-related bugs go to '
+                   '"extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
 @click.option('--brew-event', type=click.INT, required=False,
-              help='only sweep bugs that have changed to the desired status before the Brew event ID; not applies to list or diff mode')
+              help='Only SWEEP bugs that have changed to the desired status before the Brew event ID; does not apply '
+                   'to list or diff mode')
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, status, exclude_status, id,
-                  cve_trackers, from_diff, flag, report, output, into_default_advisories, brew_event, noop):
-    """Find Red Hat Bugzilla bugs or add them to ADVISORY. Bugs can be
-"swept" into the advisory either automatically (--mode sweep), or by
+                  cve_trackers, report, output, into_default_advisories, brew_event, noop):
+    """Find OCP bugs and (optional) add them to ADVISORY. Bugs can be
+"swept" into advisories either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
 Use cases are described below:
-
-    Note: Using --id without --add is basically pointless
 
 SWEEP: For this use-case the --group option MUST be provided. The
 --group automatically determines the correct target-releases to search
@@ -101,16 +127,13 @@ default --status: ['MODIFIED', 'ON_QA', 'VERIFIED']
 LIST: The --group option is not required if you are specifying advisory
 manually. Provide one or more --id's for manual bug addition. In LIST
 mode you must provide a list of IDs to perform operation on with the --id option.
-Supported operations: report with --report, attach with --attach and --into-default-advisories
-
-DIFF: For this use case, you must provide the --between option using two
-URLs to payloads.
+Supported operations: report with --report, attach with --add or --into-default-advisories
 
 QE: Find MODIFIED bugs for the target-releases, and set them to ON_QA.
 The --group option MUST be provided. Cannot be used in combination
 with --add, --use-default-advisory, --into-default-advisories, --exclude-status.
 
-BLOCKER: List active blocker+ bugs for the target-releases.
+BLOCKER: List active blocker bugs for the target-releases.
 The --group option MUST be provided. Cannot be used in combination
 with --add, --use-default-advisory, --into-default-advisories.
 default --status: ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
@@ -122,27 +145,20 @@ in the build-data will cause an error and elliott will exit in a
 non-zero state. Use of this option silently overrides providing an
 advisory with the --add option.
 
-    Automatically add bugs with target-release matching 3.7.Z or 3.7.0
-    to advisory 123456:
+    List bugs that WOULD be swept into advisories (NOOP):
 
 \b
-    $ elliott --group openshift-3.7 find-bugs --mode sweep --add 123456
+    $ elliott --group openshift-4.8 --assembly 4.8.32 find-bugs --mode sweep
 
-    List bugs that WOULD be added to an advisory and have set the bro_ok flag on them (NOOP):
-
-\b
-    $ elliott --group openshift-3.7 find-bugs --mode sweep --flag bro_ok
-
-    Attach bugs to their correct default advisories, e.g. operator-related bugs go to "extras" instead of the default "image":
+    Sweep bugs for an assembly into the advisories defined
 
 \b
-    $ elliott --group=openshift-4.4 find-bugs --mode=sweep --into-default-advisories
+    $ elliott -g openshift-4.8 --assembly 4.8.32 find-bugs --mode sweep --into-default-advisories
 
-    Add two bugs to advisory 123456. Note that --group is not required
-    because we're not auto searching:
+    Sweep rpm bugs into the rpm advisory defined
 
 \b
-    $ elliott find-bugs --mode list --id 8675309 --id 7001337 --add 123456
+    $ elliott -g openshift-4.8 --assembly 4.8.32 find-bugs --mode sweep --use-default-advisory rpm
 
     Add given list of bugs to the appropriate advisories. This would apply sweep logic to the given bugs
     grouping them to be attached to rpm/extras/image advisories
@@ -150,19 +166,20 @@ advisory with the --add option.
 \b
     $ elliott -g openshift-4.8 find-bugs --mode list --id 8675309,7001337 --into-default-advisories
 
-    Automatically find bugs for openshift-4.1 and attach them to the
-    rpm advisory defined in ocp-build-data:
+    Attach two bugs to the advisory 123456. Note that --group is not required since we're not auto searching:
 
 \b
-    $ elliott --group=openshift-4.1 --mode sweep --use-default-advisory rpm
+    $ elliott find-bugs --mode list --id 8675309 --id 7001337 --add 123456
+
 
     Find bugs for 4.6 that are in MODIFIED state, and set them to ON_QA:
 
 \b
-    $ elliott --group=openshift-4.6 --mode qe
+    $ elliott -g openshift-4.6 --mode qe
 
+    Find blocker bugs for 4.6 - output in report format:
 \b
-    $ elliott --group=openshift-4.6 --mode blocker --report
+    $ elliott -g openshift-4.6 --mode blocker --report
 """
     count_advisory_attach_flags = sum(map(bool, [advisory, default_advisory_type, into_default_advisories]))
 
@@ -172,11 +189,11 @@ advisory with the --add option.
     if mode == 'list' and len(id) == 0:
         raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
 
-    if mode == 'diff' and not len(from_diff) == 2:
-        raise click.BadParameter("If using mode=diff, you must provide two payloads to compare")
-
     if count_advisory_attach_flags > 1:
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
+
+    if mode == 'qe' and exclude_status:
+        raise click.BadParameter("--exclude_status not supported with mode qe")
 
     if mode in ['qe', 'blocker'] and count_advisory_attach_flags > 0:
         raise click.BadParameter("Mode does not operate on an advisory. Do not specify any of "
@@ -198,78 +215,61 @@ advisory with the --add option.
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    if mode in ['sweep', 'qe', 'blocker']:
-        if not cve_trackers:
-            if mode == 'blocker':
-                cve_trackers = True
-            else:
-                cve_trackers = False
-
-        if not status:  # use default status filter according to mode
-            if mode == 'sweep':
-                status = ['MODIFIED', 'ON_QA', 'VERIFIED']
-            if mode == 'qe':
-                status = ['MODIFIED']
-            if mode == 'blocker':
-                status = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
-
-        if mode != 'qe' and exclude_status:
-            status = set(status) - set(exclude_status)
-
-        if output == 'text':
-            green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
-            click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
-
-        search_flag = 'blocker+' if mode == 'blocker' else None
-        bugs = bugzilla.search(status,
-                               flag=search_flag,
-                               filter_out_security_bugs=not cve_trackers,
-                               verbose=runtime.debug)
-
-        sweep_cutoff_timestamp = 0
-        if brew_event:
-            green_print(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
-            sweep_cutoff_timestamp = runtime.build_retrying_koji_client().getEvent(brew_event)["ts"]
-        elif runtime.assembly_basis_event:
-            green_print(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
-            brew_api = runtime.build_retrying_koji_client()
-            sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api, runtime.rpm_metas() + runtime.image_metas())
-
-        if sweep_cutoff_timestamp:
-            green_print(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
-                        f"cutoff time"
-                        f" {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
-            qualified_bugs = []
-            for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
-                qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bugzilla.client(), chunk_of_bugs, status,
-                                                                         sweep_cutoff_timestamp))
-            click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
-            bugs = qualified_bugs
-
-        # Loads included/excluded bugs from assembly config
-        issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
-        # JIRA issues are not supported yet. Only loads issues with integer IDs.
-        included_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.include if isinstance(issue["id"], int) or issue["id"].isdigit()}
-        excluded_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.exclude if isinstance(issue["id"], int) or issue["id"].isdigit()}
-        if included_bug_ids & excluded_bug_ids:
-            raise ValueError(f"The following bugs are defined in both 'include' and 'exclude': {included_bug_ids & excluded_bug_ids}")
-        if included_bug_ids:
-            yellow_print(f"The following bugs will be additionally included because they are explicitly defined in the assembly config: {included_bug_ids}")
-            included_bugs = bugzilla.get_bugs(included_bug_ids)
-            bugs.extend(included_bugs)
-        if excluded_bug_ids:
-            yellow_print(f"The following bugs will be excluded because they are explicitly defined in the assembly config: {excluded_bug_ids}")
-            bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
-
-    elif mode == 'list':
+    if mode == 'list':
         bugs = [bugzilla.getbug(i) for i in cli_opts.id_convert(id)]
         if not into_default_advisories:
-            mode_list(advisory=advisory, bugs=bugs, flags=flag, report=report, noop=noop)
+            mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop)
             return
-    elif mode == 'diff':
-        click.echo(runtime.working_dir)
-        bug_id_strings = openshiftclient.get_bug_list(runtime.working_dir, from_diff[0], from_diff[1])
-        bugs = [bugzilla.getbug(i) for i in bug_id_strings]
+
+    if mode == 'sweep':
+        find_bugs_obj = FindBugsSweep()
+    elif mode == 'qe':
+        find_bugs_obj = FindBugsQE()
+    elif mode == 'blocker':
+        find_bugs_obj = FindBugsBlocker()
+
+    find_bugs_obj.status = set(find_bugs_obj.status) - set(exclude_status)
+
+    if output == 'text':
+        green_prefix(f"Searching for bugs with status {' '.join(status)} and target release(s):")
+        click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
+
+    bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
+
+    sweep_cutoff_timestamp = 0
+    if brew_event:
+        green_print(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
+        sweep_cutoff_timestamp = runtime.build_retrying_koji_client().getEvent(brew_event)["ts"]
+    elif runtime.assembly_basis_event:
+        green_print(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
+        brew_api = runtime.build_retrying_koji_client()
+        sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api, runtime.rpm_metas() + runtime.image_metas())
+
+    if sweep_cutoff_timestamp:
+        green_print(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
+                    f"cutoff time"
+                    f" {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
+        qualified_bugs = []
+        for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
+            qualified_bugs.extend(bzutil.filter_bugs_by_cutoff_event(bugzilla.client(), chunk_of_bugs, status,
+                                                                     sweep_cutoff_timestamp))
+        click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
+        bugs = qualified_bugs
+
+    # Loads included/excluded bugs from assembly config
+    issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
+    # JIRA issues are not supported yet. Only loads issues with integer IDs.
+    included_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.include if isinstance(issue["id"], int) or issue["id"].isdigit()}
+    excluded_bug_ids: Set[int] = {int(issue["id"]) for issue in issues_config.exclude if isinstance(issue["id"], int) or issue["id"].isdigit()}
+    if included_bug_ids & excluded_bug_ids:
+        raise ValueError(f"The following bugs are defined in both 'include' and 'exclude': {included_bug_ids & excluded_bug_ids}")
+    if included_bug_ids:
+        yellow_print(f"The following bugs will be additionally included because they are explicitly defined in the assembly config: {included_bug_ids}")
+        included_bugs = bugzilla.get_bugs(included_bug_ids)
+        bugs.extend(included_bugs)
+    if excluded_bug_ids:
+        yellow_print(f"The following bugs will be excluded because they are explicitly defined in the assembly config: {excluded_bug_ids}")
+        bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
     filtered_bugs = filter_bugs(bugs, major_version, minor_version, runtime)
     if output == 'text':
@@ -280,9 +280,6 @@ advisory with the --add option.
     if mode == 'qe':
         for bug in bugs:
             bzutil.set_state(bug, 'ON_QA', noop=noop, comment_for_release=f"{major_version}.{minor_version}")
-
-    if len(flag) > 0:
-        add_flags(bugs=bugs, flags=flag, noop=noop)
 
     if report:
         print_report(bugs, output)
@@ -400,15 +397,6 @@ def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, run
     return r
 
 
-def add_flags(bugs: type_bug_list, flags: List[str], noop: bool) -> None:
-    for bug in bugs:
-        for f in flags:
-            if noop:
-                click.echo(f'Would have updated bug {bug.id} by setting flag {f}')
-                continue
-            bug.updateflags({f: "+"})
-
-
 def print_report(bugs: type_bug_list, output: str = 'text') -> None:
     if output == 'slack':
         for bug in bugs:
@@ -445,14 +433,11 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
                                                                                     bug.summary[:60]))
 
 
-def mode_list(advisory: str, bugs: type_bug_list, report: bool, flags: List[str], noop: bool) -> None:
+def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool) -> None:
     LOGGER.info(f"Found {len(bugs)} bugs: ")
     LOGGER.info(", ".join(sorted(str(b.bug_id) for b in bugs)))
     if report:
         print_report(bugs)
-
-    if flags:
-        add_flags(bugs, flags, noop)
 
     if advisory:
         errata.add_bugs_with_retry(advisory, bugs, noop=noop)
