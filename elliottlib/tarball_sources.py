@@ -54,6 +54,8 @@ def find_builds_from_advisory(advisory_number, components):
 
 
 def generate_tarball_source(tarball_file, prefix, local_repo_path, source_url, force_fetch=False):
+    # pylint: disable=no-member
+    # TODO: fix pylint false positives for pygit2
     """ Gereate a tarball source from specified commit of a remote Git repository.
 
     This function uses pygit2 (libgit2) to walkthrough files of a commit.

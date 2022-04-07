@@ -9,8 +9,6 @@ venv:
 
 lint:
 	./venv/bin/python -m flake8
-
-pylint:
 	./venv/bin/python -m pylint elliottlib/
 
 test: lint

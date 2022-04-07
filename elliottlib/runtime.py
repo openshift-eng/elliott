@@ -33,6 +33,9 @@ def remove_tmp_working_dir(runtime):
 
 
 class Runtime(object):
+    # pylint: disable=no-member
+    # TODO: analyze/fix pylint no-member violations
+
     # Use any time it is necessary to synchronize feedback from multiple threads.
     mutex = RLock()
 
