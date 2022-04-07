@@ -11,7 +11,7 @@ lint:
 	./venv/bin/python -m flake8
 
 pylint:
-	./venv/bin/python -m pylint elliottlib/cli/
+	./venv/bin/python -m pylint elliottlib/
 
 test: lint
 	./venv/bin/python -m pytest --verbose --color=yes --disable-pytest-warnings tests/
