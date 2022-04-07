@@ -2,7 +2,7 @@ import json
 
 from elliottlib.assembly import assembly_issues_config
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Set
 
 import click
@@ -222,8 +222,7 @@ advisory with the --add option.
         bug_tracker = jira
 
     # filter out bugs ART does not manage
-    m = re.match(r"rhaos-(\d+).(\d+)",
-                 runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
+    m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)
     if not m:
         raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
     major_version = int(m[1])
@@ -235,7 +234,7 @@ advisory with the --add option.
     if mode == 'list':
         bugs = bug_tracker.get_bugs(cli_opts.id_convert_str(bug_ids))
         if not into_default_advisories:
-            mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop)
+            mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop, output=output)
             return
 
     if mode == 'sweep':
@@ -411,16 +410,16 @@ def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, run
 def print_report(bugs: type_bug_list, output: str = 'text') -> None:
     if output == 'slack':
         for bug in bugs:
-            click.echo("<{}|{}> - {:<25s} ".format(bug.url, bug.id, bug.component))
+            click.echo("<{}|{}> - {:<25s} ".format(bug.weburl, bug.bug_id, bug.component))
 
     elif output == 'json':
         print(json.dumps(
             [
                 {
-                    "id": bug.id,
+                    "id": bug.bug_id,
                     "component": bug.component,
                     "status": bug.status,
-                    "date": str(datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')),
+                    "date": str(bug.creation_time_parsed),
                     "summary": bug.summary[:60],
                     "url": bug.weburl
                 }
@@ -431,11 +430,12 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
 
     else:  # output == 'text'
         green_print(
-            "{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
+            "{:<13s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE",
+                                                                  "SUMMARY"))
         for bug in bugs:
-            created_date = datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
-            days_ago = (datetime.today() - created_date).days
-            click.echo("{:<8d} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.id,
+            created_date = bug.creation_time_parsed
+            days_ago = (datetime.now(timezone.utc) - created_date).days
+            click.echo("{:<13s} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.bug_id,
                                                                                     bug.component,
                                                                                     bug.status,
                                                                                     bug.cf_pm_score if hasattr(bug,
@@ -444,11 +444,11 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
                                                                                     bug.summary[:60]))
 
 
-def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool) -> None:
+def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool, output: str) -> None:
     LOGGER.info(f"Found {len(bugs)} bugs: ")
-    LOGGER.info(", ".join(sorted(str(b.id) for b in bugs)))
+    LOGGER.info(", ".join(sorted(str(b.bug_id) for b in bugs)))
     if report:
-        print_report(bugs)
+        print_report(bugs, output=output)
 
     if advisory:
         errata.add_bugs_with_retry(advisory, bugs, noop=noop)

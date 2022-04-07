@@ -10,6 +10,7 @@ import xmlrpc.client
 from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
+from urllib.parse import urlparse
 from jira import JIRA, Issue
 
 import bugzilla
@@ -30,24 +31,31 @@ class Bug(ABC):
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
+
+class BugzillaBug(Bug):
     def __getattr__(self, attr):
         if attr in self.__dict__:
             return getattr(self, attr)
         return getattr(self.bug, attr)
 
-
-class BugzillaBug(Bug):
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
-        self.id = self.bug.bug_id
-        self.url = self.bug.weburl
+        self.creation_time_parsed = datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S')
 
 
 class JIRABug(Bug):
+    def _url(self):
+        o = urlparse(self.bug.self)
+        return o._replace(path=f"/browse/{self.bug_id}").geturl()
+
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
-        self.id = self.bug.key
-        self.url = ''
+        self.bug_id = self.bug.key
+        self.weburl = self._url()
+        self.component = self.bug.fields.components[0].name
+        self.status = self.bug.fields.status.name
+        self.creation_time_parsed = datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
+        self.summary = self.bug.fields.summary
 
 
 class BugTracker(ABC):
@@ -127,10 +135,10 @@ class BugzillaBugTracker(BugTracker):
         self._client = self.login()
 
     def get_bug(self, bugid, **kwargs):
-        return self._client.getbug(bugid, **kwargs)
+        return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
     def get_bugs(self, bugids, **kwargs):
-        return self._client.getbugs(bugids, **kwargs)
+        return [BugzillaBug(b) for b in self._client.getbugs(bugids, **kwargs)]
 
     def client(self):
         return self._client
@@ -157,7 +165,7 @@ class BugzillaBugTracker(BugTracker):
         if verbose:
             click.echo(query_url)
 
-        return _perform_query(self._client, query_url, include_fields=fields)
+        return [BugzillaBug(b) for b in _perform_query(self._client, query_url, include_fields=fields)]
 
     def get_bugs_map(self, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
         id_bug_map: Dict[int, Bug] = {}
