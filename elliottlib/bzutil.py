@@ -83,6 +83,47 @@ class BugzillaBugTracker:
             id_bug_map[ids[i]] = bug
         return id_bug_map
 
+    def create_bug(self, bugtitle, bugdescription, target_status, keywords: List):
+        createinfo = self._client.build_createbug(
+            product=self.config.get('product'),
+            version=self.config.get('version')[0],
+            component="Release",
+            summary=bugtitle,
+            keywords=keywords,
+            description=bugdescription)
+        newbug = self._client.createbug(createinfo)
+        # change state to VERIFIED, set target release
+        try:
+            update = self._client.build_update(status=target_status, target_release=self.config.get('target_release'))
+            self._client.update_bugs([newbug.id], update)
+        except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
+            sleep(5)
+            self._client.update_bugs([newbug.id], update)
+            print(ex)
+
+        return newbug
+
+    def create_placeholder(self, kind):
+        """Create a placeholder bug
+
+        :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
+        :param kind: The "kind" of placeholder to create. Generally 'rpm' or 'image'
+
+        :return: Placeholder Bug object
+        """
+        boilerplate = "Placeholder bug for OCP {} {} release".format(self.config.get('target_release')[0], kind)
+        return self.create_bug(self, boilerplate, boilerplate, "VERIFIED", ["Automation"])
+
+    def create_textonly(self, bugtitle, bugdescription):
+        """Create a text only bug
+        :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
+        :param bugtitle: The title of the bug to create
+        :param bugdescription: The description of the bug to create
+
+        :return: Text only Bug object
+        """
+        return self.create_bug(self, bugtitle, bugdescription, "VERIFIED")
+
 
 def get_highest_impact(trackers, tracker_flaws_map):
     """Get the highest impact of security bugs
@@ -214,78 +255,6 @@ def set_state(bug, desired_state, noop=False, comment_for_release=None):
     bug.setstatus(status=desired_state,
                   comment=comment,
                   private=True)
-
-
-def create_placeholder(bz_data, kind):
-    """Create a placeholder bug
-
-    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
-    :param kind: The "kind" of placeholder to create. Generally 'rpm' or 'image'
-
-    :return: Placeholder Bug object
-    """
-
-    bzapi = get_bzapi(bz_data)
-    version = bz_data['version'][0]
-    target_release = bz_data['target_release'][0]
-
-    boilerplate = "Placeholder bug for OCP {} {} release".format(target_release, kind)
-
-    createinfo = bzapi.build_createbug(
-        product=bz_data['product'],
-        version=version,
-        component="Release",
-        summary=boilerplate,
-        keywords=["Automation"],
-        description=boilerplate)
-
-    newbug = bzapi.createbug(createinfo)
-
-    # change state to VERIFIED, set target release
-    try:
-        update = bzapi.build_update(status="VERIFIED", target_release=target_release)
-        bzapi.update_bugs([newbug.id], update)
-    except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
-        sleep(5)
-        bzapi.update_bugs([newbug.id], update)
-        print(ex)
-
-    return newbug
-
-
-def create_textonly(bz_data, bugtitle, bugdescription):
-    """Create a text only bug
-
-    :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
-    :param bugtitle: The title of the bug to create
-    :param bugdescription: The description of the bug to create
-
-    :return: Text only Bug object
-    """
-
-    bzapi = get_bzapi(bz_data)
-    version = bz_data['version'][0]
-    target_release = bz_data['target_release'][0]
-
-    createinfo = bzapi.build_createbug(
-        product=bz_data['product'],
-        version=version,
-        component="Release",
-        summary=bugtitle,
-        description=bugdescription)
-
-    newbug = bzapi.createbug(createinfo)
-
-    # change state to VERIFIED, set target release
-    try:
-        update = bzapi.build_update(status="VERIFIED", target_release=target_release)
-        bzapi.update_bugs([newbug.id], update)
-    except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
-        sleep(5)
-        bzapi.update_bugs([newbug.id], update)
-        print(ex)
-
-    return newbug
 
 
 def is_viable_bug(bug_obj):

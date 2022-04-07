@@ -56,10 +56,8 @@ def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
         raise click.BadParameter(
             "--kind must be specified when not using --use-default-advisory")
 
-    bz_data = runtime.gitdata.load_data(key='bugzilla').data
-
-    newbug = elliottlib.bzutil.create_placeholder(bz_data, kind)
-
+    bz_config = runtime.gitdata.load_data(key='bugzilla').data
+    newbug = elliottlib.bzutil.BugzillaBugTracker(bz_config).create_placeholder(kind)
     click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
 
     if advisory:

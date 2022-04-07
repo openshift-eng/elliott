@@ -76,8 +76,8 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     runtime.initialize()
 
     # create textonly bug
-    bz_data = runtime.gitdata.load_data(key='bugzilla').data
-    newbug = elliottlib.bzutil.create_textonly(bz_data, bugtitle, bugdescription)
+    bz_config = runtime.gitdata.load_data(key='bugzilla').data
+    newbug = elliottlib.bzutil.BugzillaBugTracker(bz_config).create_textonly(bugtitle, bugdescription)
     click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
 
     # create textonly advisory
