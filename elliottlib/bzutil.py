@@ -25,19 +25,20 @@ logger = logutil.getLogger(__name__)
 
 class BugzillaBugTracker:
     def login(self, interactive_login):
-        if not self._client.logged_in:
+        client = bugzilla.Bugzilla(self._server)
+        if not client.logged_in:
             print(f"elliott requires cached login credentials for {self._server}")
             if interactive_login:
                 self._client.interactive_login()
             else:
                 red_print("Login using 'bugzilla login --api-key'")
                 exit(1)
+        return client
 
     def __init__(self, config, interactive_login=False):
         self.config = config
         self._server = config.get('server')
-        self._client = bugzilla.Bugzilla(self._server)
-        self.login(interactive_login)
+        self._client = self.login(interactive_login)
 
     def target_release(self):
         return self.config.get('target_release')

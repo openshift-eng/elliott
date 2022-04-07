@@ -57,7 +57,9 @@ class TestBZUtil(unittest.TestCase):
     #     actual = bzutil.get_bugs(bzapi, bug_ids)
     #     self.assertEqual(expected, actual)
 
-    def test_get_tracker_flaws_map(self):
+    @mock.patch.object(bzutil.BugzillaBugTracker, 'get_bugs_map', autospec=True)
+    @mock.patch.object(bzutil.BugzillaBugTracker, 'login', return_value=None, autospec=True)
+    def test_get_tracker_flaws_map(self, login_mock: mock.MagicMock, get_bugs_mock: mock.MagicMock):
         trackers = {
             1: mock.MagicMock(id=1, blocks=[11, 12]),
             2: mock.MagicMock(id=2, blocks=[21, 22]),
@@ -71,11 +73,11 @@ class TestBZUtil(unittest.TestCase):
             1: [flaws[11], flaws[12]],
             2: [flaws[21], flaws[22]],
         }
-        with mock.patch("elliottlib.bzutil.BugzillaBugTracker.__new__") as mock_bz:
-            mock_bug_tracker = mock.MagicMock(get_bugs_map=mock.MagicMock(return_value=flaws))
-            mock_bz.return_value = mock_bug_tracker
-            actual = bzutil.get_tracker_flaws_map(mock_bug_tracker, trackers.values())
-            self.assertEqual(expected, actual)
+
+        mock_bug_tracker = bzutil.BugzillaBugTracker({})
+        get_bugs_mock.return_value = flaws
+        actual = bzutil.get_tracker_flaws_map(mock_bug_tracker, trackers.values())
+        self.assertEqual(expected, actual)
 
     def test_is_viable_bug(self):
         bug = mock.MagicMock()

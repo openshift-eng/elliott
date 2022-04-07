@@ -22,18 +22,18 @@ LOGGER = logutil.getLogger(__name__)
 
 
 class FindBugsMode:
-    def __init__(self, status=set(), cve_trackers=False, search_flag=None):
-        self.status = status
+    def __init__(self, status: List, cve_trackers: bool = False, search_flag: str = None):
+        self.status = set(status)
         self.cve_trackers = cve_trackers
         self.search_flag = search_flag
 
-    def include_status(self, status):
+    def include_status(self, status: List):
         self.status |= set(status)
 
-    def exclude_status(self, status):
+    def exclude_status(self, status: List):
         self.status -= set(status)
 
-    def search(self, bug_tracker_obj, verbose=False):
+    def search(self, bug_tracker_obj: bzutil.BugzillaBugTracker, verbose: bool = False):
         return bug_tracker_obj.search(
             self.status,
             flag=self.search_flag,
