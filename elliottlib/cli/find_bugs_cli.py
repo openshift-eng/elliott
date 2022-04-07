@@ -1,4 +1,3 @@
-import datetime
 import json
 
 from elliottlib.assembly import assembly_issues_config
@@ -87,7 +86,7 @@ class FindBugsBlocker(FindBugsMode):
               required=False,
               type=click.Choice(constants.VALID_BUG_STATES),
               help="Exclude bugs of this status")
-@click.option("--id", metavar='BUGID', default=None,
+@click.option("--id", 'bug_ids', metavar='<BUGID>', default=None,
               multiple=True, required=False,
               help="Bug IDs to add, required for LIST mode.")
 @click.option("--cve-trackers",
@@ -117,7 +116,7 @@ class FindBugsBlocker(FindBugsMode):
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, include_status, exclude_status,
-                  id, cve_trackers, report, output, into_default_advisories, brew_event, noop):
+                  bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY. Bugs can be
 "swept" into advisories either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
@@ -189,10 +188,10 @@ advisory with the --add option.
 """
     count_advisory_attach_flags = sum(map(bool, [advisory, default_advisory_type, into_default_advisories]))
 
-    if mode != 'list' and len(id) > 0:
+    if mode != 'list' and len(bug_ids) > 0:
         raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
 
-    if mode == 'list' and len(id) == 0:
+    if mode == 'list' and len(bug_ids) == 0:
         raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
 
     if count_advisory_attach_flags > 1:
@@ -222,7 +221,7 @@ advisory with the --add option.
         advisory = find_default_advisory(runtime, default_advisory_type)
 
     if mode == 'list':
-        bugs = [bugzilla.getbug(i) for i in cli_opts.id_convert(id)]
+        bugs = [bugzilla.get_bug(i) for i in cli_opts.id_convert(bug_ids)]
         if not into_default_advisories:
             mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop)
             return
@@ -307,7 +306,7 @@ advisory with the --add option.
         impetus_bugs["rpm"] = set(bugs)
     else:  # for 4.x
         # sweep rpm cve trackers into "rpm" advisory
-        rpm_bugs = dict()
+        rpm_bugs = {}
         if mode == 'sweep' and cve_trackers:
             rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
             green_prefix("RPM CVEs found: ")
@@ -441,7 +440,6 @@ def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool) -> N
 
     if advisory:
         errata.add_bugs_with_retry(advisory, bugs, noop=noop)
-    return
 
 
 def get_sweep_cutoff_timestamp(runtime, cli_brew_event):
