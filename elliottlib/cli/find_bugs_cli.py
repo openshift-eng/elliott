@@ -431,17 +431,17 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
     else:  # output == 'text'
         green_print(
             "{:<13s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE",
-                                                                  "SUMMARY"))
+                                                                   "SUMMARY"))
         for bug in bugs:
             created_date = bug.creation_time_parsed
             days_ago = (datetime.now(timezone.utc) - created_date).days
+            cf_pm_score = bug.cf_pm_score if hasattr(bug, "cf_pm_score") else '?'
             click.echo("{:<13s} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.bug_id,
-                                                                                    bug.component,
-                                                                                    bug.status,
-                                                                                    bug.cf_pm_score if hasattr(bug,
-                                                                                                               "cf_pm_score") else '?',
-                                                                                    days_ago,
-                                                                                    bug.summary[:60]))
+                                                                                     bug.component,
+                                                                                     bug.status,
+                                                                                     cf_pm_score,
+                                                                                     days_ago,
+                                                                                     bug.summary[:60]))
 
 
 def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool, output: str) -> None:

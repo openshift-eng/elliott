@@ -22,7 +22,7 @@ class TestFindBugsCli(unittest.TestCase):
             should_receive("add_bugs_with_retry").\
             once()
 
-        mode_list(advisory, bugs, report, noop)
+        mode_list(advisory, bugs, report, 'text', noop)
 
     @patch.object(BugzillaBugTracker, 'login', return_value=None, autospec=True)
     @patch.object(BugzillaBugTracker, 'search', return_value=[1, 2], autospec=True)
