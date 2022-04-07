@@ -1,6 +1,6 @@
 """
 Utility functions and object abstractions for general interactions
-with Red Hat Bugzilla
+with BugTrackers
 """
 import asyncio
 import itertools
@@ -9,12 +9,15 @@ import urllib.parse
 import xmlrpc.client
 from datetime import datetime, timezone
 from time import sleep
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
+from jira import JIRA, Issue
 
 import bugzilla
 import click
+import os
 from bugzilla.bug import Bug
 from koji import ClientSession
+from abc import ABC, abstractmethod
 
 from elliottlib import constants, exceptions, exectools, logutil
 from elliottlib.metadata import Metadata
@@ -23,31 +26,111 @@ from elliottlib.util import isolate_timestamp_in_release, red_print
 logger = logutil.getLogger(__name__)
 
 
-class BugzillaBugTracker:
-    def login(self, interactive_login):
-        client = bugzilla.Bugzilla(self._server)
-        if not client.logged_in:
-            print(f"elliott requires cached login credentials for {self._server}")
-            if interactive_login:
-                self._client.interactive_login()
-            else:
-                red_print("Login using 'bugzilla login --api-key'")
-                exit(1)
-        return client
+class Bug(ABC):
+    def __init__(self, bug_obj):
+        self.bug = bug_obj
 
-    def __init__(self, config, interactive_login=False):
+    def __getattr__(self, attr):
+        if attr in self.__dict__:
+            return getattr(self, attr)
+        return getattr(self.bug, attr)
+
+
+class BugzillaBug(Bug):
+    def __init__(self, bug_obj):
+        super().__init__(bug_obj)
+        self.id = self.bug.bug_id
+        self.url = self.bug.weburl
+
+
+class JIRABug(Bug):
+    def __init__(self, bug_obj):
+        super().__init__(bug_obj)
+        self.id = self.bug.key
+        self.url = ''
+
+
+class BugTracker(ABC):
+    def __init__(self, config):
         self.config = config
         self._server = config.get('server')
-        self._client = self.login(interactive_login)
 
     def target_release(self):
         return self.config.get('target_release')
 
+    @abstractmethod
+    def search(self):
+        raise NotImplementedError
+
+
+class JIRABugTracker(BugTracker):
+    @staticmethod
+    def get_config(runtime):
+        return runtime.gitdata.load_data(key='jira').data
+
+    def login(self, token_auth=None) -> JIRA:
+        if not token_auth:
+            token_auth = os.environ.get("JIRA_TOKEN")
+            if not token_auth:
+                raise ValueError(f"elliott requires login credentials for {self._server}. Set a JIRA_TOKEN env var ")
+        client = JIRA(self._server, token_auth=token_auth)
+        return client
+
+    def __init__(self, config):
+        super().__init__(config)
+        self._project = config.get('project')
+        self._client: JIRA = self.login()
+
+    def target_release(self):
+        return self.config.get('target_release')
+
+    def get_bug(self, bugid, **kwargs) -> JIRABug:
+        return JIRABug(self._client.issue(bugid, **kwargs))
+
+    def get_bugs(self, bugids):
+        return self.search(bug_list=bugids)
+
+    def search(self,
+               bug_list: Optional[List] = None,
+               status: Optional[List] = None,
+               target_release: Optional[List] = None,
+               include_labels: Optional[List] = None,
+               exclude_labels: Optional[List] = None) -> List[Issue]:
+        query = f"project={self._project}"
+        if bug_list:
+            query += f" and issue in ({','.join(bug_list)})"
+        if status:
+            query += f" and status in ({','.join(status)})"
+        if target_release:
+            query += f" and fixVersion in ({','.join(target_release)})"
+        if include_labels:
+            query += f" and labels in ({','.join(exclude_labels)})"
+        if exclude_labels:
+            query += f" and labels not in ({','.join(exclude_labels)})"
+        return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False)]
+
+
+class BugzillaBugTracker(BugTracker):
+    @staticmethod
+    def get_config(runtime):
+        return runtime.gitdata.load_data(key='bugzilla').data
+
+    def login(self):
+        client = bugzilla.Bugzilla(self._server)
+        if not client.logged_in:
+            raise ValueError(f"elliott requires cached login credentials for {self._server}. Login using 'bugzilla "
+                             "login --api-key")
+        return client
+
+    def __init__(self, config):
+        super().__init__(config)
+        self._client = self.login()
+
     def get_bug(self, bugid, **kwargs):
         return self._client.getbug(bugid, **kwargs)
 
-    def get_bugs(self, idlist, **kwargs):
-        return self._client.getbugs(idlist, **kwargs)
+    def get_bugs(self, bugids, **kwargs):
+        return self._client.getbugs(bugids, **kwargs)
 
     def client(self):
         return self._client
@@ -106,7 +189,6 @@ class BugzillaBugTracker:
     def create_placeholder(self, kind):
         """Create a placeholder bug
 
-        :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
         :param kind: The "kind" of placeholder to create. Generally 'rpm' or 'image'
 
         :return: Placeholder Bug object
@@ -116,7 +198,6 @@ class BugzillaBugTracker:
 
     def create_textonly(self, bugtitle, bugdescription):
         """Create a text only bug
-        :param bz_data: The Bugzilla data dump we got from our bugzilla.yaml file
         :param bugtitle: The title of the bug to create
         :param bugdescription: The description of the bug to create
 

@@ -18,9 +18,9 @@ CLI_ENV_VARS = {k: v['env'] for (k, v) in CLI_OPTS.items()}
 CLI_CONFIG_TEMPLATE = '\n'.join(['#{}\n{}:\n'.format(v['help'], k) for (k, v) in CLI_OPTS.items()])
 
 
-def id_convert(ids):
+def id_convert_str(ids):
     # this function convert string list param --id "1" --id "2" --id "3,4,5"
-    # to int list [1,2,3,4,5]
+    # to string list ['1','2','3','4','5']
     id_str = []
     for id in ids:
         # id = "1234,42345,1234,"
@@ -30,4 +30,8 @@ def id_convert(ids):
         # id = 123  no ','
         else:
             id_str.append(id)
-    return [int(s) for s in id_str]
+    return [s for s in id_str]
+
+
+def id_convert(ids):
+    return [int(s) for s in id_convert_str(ids)]
