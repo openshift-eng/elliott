@@ -18,7 +18,6 @@ import click
 import os
 from bugzilla.bug import Bug
 from koji import ClientSession
-from abc import ABC, abstractmethod
 
 from elliottlib import constants, exceptions, exectools, logutil
 from elliottlib.metadata import Metadata
@@ -27,7 +26,7 @@ from elliottlib.util import isolate_timestamp_in_release, red_print
 logger = logutil.getLogger(__name__)
 
 
-class Bug(ABC):
+class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
@@ -58,7 +57,7 @@ class JIRABug(Bug):
         self.summary = self.bug.fields.summary
 
 
-class BugTracker(ABC):
+class BugTracker:
     def __init__(self, config):
         self.config = config
         self._server = config.get('server')
@@ -66,7 +65,6 @@ class BugTracker(ABC):
     def target_release(self):
         return self.config.get('target_release')
 
-    @abstractmethod
     def search(self):
         raise NotImplementedError
 
