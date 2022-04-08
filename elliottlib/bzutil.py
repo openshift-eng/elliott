@@ -136,14 +136,13 @@ class JIRABugTracker(BugTracker):
         return JIRABug(self._client.issue(bugid, **kwargs))
 
     def get_bugs(self, bugids):
-        return self.search(bug_list=bugids)
+        return self._search(self._query(bug_list=bugids))
 
-    def search(self,
-               bug_list: Optional[List] = None,
+    def _query(self, bug_list: Optional[List] = None,
                status: Optional[List] = None,
                target_release: Optional[List] = None,
                include_labels: Optional[List] = None,
-               exclude_labels: Optional[List] = None) -> List[Issue]:
+               exclude_labels: Optional[List] = None) -> str:
         query = f"project={self._project}"
         if bug_list:
             query += f" and issue in ({','.join(bug_list)})"
@@ -155,7 +154,18 @@ class JIRABugTracker(BugTracker):
             query += f" and labels in ({','.join(exclude_labels)})"
         if exclude_labels:
             query += f" and labels not in ({','.join(exclude_labels)})"
+        return query
+
+    def _search(self, query) -> List[JIRABug]:
         return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False)]
+
+    def search(self, status, search_filter='default', flag=None, filter_out_security_bugs=True, verbose=False):
+        exclude_labels = ['SecurityTracking'] if filter_out_security_bugs else []
+        query = self._query(
+            status=status,
+            exclude_labels=exclude_labels
+        )
+        return self._search(query)
 
 
 class BugzillaBugTracker(BugTracker):

@@ -251,7 +251,10 @@ advisory with the --add option.
         green_prefix(f"Searching for bugs with status {' '.join(find_bugs_obj.status)} and target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
 
-    bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
+    bugs = []
+    if jira:
+        bugs.extend(find_bugs_obj.search(bug_tracker_obj=jira, verbose=runtime.debug))
+    bugs.extend(find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug))
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
     if sweep_cutoff_timestamp:
