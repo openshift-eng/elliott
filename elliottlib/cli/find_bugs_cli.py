@@ -35,28 +35,33 @@ class FindBugsMode:
     def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
         return bug_tracker_obj.search(
             self.status,
-            flag=self.search_flag,
-            filter_out_security_bugs=not self.cve_trackers,
+            filter_out_cve_trackers=not self.cve_trackers,
             verbose=verbose
         )
 
 
 class FindBugsSweep(FindBugsMode):
-    def __init__(self):
-        super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'})
+    def __init__(self, cve_trackers):
+        super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'}, cve_trackers=cve_trackers)
 
 
 class FindBugsQE(FindBugsMode):
-    def __init__(self):
-        super().__init__(status={'MODIFIED'})
+    def __init__(self, cve_trackers):
+        super().__init__(status={'MODIFIED'}, cve_trackers=cve_trackers)
 
 
 class FindBugsBlocker(FindBugsMode):
     def __init__(self):
         super().__init__(
             cve_trackers=True,
-            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'},
-            search_flag='blocker+'
+            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'}
+        )
+
+    def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
+        return bug_tracker_obj.blocker_search(
+            self.status,
+            filter_out_cve_trackers=not self.cve_trackers,
+            verbose=verbose
         )
 
 
@@ -110,17 +115,22 @@ class FindBugsBlocker(FindBugsMode):
 @click.option('--brew-event', type=click.INT, required=False,
               help='Only SWEEP bugs that have changed to the desired status before the Brew event ID; does not apply '
                    'to list or diff mode')
-@click.option("--jira", 'use_jira',
+@click.option("--with-jira",
               is_flag=True,
               default=False,
               help="Use jira in combination with bugzilla (https://issues.redhat.com/browse/ART-3818)")
+@click.option("--only-jira",
+              is_flag=True,
+              default=False,
+              help="Use jira instead of bugzilla")
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, include_status, exclude_status,
-                  bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, use_jira, noop):
+                  bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, with_jira, only_jira,
+                  noop):
     """Find OCP bugs and (optional) add them to ADVISORY. Bugs can be
 "swept" into advisories either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
@@ -192,6 +202,12 @@ advisory with the --add option.
 """
     count_advisory_attach_flags = sum(map(bool, [advisory, default_advisory_type, into_default_advisories]))
 
+    if with_jira and only_jira:
+        raise click.BadParameter("Cannot combine --with-jira and --only-jira")
+
+    if mode == list and with_jira:
+        raise click.BadParameter("Cannot combine --mode=list and --with-jira. Use --only-jira for use with jira bugs")
+
     if mode != 'list' and len(bug_ids) > 0:
         raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
 
@@ -210,16 +226,16 @@ advisory with the --add option.
 
     runtime.initialize(mode="both")
 
-    bz_config = BugzillaBugTracker.get_config(runtime)
-    bugzilla = BugzillaBugTracker(bz_config)
-
-    # object used in cases where we need a single bug tracker
-    bug_tracker = bugzilla
-
-    if use_jira:
+    bug_trackers = []
+    if only_jira or with_jira:
         jira_config = JIRABugTracker.get_config(runtime)
         jira = JIRABugTracker(jira_config)
-        bug_tracker = jira
+        bug_trackers.append(jira)
+
+    if not only_jira or with_jira:
+        bz_config = BugzillaBugTracker.get_config(runtime)
+        bugzilla = BugzillaBugTracker(bz_config)
+        bug_trackers.append(bugzilla)
 
     # filter out bugs ART does not manage
     m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)
@@ -232,15 +248,15 @@ advisory with the --add option.
         advisory = find_default_advisory(runtime, default_advisory_type)
 
     if mode == 'list':
-        bugs = bug_tracker.get_bugs(cli_opts.id_convert_str(bug_ids))
+        bugs = bug_trackers[0].get_bugs(cli_opts.id_convert_str(bug_ids))
         if not into_default_advisories:
             mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop, output=output)
             return
 
     if mode == 'sweep':
-        find_bugs_obj = FindBugsSweep()
+        find_bugs_obj = FindBugsSweep(cve_trackers=cve_trackers)
     elif mode == 'qe':
-        find_bugs_obj = FindBugsQE()
+        find_bugs_obj = FindBugsQE(cve_trackers=cve_trackers)
     elif mode == 'blocker':
         find_bugs_obj = FindBugsBlocker()
 
@@ -248,13 +264,15 @@ advisory with the --add option.
     find_bugs_obj.exclude_status(exclude_status)
 
     if output == 'text':
-        green_prefix(f"Searching for bugs with status {' '.join(find_bugs_obj.status)} and target release(s):")
-        click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
+        green_prefix(f"Searching for bugs on {bug_trackers[0]._server} with status {' '.join(find_bugs_obj.status)} "
+                     f"and "
+                     f"target "
+                     f"release(s):")
+        click.echo(" {tr}".format(tr=", ".join(bug_trackers[0].target_release())))
 
     bugs = []
-    if jira:
-        bugs.extend(find_bugs_obj.search(bug_tracker_obj=jira, verbose=runtime.debug))
-    bugs.extend(find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug))
+    for bt in bug_trackers:
+        bugs.extend(find_bugs_obj.search(bug_tracker_obj=bt, verbose=runtime.debug))
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
     if sweep_cutoff_timestamp:
