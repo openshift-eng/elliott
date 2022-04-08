@@ -2,11 +2,11 @@ import json
 
 from elliottlib.assembly import assembly_issues_config
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Set
 
 import click
-from bugzilla import bug as bug_module
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, BugTracker, Bug
 
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import cli_opts
@@ -32,7 +32,7 @@ class FindBugsMode:
     def exclude_status(self, status: List):
         self.status -= set(status)
 
-    def search(self, bug_tracker_obj: bzutil.BugzillaBugTracker, verbose: bool = False):
+    def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
         return bug_tracker_obj.search(
             self.status,
             flag=self.search_flag,
@@ -110,13 +110,17 @@ class FindBugsBlocker(FindBugsMode):
 @click.option('--brew-event', type=click.INT, required=False,
               help='Only SWEEP bugs that have changed to the desired status before the Brew event ID; does not apply '
                    'to list or diff mode')
+@click.option("--jira", 'use_jira',
+              is_flag=True,
+              default=False,
+              help="Use jira in combination with bugzilla (https://issues.redhat.com/browse/ART-3818)")
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, include_status, exclude_status,
-                  bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, noop):
+                  bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, use_jira, noop):
     """Find OCP bugs and (optional) add them to ADVISORY. Bugs can be
 "swept" into advisories either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
@@ -206,12 +210,19 @@ advisory with the --add option.
 
     runtime.initialize(mode="both")
 
-    bz_config = runtime.gitdata.load_data(key='bugzilla').data
-    bugzilla = bzutil.BugzillaBugTracker(bz_config)
+    bz_config = BugzillaBugTracker.get_config(runtime)
+    bugzilla = BugzillaBugTracker(bz_config)
+
+    # object used in cases where we need a single bug tracker
+    bug_tracker = bugzilla
+
+    if use_jira:
+        jira_config = JIRABugTracker.get_config(runtime)
+        jira = JIRABugTracker(jira_config)
+        bug_tracker = jira
 
     # filter out bugs ART does not manage
-    m = re.match(r"rhaos-(\d+).(\d+)",
-                 runtime.branch)  # extract OpenShift version from the branch name. there should be a better way...
+    m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)
     if not m:
         raise ElliottFatalError(f"Unable to determine OpenShift version from branch name {runtime.branch}.")
     major_version = int(m[1])
@@ -221,9 +232,9 @@ advisory with the --add option.
         advisory = find_default_advisory(runtime, default_advisory_type)
 
     if mode == 'list':
-        bugs = [bugzilla.get_bug(i) for i in cli_opts.id_convert(bug_ids)]
+        bugs = bug_tracker.get_bugs(cli_opts.id_convert_str(bug_ids))
         if not into_default_advisories:
-            mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop)
+            mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop, output=output)
             return
 
     if mode == 'sweep':
@@ -348,7 +359,7 @@ advisory with the --add option.
                 errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
 
 
-type_bug_list = List[bug_module.Bug]
+type_bug_list = List[Bug]
 
 
 def extras_bugs(bugs: type_bug_list) -> type_bug_list:
@@ -399,16 +410,16 @@ def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, run
 def print_report(bugs: type_bug_list, output: str = 'text') -> None:
     if output == 'slack':
         for bug in bugs:
-            click.echo("<{}|{}> - {:<25s} ".format(bug.weburl, bug.id, bug.component))
+            click.echo("<{}|{}> - {:<25s} ".format(bug.weburl, bug.bug_id, bug.component))
 
     elif output == 'json':
         print(json.dumps(
             [
                 {
-                    "id": bug.id,
+                    "id": bug.bug_id,
                     "component": bug.component,
                     "status": bug.status,
-                    "date": str(datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')),
+                    "date": str(bug.creation_time_parsed),
                     "summary": bug.summary[:60],
                     "url": bug.weburl
                 }
@@ -419,24 +430,25 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
 
     else:  # output == 'text'
         green_print(
-            "{:<8s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE", "SUMMARY"))
+            "{:<13s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE",
+                                                                   "SUMMARY"))
         for bug in bugs:
-            created_date = datetime.strptime(str(bug.creation_time), '%Y%m%dT%H:%M:%S')
-            days_ago = (datetime.today() - created_date).days
-            click.echo("{:<8d} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.id,
-                                                                                    bug.component,
-                                                                                    bug.status,
-                                                                                    bug.cf_pm_score if hasattr(bug,
-                                                                                                               "cf_pm_score") else '?',
-                                                                                    days_ago,
-                                                                                    bug.summary[:60]))
+            created_date = bug.creation_time_parsed
+            days_ago = (datetime.now(timezone.utc) - created_date).days
+            cf_pm_score = bug.cf_pm_score if hasattr(bug, "cf_pm_score") else '?'
+            click.echo("{:<13s} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.bug_id,
+                                                                                     bug.component,
+                                                                                     bug.status,
+                                                                                     cf_pm_score,
+                                                                                     days_ago,
+                                                                                     bug.summary[:60]))
 
 
-def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool) -> None:
+def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool, output: str) -> None:
     LOGGER.info(f"Found {len(bugs)} bugs: ")
     LOGGER.info(", ".join(sorted(str(b.bug_id) for b in bugs)))
     if report:
-        print_report(bugs)
+        print_report(bugs, output=output)
 
     if advisory:
         errata.add_bugs_with_retry(advisory, bugs, noop=noop)
