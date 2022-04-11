@@ -1,7 +1,7 @@
 import click
 import sys
 
-from elliottlib import Runtime, errata, logutil, util
+from elliottlib import Runtime, errata, logutil
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, find_default_advisory, use_default_advisory_option
@@ -79,7 +79,7 @@ For attaching use --advisory, --use-default-advisory <TYPE>
 
     # Check if target release and OCP version match
     bugs = bug_tracker.get_bugs(cli_opts.id_convert_str(bug_ids))
-    target_release = util.get_target_release(bugs)
+    target_release = Bug.get_target_release(bugs)
 
     if version not in target_release:
         LOGGER.warning('OCP versions for bugs target release %s and group %s do not match: aborting', target_release, version)
