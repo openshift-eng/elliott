@@ -40,12 +40,13 @@ def attach_bugs_cli(runtime: Runtime, advisory, default_advisory_type, bug_ids, 
 Print bug details with --report
 For attaching use --advisory, --use-default-advisory <TYPE>
 
-    Print bug report (no attaching)
+    Print bug report (no attach)
 
 \b
     $ elliott -g openshift-4.10 attach-bugs 8675309 7001337 --report
 
-    Print bug report (no attaching)
+
+    Print bug report for jira bugs (no attach)
 
 \b
     $ elliott -g openshift-4.10 attach-bugs OCPBUGS-10 OCPBUGS-9 --report --jira
