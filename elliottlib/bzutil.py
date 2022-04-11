@@ -96,6 +96,30 @@ class JIRABugTracker(BugTracker):
     def get_bugs(self, bugids):
         return self.search(bug_list=bugids)
 
+    def create_bug(self, bugtitle, bugdescription, target_status, keywords: List) -> JIRABug:
+        issueinfo = {
+            'project':{'key':self.config.get('product')},
+            'issuetype':{'name':'Bug'},
+            'fixVersions':{'name':self.config.get('version')[0]},
+            'components':{'name':'Release'},
+            'summary':bugtitle,
+            'labels':keywords,
+            'description':bugdescription,
+            }
+        newbug = self._client.create_issue(fields=issueinfo)
+        self._client.transition_issue(newbug, 'VERIFIED')
+        return JIRABug(newbug)
+
+    def update_bug(self, bugid, status):
+        self._client.transition_issue(self._client.issue(bugid), status)
+
+    def create_placeholder(self, kind):
+        boilerplate = "Placeholder bug for OCP {} {} release".format(self.config.get('target_release')[0], kind)
+        return self.create_bug(self, boilerplate, boilerplate, "VERIFIED", ["Automation"])
+
+    def create_textonly(self, bugtitle, bugdescription):
+        return self.create_bug(self, bugtitle, bugdescription, "VERIFIED")
+
     def search(self,
                bug_list: Optional[List] = None,
                status: Optional[List] = None,
