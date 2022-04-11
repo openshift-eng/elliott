@@ -59,7 +59,7 @@ from elliottlib.cli.advisory_drop_cli import advisory_drop_cli
 from elliottlib.cli.verify_attached_operators_cli import verify_attached_operators_cli
 from elliottlib.cli.verify_attached_bugs_cli import verify_attached_bugs_cli
 from elliottlib.cli.attach_cve_flaws_cli import attach_cve_flaws_cli
-from elliottlib.cli.find_bugs_list_cli import find_bugs_list_cli
+from elliottlib.cli.attach_bugs_cli import attach_bugs_cli
 from elliottlib.cli.get_golang_versions_cli import get_golang_versions_cli
 from elliottlib.cli.validate_rhsa import validate_rhsa_cli
 from elliottlib.cli.rhcos_cli import rhcos_cli
@@ -691,7 +691,7 @@ cli.add_command(verify_attached_operators_cli)
 cli.add_command(verify_attached_bugs_cli)
 cli.add_command(attach_cve_flaws_cli)
 cli.add_command(create_textonly_cli)
-cli.add_command(find_bugs_list_cli)
+cli.add_command(attach_bugs_cli)
 
 
 # -----------------------------------------------------------------------------

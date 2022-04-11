@@ -39,7 +39,8 @@ class BugzillaBug(Bug):
 
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
-        self.creation_time_parsed = datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S')
+        self.creation_time_parsed = datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
+        self.bug_id = str(self.bug.bug_id)
 
 
 class JIRABug(Bug):
