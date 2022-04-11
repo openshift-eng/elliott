@@ -42,13 +42,13 @@ class FindBugsMode:
 
 
 class FindBugsSweep(FindBugsMode):
-    def __init__(self):
-        super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'})
+    def __init__(self, cve_trackers):
+        super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'}, cve_trackers=cve_trackers)
 
 
 class FindBugsQE(FindBugsMode):
-    def __init__(self):
-        super().__init__(status={'MODIFIED'})
+    def __init__(self, cve_trackers):
+        super().__init__(status={'MODIFIED'}, cve_trackers=cve_trackers)
 
 
 class FindBugsBlocker(FindBugsMode):
@@ -110,17 +110,13 @@ class FindBugsBlocker(FindBugsMode):
 @click.option('--brew-event', type=click.INT, required=False,
               help='Only SWEEP bugs that have changed to the desired status before the Brew event ID; does not apply '
                    'to list or diff mode')
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira in combination with bugzilla (https://issues.redhat.com/browse/ART-3818)")
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, include_status, exclude_status,
-                  bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, use_jira, noop):
+                  bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY. Bugs can be
 "swept" into advisories either automatically (--mode sweep), or by
 manually specifying one or more bugs using --mode list with the --id option.
@@ -213,14 +209,6 @@ advisory with the --add option.
     bz_config = BugzillaBugTracker.get_config(runtime)
     bugzilla = BugzillaBugTracker(bz_config)
 
-    # object used in cases where we need a single bug tracker
-    bug_tracker = bugzilla
-
-    if use_jira:
-        jira_config = JIRABugTracker.get_config(runtime)
-        jira = JIRABugTracker(jira_config)
-        bug_tracker = jira
-
     # filter out bugs ART does not manage
     m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)
     if not m:
@@ -232,15 +220,15 @@ advisory with the --add option.
         advisory = find_default_advisory(runtime, default_advisory_type)
 
     if mode == 'list':
-        bugs = bug_tracker.get_bugs(cli_opts.id_convert_str(bug_ids))
+        bugs = bugzilla.get_bugs(cli_opts.id_convert_str(bug_ids))
         if not into_default_advisories:
             mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop, output=output)
             return
 
     if mode == 'sweep':
-        find_bugs_obj = FindBugsSweep()
+        find_bugs_obj = FindBugsSweep(cve_trackers=cve_trackers)
     elif mode == 'qe':
-        find_bugs_obj = FindBugsQE()
+        find_bugs_obj = FindBugsQE(cve_trackers=cve_trackers)
     elif mode == 'blocker':
         find_bugs_obj = FindBugsBlocker()
 
