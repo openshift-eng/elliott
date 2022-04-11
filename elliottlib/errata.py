@@ -19,6 +19,7 @@ import requests
 from requests_kerberos import HTTPKerberosAuth
 from spnego.exceptions import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
+from typing import List
 
 import xmlrpc.client
 
@@ -472,27 +473,29 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=constants.BUG_ATTACH_CHUNK_SIZE):
+def add_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_ATTACH_CHUNK_SIZE):
     """
     adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
     list then add bug to advisory again, if still has failures raise exceptions
 
-    :param advisory: advisory id
+    :param advisory_id: advisory id
     :param bugs: iterable of bzutil.bug to attach to advisory
+    :param noop: do not modify anything
+    :param batch_size: perform operation in batches of given size
     :return:
     """
-    print(f'Request to attach {len(bugs)} bugs to the advisory {advisory}')
+    print(f'Request to attach {len(bugs)} bugs to the advisory {advisory_id}')
 
     try:
-        advs = Erratum(errata_id=advisory)
+        advisory = Erratum(errata_id=advisory_id)
     except GSSError:
         exit_unauthenticated()
 
-    if advs is False:
-        raise exceptions.ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
+    if advisory_id is False:
+        raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
-    existing_bugs = advs.errata_bugs
+    existing_bugs = advisory.errata_bugs
     new_bugs = set(bug.id for bug in bugs) - set(existing_bugs)
     print(f'Bugs already attached: {len(existing_bugs)}')
     print(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
@@ -502,14 +505,13 @@ def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=constants.BUG_ATT
         return
 
     bugs = list(new_bugs)
-    green_prefix(f"Adding bugs in batches of {batch_size}\n")
     for chunk_of_bugs in chunk(bugs, batch_size):
         if noop:
             print('Dry run: Would have attached bugs')
             continue
         try:
-            advs.addBugs(chunk_of_bugs)
-            advs.commit()
+            advisory.addBugs(chunk_of_bugs)
+            advisory.commit()
         except ErrataException as e:
             print(f"ErrataException Message: {e}\nRetrying...")
             block_list = parse_exception_error_message(e)
@@ -518,9 +520,9 @@ def add_bugs_with_retry(advisory, bugs, noop=False, batch_size=constants.BUG_ATT
                 continue
 
             try:
-                advs = Erratum(errata_id=advisory)
-                advs.addBugs(retry_list)
-                advs.commit()
+                advisory = Erratum(errata_id=advisory)
+                advisory.addBugs(retry_list)
+                advisory.commit()
             except ErrataException as e:
                 raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
             print("remaining bugs attached")

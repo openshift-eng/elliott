@@ -53,7 +53,7 @@ class Bug:
         if invalid_bugs:
             err = 'target_release should be a list with a string matching regex (digit+.digit+.[0|z])'
             for b in invalid_bugs:
-                err += f'\n bug: {b.bug_id}, target_release: {b.target_release} '
+                err += f'\n bug: {b.id}, target_release: {b.target_release} '
             raise ValueError(err)
 
         if len(target_releases) != 1:
@@ -73,17 +73,17 @@ class BugzillaBug(Bug):
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
         self.creation_time_parsed = datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
-        self.bug_id = str(self.bug.bug_id)
+        self.id = str(self.bug.id)
 
 
 class JIRABug(Bug):
     def _url(self):
         o = urlparse(self.bug.self)
-        return o._replace(path=f"/browse/{self.bug_id}").geturl()
+        return o._replace(path=f"/browse/{self.id}").geturl()
 
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
-        self.bug_id = self.bug.key
+        self.id = self.bug.key
         self.weburl = self._url()
         self.component = self.bug.fields.components[0].name
         self.status = self.bug.fields.status.name
@@ -378,10 +378,10 @@ def set_state(bug, desired_state, noop=False, comment_for_release=None):
     if comment_for_release:
         comment += f"\nThis bug is expected to ship in the next {comment_for_release} release created."
     if noop:
-        logger.info(f"Would have changed BZ#{bug.bug_id} from {current_state} to {desired_state} with comment:\n{comment}")
+        logger.info(f"Would have changed BZ#{bug.id} from {current_state} to {desired_state} with comment:\n{comment}")
         return
 
-    logger.info(f"Changing BZ#{bug.bug_id} from {current_state} to {desired_state}")
+    logger.info(f"Changing BZ#{bug.id} from {current_state} to {desired_state}")
     bug.setstatus(status=desired_state,
                   comment=comment,
                   private=True)

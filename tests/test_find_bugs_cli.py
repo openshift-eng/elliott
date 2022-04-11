@@ -13,7 +13,7 @@ from elliottlib.bzutil import BugzillaBugTracker
 class TestFindBugsCli(unittest.TestCase):
     def test_mode_list(self):
         advisory = 'foo'
-        bugs = [flexmock(bug_id='bar')]
+        bugs = [flexmock(id='bar')]
         report = False
         noop = False
 
@@ -44,19 +44,19 @@ class TestFindBugsCli(unittest.TestCase):
 
 class TestExtrasBugs(unittest.TestCase):
     def test_payload_bug(self):
-        bugs = [flexmock(bug_id='123', component='Payload Component', subcomponent='Subcomponent')]
+        bugs = [flexmock(id='123', component='Payload Component', subcomponent='Subcomponent')]
         self.assertEqual(len(extras_bugs(bugs)), 0)
 
     def test_extras_bug(self):
-        bugs = [flexmock(bug_id='123', component='Metering Operator', subcomponent='Subcomponent')]
+        bugs = [flexmock(id='123', component='Metering Operator', subcomponent='Subcomponent')]
         self.assertEqual(len(extras_bugs(bugs)), 1)
 
     def test_subcomponent_bug(self):
-        bugs = [flexmock(bug_id='123', component='Networking', subcomponent='SR-IOV')]
+        bugs = [flexmock(id='123', component='Networking', subcomponent='SR-IOV')]
         self.assertEqual(len(extras_bugs(bugs)), 1)
 
     def test_subcomponent_bug(self):
-        bugs = [flexmock(bug_id='123', component='Networking', subcomponent='Not SR-IOV')]
+        bugs = [flexmock(id='123', component='Networking', subcomponent='Not SR-IOV')]
         self.assertEqual(len(extras_bugs(bugs)), 0)
 
 

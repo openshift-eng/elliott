@@ -45,6 +45,11 @@ For attaching use --advisory, --use-default-advisory <TYPE>
 \b
     $ elliott -g openshift-4.10 attach-bugs 8675309 7001337 --report
 
+    Print bug report (no attaching)
+
+\b
+    $ elliott -g openshift-4.10 attach-bugs OCPBUGS-10 OCPBUGS-9 --report --jira
+
 
     Attach bugs to the advisory 123456
 
@@ -82,11 +87,12 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     target_release = Bug.get_target_release(bugs)
 
     if version not in target_release:
-        LOGGER.warning('OCP versions for bugs target release %s and group %s do not match: aborting', target_release, version)
+        LOGGER.error('Target release version for given bugs (%s) does not match the group (%s): aborting',
+                     target_release, version)
         sys.exit(1)
 
     LOGGER.info(f"Found {len(bugs)} bugs: ")
-    LOGGER.info(", ".join(sorted(str(b.bug_id) for b in bugs)))
+    LOGGER.info(", ".join(sorted(str(b.id) for b in bugs)))
     if report:
         print_report(bugs, output=output)
 
