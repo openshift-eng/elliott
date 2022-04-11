@@ -51,7 +51,7 @@ def find_bugs_qe_cli(runtime: Runtime, use_jira, noop):
 
     find_bugs_obj = FindBugsQE()
     green_prefix(f"Searching for bugs with status {' '.join(find_bugs_obj.status)} and target release(s):")
-    click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
+    click.echo(" {tr}".format(tr=", ".join(bug_tracker.target_release())))
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 

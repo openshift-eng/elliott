@@ -51,6 +51,14 @@ class FindBugsQE(FindBugsMode):
         super().__init__(status={'MODIFIED'}, cve_trackers=cve_trackers)
 
 
+class FindBugsQE(FindBugsMode):
+    def __init__(self):
+        super().__init__(
+            cve_trackers=True,
+            status={'MODIFIED'}
+        )
+
+
 class FindBugsBlocker(FindBugsMode):
     def __init__(self):
         super().__init__(
