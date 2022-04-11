@@ -123,10 +123,7 @@ class BugValidator:
         # Find first-fix flaws
         first_fix_flaw_ids = set()
         if attached_trackers:
-            current_target_release, err = util.get_target_release(attached_trackers)
-            if err:
-                self._complain(f"Couldn't determine target release for attached trackers: {err}")
-                return
+            current_target_release = bzutil.Bug.get_target_release(attached_trackers)
             if current_target_release[-1] == 'z':
                 first_fix_flaw_ids = flaw_id_bugs.keys()
             else:
@@ -140,11 +137,11 @@ class BugValidator:
         missing_flaw_ids = attached_flaw_ids - first_fix_flaw_ids
         if missing_flaw_ids:
             self._complain(f"On advisory {advisory_id}, {len(missing_flaw_ids)} flaw bugs are not attached but they are referenced by attached tracker bugs: {', '.join(sorted(map(str, missing_flaw_ids)))}."
-                           " You probabbly need to attach those flaw bugs or drop the corresponding tracker bugs.")
+                           " You probably need to attach those flaw bugs or drop the corresponding tracker bugs.")
         extra_flaw_ids = first_fix_flaw_ids - attached_flaw_ids
         if extra_flaw_ids:
             self._complain(f"On advisory {advisory_id}, {len(extra_flaw_ids)} flaw bugs are attached but there are no tracker bugs referencing them: {', '.join(sorted(map(str, extra_flaw_ids)))}."
-                           " You probabbly need to drop those flaw bugs or attach the corresponding tracker bugs.")
+                           " You probably need to drop those flaw bugs or attach the corresponding tracker bugs.")
 
         # Check if flaw bugs are associated with specific builds
         cve_components_mapping: Dict[str, Set[str]] = {}
