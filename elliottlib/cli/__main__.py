@@ -59,6 +59,7 @@ from elliottlib.cli.advisory_drop_cli import advisory_drop_cli
 from elliottlib.cli.verify_attached_operators_cli import verify_attached_operators_cli
 from elliottlib.cli.verify_attached_bugs_cli import verify_attached_bugs_cli
 from elliottlib.cli.attach_cve_flaws_cli import attach_cve_flaws_cli
+from elliottlib.cli.attach_bugs_cli import attach_bugs_cli
 from elliottlib.cli.get_golang_versions_cli import get_golang_versions_cli
 from elliottlib.cli.validate_rhsa import validate_rhsa_cli
 from elliottlib.cli.rhcos_cli import rhcos_cli
@@ -143,7 +144,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all):
             if remove_all:
                 bug_ids = advs.errata_bugs
             else:
-                bug_ids = [bzapi.getbug(i).bug_id for i in cli_opts.id_convert(id)]
+                bug_ids = [bzapi.getbug(i).id for i in cli_opts.id_convert(id)]
             green_prefix("Found {} bugs:".format(len(bug_ids)))
             click.echo(" {}".format(", ".join([str(b) for b in bug_ids])))
             green_prefix("Removing {count} bugs from advisory:".format(count=len(bug_ids)))
@@ -690,6 +691,7 @@ cli.add_command(verify_attached_operators_cli)
 cli.add_command(verify_attached_bugs_cli)
 cli.add_command(attach_cve_flaws_cli)
 cli.add_command(create_textonly_cli)
+cli.add_command(attach_bugs_cli)
 
 
 # -----------------------------------------------------------------------------

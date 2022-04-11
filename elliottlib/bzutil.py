@@ -30,6 +30,39 @@ class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
+    @staticmethod
+    def get_target_release(bugs) -> str:
+        """
+        Pass in a list of bugs and get their target release version back.
+        Raises exception if they have different target release versions set.
+
+        :param bugs: List[Bug] instance
+        """
+        invalid_bugs = []
+        target_releases = set()
+
+        for bug in bugs:
+            # make sure it's a list with a valid str value
+            valid_target_rel = isinstance(bug.target_release, list) and len(bug.target_release) > 0 and \
+                re.match(r'(\d+.\d+.[0|z])', bug.target_release[0])
+            if not valid_target_rel:
+                invalid_bugs.append(bug)
+            else:
+                target_releases.add(bug.target_release[0])
+
+        if invalid_bugs:
+            err = 'target_release should be a list with a string matching regex (digit+.digit+.[0|z])'
+            for b in invalid_bugs:
+                err += f'\n bug: {b.id}, target_release: {b.target_release} '
+            raise ValueError(err)
+
+        if len(target_releases) != 1:
+            err = f'Found different target_release values for bugs: {target_releases}. ' \
+                'There should be only 1 target release for all bugs. Fix the offending bug(s) and try again.'
+            raise ValueError(err)
+
+        return target_releases.pop()
+
 
 class BugzillaBug(Bug):
     def __getattr__(self, attr):
@@ -39,22 +72,23 @@ class BugzillaBug(Bug):
 
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
-        self.creation_time_parsed = datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S')
+        self.creation_time_parsed = datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
 
 
 class JIRABug(Bug):
     def _url(self):
         o = urlparse(self.bug.self)
-        return o._replace(path=f"/browse/{self.bug_id}").geturl()
+        return o._replace(path=f"/browse/{self.id}").geturl()
 
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
-        self.bug_id = self.bug.key
+        self.id = self.bug.key
         self.weburl = self._url()
         self.component = self.bug.fields.components[0].name
         self.status = self.bug.fields.status.name
         self.creation_time_parsed = datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
         self.summary = self.bug.fields.summary
+        self.target_release = [x.name for x in self.bug.fields.fixVersions]
 
 
 class BugTracker:
@@ -72,6 +106,14 @@ class BugTracker:
 class JIRABugTracker(BugTracker):
     @staticmethod
     def get_config(runtime):
+        version = f'{runtime.group_config.vars.MAJOR}.{runtime.group_config.vars.MINOR}'
+        # TODO: have jira.yml file for all versions 4.6-4.11
+        if version != '4.11':
+            return {
+                'server': "https://issues.stage.redhat.com",
+                'project': 'OCPBUGS',
+                'target_release': [f"{version}.0", f"{version}.z"]
+            }
         return runtime.gitdata.load_data(key='jira').data
 
     def login(self, token_auth=None) -> JIRA:
@@ -183,7 +225,7 @@ class BugzillaBugTracker(BugTracker):
         newbug = self._client.createbug(createinfo)
         # change state to VERIFIED, set target release
         try:
-            update = self._client.build_update(status=target_status, target_release=self.config.get('target_release'))
+            update = self._client.build_update(status=target_status, target_release=self.config.get('target_release')[0])
             self._client.update_bugs([newbug.id], update)
         except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
             sleep(5)
@@ -200,7 +242,7 @@ class BugzillaBugTracker(BugTracker):
         :return: Placeholder Bug object
         """
         boilerplate = "Placeholder bug for OCP {} {} release".format(self.config.get('target_release')[0], kind)
-        return self.create_bug(self, boilerplate, boilerplate, "VERIFIED", ["Automation"])
+        return self.create_bug(boilerplate, boilerplate, "VERIFIED", ["Automation"])
 
     def create_textonly(self, bugtitle, bugdescription):
         """Create a text only bug
@@ -209,7 +251,7 @@ class BugzillaBugTracker(BugTracker):
 
         :return: Text only Bug object
         """
-        return self.create_bug(self, bugtitle, bugdescription, "VERIFIED")
+        return self.create_bug(bugtitle, bugdescription, "VERIFIED")
 
 
 def get_highest_impact(trackers, tracker_flaws_map):
@@ -335,10 +377,10 @@ def set_state(bug, desired_state, noop=False, comment_for_release=None):
     if comment_for_release:
         comment += f"\nThis bug is expected to ship in the next {comment_for_release} release created."
     if noop:
-        logger.info(f"Would have changed BZ#{bug.bug_id} from {current_state} to {desired_state} with comment:\n{comment}")
+        logger.info(f"Would have changed BZ#{bug.id} from {current_state} to {desired_state} with comment:\n{comment}")
         return
 
-    logger.info(f"Changing BZ#{bug.bug_id} from {current_state} to {desired_state}")
+    logger.info(f"Changing BZ#{bug.id} from {current_state} to {desired_state}")
     bug.setstatus(status=desired_state,
                   comment=comment,
                   private=True)

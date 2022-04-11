@@ -284,7 +284,7 @@ advisory with the --add option.
     filtered_bugs = filter_bugs(bugs, major_version, minor_version, runtime)
     if output == 'text':
         green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
-        click.echo(", ".join(sorted(str(b.bug_id) for b in filtered_bugs)))
+        click.echo(", ".join(sorted(str(b.id) for b in filtered_bugs)))
     bugs = filtered_bugs
 
     if mode == 'qe':
@@ -410,13 +410,13 @@ def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, run
 def print_report(bugs: type_bug_list, output: str = 'text') -> None:
     if output == 'slack':
         for bug in bugs:
-            click.echo("<{}|{}> - {:<25s} ".format(bug.weburl, bug.bug_id, bug.component))
+            click.echo("<{}|{}> - {:<25s} ".format(bug.weburl, bug.id, bug.component))
 
     elif output == 'json':
         print(json.dumps(
             [
                 {
-                    "id": bug.bug_id,
+                    "id": bug.id,
                     "component": bug.component,
                     "status": bug.status,
                     "date": str(bug.creation_time_parsed),
@@ -436,7 +436,7 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
             created_date = bug.creation_time_parsed
             days_ago = (datetime.now(timezone.utc) - created_date).days
             cf_pm_score = bug.cf_pm_score if hasattr(bug, "cf_pm_score") else '?'
-            click.echo("{:<13s} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.bug_id,
+            click.echo("{:<13s} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(str(bug.id),
                                                                                      bug.component,
                                                                                      bug.status,
                                                                                      cf_pm_score,
@@ -446,7 +446,7 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
 
 def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool, output: str) -> None:
     LOGGER.info(f"Found {len(bugs)} bugs: ")
-    LOGGER.info(", ".join(sorted(str(b.bug_id) for b in bugs)))
+    LOGGER.info(", ".join(sorted(str(b.id) for b in bugs)))
     if report:
         print_report(bugs, output=output)
 
