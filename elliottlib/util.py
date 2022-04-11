@@ -242,14 +242,18 @@ def parallel_results_with_progress(inputs, func, file=None):
     return results
 
 
-def get_target_release(bugs):
+def get_target_release(bugs) -> str:
     """
     Pass in a list of bugs attached to an advisory and get
     the target release version back
+
+    :param bugs: List[Bug] instance
     """
     invalid_bugs = []
     target_releases = set()
+
     for bug in bugs:
+        print(f'*** {bug.target_release}')
         # make sure it's a list with a valid str value
         valid_target_rel = isinstance(bug.target_release, list) and len(bug.target_release) > 0 and \
             re.match(r'(\d+.\d+.[0|z])', bug.target_release[0])
@@ -261,15 +265,15 @@ def get_target_release(bugs):
     if invalid_bugs:
         err = 'bug.target_release should be a list with a string matching regex (digit+.digit+.[0|z])'
         for b in invalid_bugs:
-            err += f'\n bug.id: {b.id}, bug.target_release: {b.target_release} '
-        return '', err
+            err += f'\n bug: {b.bug_id}, target_release: {b.target_release} '
+        raise ValueError(err)
 
     if len(target_releases) != 1:
-        err = f'Found different target_release values for tracker bugs: {target_releases}. ' \
+        err = f'Found different target_release values for bugs: {target_releases}. ' \
               'There should be only 1 target release for all bugs. Fix the offending bug(s) and try again.'
-        return '', err
+        raise ValueError(err)
 
-    return target_releases.pop(), ''
+    return target_releases.pop()
 
 
 def get_release_version(pv):

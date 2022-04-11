@@ -1,6 +1,7 @@
 import click
+import sys
 
-from elliottlib import Runtime, errata, logutil
+from elliottlib import Runtime, errata, logutil, util
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, find_default_advisory, use_default_advisory_option
@@ -62,8 +63,18 @@ For attaching use --advisory, --use-default-advisory <TYPE>
 
     runtime.initialize()
 
+    version = f'{runtime.group_config.vars.MAJOR}.{runtime.group_config.vars.MINOR}'
+
     if use_jira:
-        jira_config = JIRABugTracker.get_config(runtime)
+        if version != '4.11':
+            jira_config = {
+                'server': "https://issues.stage.redhat.com",
+                'project': 'OCPBUGS',
+                'target_release': [f"{version}.0", f"{version}.z"]
+            }
+        else:
+            jira_config = JIRABugTracker.get_config(runtime)
+
         jira = JIRABugTracker(jira_config)
         bug_tracker = jira
     else:
@@ -74,7 +85,14 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
+    # Check if target release and OCP version match
     bugs = bug_tracker.get_bugs(cli_opts.id_convert_str(bug_ids))
+    target_release = util.get_target_release(bugs)
+
+    if version not in target_release:
+        LOGGER.warning('OCP versions for bugs target release %s and group %s do not match: aborting', target_release, version)
+        sys.exit(1)
+
     LOGGER.info(f"Found {len(bugs)} bugs: ")
     LOGGER.info(", ".join(sorted(str(b.bug_id) for b in bugs)))
     if report:

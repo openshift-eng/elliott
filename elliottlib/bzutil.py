@@ -56,6 +56,7 @@ class JIRABug(Bug):
         self.status = self.bug.fields.status.name
         self.creation_time_parsed = datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
         self.summary = self.bug.fields.summary
+        self.target_release = [x.name for x in self.bug.fields.fixVersions]
 
 
 class BugTracker:
@@ -184,7 +185,7 @@ class BugzillaBugTracker(BugTracker):
         newbug = self._client.createbug(createinfo)
         # change state to VERIFIED, set target release
         try:
-            update = self._client.build_update(status=target_status, target_release=self.config.get('target_release'))
+            update = self._client.build_update(status=target_status, target_release=self.config.get('target_release')[0])
             self._client.update_bugs([newbug.id], update)
         except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
             sleep(5)
@@ -201,7 +202,7 @@ class BugzillaBugTracker(BugTracker):
         :return: Placeholder Bug object
         """
         boilerplate = "Placeholder bug for OCP {} {} release".format(self.config.get('target_release')[0], kind)
-        return self.create_bug(self, boilerplate, boilerplate, "VERIFIED", ["Automation"])
+        return self.create_bug(boilerplate, boilerplate, "VERIFIED", ["Automation"])
 
     def create_textonly(self, bugtitle, bugdescription):
         """Create a text only bug
@@ -210,7 +211,7 @@ class BugzillaBugTracker(BugTracker):
 
         :return: Text only Bug object
         """
-        return self.create_bug(self, bugtitle, bugdescription, "VERIFIED")
+        return self.create_bug(bugtitle, bugdescription, "VERIFIED")
 
 
 def get_highest_impact(trackers, tracker_flaws_map):
