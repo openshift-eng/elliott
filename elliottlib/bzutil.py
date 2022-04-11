@@ -74,6 +74,14 @@ class BugTracker:
 class JIRABugTracker(BugTracker):
     @staticmethod
     def get_config(runtime):
+        version = f'{runtime.group_config.vars.MAJOR}.{runtime.group_config.vars.MINOR}'
+        # TODO: have jira.yml file for all versions 4.6-4.11
+        if version != '4.11':
+            return {
+                'server': "https://issues.stage.redhat.com",
+                'project': 'OCPBUGS',
+                'target_release': [f"{version}.0", f"{version}.z"]
+            }
         return runtime.gitdata.load_data(key='jira').data
 
     def login(self, token_auth=None) -> JIRA:

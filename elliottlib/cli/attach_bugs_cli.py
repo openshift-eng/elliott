@@ -66,15 +66,7 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     version = f'{runtime.group_config.vars.MAJOR}.{runtime.group_config.vars.MINOR}'
 
     if use_jira:
-        if version != '4.11':
-            jira_config = {
-                'server': "https://issues.stage.redhat.com",
-                'project': 'OCPBUGS',
-                'target_release': [f"{version}.0", f"{version}.z"]
-            }
-        else:
-            jira_config = JIRABugTracker.get_config(runtime)
-
+        jira_config = JIRABugTracker.get_config(runtime)
         jira = JIRABugTracker(jira_config)
         bug_tracker = jira
     else:
