@@ -1,29 +1,15 @@
 import unittest
 
-import mock
 from flexmock import flexmock
 import elliottlib.errata as errata_module
 from elliottlib import util
-from elliottlib.cli.find_bugs_cli import mode_list, extras_bugs
+from elliottlib.cli.find_bugs_cli import extras_bugs
 from mock import patch, MagicMock
 from elliottlib.cli.find_bugs_cli import FindBugsMode
 from elliottlib.bzutil import BugzillaBugTracker
 
 
 class TestFindBugsCli(unittest.TestCase):
-    def test_mode_list(self):
-        advisory = 'foo'
-        bugs = [flexmock(id='bar')]
-        report = False
-        noop = False
-
-        flexmock(util).should_receive('green_prefix')
-        flexmock(errata_module).\
-            should_receive("add_bugs_with_retry").\
-            once()
-
-        mode_list(advisory, bugs, report, 'text', noop)
-
     @patch.object(BugzillaBugTracker, 'login', return_value=None, autospec=True)
     @patch.object(BugzillaBugTracker, 'search', return_value=[1, 2], autospec=True)
     def test_find_bugs_mode_search(self, mock_search: MagicMock, mock_login: MagicMock):
