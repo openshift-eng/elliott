@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Set
 
 import click
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, BugTracker, Bug
+from elliottlib.bzutil import BugzillaBugTracker, BugTracker, Bug
 
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import cli_opts
@@ -76,8 +76,8 @@ class FindBugsBlocker(FindBugsMode):
 @use_default_advisory_option
 @click.option("--mode",
               required=True,
-              type=click.Choice(['list', 'sweep', 'qe', 'blocker']),
-              default='list',
+              type=click.Choice(['sweep', 'qe', 'blocker']),
+              default='blocker',
               help='Mode to use to find bugs')
 @click.option("--check-builds",
               required=False,
@@ -95,9 +95,6 @@ class FindBugsBlocker(FindBugsMode):
               required=False,
               type=click.Choice(constants.VALID_BUG_STATES),
               help="Exclude bugs of this status")
-@click.option("--id", 'bug_ids', metavar='<BUGID>', default=None,
-              multiple=True, required=False,
-              help="Bug IDs to add, required for LIST mode.")
 @click.option("--cve-trackers",
               required=False,
               default=None,
@@ -117,8 +114,7 @@ class FindBugsBlocker(FindBugsMode):
               help='Attaches bugs found to their correct default advisories, e.g. operator-related bugs go to '
                    '"extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
 @click.option('--brew-event', type=click.INT, required=False,
-              help='Only SWEEP bugs that have changed to the desired status before the Brew event ID; does not apply '
-                   'to list or diff mode')
+              help='Only in sweep mode: SWEEP bugs that have changed to the desired status before the Brew event')
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
@@ -127,8 +123,7 @@ class FindBugsBlocker(FindBugsMode):
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, include_status, exclude_status,
                   bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY. Bugs can be
-"swept" into advisories either automatically (--mode sweep), or by
-manually specifying one or more bugs using --mode list with the --id option.
+"swept" into advisories automatically (--mode sweep).
 Use cases are described below:
 
 SWEEP: For this use-case the --group option MUST be provided. The
@@ -137,11 +132,6 @@ for bugs claimed to be fixed, but not yet attached to advisories.
 --check-builds flag forces bug validation with attached builds to rpm advisory.
 It assumes builds have been attached and only attaches bugs with matching builds.
 default --status: ['MODIFIED', 'ON_QA', 'VERIFIED']
-
-LIST: The --group option is not required if you are specifying advisory
-manually. Provide one or more --id's for manual bug addition. In LIST
-mode you must provide a list of IDs to perform operation on with the --id option.
-Supported operations: report with --report, attach with --add or --into-default-advisories
 
 QE: Find MODIFIED bugs for the target-releases, and set them to ON_QA.
 The --group option MUST be provided. Cannot be used in combination
@@ -174,17 +164,6 @@ advisory with the --add option.
 \b
     $ elliott -g openshift-4.8 --assembly 4.8.32 find-bugs --mode sweep --use-default-advisory rpm
 
-    Add given list of bugs to the appropriate advisories. This would apply sweep logic to the given bugs
-    grouping them to be attached to rpm/extras/image advisories
-
-\b
-    $ elliott -g openshift-4.8 find-bugs --mode list --id 8675309,7001337 --into-default-advisories
-
-    Attach two bugs to the advisory 123456. Note that --group is not required since we're not auto searching:
-
-\b
-    $ elliott find-bugs --mode list --id 8675309 --id 7001337 --add 123456
-
 
     Find bugs for 4.6 that are in MODIFIED state, and set them to ON_QA:
 
@@ -196,12 +175,6 @@ advisory with the --add option.
     $ elliott -g openshift-4.6 --mode blocker --report
 """
     count_advisory_attach_flags = sum(map(bool, [advisory, default_advisory_type, into_default_advisories]))
-
-    if mode != 'list' and len(bug_ids) > 0:
-        raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
-
-    if mode == 'list' and len(bug_ids) == 0:
-        raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
 
     if count_advisory_attach_flags > 1:
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
@@ -227,12 +200,6 @@ advisory with the --add option.
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
-
-    if mode == 'list':
-        bugs = bugzilla.get_bugs(cli_opts.id_convert_str(bug_ids))
-        if not into_default_advisories:
-            mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop, output=output)
-            return
 
     if mode == 'sweep':
         find_bugs_obj = FindBugsSweep(cve_trackers=cve_trackers)
@@ -439,16 +406,6 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
                                                                                      cf_pm_score,
                                                                                      days_ago,
                                                                                      bug.summary[:60]))
-
-
-def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool, output: str) -> None:
-    LOGGER.info(f"Found {len(bugs)} bugs: ")
-    LOGGER.info(", ".join(sorted(str(b.id) for b in bugs)))
-    if report:
-        print_report(bugs, output=output)
-
-    if advisory:
-        errata.add_bugs_with_retry(advisory, bugs, noop=noop)
 
 
 def get_sweep_cutoff_timestamp(runtime, cli_brew_event):
