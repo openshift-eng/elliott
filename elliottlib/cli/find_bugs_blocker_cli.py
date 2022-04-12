@@ -26,7 +26,7 @@ from elliottlib.util import green_prefix
               default='text',
               help='Display format for output')
 @click.pass_obj
-def find_bugs_blocker_cli(runtime: Runtime, include_status, exclude_status, report, output):
+def find_bugs_blocker_cli(runtime: Runtime, include_status, exclude_status, output):
     """
 List active OCP blocker bugs for the target-releases.
 default bug status to search: ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
@@ -59,5 +59,5 @@ Use --exclude_status to filter out from default status list.
         green_prefix(f"Found {len(bugs)} bugs: ")
         click.echo(", ".join(sorted(str(b.id) for b in bugs)))
 
-    if report:
+    if bugs:
         print_report(bugs, output)
