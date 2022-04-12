@@ -97,10 +97,7 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     LOGGER.info(f"Found {len(bugs)} bugs: ")
     LOGGER.info(", ".join(sorted(str(b.id) for b in bugs)))
     if report:
-        #print_report(bugs, output=output)
-        for b in bugs:
-            pprint(b.bug.raw['fields'])
-
+        print_report(bugs, output=output)
 
     if advisory:
         errata.add_bugs_with_retry(advisory, bugs, noop=noop)
