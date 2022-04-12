@@ -47,14 +47,9 @@ class FindBugsSweep(FindBugsMode):
 
 
 class FindBugsQE(FindBugsMode):
-    def __init__(self, cve_trackers):
-        super().__init__(status={'MODIFIED'}, cve_trackers=cve_trackers)
-
-
-class FindBugsQE(FindBugsMode):
-    def __init__(self):
+    def __init__(self, cve_trackers=True):
         super().__init__(
-            cve_trackers=True,
+            cve_trackers=cve_trackers,
             status={'MODIFIED'}
         )
 
