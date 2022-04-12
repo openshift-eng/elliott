@@ -19,7 +19,7 @@ import os
 from bugzilla.bug import Bug
 from koji import ClientSession
 
-from elliottlib import constants, exceptions, exectools, logutil
+from elliottlib import constants, exceptions, exectools, logutil, bzutil
 from elliottlib.metadata import Metadata
 from elliottlib.util import isolate_timestamp_in_release, red_print
 
@@ -31,7 +31,7 @@ class Bug:
         self.bug = bug_obj
 
     @staticmethod
-    def get_target_release(bugs) -> str:
+    def get_target_release(bugs: List[bzutil.Bug]) -> str:
         """
         Pass in a list of bugs and get their target release version back.
         Raises exception if they have different target release versions set.
@@ -40,6 +40,9 @@ class Bug:
         """
         invalid_bugs = []
         target_releases = set()
+
+        if not bugs:
+            raise ValueError("bugs should be a non empty list")
 
         for bug in bugs:
             # make sure it's a list with a valid str value
@@ -76,14 +79,10 @@ class BugzillaBug(Bug):
 
 
 class JIRABug(Bug):
-    def _url(self):
-        o = urlparse(self.bug.self)
-        return o._replace(path=f"/browse/{self.id}").geturl()
-
-    def __init__(self, bug_obj):
+    def __init__(self, bug_obj: Issue):
         super().__init__(bug_obj)
         self.id = self.bug.key
-        self.weburl = self._url()
+        self.weburl = self.bug.permalink()
         self.component = self.bug.fields.components[0].name
         self.status = self.bug.fields.status.name
         self.creation_time_parsed = datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
@@ -100,6 +99,9 @@ class BugTracker:
         return self.config.get('target_release')
 
     def search(self):
+        raise NotImplementedError
+
+    def blocker_search(self):
         raise NotImplementedError
 
 
@@ -135,15 +137,17 @@ class JIRABugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs) -> JIRABug:
         return JIRABug(self._client.issue(bugid, **kwargs))
 
-    def get_bugs(self, bugids):
-        return self.search(bug_list=bugids)
+    def get_bugs(self, bugids, strict=True, verbose=False, **kwargs):
+        bugs = self._search(self._query(bug_list=bugids), verbose=verbose, **kwargs)
+        if strict and len(bugs) < len(bugids):
+            raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
+        return bugs
 
-    def search(self,
-               bug_list: Optional[List] = None,
+    def _query(self, bug_list: Optional[List] = None,
                status: Optional[List] = None,
                target_release: Optional[List] = None,
                include_labels: Optional[List] = None,
-               exclude_labels: Optional[List] = None) -> List[Issue]:
+               exclude_labels: Optional[List] = None) -> str:
         query = f"project={self._project}"
         if bug_list:
             query += f" and issue in ({','.join(bug_list)})"
@@ -155,7 +159,41 @@ class JIRABugTracker(BugTracker):
             query += f" and labels in ({','.join(exclude_labels)})"
         if exclude_labels:
             query += f" and labels not in ({','.join(exclude_labels)})"
-        return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False)]
+        return query
+
+    def _search(self, query, verbose=False, **kwargs) -> List[JIRABug]:
+        if verbose:
+            click.echo(query)
+        return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False, **kwargs)]
+
+    def blocker_search(self, status, search_filter='default', filter_out_cve_trackers=False, verbose=False, **kwargs):
+        include_labels = ['blocker+']
+        exclude_labels = ['SecurityTracking'] if filter_out_cve_trackers else []
+        query = self._query(
+            status=status,
+            include_labels=include_labels,
+            exclude_labels=exclude_labels,
+            target_release=self.target_release()
+        )
+        return self._search(query, verbose, **kwargs)
+
+    def search(self, status, search_filter='default', filter_out_cve_trackers=False, verbose=False, **kwargs):
+        exclude_labels = ['SecurityTracking'] if filter_out_cve_trackers else []
+        query = self._query(
+            status=status,
+            exclude_labels=exclude_labels
+        )
+        return self._search(query, verbose, **kwargs)
+
+    def search_with_target_release(self, status, search_filter='default', filter_out_cve_trackers=False,
+                                   verbose=False, **kwargs):
+        exclude_labels = ['SecurityTracking'] if filter_out_cve_trackers else []
+        query = self._query(
+            status=status,
+            exclude_labels=exclude_labels,
+            target_release=self.target_release()
+        )
+        return self._search(query, verbose, **kwargs)
 
 
 class BugzillaBugTracker(BugTracker):
@@ -177,35 +215,34 @@ class BugzillaBugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
-    def get_bugs(self, bugids, **kwargs):
-        return [BugzillaBug(b) for b in self._client.getbugs(bugids, **kwargs)]
+    def get_bugs(self, bugids, verbose=False, **kwargs):
+        return [BugzillaBug(b) for b in self._client.getbugs(bugids, verbose=verbose, **kwargs)]
 
     def client(self):
         return self._client
 
-    def search(self, status, search_filter='default', flag=None, filter_out_security_bugs=True, verbose=False):
-        """Search the provided target_release's for bugs in the specified states
-
-        :param status: The status(es) of bugs to search for
-        :param search_filter: Which search filter from bz_data to use if multiple are specified
-        :param flag: The Bugzilla flag (string) of bugs to search for. Flags are similar to status but are categorically
-        different. https://bugzilla.readthedocs.io/en/latest/using/understanding.html#flags
-        :param filter_out_security_bugs: Boolean on whether to filter out bugs tagged with the SecurityTracking keyword.
-
-        :return: A list of Bug objects
-        """
-        query_url = _construct_query_url(self.config, status, search_filter, flag=flag)
+    def blocker_search(self, status, search_filter='default', filter_out_cve_trackers=False, verbose=False):
+        query = _construct_query_url(self.config, status, search_filter, flag='blocker+')
         fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
-
-        if filter_out_security_bugs:
-            query_url.addKeyword('SecurityTracking', 'nowords')
+        if filter_out_cve_trackers:
+            query.addKeyword('SecurityTracking', 'nowords')
         else:
             fields.extend(['whiteboard', 'keywords'])
+        return self._search(query, fields, verbose)
 
+    def search(self, status, search_filter='default', filter_out_cve_trackers=False, verbose=False):
+        query = _construct_query_url(self.config, status, search_filter)
+        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
+        if filter_out_cve_trackers:
+            query.addKeyword('SecurityTracking', 'nowords')
+        else:
+            fields.extend(['whiteboard', 'keywords'])
+        return self._search(query, fields, verbose)
+
+    def _search(self, query, fields, verbose=False):
         if verbose:
-            click.echo(query_url)
-
-        return [BugzillaBug(b) for b in _perform_query(self._client, query_url, include_fields=fields)]
+            click.echo(query)
+        return [BugzillaBug(b) for b in _perform_query(self._client, query, include_fields=fields)]
 
     def get_bugs_map(self, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
         id_bug_map: Dict[int, Bug] = {}

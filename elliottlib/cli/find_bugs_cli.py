@@ -35,8 +35,7 @@ class FindBugsMode:
     def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
         return bug_tracker_obj.search(
             self.status,
-            flag=self.search_flag,
-            filter_out_security_bugs=not self.cve_trackers,
+            filter_out_cve_trackers=not self.cve_trackers,
             verbose=verbose
         )
 
@@ -47,8 +46,11 @@ class FindBugsSweep(FindBugsMode):
 
 
 class FindBugsQE(FindBugsMode):
-    def __init__(self, cve_trackers):
-        super().__init__(status={'MODIFIED'}, cve_trackers=cve_trackers)
+    def __init__(self, cve_trackers=True):
+        super().__init__(
+            cve_trackers=cve_trackers,
+            status={'MODIFIED'}
+        )
 
 
 class FindBugsBlocker(FindBugsMode):
@@ -57,6 +59,13 @@ class FindBugsBlocker(FindBugsMode):
             cve_trackers=True,
             status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'},
             search_flag='blocker+'
+        )
+
+    def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
+        return bug_tracker_obj.blocker_search(
+            self.status,
+            filter_out_cve_trackers=not self.cve_trackers,
+            verbose=verbose
         )
 
 

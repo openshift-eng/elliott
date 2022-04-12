@@ -83,10 +83,11 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    # Check if target release and OCP version match
-    bugs = bug_tracker.get_bugs(cli_opts.id_convert_str(bug_ids))
-    target_release = Bug.get_target_release(bugs)
+    bug_ids = cli_opts.id_convert_str(bug_ids)
+    bugs = bug_tracker.get_bugs(bug_ids, verbose=runtime.debug)
 
+    # Check if target release and OCP version match
+    target_release = Bug.get_target_release(bugs)
     if version not in target_release:
         LOGGER.error('Target release version for given bugs (%s) does not match the group (%s): aborting',
                      target_release, version)
