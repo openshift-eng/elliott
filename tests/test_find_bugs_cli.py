@@ -24,8 +24,7 @@ class TestFindBugsCli(unittest.TestCase):
         find_bugs.exclude_status(['foo'])
         bugs = find_bugs.search(bug_tracker_obj=bug_tracker)
         self.assertEqual([1, 2], bugs)
-        mock_search.assert_called_once_with(bug_tracker, {'bar', 'alpha'}, filter_out_cve_trackers=True,
-                                            verbose=False)
+        mock_search.assert_called_once_with(bug_tracker, {'bar', 'alpha'}, verbose=False)
 
 
 class TestExtrasBugs(unittest.TestCase):

@@ -18,10 +18,8 @@ LOGGER = logutil.getLogger(__name__)
 
 
 class FindBugsMode:
-    def __init__(self, status: List, cve_trackers: bool = False, search_flag: str = None):
+    def __init__(self, status: List):
         self.status = set(status)
-        self.cve_trackers = cve_trackers
-        self.search_flag = search_flag
 
     def include_status(self, status: List):
         self.status |= set(status)
@@ -32,20 +30,18 @@ class FindBugsMode:
     def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
         return bug_tracker_obj.search(
             self.status,
-            filter_out_cve_trackers=not self.cve_trackers,
             verbose=verbose
         )
 
 
 class FindBugsSweep(FindBugsMode):
-    def __init__(self, cve_trackers):
-        super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'}, cve_trackers=cve_trackers)
+    def __init__(self):
+        super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'})
 
 
 class FindBugsQE(FindBugsMode):
-    def __init__(self, cve_trackers=True):
+    def __init__(self):
         super().__init__(
-            cve_trackers=cve_trackers,
             status={'MODIFIED'}
         )
 
@@ -53,15 +49,12 @@ class FindBugsQE(FindBugsMode):
 class FindBugsBlocker(FindBugsMode):
     def __init__(self):
         super().__init__(
-            cve_trackers=True,
-            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'},
-            search_flag='blocker+'
+            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'}
         )
 
     def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
         return bug_tracker_obj.blocker_search(
             self.status,
-            filter_out_cve_trackers=not self.cve_trackers,
             verbose=verbose
         )
 
@@ -139,7 +132,6 @@ The --group option MUST be provided. Cannot be used in combination
 with --add, --use-default-advisory, --into-default-advisories.
 default --status: ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
 Use --exclude_status to filter out from default status list.
-By default --cve-trackers is True.
 
 Using --use-default-advisory without a value set for the matching key
 in the build-data will cause an error and elliott will exit in a
@@ -183,6 +175,10 @@ advisory with the --add option.
         raise click.BadParameter("Mode does not operate on an advisory. Do not specify any of "
                                  "`--use-default-advisory`, `--add`, or `--into-default-advisories`")
 
+    if cve_trackers:
+        LOGGER.warning('--cve-trackers would soon be deprecated. cve trackers are now included by default in all '
+                       'searches.')
+
     runtime.initialize(mode="both")
 
     bz_config = BugzillaBugTracker.get_config(runtime)
@@ -199,9 +195,9 @@ advisory with the --add option.
         advisory = find_default_advisory(runtime, default_advisory_type)
 
     if mode == 'sweep':
-        find_bugs_obj = FindBugsSweep(cve_trackers=cve_trackers)
+        find_bugs_obj = FindBugsSweep()
     elif mode == 'qe':
-        find_bugs_obj = FindBugsQE(cve_trackers=cve_trackers)
+        find_bugs_obj = FindBugsQE()
     elif mode == 'blocker':
         find_bugs_obj = FindBugsBlocker()
 
@@ -277,7 +273,7 @@ advisory with the --add option.
     else:  # for 4.x
         # sweep rpm cve trackers into "rpm" advisory
         rpm_bugs = {}
-        if mode == 'sweep' and cve_trackers:
+        if mode == 'sweep':
             rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
             green_prefix("RPM CVEs found: ")
             click.echo(sorted(b.id for b in rpm_bugs))

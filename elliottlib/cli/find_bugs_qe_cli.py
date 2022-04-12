@@ -3,7 +3,7 @@ import click
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib import (Runtime, bzutil, logutil)
 from elliottlib.cli.common import cli
-from elliottlib.cli.find_bugs_cli import FindBugsMode, filter_bugs
+from elliottlib.cli.find_bugs_cli import FindBugsMode
 from elliottlib.util import green_prefix
 
 pass_runtime = click.make_pass_decorator(Runtime)
@@ -55,10 +55,8 @@ def find_bugs_qe_cli(runtime: Runtime, use_jira, noop):
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
-    filtered_bugs = filter_bugs(bugs, major_version, minor_version, runtime)
-    green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
-    click.echo(", ".join(sorted(str(b.id) for b in filtered_bugs)))
-    bugs = filtered_bugs
+    green_prefix(f"Found {len(bugs)} bugs: ")
+    click.echo(", ".join(sorted(str(b.id) for b in bugs)))
 
     if noop:
         click.echo('Dry run: Would have changed bugs state to ON_QA')
