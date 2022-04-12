@@ -98,17 +98,24 @@ class JIRABugTracker(BugTracker):
 
     def create_bug(self, bugtitle, bugdescription, target_status, keywords: List) -> JIRABug:
         issueinfo = {
-            'project':{'key':self.config.get('product')},
-            'issuetype':{'name':'Bug'},
-            'fixVersions':{'name':self.config.get('version')[0]},
-            'components':{'name':'Release'},
-            'summary':bugtitle,
-            'labels':keywords,
-            'description':bugdescription,
-            }
+            'project': {'key': self.config.get('product')},
+            'issuetype': {'name': 'Bug'},
+            'fixVersions': {'name': self.config.get('version')[0]},
+            'components': {'name': 'Release'},
+            'summary': bugtitle,
+            'labels': keywords,
+            'description': bugdescription}
         newbug = self._client.create_issue(fields=issueinfo)
         self._client.transition_issue(newbug, 'VERIFIED')
         return JIRABug(newbug)
+
+    def get_remotelinks(self, bugid):
+        remotelinks = self._client.remote_links(self._client.issue(bugid))
+        linkdict = {}
+        for link in remotelinks:
+            if link.__contains__('relationship'):
+                linkdict[link.relationship] = link.object.url
+        return linkdict
 
     def update_bug(self, bugid, status):
         self._client.transition_issue(self._client.issue(bugid), status)
