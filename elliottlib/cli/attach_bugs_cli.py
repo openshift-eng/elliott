@@ -6,6 +6,7 @@ from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, find_default_advisory, use_default_advisory_option
 from elliottlib.cli.find_bugs_cli import print_report
+from pprint import pprint
 
 
 LOGGER = logutil.getLogger(__name__)
@@ -83,10 +84,11 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    # Check if target release and OCP version match
-    bugs = bug_tracker.get_bugs(cli_opts.id_convert_str(bug_ids))
-    target_release = Bug.get_target_release(bugs)
+    bug_ids = cli_opts.id_convert_str(bug_ids)
+    bugs = bug_tracker.get_bugs(bug_ids, verbose=runtime.debug)
 
+    # Check if target release and OCP version match
+    target_release = Bug.get_target_release(bugs)
     if version not in target_release:
         LOGGER.error('Target release version for given bugs (%s) does not match the group (%s): aborting',
                      target_release, version)
@@ -95,7 +97,10 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     LOGGER.info(f"Found {len(bugs)} bugs: ")
     LOGGER.info(", ".join(sorted(str(b.id) for b in bugs)))
     if report:
-        print_report(bugs, output=output)
+        #print_report(bugs, output=output)
+        for b in bugs:
+            pprint(b.bug.raw['fields'])
+
 
     if advisory:
         errata.add_bugs_with_retry(advisory, bugs, noop=noop)
