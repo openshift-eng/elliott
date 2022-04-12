@@ -10,7 +10,6 @@ import xmlrpc.client
 from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
-from urllib.parse import urlparse
 from jira import JIRA, Issue
 
 import bugzilla
