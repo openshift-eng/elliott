@@ -209,8 +209,8 @@ class BugzillaBugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
-    def get_bugs(self, bugids, verbose=False, **kwargs):
-        return [BugzillaBug(b) for b in self._client.getbugs(bugids, verbose=verbose, **kwargs)]
+    def get_bugs(self, bugids, **kwargs):
+        return [BugzillaBug(b) for b in self._client.getbugs(bugids, **kwargs)]
 
     def client(self):
         return self._client
