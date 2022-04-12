@@ -1,15 +1,12 @@
 import json
-
-from elliottlib.assembly import assembly_issues_config
 import re
+import click
 from datetime import datetime, timezone
 from typing import List, Set
 
-import click
+from elliottlib.assembly import assembly_issues_config
 from elliottlib.bzutil import BugzillaBugTracker, BugTracker, Bug
-
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
-from elliottlib.cli import cli_opts
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.exceptions import ElliottFatalError
@@ -121,7 +118,7 @@ class FindBugsBlocker(FindBugsMode):
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, include_status, exclude_status,
-                  bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, noop):
+                  cve_trackers, report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY. Bugs can be
 "swept" into advisories automatically (--mode sweep).
 Use cases are described below:
@@ -245,11 +242,9 @@ advisory with the --add option.
         yellow_print(f"The following bugs will be excluded because they are explicitly defined in the assembly config: {excluded_bug_ids}")
         bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
-    filtered_bugs = filter_bugs(bugs, major_version, minor_version, runtime)
     if output == 'text':
-        green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
-        click.echo(", ".join(sorted(str(b.id) for b in filtered_bugs)))
-    bugs = filtered_bugs
+        green_prefix(f"Found {len(bugs)} bugs: ")
+        click.echo(", ".join(sorted(str(b.id) for b in bugs)))
 
     if mode == 'qe':
         for bug in bugs:
@@ -346,29 +341,6 @@ def extras_bugs(bugs: type_bug_list) -> type_bug_list:
         elif hasattr(bug, 'sub_component') and (bug.component, bug.sub_component) in extras_subcomponents:
             extra_bugs.add(bug)
     return extra_bugs
-
-
-def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, runtime) -> type_bug_list:
-    """returns a list of bugs that should be processed"""
-    r = []
-    ignored_repos = set()  # GitHub repos that should be ignored
-    if major_version == 4 and minor_version == 5:
-        # per https://issues.redhat.com/browse/ART-997: these repos should have their release-4.5 branches ignored by ART:
-        ignored_repos = {
-            "https://github.com/openshift/aws-ebs-csi-driver",
-            "https://github.com/openshift/aws-ebs-csi-driver-operator",
-            "https://github.com/openshift/cloud-provider-openstack",
-            "https://github.com/openshift/csi-driver-nfs",
-            "https://github.com/openshift/csi-driver-manila-operator"
-        }
-    for bug in bugs:
-        external_links = [ext["type"]["full_url"].replace("%id%", ext["ext_bz_bug_id"]) for ext in bug.external_bugs]  # https://github.com/python-bugzilla/python-bugzilla/blob/7aa70edcfea9b524cd8ac51a891b6395ca40dc87/bugzilla/_cli.py#L750
-        public_links = [runtime.get_public_upstream(url)[0] for url in external_links]  # translate openshift-priv org to openshift org when comparing to filter (i.e. prow may link to a PR on the private org).
-        # if a bug has 1 or more public_links, we should ignore the bug if ALL of the public_links are ANY of `ignored_repos`
-        if public_links and all(map(lambda url: any(map(lambda repo: url != repo and url.startswith(repo), ignored_repos)), public_links)):
-            continue
-        r.append(bug)
-    return r
 
 
 def print_report(bugs: type_bug_list, output: str = 'text') -> None:
