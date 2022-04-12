@@ -166,31 +166,25 @@ class JIRABugTracker(BugTracker):
             click.echo(query)
         return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False, **kwargs)]
 
-    def blocker_search(self, status, search_filter='default', filter_out_cve_trackers=False, verbose=False, **kwargs):
+    def blocker_search(self, status, search_filter='default', verbose=False, **kwargs):
         include_labels = ['blocker+']
-        exclude_labels = ['SecurityTracking'] if filter_out_cve_trackers else []
         query = self._query(
             status=status,
             include_labels=include_labels,
-            exclude_labels=exclude_labels,
             target_release=self.target_release()
         )
         return self._search(query, verbose, **kwargs)
 
-    def search(self, status, search_filter='default', filter_out_cve_trackers=False, verbose=False, **kwargs):
-        exclude_labels = ['SecurityTracking'] if filter_out_cve_trackers else []
+    def search(self, status, search_filter='default', verbose=False, **kwargs):
         query = self._query(
             status=status,
-            exclude_labels=exclude_labels
         )
         return self._search(query, verbose, **kwargs)
 
-    def search_with_target_release(self, status, search_filter='default', filter_out_cve_trackers=False,
+    def search_with_target_release(self, status, search_filter='default',
                                    verbose=False, **kwargs):
-        exclude_labels = ['SecurityTracking'] if filter_out_cve_trackers else []
         query = self._query(
             status=status,
-            exclude_labels=exclude_labels,
             target_release=self.target_release()
         )
         return self._search(query, verbose, **kwargs)
@@ -215,28 +209,22 @@ class BugzillaBugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
-    def get_bugs(self, bugids, verbose=False, **kwargs):
-        return [BugzillaBug(b) for b in self._client.getbugs(bugids, verbose=verbose, **kwargs)]
+    def get_bugs(self, bugids, **kwargs):
+        return [BugzillaBug(b) for b in self._client.getbugs(bugids, **kwargs)]
 
     def client(self):
         return self._client
 
-    def blocker_search(self, status, search_filter='default', filter_out_cve_trackers=False, verbose=False):
+    def blocker_search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter, flag='blocker+')
         fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
-        if filter_out_cve_trackers:
-            query.addKeyword('SecurityTracking', 'nowords')
-        else:
-            fields.extend(['whiteboard', 'keywords'])
+        fields.extend(['whiteboard', 'keywords'])
         return self._search(query, fields, verbose)
 
-    def search(self, status, search_filter='default', filter_out_cve_trackers=False, verbose=False):
+    def search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter)
         fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
-        if filter_out_cve_trackers:
-            query.addKeyword('SecurityTracking', 'nowords')
-        else:
-            fields.extend(['whiteboard', 'keywords'])
+        fields.extend(['whiteboard', 'keywords'])
         return self._search(query, fields, verbose)
 
     def _search(self, query, fields, verbose=False):
