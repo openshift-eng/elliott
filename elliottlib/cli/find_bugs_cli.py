@@ -176,7 +176,7 @@ advisory with the --add option.
                                  "`--use-default-advisory`, `--add`, or `--into-default-advisories`")
 
     if cve_trackers:
-        LOGGER.warning('--cve-trackers would soon be deprecated. cve trackers are now included by default in all '
+        LOGGER.warning('--cve-trackers is deprecated. cve trackers are now included by default in all '
                        'searches.')
 
     runtime.initialize(mode="both")
