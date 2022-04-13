@@ -328,7 +328,8 @@ def extras_bugs(bugs: type_bug_list) -> type_bug_list:
         "Node Feature Discovery Operator"
     }  # we will probably find more
     extras_subcomponents = {
-        ("Networking", "SR-IOV")
+        ("Networking", "SR-IOV"),
+        ("Storage", "Local Storage Operator"),
     }
     extra_bugs = set()
     for bug in bugs:
