@@ -184,10 +184,18 @@ advisory with the --add option.
     if not (into_default_advisories or default_advisory_type):
         return
 
-    bugs_by_kind = categorize_bugs_by_kind(bugs, major_version, check_builds)
+    if not check_builds:
+        rpm_advisory = False
+    else:
+        rpm_advisory = find_default_advisory(runtime, 'rpm')
+    bugs_by_kind = categorize_bugs_by_kind(bugs, rpm_advisory=rpm_advisory, major_version=major_version,
+                                           check_builds=check_builds)
 
-    if default_advisory_type and bugs_by_kind.get(default_advisory_type):
-        errata.add_bugs_with_retry(advisory, bugs_by_kind[default_advisory_type], noop=noop)
+    if default_advisory_type:
+        if bugs_by_kind.get(default_advisory_type):
+            errata.add_bugs_with_retry(advisory, bugs_by_kind[default_advisory_type], noop=noop)
+        else:
+            click.echo(f"0 bugs found for kind={default_advisory_type}. Exiting")
     elif into_default_advisories:
         for impetus, bugs in bugs_by_kind.items():
             if bugs:
@@ -198,7 +206,7 @@ advisory with the --add option.
 type_bug_list = List[Bug]
 
 
-def categorize_bugs_by_kind(bugs: List, major_version: int, check_builds: bool = True):
+def categorize_bugs_by_kind(bugs: List, rpm_advisory: bool = False, major_version: int = 4, check_builds: bool = True):
     # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
     bugs_by_kind = {
         "rpm": set(),
@@ -207,7 +215,7 @@ def categorize_bugs_by_kind(bugs: List, major_version: int, check_builds: bool =
     }
 
     # for 3.x, all bugs should go to the rpm advisory
-    if major_version < 4:
+    if int(major_version) < 4:
         bugs_by_kind["rpm"] = set(bugs)
     else:  # for 4.x, sweep rpm cve trackers into rpm advisory
         rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
@@ -217,9 +225,9 @@ def categorize_bugs_by_kind(bugs: List, major_version: int, check_builds: bool =
         if rpm_bugs:
             # if --check-builds flag is set
             # only attach bugs that have corresponding brew builds attached to rpm advisory
-            if check_builds:
+            if check_builds and rpm_advisory:
                 click.echo("Validating bugs with builds attached to the rpm advisory")
-                attached_builds = errata.get_advisory_nvrs(runtime.group_config.advisories["rpm"])
+                attached_builds = errata.get_advisory_nvrs(rpm_advisory)
                 packages = attached_builds.keys()
                 not_found = []
                 for bug, package_name in rpm_bugs.items():
@@ -242,7 +250,7 @@ def categorize_bugs_by_kind(bugs: List, major_version: int, check_builds: bool =
 
         # all other bugs should go into "image" advisory
         bugs_by_kind["image"] = set(bugs) - bugs_by_kind["extras"] - rpm_bugs.keys()
-        return bugs_by_kind
+    return bugs_by_kind
 
 
 def extras_bugs(bugs: type_bug_list) -> type_bug_list:
