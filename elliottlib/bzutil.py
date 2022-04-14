@@ -30,6 +30,9 @@ class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
+    def creation_time_parsed(self):
+        raise NotImplementedError
+
     @staticmethod
     def get_target_release(bugs: List[bzutil.Bug]) -> str:
         """
