@@ -143,6 +143,16 @@ class BugValidator:
             self._complain(f"On advisory {advisory_id}, {len(extra_flaw_ids)} flaw bugs are attached but there are no tracker bugs referencing them: {', '.join(sorted(map(str, extra_flaw_ids)))}."
                            " You probably need to drop those flaw bugs or attach the corresponding tracker bugs.")
 
+        # Check if advisory is of the expected type
+        advisory_info = await self.errata_api.get_advisory(advisory_id)
+        advisory_type = next(iter(advisory_info["errata"].keys())).upper()  # should be one of [RHBA, RHSA, RHEA]
+        if not first_fix_flaw_ids:
+            if advisory_type == "RHSA":
+                self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has no first-fix flaw bugs. It should be converted to RHBA or RHEA.")
+            return  # The remaining checks are not needed for a non-RHSA.
+        if advisory_type != "RHSA":
+            self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has first-fix flaw bugs {first_fix_flaw_ids}. It should be converted to RHSA.")
+
         # Check if flaw bugs are associated with specific builds
         cve_components_mapping: Dict[str, Set[str]] = {}
         for tracker in attached_trackers:
@@ -169,13 +179,13 @@ class BugValidator:
                                " You may need to explictly exclude those Brew components from the CVE mapping or attach the corresponding tracker bugs.")
 
         # Check if flaw bugs match the CVE field of the advisory
-        advisory_cves = await self.errata_api.get_cves(advisory_id)
+        advisory_cves = advisory_info["content"]["content"]["cve"].split()
         extra_cves = cve_components_mapping.keys() - advisory_cves
         if extra_cves:
             self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are already attached but they are not listed in advisory's `CVE Names` field: {', '.join(sorted(extra_cves))}")
         missing_cves = advisory_cves - cve_components_mapping.keys()
         if missing_cves:
-            self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in in advisory's `CVE Names` field: {', '.join(sorted(extra_cves))}")
+            self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in advisory's `CVE Names` field: {', '.join(sorted(missing_cves))}")
 
     async def get_attached_bugs(self, advisory_ids: Iterable[int]) -> Dict[int, Set[Bug]]:
         """ Get bugs attached to specified advisories
