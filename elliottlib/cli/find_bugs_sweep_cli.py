@@ -96,7 +96,7 @@ advisory with the --add option.
     List bugs that WOULD be swept into advisories (NOOP):
 
 \b
-    $ elliott --group openshift-4.8 --assembly 4.8.32 find-bugs:sweep
+    $ elliott -g openshift-4.8 --assembly 4.8.32 find-bugs:sweep
 
     Sweep bugs for an assembly into the advisories defined
 
@@ -196,35 +196,33 @@ advisory with the --add option.
         impetus_bugs["rpm"] = set(bugs)
     else:  # for 4.x
         # sweep rpm cve trackers into "rpm" advisory
-        rpm_bugs = {}
-        if mode == 'sweep':
-            rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
-            green_prefix("RPM CVEs found: ")
-            click.echo(sorted(b.id for b in rpm_bugs))
+        rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
+        green_prefix("RPM CVEs found: ")
+        click.echo(sorted(b.id for b in rpm_bugs))
 
-            if rpm_bugs:
-                # if --check-builds flag is set
-                # only attach bugs that have corresponding brew builds attached to rpm advisory
-                if check_builds:
-                    click.echo("Validating bugs with builds attached to the rpm advisory")
-                    attached_builds = errata.get_advisory_nvrs(runtime.group_config.advisories["rpm"])
-                    packages = attached_builds.keys()
-                    not_found = []
-                    for bug, package_name in rpm_bugs.items():
-                        if package_name not in packages:
-                            not_found.append((bug.id, package_name))
-                        else:
-                            click.echo(f"Build found for #{bug.id}, {package_name}")
-                            impetus_bugs["rpm"].add(bug)
+        if rpm_bugs:
+            # if --check-builds flag is set
+            # only attach bugs that have corresponding brew builds attached to rpm advisory
+            if check_builds:
+                click.echo("Validating bugs with builds attached to the rpm advisory")
+                attached_builds = errata.get_advisory_nvrs(runtime.group_config.advisories["rpm"])
+                packages = attached_builds.keys()
+                not_found = []
+                for bug, package_name in rpm_bugs.items():
+                    if package_name not in packages:
+                        not_found.append((bug.id, package_name))
+                    else:
+                        click.echo(f"Build found for #{bug.id}, {package_name}")
+                        impetus_bugs["rpm"].add(bug)
 
-                    if not_found:
-                        red_prefix("RPM CVE Warning: ")
-                        click.echo("The following CVE (bug, package) were found but not attached, because "
-                                   "no corresponding brew builds were found attached to the rpm advisory. "
-                                   "First attach builds and then rerun to attach the bugs")
-                        click.echo(not_found)
-                else:
-                    click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
+                if not_found:
+                    red_prefix("RPM CVE Warning: ")
+                    click.echo("The following CVE (bug, package) were found but not attached, because "
+                               "no corresponding brew builds were found attached to the rpm advisory. "
+                               "First attach builds and then rerun to attach the bugs")
+                    click.echo(not_found)
+            else:
+                click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
 
         impetus_bugs["extras"] = extras_bugs(bugs)
 
