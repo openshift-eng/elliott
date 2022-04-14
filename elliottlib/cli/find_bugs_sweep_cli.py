@@ -197,17 +197,17 @@ advisory with the --add option.
         else:
             click.echo(f"0 bugs found for kind={default_advisory_type}. Exiting")
     elif into_default_advisories:
-        for impetus, bugs in bugs_by_kind.items():
+        for kind, bugs in bugs_by_kind.items():
             if bugs:
-                green_prefix(f'{impetus} advisory: ')
-                errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
+                green_prefix(f'{kind} advisory: ')
+                errata.add_bugs_with_retry(runtime.group_config.advisories[kind], bugs, noop=noop)
 
 
 type_bug_list = List[Bug]
 
 
 def categorize_bugs_by_kind(bugs: List, rpm_advisory: bool = False, major_version: int = 4, check_builds: bool = True):
-    # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
+    # key is kind ("rpm", "image", "extras"), value is a set of bug IDs.
     bugs_by_kind = {
         "rpm": set(),
         "image": set(),
