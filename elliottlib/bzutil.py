@@ -30,6 +30,9 @@ class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
+    def creation_time_parsed(self):
+        raise NotImplementedError
+
     @staticmethod
     def get_target_release(bugs: List[bzutil.Bug]) -> str:
         """
@@ -75,7 +78,9 @@ class BugzillaBug(Bug):
 
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
-        self.creation_time_parsed = datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
+
+    def creation_time_parsed(self):
+        return datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
 
 
 class JIRABug(Bug):
@@ -85,9 +90,11 @@ class JIRABug(Bug):
         self.weburl = self.bug.permalink()
         self.component = self.bug.fields.components[0].name
         self.status = self.bug.fields.status.name
-        self.creation_time_parsed = datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
         self.summary = self.bug.fields.summary
         self.target_release = [x.name for x in self.bug.fields.fixVersions]
+
+    def creation_time_parsed(self):
+        return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
 
 
 class BugTracker:
@@ -217,14 +224,14 @@ class BugzillaBugTracker(BugTracker):
 
     def blocker_search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter, flag='blocker+')
-        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
-        fields.extend(['whiteboard', 'keywords'])
+        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs', 'whiteboard',
+                  'keywords']
         return self._search(query, fields, verbose)
 
     def search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter)
-        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
-        fields.extend(['whiteboard', 'keywords'])
+        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs', 'whiteboard',
+                  'keywords']
         return self._search(query, fields, verbose)
 
     def _search(self, query, fields, verbose=False):
