@@ -45,7 +45,7 @@ class FindBugsSweep(FindBugsMode):
               default=True,
               required=False,
               is_flag=True,
-              help='In sweep mode, add bugs only if corresponding builds attached to advisory')
+              help='When attaching, add bugs only if corresponding builds are attached to advisory')
 @click.option("--include-status", 'include_status',
               multiple=True,
               default=None,
@@ -130,7 +130,6 @@ advisory with the --add option.
     bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
-    # get_qualified_bugs(sweep_cutoff_timestamp)
     if sweep_cutoff_timestamp:
         utc_ts = datetime.utcfromtimestamp(sweep_cutoff_timestamp)
         green_print(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
@@ -150,6 +149,7 @@ advisory with the --add option.
 
     def valid_issue(x):
         return isinstance(x["id"], int) or x["id"].isdigit()
+
     included_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.include if valid_issue(i)}
     excluded_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.exclude if valid_issue(i)}
     if included_bug_ids & excluded_bug_ids:
@@ -184,20 +184,32 @@ advisory with the --add option.
     if not (into_default_advisories or default_advisory_type):
         return
 
+    bugs_by_kind = categorize_bugs_by_kind(bugs, major_version, check_builds)
+
+    if default_advisory_type and bugs_by_kind.get(default_advisory_type):
+        errata.add_bugs_with_retry(advisory, bugs_by_kind[default_advisory_type], noop=noop)
+    elif into_default_advisories:
+        for impetus, bugs in bugs_by_kind.items():
+            if bugs:
+                green_prefix(f'{impetus} advisory: ')
+                errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
+
+
+type_bug_list = List[Bug]
+
+
+def categorize_bugs_by_kind(bugs: List, major_version: int, check_builds: bool = True):
     # key is impetus ("rpm", "image", "extras"), value is a set of bug IDs.
-    impetus_bugs = {
+    bugs_by_kind = {
         "rpm": set(),
         "image": set(),
         "extras": set()
     }
 
-    # @lmeyer: simple and stupid would still be keeping the logic in python,
-    # possibly with config flags for branched logic.
-    # until that logic becomes too ugly to keep in python, i suppose..
-    if major_version < 4:  # for 3.x, all bugs should go to the rpm advisory
-        impetus_bugs["rpm"] = set(bugs)
-    else:  # for 4.x
-        # sweep rpm cve trackers into "rpm" advisory
+    # for 3.x, all bugs should go to the rpm advisory
+    if major_version < 4:
+        bugs_by_kind["rpm"] = set(bugs)
+    else:  # for 4.x, sweep rpm cve trackers into rpm advisory
         rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
         green_prefix("RPM CVEs found: ")
         click.echo(sorted(b.id for b in rpm_bugs))
@@ -215,7 +227,7 @@ advisory with the --add option.
                         not_found.append((bug.id, package_name))
                     else:
                         click.echo(f"Build found for #{bug.id}, {package_name}")
-                        impetus_bugs["rpm"].add(bug)
+                        bugs_by_kind["rpm"].add(bug)
 
                 if not_found:
                     red_prefix("RPM CVE Warning: ")
@@ -226,21 +238,11 @@ advisory with the --add option.
             else:
                 click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
 
-        impetus_bugs["extras"] = extras_bugs(bugs)
+        bugs_by_kind["extras"] = extras_bugs(bugs)
 
         # all other bugs should go into "image" advisory
-        impetus_bugs["image"] = set(bugs) - impetus_bugs["extras"] - rpm_bugs.keys()
-
-    if default_advisory_type and impetus_bugs.get(default_advisory_type):
-        errata.add_bugs_with_retry(advisory, impetus_bugs[default_advisory_type], noop=noop)
-    elif into_default_advisories:
-        for impetus, bugs in impetus_bugs.items():
-            if bugs:
-                green_prefix(f'{impetus} advisory: ')
-                errata.add_bugs_with_retry(runtime.group_config.advisories[impetus], bugs, noop=noop)
-
-
-type_bug_list = List[Bug]
+        bugs_by_kind["image"] = set(bugs) - bugs_by_kind["extras"] - rpm_bugs.keys()
+        return bugs_by_kind
 
 
 def extras_bugs(bugs: type_bug_list) -> type_bug_list:
