@@ -1,7 +1,7 @@
 import json
 import re
 import click
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Set
 
 from elliottlib.assembly import assembly_issues_config
@@ -205,7 +205,7 @@ advisory with the --add option.
     find_bugs_obj.exclude_status(exclude_status)
 
     if output == 'text':
-        green_prefix(f"Searching for bugs with status {' '.join(find_bugs_obj.status)} and target release(s):")
+        green_prefix(f"Searching for bugs with status {' '.join(sorted(find_bugs_obj.status))} and target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
@@ -366,8 +366,7 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
             "{:<13s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE",
                                                                    "SUMMARY"))
         for bug in bugs:
-            created_date = bug.creation_time_parsed()
-            days_ago = (datetime.now(timezone.utc) - created_date).days
+            days_ago = bug.created_days_ago()
             cf_pm_score = bug.cf_pm_score if hasattr(bug, "cf_pm_score") else '?'
             click.echo("{:<13s} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(str(bug.id),
                                                                                      bug.component,

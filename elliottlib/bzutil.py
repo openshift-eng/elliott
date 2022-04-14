@@ -30,6 +30,10 @@ class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
+    def created_days_ago(self):
+        created_date = self.creation_time_parsed()
+        return (datetime.now(timezone.utc) - created_date).days
+
     def creation_time_parsed(self):
         raise NotImplementedError
 
@@ -174,19 +178,20 @@ class JIRABugTracker(BugTracker):
         return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False, **kwargs)]
 
     def blocker_search(self, status, search_filter='default', verbose=False, **kwargs):
+        # TODO this would be the release_blocker custom field instead of label
         include_labels = ['blocker+']
         query = self._query(
             status=status,
             include_labels=include_labels,
             target_release=self.target_release()
         )
-        return self._search(query, verbose, **kwargs)
+        return self._search(query, verbose=verbose, **kwargs)
 
     def search(self, status, search_filter='default', verbose=False, **kwargs):
         query = self._query(
             status=status,
         )
-        return self._search(query, verbose, **kwargs)
+        return self._search(query, verbose=verbose, **kwargs)
 
     def search_with_target_release(self, status, search_filter='default',
                                    verbose=False, **kwargs):
@@ -493,6 +498,7 @@ def get_bzapi(bz_data, interactive_login=False):
 def _construct_query_url(bz_data, status, search_filter='default', flag=None):
     query_url = SearchURL(bz_data)
 
+    filter_list = []
     if bz_data.get('filter'):
         filter_list = bz_data.get('filter')
     elif bz_data.get('filters'):
