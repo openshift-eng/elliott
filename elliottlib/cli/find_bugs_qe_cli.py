@@ -3,7 +3,7 @@ import click
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib import (Runtime, bzutil, logutil)
 from elliottlib.cli.common import cli
-from elliottlib.cli.find_bugs_cli import FindBugsMode
+from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
 
 LOGGER = logutil.getLogger(__name__)
 

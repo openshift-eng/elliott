@@ -40,7 +40,7 @@ from elliottlib.cli.common import cli, use_default_advisory_option, find_default
 from elliottlib.cli.list_cli import list_cli
 from elliottlib.cli.tarball_sources_cli import tarball_sources_cli
 from elliottlib.cli.find_builds_cli import find_builds_cli
-from elliottlib.cli.find_bugs_cli import find_bugs_cli
+from elliottlib.cli.find_bugs_sweep_cli import find_bugs_sweep_cli
 from elliottlib.cli.create_cli import create_cli
 from elliottlib.cli.add_metadata_cli import add_metadata_cli
 from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
@@ -673,7 +673,7 @@ cli.add_command(advisory_impetus_cli)
 cli.add_command(create_placeholder_cli)
 cli.add_command(create_cli)
 cli.add_command(change_state_cli)
-cli.add_command(find_bugs_cli)
+cli.add_command(find_bugs_sweep_cli)
 cli.add_command(find_builds_cli)
 cli.add_command(list_cli)
 cli.add_command(puddle_advisories_cli)

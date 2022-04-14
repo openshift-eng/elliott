@@ -5,7 +5,7 @@ from elliottlib import Runtime, errata, logutil
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, find_default_advisory, use_default_advisory_option
-from elliottlib.cli.find_bugs_cli import print_report
+from elliottlib.cli.find_bugs_sweep_cli import print_report
 
 
 LOGGER = logutil.getLogger(__name__)

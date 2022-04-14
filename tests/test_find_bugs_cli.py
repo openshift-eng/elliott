@@ -3,9 +3,9 @@ import unittest
 from flexmock import flexmock
 import elliottlib.errata as errata_module
 from elliottlib import util
-from elliottlib.cli.find_bugs_cli import extras_bugs
+from elliottlib.cli.find_bugs_sweep_cli import extras_bugs
 from mock import patch, MagicMock
-from elliottlib.cli.find_bugs_cli import FindBugsMode
+from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
 from elliottlib.bzutil import BugzillaBugTracker
 
 
