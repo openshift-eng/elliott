@@ -1,6 +1,6 @@
 import click
 
-from elliottlib.cli.find_bugs_cli import FindBugsBlocker, print_report
+from elliottlib.cli.find_bugs_cli import print_report, FindBugsBlocker
 from elliottlib.bzutil import BugzillaBugTracker
 from elliottlib import (Runtime, constants)
 from elliottlib.cli.common import cli
@@ -50,7 +50,7 @@ Use --exclude_status to filter out from default status list.
     find_bugs_obj.exclude_status(exclude_status)
 
     if output == 'text':
-        green_prefix(f"Searching for bugs with status {' '.join(find_bugs_obj.status)} and target release(s):")
+        green_prefix(f"Searching for bugs with status {' '.join(sorted(find_bugs_obj.status))} and target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
