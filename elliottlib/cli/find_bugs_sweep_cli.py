@@ -130,16 +130,18 @@ advisory with the --add option.
     bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
+    # get_qualified_bugs(sweep_cutoff_timestamp)
     if sweep_cutoff_timestamp:
+        utc_ts = datetime.utcfromtimestamp(sweep_cutoff_timestamp)
         green_print(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
-                    f"cutoff time {datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
+                    f"cutoff time {utc_ts}...")
         qualified_bugs = []
         for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
-            b = bzutil.filter_bugs_by_cutoff_event(bugzilla.client(), chunk_of_bugs, find_bugs_obj.status,
-                                                   sweep_cutoff_timestamp)
+            b = bugzilla.filter_bugs_by_cutoff_event(chunk_of_bugs, find_bugs_obj.status,
+                                                     sweep_cutoff_timestamp)
             qualified_bugs.extend(b)
         click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time "
-                   f"{datetime.utcfromtimestamp(sweep_cutoff_timestamp)}...")
+                   f"{utc_ts}...")
         bugs = qualified_bugs
 
     # Loads included/excluded bugs from assembly config
