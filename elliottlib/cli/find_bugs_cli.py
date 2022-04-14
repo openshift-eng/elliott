@@ -352,7 +352,7 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
                     "id": bug.id,
                     "component": bug.component,
                     "status": bug.status,
-                    "date": str(bug.creation_time_parsed),
+                    "date": str(bug.creation_time_parsed()),
                     "summary": bug.summary[:60],
                     "url": bug.weburl
                 }
@@ -366,7 +366,7 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
             "{:<13s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE",
                                                                    "SUMMARY"))
         for bug in bugs:
-            created_date = bug.creation_time_parsed
+            created_date = bug.creation_time_parsed()
             days_ago = (datetime.now(timezone.utc) - created_date).days
             cf_pm_score = bug.cf_pm_score if hasattr(bug, "cf_pm_score") else '?'
             click.echo("{:<13s} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(str(bug.id),
