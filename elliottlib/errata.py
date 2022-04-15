@@ -101,6 +101,30 @@ def get_raw_erratum(advisory_id):
     return ErrataConnector()._get(f"/api/v1/erratum/{advisory_id}")
 
 
+def add_jira_issue(advisory_id, jira_issue_id):
+    """
+    Attach a jira issue to advisory
+    Response code will return
+    """
+    return ErrataConnector()._post(f"/api/v1/erratum/{advisory_id}/add_jira_issue", data={'jira_issue': jira_issue_id})
+
+
+def remove_jira_issue(advisory_id, jira_issue_id):
+    """
+    Remove a jira issue from advisory
+    Response code will return
+    """
+    return ErrataConnector()._post(f"/api/v1/erratum/{advisory_id}/remove_jira_issue", data={'jira_issue': jira_issue_id})
+
+
+def get_jira_issue(advisory_id):
+    """
+    Get a list of jira issues from a advisory
+    Will return a list of dict contains jira issue data
+    """
+    return ErrataConnector()._get(f"/advisory/{advisory_id}/jira_issues.json")
+
+
 def get_bug_ids(advisory_id):
     """
     Retrieve just the bug IDs from an advisory without wasting time processing it, loading builds, etc.
