@@ -1,25 +1,36 @@
-
 import sys
 if sys.version_info < (3, 6):
     sys.exit('Sorry, Python < 3.6 is not supported.')
 
 from setuptools import setup, find_packages
+import subprocess
+
 
 with open('./requirements.txt') as f:
     INSTALL_REQUIRES = f.read().splitlines()
 
 
-def _get_version():
-    from os.path import abspath, dirname, join
-    filename = join(dirname(abspath(__file__)), 'elliottlib', 'VERSION')
-    return open(filename).read().strip()
+def get_version():
+    proc = subprocess.run(['git', 'describe', '--tags'], stdout=subprocess.PIPE)
+    return proc.stdout.decode().strip()
+
+
+__version__ = get_version()
+
+
+def set_version():
+    with open('elliottlib/VERSION', 'w') as version_file:
+        version_file.write(__version__)
+
+
+set_version()
 
 
 setup(
     name="rh-elliott",
     author="AOS ART Team",
     author_email="aos-team-art@redhat.com",
-    version=_get_version(),
+    version=__version__,
     description="CLI tool for managing and automating Red Hat software releases",
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
@@ -27,6 +38,7 @@ setup(
     license="Apache License, Version 2.0",
     packages=find_packages(exclude=["tests", "tests.*", "functional_tests", "functional_tests.*"]),
     include_package_data=True,
+    package_data={'': ['elliottlib/VERSION']},
     entry_points={
         'console_scripts': [
             'elliott = elliottlib.cli.__main__:main'

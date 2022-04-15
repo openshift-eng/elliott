@@ -29,3 +29,6 @@ ocp-build-data/
 
 # Ignore functional tests artifacts
 summary_results.json
+
+# Version file
+elliottlib/VERSION

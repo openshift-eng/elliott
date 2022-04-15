@@ -12,8 +12,8 @@ from elliottlib.util import green_prefix, red_prefix, yellow_print
 def print_version(ctx, param, value):
     if not value or ctx.resilient_parsing:
         return
-    click.echo('Elliott v{}'.format(version()))
-    click.echo("Python v{}".format(sys.version))
+    click.echo('Elliott {}'.format(version()))
+    click.echo("Python {}".format(sys.version))
     ctx.exit()
 
 
