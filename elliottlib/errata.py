@@ -11,15 +11,16 @@ import datetime
 import json
 import ssl
 import re
-from elliottlib import exceptions, constants, brew, logutil
-from elliottlib.util import green_prefix, green_print, exit_unauthenticated, chunk
-
 import click
 import requests
+from elliottlib import exceptions, constants, brew, logutil
+from elliottlib.util import green_prefix, green_print, exit_unauthenticated, chunk
+from elliottlib.bzutil import JIRABug, BugzillaBug
 from requests_kerberos import HTTPKerberosAuth
 from spnego.exceptions import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
 from typing import List
+
 
 import xmlrpc.client
 
@@ -99,6 +100,38 @@ def get_raw_erratum(advisory_id):
     without wasting time processing it, loading builds, etc.
     """
     return ErrataConnector()._get(f"/api/v1/erratum/{advisory_id}")
+
+
+def add_jira_issue(advisory_id, jira_issue_id):
+    """
+    Attach a jira issue to advisory
+    Response code will return
+    """
+    return ErrataConnector()._post(f"/api/v1/erratum/{advisory_id}/add_jira_issue", data={'jira_issue': jira_issue_id})
+
+
+def remove_jira_issue(advisory_id, jira_issue_id):
+    """
+    Remove a jira issue from advisory
+    Response code will return
+    """
+    return ErrataConnector()._post(f"/api/v1/erratum/{advisory_id}/remove_jira_issue", data={'jira_issue': jira_issue_id})
+
+
+def add_multi_jira_issues(advisory_id, jira_list: List):
+    """
+    Add multi jira issues to advisory
+    Return a list to response code
+    """
+    return [add_jira_issue(advisory_id, jira_id) for jira_id in jira_list]
+
+
+def get_jira_issue(advisory_id):
+    """
+    Get a list of jira issues from a advisory
+    Will return a list of dict contains jira issue data
+    """
+    return ErrataConnector()._get(f"/advisory/{advisory_id}/jira_issues.json")
 
 
 def get_bug_ids(advisory_id):
@@ -378,7 +411,6 @@ def get_brew_builds(errata_id, session=None):
     Get Errata list of builds.
 
     https://errata.devel.redhat.com/developer-guide/api-http-api.html#api-get-apiv1erratumidbuilds
-
     :param str errata_id: the errata id
     :param requests.Session session: A python-requests Session object,
     used for for connection pooling. Providing `session` object can
@@ -480,7 +512,7 @@ def add_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_
     list then add bug to advisory again, if still has failures raise exceptions
 
     :param advisory_id: advisory id
-    :param bugs: iterable of bzutil.bug to attach to advisory
+    :param bugs: iterable of BugzillaBug or JIRABug to attach to advisory
     :param noop: do not modify anything
     :param batch_size: perform operation in batches of given size
     :return:
@@ -495,37 +527,42 @@ def add_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_
     if advisory_id is False:
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
-    existing_bugs = advisory.errata_bugs
-    new_bugs = set(bug.id for bug in bugs) - set(existing_bugs)
-    print(f'Bugs already attached: {len(existing_bugs)}')
-    print(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
+    bugzilla_buglist = [bug.id for bug in bugs if isinstance(bug, BugzillaBug) and bug.id not in advisory.errata_bugs]
+    jira_buglist = [bug.id for bug in bugs if isinstance(bug, JIRABug)]
 
-    if not new_bugs:
-        print('No new bugs to attach. Exiting.')
-        return
-
-    bugs = list(new_bugs)
-    for chunk_of_bugs in chunk(bugs, batch_size):
+    for chunk_of_bugs in chunk(bugzilla_buglist, batch_size):
         if noop:
-            print('Dry run: Would have attached bugs')
+            logger.info('Dry run: Would have attached bugs')
             continue
         try:
             advisory.addBugs(chunk_of_bugs)
             advisory.commit()
         except ErrataException as e:
-            print(f"ErrataException Message: {e}\nRetrying...")
+            logger.info(f"ErrataException Message: {e}\nRetrying...")
             block_list = parse_exception_error_message(e)
             retry_list = [x for x in chunk_of_bugs if x not in block_list]
             if len(retry_list) == 0:
                 continue
-
             try:
-                advisory = Erratum(errata_id=advisory)
+                advisory = Erratum(errata_id=advisory_id)
                 advisory.addBugs(retry_list)
                 advisory.commit()
             except ErrataException as e:
                 raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
-            print("remaining bugs attached")
+            logger.info("remaining bugs attached")
+        logger.info("All bugzilla bugs attached")
+
+    for chunk_of_bugs in chunk(jira_buglist, batch_size):
+        if noop:
+            logger.info('Dry run: Would have attached bugs')
+            continue
+        results = add_multi_jira_issues(advisory_id, chunk_of_bugs)
+        for i, result in enumerate(results):
+            if result.status_code != 201:
+                rt = add_jira_issue(advisory_id, chunk_of_bugs[i])
+                if rt.status_code != 201:
+                    raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with post link {rt.url}")
+        logger.info("All jira bugs attached")
 
 
 def get_rpmdiff_runs(advisory_id, status=None, session=None):
