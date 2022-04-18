@@ -1,6 +1,7 @@
 import unittest
 from flexmock import flexmock
 from elliottlib import util
+from elliottlib.bzutil import Bug
 
 
 class TestUtil(unittest.TestCase):
@@ -103,9 +104,12 @@ class TestUtil(unittest.TestCase):
         ]
 
         for t in test_cases:
-            target_release, err = util.get_target_release(t['bugs'])
-            actual = (target_release, bool(err))
-            self.assertEqual(t['expected'], actual)
+            expected_value, expected_err = t['expected']
+            if expected_err:
+                self.assertRaises(ValueError)
+            else:
+                actual = Bug.get_target_release(t['bugs'])
+                self.assertEqual(expected_value, actual)
 
 
 if __name__ == '__main__':

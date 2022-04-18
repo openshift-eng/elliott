@@ -76,6 +76,9 @@ class Runtime(object):
 
         self.initialized = False
 
+    def get_major_minor(self):
+        return self.group_config.vars.MAJOR, self.group_config.vars.MINOR
+
     def get_group_config(self):
         # group.yml can contain a `vars` section which should be a
         # single level dict containing keys to str.format(**dict) replace

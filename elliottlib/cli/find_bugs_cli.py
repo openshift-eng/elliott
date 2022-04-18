@@ -1,15 +1,12 @@
 import json
-
-from elliottlib.assembly import assembly_issues_config
 import re
-from datetime import datetime, timezone
+import click
+from datetime import datetime
 from typing import List, Set
 
-import click
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, BugTracker, Bug
-
+from elliottlib.assembly import assembly_issues_config
+from elliottlib.bzutil import BugzillaBugTracker, BugTracker, Bug
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
-from elliottlib.cli import cli_opts
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.exceptions import ElliottFatalError
@@ -21,10 +18,8 @@ LOGGER = logutil.getLogger(__name__)
 
 
 class FindBugsMode:
-    def __init__(self, status: List, cve_trackers: bool = False, search_flag: str = None):
+    def __init__(self, status: List):
         self.status = set(status)
-        self.cve_trackers = cve_trackers
-        self.search_flag = search_flag
 
     def include_status(self, status: List):
         self.status |= set(status)
@@ -35,8 +30,6 @@ class FindBugsMode:
     def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
         return bug_tracker_obj.search(
             self.status,
-            flag=self.search_flag,
-            filter_out_security_bugs=not self.cve_trackers,
             verbose=verbose
         )
 
@@ -48,15 +41,21 @@ class FindBugsSweep(FindBugsMode):
 
 class FindBugsQE(FindBugsMode):
     def __init__(self):
-        super().__init__(status={'MODIFIED'})
+        super().__init__(
+            status={'MODIFIED'}
+        )
 
 
 class FindBugsBlocker(FindBugsMode):
     def __init__(self):
         super().__init__(
-            cve_trackers=True,
-            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'},
-            search_flag='blocker+'
+            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'}
+        )
+
+    def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
+        return bug_tracker_obj.blocker_search(
+            self.status,
+            verbose=verbose
         )
 
 
@@ -67,8 +66,8 @@ class FindBugsBlocker(FindBugsMode):
 @use_default_advisory_option
 @click.option("--mode",
               required=True,
-              type=click.Choice(['list', 'sweep', 'qe', 'blocker']),
-              default='list',
+              type=click.Choice(['sweep', 'qe', 'blocker']),
+              default='blocker',
               help='Mode to use to find bugs')
 @click.option("--check-builds",
               required=False,
@@ -86,9 +85,6 @@ class FindBugsBlocker(FindBugsMode):
               required=False,
               type=click.Choice(constants.VALID_BUG_STATES),
               help="Exclude bugs of this status")
-@click.option("--id", 'bug_ids', metavar='<BUGID>', default=None,
-              multiple=True, required=False,
-              help="Bug IDs to add, required for LIST mode.")
 @click.option("--cve-trackers",
               required=False,
               default=None,
@@ -108,22 +104,16 @@ class FindBugsBlocker(FindBugsMode):
               help='Attaches bugs found to their correct default advisories, e.g. operator-related bugs go to '
                    '"extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
 @click.option('--brew-event', type=click.INT, required=False,
-              help='Only SWEEP bugs that have changed to the desired status before the Brew event ID; does not apply '
-                   'to list or diff mode')
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira in combination with bugzilla (https://issues.redhat.com/browse/ART-3818)")
+              help='Only in sweep mode: SWEEP bugs that have changed to the desired status before the Brew event')
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @pass_runtime
 def find_bugs_cli(runtime: Runtime, advisory, default_advisory_type, mode, check_builds, include_status, exclude_status,
-                  bug_ids, cve_trackers, report, output, into_default_advisories, brew_event, use_jira, noop):
+                  cve_trackers, report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY. Bugs can be
-"swept" into advisories either automatically (--mode sweep), or by
-manually specifying one or more bugs using --mode list with the --id option.
+"swept" into advisories automatically (--mode sweep).
 Use cases are described below:
 
 SWEEP: For this use-case the --group option MUST be provided. The
@@ -132,11 +122,6 @@ for bugs claimed to be fixed, but not yet attached to advisories.
 --check-builds flag forces bug validation with attached builds to rpm advisory.
 It assumes builds have been attached and only attaches bugs with matching builds.
 default --status: ['MODIFIED', 'ON_QA', 'VERIFIED']
-
-LIST: The --group option is not required if you are specifying advisory
-manually. Provide one or more --id's for manual bug addition. In LIST
-mode you must provide a list of IDs to perform operation on with the --id option.
-Supported operations: report with --report, attach with --add or --into-default-advisories
 
 QE: Find MODIFIED bugs for the target-releases, and set them to ON_QA.
 The --group option MUST be provided. Cannot be used in combination
@@ -147,7 +132,6 @@ The --group option MUST be provided. Cannot be used in combination
 with --add, --use-default-advisory, --into-default-advisories.
 default --status: ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA']
 Use --exclude_status to filter out from default status list.
-By default --cve-trackers is True.
 
 Using --use-default-advisory without a value set for the matching key
 in the build-data will cause an error and elliott will exit in a
@@ -169,17 +153,6 @@ advisory with the --add option.
 \b
     $ elliott -g openshift-4.8 --assembly 4.8.32 find-bugs --mode sweep --use-default-advisory rpm
 
-    Add given list of bugs to the appropriate advisories. This would apply sweep logic to the given bugs
-    grouping them to be attached to rpm/extras/image advisories
-
-\b
-    $ elliott -g openshift-4.8 find-bugs --mode list --id 8675309,7001337 --into-default-advisories
-
-    Attach two bugs to the advisory 123456. Note that --group is not required since we're not auto searching:
-
-\b
-    $ elliott find-bugs --mode list --id 8675309 --id 7001337 --add 123456
-
 
     Find bugs for 4.6 that are in MODIFIED state, and set them to ON_QA:
 
@@ -192,12 +165,6 @@ advisory with the --add option.
 """
     count_advisory_attach_flags = sum(map(bool, [advisory, default_advisory_type, into_default_advisories]))
 
-    if mode != 'list' and len(bug_ids) > 0:
-        raise click.BadParameter("Combining the automatic and manual bug attachment options is not supported")
-
-    if mode == 'list' and len(bug_ids) == 0:
-        raise click.BadParameter("When using mode=list, you must provide a list of bug IDs")
-
     if count_advisory_attach_flags > 1:
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
 
@@ -208,18 +175,14 @@ advisory with the --add option.
         raise click.BadParameter("Mode does not operate on an advisory. Do not specify any of "
                                  "`--use-default-advisory`, `--add`, or `--into-default-advisories`")
 
+    if cve_trackers:
+        LOGGER.warning('--cve-trackers is deprecated. cve trackers are now included by default in all '
+                       'searches.')
+
     runtime.initialize(mode="both")
 
     bz_config = BugzillaBugTracker.get_config(runtime)
     bugzilla = BugzillaBugTracker(bz_config)
-
-    # object used in cases where we need a single bug tracker
-    bug_tracker = bugzilla
-
-    if use_jira:
-        jira_config = JIRABugTracker.get_config(runtime)
-        jira = JIRABugTracker(jira_config)
-        bug_tracker = jira
 
     # filter out bugs ART does not manage
     m = re.match(r"rhaos-(\d+).(\d+)", runtime.branch)
@@ -230,12 +193,6 @@ advisory with the --add option.
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
-
-    if mode == 'list':
-        bugs = bug_tracker.get_bugs(cli_opts.id_convert_str(bug_ids))
-        if not into_default_advisories:
-            mode_list(advisory=advisory, bugs=bugs, report=report, noop=noop, output=output)
-            return
 
     if mode == 'sweep':
         find_bugs_obj = FindBugsSweep()
@@ -248,7 +205,7 @@ advisory with the --add option.
     find_bugs_obj.exclude_status(exclude_status)
 
     if output == 'text':
-        green_prefix(f"Searching for bugs with status {' '.join(find_bugs_obj.status)} and target release(s):")
+        green_prefix(f"Searching for bugs with status {' '.join(sorted(find_bugs_obj.status))} and target release(s):")
         click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
@@ -281,11 +238,9 @@ advisory with the --add option.
         yellow_print(f"The following bugs will be excluded because they are explicitly defined in the assembly config: {excluded_bug_ids}")
         bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
-    filtered_bugs = filter_bugs(bugs, major_version, minor_version, runtime)
     if output == 'text':
-        green_prefix(f"Found {len(filtered_bugs)} bugs ({len(bugs) - len(filtered_bugs)} ignored): ")
-        click.echo(", ".join(sorted(str(b.bug_id) for b in filtered_bugs)))
-    bugs = filtered_bugs
+        green_prefix(f"Found {len(bugs)} bugs: ")
+        click.echo(", ".join(sorted(str(b.id) for b in bugs)))
 
     if mode == 'qe':
         for bug in bugs:
@@ -318,7 +273,7 @@ advisory with the --add option.
     else:  # for 4.x
         # sweep rpm cve trackers into "rpm" advisory
         rpm_bugs = {}
-        if mode == 'sweep' and cve_trackers:
+        if mode == 'sweep':
             rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
             green_prefix("RPM CVEs found: ")
             click.echo(sorted(b.id for b in rpm_bugs))
@@ -373,7 +328,8 @@ def extras_bugs(bugs: type_bug_list) -> type_bug_list:
         "Node Feature Discovery Operator"
     }  # we will probably find more
     extras_subcomponents = {
-        ("Networking", "SR-IOV")
+        ("Networking", "SR-IOV"),
+        ("Storage", "Local Storage Operator"),
     }
     extra_bugs = set()
     for bug in bugs:
@@ -384,42 +340,19 @@ def extras_bugs(bugs: type_bug_list) -> type_bug_list:
     return extra_bugs
 
 
-def filter_bugs(bugs: type_bug_list, major_version: int, minor_version: int, runtime) -> type_bug_list:
-    """returns a list of bugs that should be processed"""
-    r = []
-    ignored_repos = set()  # GitHub repos that should be ignored
-    if major_version == 4 and minor_version == 5:
-        # per https://issues.redhat.com/browse/ART-997: these repos should have their release-4.5 branches ignored by ART:
-        ignored_repos = {
-            "https://github.com/openshift/aws-ebs-csi-driver",
-            "https://github.com/openshift/aws-ebs-csi-driver-operator",
-            "https://github.com/openshift/cloud-provider-openstack",
-            "https://github.com/openshift/csi-driver-nfs",
-            "https://github.com/openshift/csi-driver-manila-operator"
-        }
-    for bug in bugs:
-        external_links = [ext["type"]["full_url"].replace("%id%", ext["ext_bz_bug_id"]) for ext in bug.external_bugs]  # https://github.com/python-bugzilla/python-bugzilla/blob/7aa70edcfea9b524cd8ac51a891b6395ca40dc87/bugzilla/_cli.py#L750
-        public_links = [runtime.get_public_upstream(url)[0] for url in external_links]  # translate openshift-priv org to openshift org when comparing to filter (i.e. prow may link to a PR on the private org).
-        # if a bug has 1 or more public_links, we should ignore the bug if ALL of the public_links are ANY of `ignored_repos`
-        if public_links and all(map(lambda url: any(map(lambda repo: url != repo and url.startswith(repo), ignored_repos)), public_links)):
-            continue
-        r.append(bug)
-    return r
-
-
 def print_report(bugs: type_bug_list, output: str = 'text') -> None:
     if output == 'slack':
         for bug in bugs:
-            click.echo("<{}|{}> - {:<25s} ".format(bug.weburl, bug.bug_id, bug.component))
+            click.echo("<{}|{}> - {:<25s} ".format(bug.weburl, bug.id, bug.component))
 
     elif output == 'json':
         print(json.dumps(
             [
                 {
-                    "id": bug.bug_id,
+                    "id": bug.id,
                     "component": bug.component,
                     "status": bug.status,
-                    "date": str(bug.creation_time_parsed),
+                    "date": str(bug.creation_time_parsed()),
                     "summary": bug.summary[:60],
                     "url": bug.weburl
                 }
@@ -433,25 +366,14 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
             "{:<13s} {:<25s} {:<12s} {:<7s} {:<10s} {:60s}".format("ID", "COMPONENT", "STATUS", "SCORE", "AGE",
                                                                    "SUMMARY"))
         for bug in bugs:
-            created_date = bug.creation_time_parsed
-            days_ago = (datetime.now(timezone.utc) - created_date).days
+            days_ago = bug.created_days_ago()
             cf_pm_score = bug.cf_pm_score if hasattr(bug, "cf_pm_score") else '?'
-            click.echo("{:<13s} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(bug.bug_id,
+            click.echo("{:<13s} {:<25s} {:<12s} {:<7s} {:<3d} days   {:60s} ".format(str(bug.id),
                                                                                      bug.component,
                                                                                      bug.status,
                                                                                      cf_pm_score,
                                                                                      days_ago,
                                                                                      bug.summary[:60]))
-
-
-def mode_list(advisory: str, bugs: type_bug_list, report: bool, noop: bool, output: str) -> None:
-    LOGGER.info(f"Found {len(bugs)} bugs: ")
-    LOGGER.info(", ".join(sorted(str(b.bug_id) for b in bugs)))
-    if report:
-        print_report(bugs, output=output)
-
-    if advisory:
-        errata.add_bugs_with_retry(advisory, bugs, noop=noop)
 
 
 def get_sweep_cutoff_timestamp(runtime, cli_brew_event):

@@ -1,11 +1,10 @@
 from typing import Dict, List, Set
 
-import bugzilla
-import click
 from bugzilla.bug import Bug
+import click
 from errata_tool import Erratum
 
-from elliottlib import attach_cve_flaws, bzutil, constants, util
+from elliottlib import attach_cve_flaws, bzutil, constants
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
@@ -65,10 +64,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         exit(0)
 
     # validate and get target_release
-    current_target_release, err = util.get_target_release(attached_tracker_bugs)
-    if err:
-        runtime.logger.error(err)
-        exit(1)
+    current_target_release = bzutil.Bug.get_target_release(attached_tracker_bugs)
     runtime.logger.info('current_target_release: {}'.format(current_target_release))
 
     tracker_flaws, flaw_id_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(

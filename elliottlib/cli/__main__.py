@@ -15,14 +15,11 @@ from multiprocessing.dummy import Pool as ThreadPool
 import asyncio
 import datetime
 import json
-import os
-import re
 import sys
-import time
 from typing import Dict, List
 
 # ours
-from elliottlib import version, exectools
+from elliottlib import exectools
 from elliottlib import Runtime
 import elliottlib.constants
 import elliottlib.bzutil
@@ -32,11 +29,10 @@ import elliottlib.exceptions
 
 from elliottlib.cli import cli_opts
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import exit_unauthenticated, green_prefix, YMD
-from elliottlib.util import default_release_date, validate_release_date
-from elliottlib.util import validate_email_address, red_print, major_from_branch
-from elliottlib.util import green_print, red_prefix, minor_from_branch
-from elliottlib.util import yellow_print, yellow_prefix, exit_unauthorized, release_from_branch
+from elliottlib.util import exit_unauthenticated, green_prefix
+from elliottlib.util import red_print
+from elliottlib.util import green_print, red_prefix
+from elliottlib.util import yellow_print, yellow_prefix
 from elliottlib.util import progress_func, pbar_header
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory, click_coroutine
 
@@ -59,17 +55,17 @@ from elliottlib.cli.advisory_drop_cli import advisory_drop_cli
 from elliottlib.cli.verify_attached_operators_cli import verify_attached_operators_cli
 from elliottlib.cli.verify_attached_bugs_cli import verify_attached_bugs_cli
 from elliottlib.cli.attach_cve_flaws_cli import attach_cve_flaws_cli
+from elliottlib.cli.attach_bugs_cli import attach_bugs_cli
+from elliottlib.cli.find_bugs_qe_cli import find_bugs_qe_cli
 from elliottlib.cli.get_golang_versions_cli import get_golang_versions_cli
 from elliottlib.cli.validate_rhsa import validate_rhsa_cli
 from elliottlib.cli.rhcos_cli import rhcos_cli
 from elliottlib.cli.create_textonly_cli import create_textonly_cli
 from elliottlib.cli.advisory_commons_cli import advisory_commons_cli
+from elliottlib.cli.find_bugs_blocker_cli import find_bugs_blocker_cli
 
 # 3rd party
-import bugzilla
 import click
-import requests
-import errata_tool.build
 from errata_tool import ErrataException
 from spnego.exceptions import GSSError
 
@@ -143,7 +139,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all):
             if remove_all:
                 bug_ids = advs.errata_bugs
             else:
-                bug_ids = [bzapi.getbug(i).bug_id for i in cli_opts.id_convert(id)]
+                bug_ids = [bzapi.getbug(i).id for i in cli_opts.id_convert(id)]
             green_prefix("Found {} bugs:".format(len(bug_ids)))
             click.echo(" {}".format(", ".join([str(b) for b in bug_ids])))
             green_prefix("Removing {count} bugs from advisory:".format(count=len(bug_ids)))
@@ -690,6 +686,13 @@ cli.add_command(verify_attached_operators_cli)
 cli.add_command(verify_attached_bugs_cli)
 cli.add_command(attach_cve_flaws_cli)
 cli.add_command(create_textonly_cli)
+cli.add_command(attach_bugs_cli)
+cli.add_command(find_bugs_qe_cli)
+cli.add_command(get_golang_versions_cli)
+cli.add_command(validate_rhsa_cli)
+cli.add_command(rhcos_cli)
+cli.add_command(advisory_commons_cli)
+cli.add_command(find_bugs_blocker_cli)
 
 
 # -----------------------------------------------------------------------------

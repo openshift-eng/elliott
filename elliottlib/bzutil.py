@@ -19,7 +19,7 @@ import os
 from bugzilla.bug import Bug
 from koji import ClientSession
 
-from elliottlib import constants, exceptions, exectools, logutil
+from elliottlib import constants, exceptions, exectools, logutil, bzutil
 from elliottlib.metadata import Metadata
 from elliottlib.util import isolate_timestamp_in_release, red_print
 
@@ -30,6 +30,49 @@ class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
+    def created_days_ago(self):
+        created_date = self.creation_time_parsed()
+        return (datetime.now(timezone.utc) - created_date).days
+
+    def creation_time_parsed(self):
+        raise NotImplementedError
+
+    @staticmethod
+    def get_target_release(bugs: List[bzutil.Bug]) -> str:
+        """
+        Pass in a list of bugs and get their target release version back.
+        Raises exception if they have different target release versions set.
+
+        :param bugs: List[Bug] instance
+        """
+        invalid_bugs = []
+        target_releases = set()
+
+        if not bugs:
+            raise ValueError("bugs should be a non empty list")
+
+        for bug in bugs:
+            # make sure it's a list with a valid str value
+            valid_target_rel = isinstance(bug.target_release, list) and len(bug.target_release) > 0 and \
+                re.match(r'(\d+.\d+.[0|z])', bug.target_release[0])
+            if not valid_target_rel:
+                invalid_bugs.append(bug)
+            else:
+                target_releases.add(bug.target_release[0])
+
+        if invalid_bugs:
+            err = 'target_release should be a list with a string matching regex (digit+.digit+.[0|z])'
+            for b in invalid_bugs:
+                err += f'\n bug: {b.id}, target_release: {b.target_release} '
+            raise ValueError(err)
+
+        if len(target_releases) != 1:
+            err = f'Found different target_release values for bugs: {target_releases}. ' \
+                'There should be only 1 target release for all bugs. Fix the offending bug(s) and try again.'
+            raise ValueError(err)
+
+        return target_releases.pop()
+
 
 class BugzillaBug(Bug):
     def __getattr__(self, attr):
@@ -39,22 +82,23 @@ class BugzillaBug(Bug):
 
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
-        self.creation_time_parsed = datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S')
+
+    def creation_time_parsed(self):
+        return datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
 
 
 class JIRABug(Bug):
-    def _url(self):
-        o = urlparse(self.bug.self)
-        return o._replace(path=f"/browse/{self.bug_id}").geturl()
-
-    def __init__(self, bug_obj):
+    def __init__(self, bug_obj: Issue):
         super().__init__(bug_obj)
-        self.bug_id = self.bug.key
-        self.weburl = self._url()
+        self.id = self.bug.key
+        self.weburl = self.bug.permalink()
         self.component = self.bug.fields.components[0].name
         self.status = self.bug.fields.status.name
-        self.creation_time_parsed = datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
         self.summary = self.bug.fields.summary
+        self.target_release = [x.name for x in self.bug.fields.fixVersions]
+
+    def creation_time_parsed(self):
+        return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
 
 
 class BugTracker:
@@ -68,10 +112,21 @@ class BugTracker:
     def search(self):
         raise NotImplementedError
 
+    def blocker_search(self):
+        raise NotImplementedError
+
 
 class JIRABugTracker(BugTracker):
     @staticmethod
     def get_config(runtime):
+        version = f'{runtime.group_config.vars.MAJOR}.{runtime.group_config.vars.MINOR}'
+        # TODO: have jira.yml file for all versions 4.6-4.11
+        if version != '4.11':
+            return {
+                'server': "https://issues.stage.redhat.com",
+                'project': 'OCPBUGS',
+                'target_release': [f"{version}.0", f"{version}.z"]
+            }
         return runtime.gitdata.load_data(key='jira').data
 
     def login(self, token_auth=None) -> JIRA:
@@ -93,8 +148,11 @@ class JIRABugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs) -> JIRABug:
         return JIRABug(self._client.issue(bugid, **kwargs))
 
-    def get_bugs(self, bugids):
-        return self.search(bug_list=bugids)
+    def get_bugs(self, bugids, strict=True, verbose=False, **kwargs):
+        bugs = self._search(self._query(bug_list=bugids), verbose=verbose, **kwargs)
+        if strict and len(bugs) < len(bugids):
+            raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
+        return bugs
 
     def create_bug(self, bugtitle, bugdescription, target_status, keywords: List) -> JIRABug:
         issueinfo = {
@@ -127,12 +185,11 @@ class JIRABugTracker(BugTracker):
     def create_textonly(self, bugtitle, bugdescription):
         return self.create_bug(self, bugtitle, bugdescription, "VERIFIED")
 
-    def search(self,
-               bug_list: Optional[List] = None,
+    def _query(self, bug_list: Optional[List] = None,
                status: Optional[List] = None,
                target_release: Optional[List] = None,
                include_labels: Optional[List] = None,
-               exclude_labels: Optional[List] = None) -> List[Issue]:
+               exclude_labels: Optional[List] = None) -> str:
         query = f"project={self._project}"
         if bug_list:
             query += f" and issue in ({','.join(bug_list)})"
@@ -144,7 +201,36 @@ class JIRABugTracker(BugTracker):
             query += f" and labels in ({','.join(exclude_labels)})"
         if exclude_labels:
             query += f" and labels not in ({','.join(exclude_labels)})"
-        return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False)]
+        return query
+
+    def _search(self, query, verbose=False, **kwargs) -> List[JIRABug]:
+        if verbose:
+            click.echo(query)
+        return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False, **kwargs)]
+
+    def blocker_search(self, status, search_filter='default', verbose=False, **kwargs):
+        # TODO this would be the release_blocker custom field instead of label
+        include_labels = ['blocker+']
+        query = self._query(
+            status=status,
+            include_labels=include_labels,
+            target_release=self.target_release()
+        )
+        return self._search(query, verbose=verbose, **kwargs)
+
+    def search(self, status, search_filter='default', verbose=False, **kwargs):
+        query = self._query(
+            status=status,
+        )
+        return self._search(query, verbose=verbose, **kwargs)
+
+    def search_with_target_release(self, status, search_filter='default',
+                                   verbose=False, **kwargs):
+        query = self._query(
+            status=status,
+            target_release=self.target_release()
+        )
+        return self._search(query, verbose, **kwargs)
 
 
 class BugzillaBugTracker(BugTracker):
@@ -172,29 +258,22 @@ class BugzillaBugTracker(BugTracker):
     def client(self):
         return self._client
 
-    def search(self, status, search_filter='default', flag=None, filter_out_security_bugs=True, verbose=False):
-        """Search the provided target_release's for bugs in the specified states
+    def blocker_search(self, status, search_filter='default', verbose=False):
+        query = _construct_query_url(self.config, status, search_filter, flag='blocker+')
+        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs', 'whiteboard',
+                  'keywords']
+        return self._search(query, fields, verbose)
 
-        :param status: The status(es) of bugs to search for
-        :param search_filter: Which search filter from bz_data to use if multiple are specified
-        :param flag: The Bugzilla flag (string) of bugs to search for. Flags are similar to status but are categorically
-        different. https://bugzilla.readthedocs.io/en/latest/using/understanding.html#flags
-        :param filter_out_security_bugs: Boolean on whether to filter out bugs tagged with the SecurityTracking keyword.
+    def search(self, status, search_filter='default', verbose=False):
+        query = _construct_query_url(self.config, status, search_filter)
+        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs', 'whiteboard',
+                  'keywords']
+        return self._search(query, fields, verbose)
 
-        :return: A list of Bug objects
-        """
-        query_url = _construct_query_url(self.config, status, search_filter, flag=flag)
-        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs']
-
-        if filter_out_security_bugs:
-            query_url.addKeyword('SecurityTracking', 'nowords')
-        else:
-            fields.extend(['whiteboard', 'keywords'])
-
+    def _search(self, query, fields, verbose=False):
         if verbose:
-            click.echo(query_url)
-
-        return [BugzillaBug(b) for b in _perform_query(self._client, query_url, include_fields=fields)]
+            click.echo(query)
+        return [BugzillaBug(b) for b in _perform_query(self._client, query, include_fields=fields)]
 
     def get_bugs_map(self, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
         id_bug_map: Dict[int, Bug] = {}
@@ -214,7 +293,7 @@ class BugzillaBugTracker(BugTracker):
         newbug = self._client.createbug(createinfo)
         # change state to VERIFIED, set target release
         try:
-            update = self._client.build_update(status=target_status, target_release=self.config.get('target_release'))
+            update = self._client.build_update(status=target_status, target_release=self.config.get('target_release')[0])
             self._client.update_bugs([newbug.id], update)
         except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
             sleep(5)
@@ -231,7 +310,7 @@ class BugzillaBugTracker(BugTracker):
         :return: Placeholder Bug object
         """
         boilerplate = "Placeholder bug for OCP {} {} release".format(self.config.get('target_release')[0], kind)
-        return self.create_bug(self, boilerplate, boilerplate, "VERIFIED", ["Automation"])
+        return self.create_bug(boilerplate, boilerplate, "VERIFIED", ["Automation"])
 
     def create_textonly(self, bugtitle, bugdescription):
         """Create a text only bug
@@ -240,7 +319,7 @@ class BugzillaBugTracker(BugTracker):
 
         :return: Text only Bug object
         """
-        return self.create_bug(self, bugtitle, bugdescription, "VERIFIED")
+        return self.create_bug(bugtitle, bugdescription, "VERIFIED")
 
 
 def get_highest_impact(trackers, tracker_flaws_map):
@@ -366,10 +445,10 @@ def set_state(bug, desired_state, noop=False, comment_for_release=None):
     if comment_for_release:
         comment += f"\nThis bug is expected to ship in the next {comment_for_release} release created."
     if noop:
-        logger.info(f"Would have changed BZ#{bug.bug_id} from {current_state} to {desired_state} with comment:\n{comment}")
+        logger.info(f"Would have changed BZ#{bug.id} from {current_state} to {desired_state} with comment:\n{comment}")
         return
 
-    logger.info(f"Changing BZ#{bug.bug_id} from {current_state} to {desired_state}")
+    logger.info(f"Changing BZ#{bug.id} from {current_state} to {desired_state}")
     bug.setstatus(status=desired_state,
                   comment=comment,
                   private=True)
@@ -450,6 +529,7 @@ def get_bzapi(bz_data, interactive_login=False):
 def _construct_query_url(bz_data, status, search_filter='default', flag=None):
     query_url = SearchURL(bz_data)
 
+    filter_list = []
     if bz_data.get('filter'):
         filter_list = bz_data.get('filter')
     elif bz_data.get('filters'):
