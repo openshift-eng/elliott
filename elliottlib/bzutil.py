@@ -156,6 +156,37 @@ class JIRABugTracker(BugTracker):
             raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
         return bugs
 
+    def create_bug(self, bugtitle, bugdescription, target_status, keywords: List) -> JIRABug:
+        issueinfo = {
+            'project': {'key': self.config.get('product')},
+            'issuetype': {'name': 'Bug'},
+            'fixVersions': {'name': self.config.get('version')[0]},
+            'components': {'name': 'Release'},
+            'summary': bugtitle,
+            'labels': keywords,
+            'description': bugdescription}
+        newbug = self._client.create_issue(fields=issueinfo)
+        self._client.transition_issue(newbug, 'VERIFIED')
+        return JIRABug(newbug)
+
+    def get_remotelinks(self, bugid):
+        remotelinks = self._client.remote_links(self._client.issue(bugid))
+        linkdict = {}
+        for link in remotelinks:
+            if link.__contains__('relationship'):
+                linkdict[link.relationship] = link.object.url
+        return linkdict
+
+    def update_bug(self, bugid, status):
+        self._client.transition_issue(self._client.issue(bugid), status)
+
+    def create_placeholder(self, kind):
+        boilerplate = "Placeholder bug for OCP {} {} release".format(self.config.get('target_release')[0], kind)
+        return self.create_bug(self, boilerplate, boilerplate, "VERIFIED", ["Automation"])
+
+    def create_textonly(self, bugtitle, bugdescription):
+        return self.create_bug(self, bugtitle, bugdescription, "VERIFIED")
+
     def _query(self, bug_list: Optional[List] = None,
                status: Optional[List] = None,
                target_release: Optional[List] = None,
