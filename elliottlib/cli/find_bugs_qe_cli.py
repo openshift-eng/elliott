@@ -54,4 +54,4 @@ def find_bugs_qe_cli(runtime: Runtime, use_jira, noop):
     click.echo(f"Found {len(bugs)} bugs: {', '.join(sorted(str(b.id) for b in bugs))}")
 
     for bug in bugs:
-        bzutil.set_state(bug, 'ON_QA', noop=noop, comment_for_release=f"{major_version}.{minor_version}")
+        bug_tracker.update_bug_status(bug.id, 'ON_QA', noop=noop, comment_for_release=f"{major_version}.{minor_version}")

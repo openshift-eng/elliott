@@ -177,8 +177,19 @@ class JIRABugTracker(BugTracker):
                 linkdict[link.relationship] = link.object.url
         return linkdict
 
-    def update_bug(self, bugid, status):
-        self._client.transition_issue(self._client.issue(bugid), status)
+    def update_bug_status(self, bugid, target_status, comment_for_release=None):
+        current_state = self._client.issue(bugid).fields.status.name
+        self._client.transition_issue(self._client.issue(bugid), target_status)
+        comment = f'Elliott changed bug status from {current_state} to {target_status}.'
+        self.add_comment_to_bug(self, bugid, comment, True, comment_for_release)
+
+    def add_comment_to_bug(self, bugid, comment, private, comment_for_release):
+        if comment_for_release:
+            comment += f"\nThis bug is expected to ship in the next {comment_for_release} release created."
+        if private:
+            self._client.add_comment(self._client.issue(bugid), comment, visibility={'type': 'group', 'value': 'Red Hat Employee'})
+        else:
+            self._client.add_comment(self._client.issue(bugid), comment)
 
     def create_placeholder(self, kind):
         boilerplate = "Placeholder bug for OCP {} {} release".format(self.config.get('target_release')[0], kind)
@@ -301,8 +312,18 @@ class BugzillaBugTracker(BugTracker):
             sleep(5)
             self._client.update_bugs([newbug.id], update)
             print(ex)
-
         return newbug
+
+    def update_bug_status(self, bugid, target_status, comment_for_release=None):
+        current_state = self._client.getbug(bugid).status
+        self._client.update_bugs([bugid], self._client.build_update(status=target_status))
+        comment = f'Elliott changed bug status from {current_state} to {target_status}.'
+        self.add_comment_to_bug(self, bugid, comment, True, comment_for_release)
+
+    def add_comment_to_bug(self, bugid, comment, private, comment_for_release=None):
+        if comment_for_release:
+            comment += f"\nThis bug is expected to ship in the next {comment_for_release} release created."
+        self._client.update_bugs([bugid], self._client.build_update(comment=comment, comment_private=private))
 
     def create_placeholder(self, kind):
         """Create a placeholder bug
@@ -437,7 +458,7 @@ def get_flaw_aliases(flaws):
 def set_state(bug, desired_state, noop=False, comment_for_release=None):
     """Change the state of a bug to desired_state
 
-    :param bug:
+    :param bug: BugzillaBug obj or JIRABug obj
     :param desired_state: Target state
     :param noop: Do not do anything
     :param comment_for_release: If set (e.g. "4.9") then comment on expected release.

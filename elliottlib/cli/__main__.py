@@ -333,8 +333,14 @@ providing an advisory with the -a/--advisory option.
 
     # Load bugzilla infomation and get a reference to the api
     runtime.initialize()
-    bz_config = runtime.gitdata.load_data(key='bugzilla').data
-    bug_tracker_bz = elliottlib.bzutil.BugzillaBugTracker(bz_config)
+    if use_jira:
+        jira_config = JIRABugTracker.get_config(runtime)
+        jira = JIRABugTracker(jira_config)
+        bug_tracker = jira
+    else:
+        bz_config = BugzillaBugTracker.get_config(runtime)
+        bugzilla = BugzillaBugTracker(bz_config)
+        bug_tracker = bugzilla
     changed_bug_count = 0
     attached_bugs = []
 
@@ -361,7 +367,7 @@ providing an advisory with the -a/--advisory option.
     click.secho("[", nl=False)
 
     attached_bugs = pool.map(
-        lambda bug: progress_func(lambda: bug_tracker_bz.get_bug(bug), '*'),
+        lambda bug: progress_func(lambda: bug_tracker.get_bug(bug), '*'),
         raw_bug_list)
     # Wait for results
     pool.close()
@@ -372,12 +378,12 @@ providing an advisory with the -a/--advisory option.
     for bug in attached_bugs:
         if bug.status in original_state:
             if close_placeholder and "Placeholder" in bug.summary:
-                elliottlib.bzutil.set_state(bug, "CLOSED", noop=noop)
+                bug_tracker.update_bug_status(bug.id, "CLOSED")
             else:
-                elliottlib.bzutil.set_state(bug, new_state, noop=noop)
+                bug_tracker.update_bug_status(bug.id, new_state)
                 # only add comments for non-placeholder bug
                 if comment and not noop:
-                    bug.setstatus(comment=comment, private=False)
+                    bug_tracker.add_comment_to_bug(bug.id, comment, False)
             changed_bug_count += 1
 
     green_print("{} bugs successfully modified (or would have been)".format(changed_bug_count))

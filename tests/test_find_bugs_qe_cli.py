@@ -16,7 +16,7 @@ class FindBugsQETestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
         flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
         flexmock(FindBugsQE).should_receive("search").and_return(bugs)
-        flexmock(bzutil).should_receive("set_state").and_return(True)
+        #flexmock(bzutil).should_receive("set_state").and_return(True)
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:qe', '--noop'])
         search_string1 = 'Searching for bugs with status MODIFIED and target release(s): 4.6.z'
         search_string2 = 'Found 2 bugs: 1, 2'

@@ -37,15 +37,6 @@ class TestBZUtil(unittest.TestCase):
             actual = bzutil.get_whiteboard_component(bug)
             self.assertEqual(actual, expected.strip())
 
-    def test_set_state(self):
-        bug = mock.MagicMock()
-        bug.status = "ON_QA"
-        bug.setstatus = mock.MagicMock(return_value="CLOSED")
-        bzutil.set_state(bug, "CLOSED")
-        bug.setstatus.assert_called()
-        newstate = bug.setstatus.call_args[1]['status']
-        self.assertEqual(newstate, "CLOSED")
-
     # def test_get_bugs(self):
     #     bug_ids = [1, 2]
     #     expected = {
