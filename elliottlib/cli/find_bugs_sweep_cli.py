@@ -184,14 +184,14 @@ advisory with the --add option.
     bugs_by_type = categorize_bugs_by_type(bugs, rpm_advisory_id=rpm_advisory_id, major_version=major_version,
                                            check_builds=check_builds)
 
-    advisory_types_to_attach = [default_advisory_type if default_advisory_type else bugs_by_type.keys()]
+    advisory_types_to_attach = [default_advisory_type] if default_advisory_type else bugs_by_type.keys()
     for advisory_type in advisory_types_to_attach:
         bugs = bugs_by_type.get(advisory_type)
+        green_prefix(f'{advisory_type} advisory: ')
         if bugs:
-            green_prefix(f'{advisory_type} advisory: ')
             errata.add_bugs_with_retry(runtime.group_config.advisories[advisory_type], bugs, noop=noop)
         else:
-            click.echo(f"0 bugs found for type={advisory_type}")
+            click.echo(f"0 bugs found")
 
 
 type_bug_list = List[Bug]
@@ -199,8 +199,8 @@ type_bug_list = List[Bug]
 
 def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, major_version: int = 4, check_builds:
                             bool = True):
-    # key is kind ("rpm", "image", "extras"), value is a set of bug IDs.
-    bugs_by_kind = {
+    # key is type ("rpm", "image", "extras"), value is a set of bug IDs.
+    bugs_by_type = {
         "rpm": set(),
         "image": set(),
         "extras": set()
@@ -208,13 +208,12 @@ def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, m
 
     # for 3.x, all bugs should go to the rpm advisory
     if int(major_version) < 4:
-        bugs_by_kind["rpm"] = set(bugs)
+        bugs_by_type["rpm"] = set(bugs)
     else:  # for 4.x, sweep rpm cve trackers into rpm advisory
         rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
-        green_prefix("RPM CVEs found: ")
-        click.echo(sorted(b.id for b in rpm_bugs))
-
         if rpm_bugs:
+            green_prefix("RPM CVEs found: ")
+            click.echo(sorted(b.id for b in rpm_bugs))
             # if --check-builds flag is set
             # only attach bugs that have corresponding brew builds attached to rpm advisory
             if check_builds and rpm_advisory_id:
@@ -227,7 +226,7 @@ def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, m
                         not_found.append((bug.id, package_name))
                     else:
                         click.echo(f"Build found for #{bug.id}, {package_name}")
-                        bugs_by_kind["rpm"].add(bug)
+                        bugs_by_type["rpm"].add(bug)
 
                 if not_found:
                     red_prefix("RPM CVE Warning: ")
@@ -238,11 +237,11 @@ def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, m
             else:
                 click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
 
-        bugs_by_kind["extras"] = extras_bugs(bugs)
+        bugs_by_type["extras"] = extras_bugs(bugs)
 
         # all other bugs should go into "image" advisory
-        bugs_by_kind["image"] = set(bugs) - bugs_by_kind["extras"] - rpm_bugs.keys()
-    return bugs_by_kind
+        bugs_by_type["image"] = set(bugs) - bugs_by_type["extras"] - rpm_bugs.keys()
+    return bugs_by_type
 
 
 def extras_bugs(bugs: type_bug_list) -> type_bug_list:
