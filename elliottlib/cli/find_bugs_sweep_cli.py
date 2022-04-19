@@ -191,7 +191,7 @@ advisory with the --add option.
         if bugs:
             errata.add_bugs_with_retry(runtime.group_config.advisories[advisory_type], bugs, noop=noop)
         else:
-            click.echo(f"0 bugs found")
+            click.echo("0 bugs found")
 
 
 type_bug_list = List[Bug]
