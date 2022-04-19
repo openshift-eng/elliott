@@ -34,6 +34,7 @@ from elliottlib.util import red_print
 from elliottlib.util import green_print, red_prefix
 from elliottlib.util import yellow_print, yellow_prefix
 from elliottlib.util import progress_func, pbar_header
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory, click_coroutine
 
 # cli commands
@@ -270,13 +271,17 @@ Fields for the short format: Release date, State, Synopsys, URL
               required=False,
               default=False, is_flag=True,
               help="When checking bug state, close the bug if it's a placehoder bug.")
+@click.option("--jira", 'use_jira',
+              is_flag=True,
+              default=False,
+              help="Use jira in combination with bugzilla")
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
               help="Check bugs attached, print what would change, but don't change anything")
 @use_default_advisory_option
 @pass_runtime
-def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop, default_advisory_type):
+def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, use_jira, noop, default_advisory_type):
     """Move bugs attached to the advisory from one state to another
 state. This is useful if the bugs have changed states *after* they
 were attached. Similar to `find-bugs` but in reverse. `repair-bugs`
