@@ -504,19 +504,20 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugzilla_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_ATTACH_CHUNK_SIZE):
+def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = False,
+                                 batch_size: int = constants.BUG_ATTACH_CHUNK_SIZE):
     """
     adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
     list then add bug to advisory again, if still has failures raise exceptions
 
     :param advisory_id: advisory id
-    :param bugs: iterable of BugzillaBug to attach to advisory
+    :param bugids: iterable of bugzilla bug ids to attach to advisory
     :param noop: do not modify anything
     :param batch_size: perform operation in batches of given size
     :return:
     """
-    click.echo(f'Request to attach {len(bugs)} bugs to the advisory {advisory_id}')
+    click.echo(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
 
     try:
         advisory = Erratum(errata_id=advisory_id)
@@ -527,7 +528,7 @@ def add_bugzilla_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=const
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
     existing_bugs = advisory.errata_bugs
-    new_bugs = set(bug.id for bug in bugs) - set(existing_bugs)
+    new_bugs = set(bugids) - set(existing_bugs)
     logger.info(f'Bugs already attached: {len(existing_bugs)}. New bugs: {len(new_bugs)}')
     if not new_bugs:
         return
@@ -555,14 +556,15 @@ def add_bugzilla_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=const
         logger.info("All bugzilla bugs attached")
 
 
-def add_jira_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_ATTACH_CHUNK_SIZE):
+def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = False,
+                             batch_size: int = constants.BUG_ATTACH_CHUNK_SIZE):
     """
     :param advisory_id: advisory id
-    :param bugs: iterable of BugzillaBug to attach to advisory
+    :param bugids: iterable of jira bug ids to attach to advisory
     :param noop: do not modify anything
     :param batch_size: perform operation in batches of given size
     """
-    click.echo(f'Request to attach {len(bugs)} bugs to the advisory {advisory_id}')
+    click.echo(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
 
     try:
         advisory = Erratum(errata_id=advisory_id)
@@ -572,7 +574,7 @@ def add_jira_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants
     if advisory is False:
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
-    for chunk_of_bugs in chunk(bugs, batch_size):
+    for chunk_of_bugs in chunk(bugids, batch_size):
         if noop:
             logger.info('Dry run: Would have attached bugs')
             continue
