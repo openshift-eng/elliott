@@ -89,14 +89,40 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(FindBugsSweep).should_receive("search").and_return(bugs)
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
         flexmock(sweep_cli).should_receive("categorize_bugs_by_type").and_return({"image": set(bugs)})
-        c = flexmock(common)
-        c.should_receive("find_default_advisory").and_return(123)
+        flexmock(common).should_receive("find_default_advisory").and_return(123)
         flexmock(errata).should_receive("add_bugs_with_retry").with_args(123, bugs, noop=False)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--use-default-advisory', 'image'])
 
         search_string1 = 'Searching for bugs with status MODIFIED ON_QA VERIFIED and target release(s): 4.6.z'
         search_string2 = 'Found 2 bugs: 1, 2'
+        self.assertIn(search_string1, result.output)
+        self.assertIn(search_string2, result.output)
+        self.assertEqual(result.exit_code, 0)
+
+    def test_find_bugs_sweep_default_advisories(self):
+        runner = CliRunner()
+        image_bugs = [flexmock(id=1), flexmock(id=2)]
+        rpm_bugs = [flexmock(id=3), flexmock(id=4)]
+        extras_bugs = [flexmock(id=5), flexmock(id=6)]
+        flexmock(Runtime).should_receive("initialize").and_return(None)
+        flexmock(Runtime).should_receive("get_major_minor").and_return(4, 6)
+        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
+        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
+        flexmock(FindBugsSweep).should_receive("search").and_return(image_bugs + rpm_bugs + extras_bugs)
+        flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
+        flexmock(sweep_cli).should_receive("categorize_bugs_by_type").and_return({
+            "image": set(image_bugs),
+            "rpm": set(rpm_bugs),
+            "extras": set(extras_bugs)
+        })
+        flexmock(common).should_receive("find_default_advisory").and_return(123)
+        flexmock(errata).should_receive("add_bugs_with_retry").times(3)
+
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--into-default-advisories'])
+
+        search_string1 = 'Searching for bugs with status MODIFIED ON_QA VERIFIED and target release(s): 4.6.z'
+        search_string2 = 'Found 6 bugs: 1, 2, 3, 4, 5, 6'
         self.assertIn(search_string1, result.output)
         self.assertIn(search_string2, result.output)
         self.assertEqual(result.exit_code, 0)

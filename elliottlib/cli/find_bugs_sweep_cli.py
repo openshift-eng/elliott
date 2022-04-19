@@ -179,7 +179,7 @@ advisory with the --add option.
                                            check_builds=check_builds)
 
     advisory_types_to_attach = [default_advisory_type] if default_advisory_type else bugs_by_type.keys()
-    for advisory_type in advisory_types_to_attach:
+    for advisory_type in sorted(advisory_types_to_attach):
         bugs = bugs_by_type.get(advisory_type)
         green_prefix(f'{advisory_type} advisory: ')
         if bugs:
