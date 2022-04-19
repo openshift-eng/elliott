@@ -20,7 +20,7 @@ class FindBugsBlocker(FindBugsMode):
         )
 
 
-@cli.command("find-bugs:blocker", short_help="List active blocker bugs for an OCP release")
+@cli.command("find-bugs:blocker", short_help="List active blocker bugs")
 @click.option("--include-status", 'include_status',
               multiple=True,
               default=None,

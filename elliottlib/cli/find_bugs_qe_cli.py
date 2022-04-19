@@ -15,7 +15,7 @@ class FindBugsQE(FindBugsMode):
         )
 
 
-@cli.command("find-bugs:qe", short_help="Find or add MODIFIED/VERIFIED bugs to ADVISORY")
+@cli.command("find-bugs:qe", short_help="Change MODIFIED bugs to ON_QA")
 @click.option("--jira", 'use_jira',
               is_flag=True,
               default=False,

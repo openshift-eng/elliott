@@ -35,7 +35,7 @@ class FindBugsSweep(FindBugsMode):
         super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'})
 
 
-@common.cli.command("find-bugs:sweep", short_help="Find and (optional) add qualified bugs to advisory(s)")
+@common.cli.command("find-bugs:sweep", short_help="Sweep qualified bugs into advisories")
 @click.option("--add", "-a", 'advisory_id',
               type=int, metavar='ADVISORY',
               help="Add found bugs to ADVISORY")
