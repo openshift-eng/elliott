@@ -15,7 +15,6 @@ import click
 import requests
 from elliottlib import exceptions, constants, brew, logutil
 from elliottlib.util import green_prefix, green_print, exit_unauthenticated, chunk
-from elliottlib.bzutil import JIRABug, BugzillaBug
 from requests_kerberos import HTTPKerberosAuth
 from spnego.exceptions import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
@@ -505,14 +504,14 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
-def add_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_ATTACH_CHUNK_SIZE):
+def add_bugzilla_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_ATTACH_CHUNK_SIZE):
     """
     adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
     list then add bug to advisory again, if still has failures raise exceptions
 
     :param advisory_id: advisory id
-    :param bugs: iterable of BugzillaBug or JIRABug to attach to advisory
+    :param bugs: iterable of BugzillaBug to attach to advisory
     :param noop: do not modify anything
     :param batch_size: perform operation in batches of given size
     :return:
@@ -524,13 +523,16 @@ def add_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_
     except GSSError:
         exit_unauthenticated()
 
-    if advisory_id is False:
+    if advisory is False:
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
-    bugzilla_buglist = [bug.id for bug in bugs if isinstance(bug, BugzillaBug) and bug.id not in advisory.errata_bugs]
-    jira_buglist = [bug.id for bug in bugs if isinstance(bug, JIRABug)]
+    existing_bugs = advisory.errata_bugs
+    new_bugs = set(bug.id for bug in bugs) - set(existing_bugs)
+    logger.info(f'Bugs already attached: {len(existing_bugs)}. New bugs: {len(new_bugs)}')
+    if not new_bugs:
+        return
 
-    for chunk_of_bugs in chunk(bugzilla_buglist, batch_size):
+    for chunk_of_bugs in chunk(list(new_bugs), batch_size):
         if noop:
             logger.info('Dry run: Would have attached bugs')
             continue
@@ -552,7 +554,30 @@ def add_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_
             logger.info("remaining bugs attached")
         logger.info("All bugzilla bugs attached")
 
-    for chunk_of_bugs in chunk(jira_buglist, batch_size):
+
+def add_jira_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_ATTACH_CHUNK_SIZE):
+    """
+    adding specified bugs into advisory, retry 2 times: first time
+    parse the exception message to get failed bug id list, remove from original
+    list then add bug to advisory again, if still has failures raise exceptions
+
+    :param advisory_id: advisory id
+    :param bugs: iterable of BugzillaBug to attach to advisory
+    :param noop: do not modify anything
+    :param batch_size: perform operation in batches of given size
+    :return:
+    """
+    click.echo(f'Request to attach {len(bugs)} bugs to the advisory {advisory_id}')
+
+    try:
+        advisory = Erratum(errata_id=advisory_id)
+    except GSSError:
+        exit_unauthenticated()
+
+    if advisory is False:
+        raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
+
+    for chunk_of_bugs in chunk(bugs, batch_size):
         if noop:
             logger.info('Dry run: Would have attached bugs')
             continue

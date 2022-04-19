@@ -69,7 +69,8 @@ For attaching use --advisory, --use-default-advisory <TYPE>
 
     runtime.initialize()
 
-    version = f'{runtime.group_config.vars.MAJOR}.{runtime.group_config.vars.MINOR}'
+    major, minor = runtime.get_major_minor()
+    version = f'{major}.{minor}'
 
     if use_jira:
         jira_config = JIRABugTracker.get_config(runtime)
@@ -93,10 +94,9 @@ For attaching use --advisory, --use-default-advisory <TYPE>
                      target_release, version)
         sys.exit(1)
 
-    LOGGER.info(f"Found {len(bugs)} bugs: ")
-    LOGGER.info(", ".join(sorted(str(b.id) for b in bugs)))
+    LOGGER.info(f"Found {len(bugs)} bugs: {', '.join(sorted(str(b.id) for b in bugs))}")
     if report:
         print_report(bugs, output=output)
 
     if advisory:
-        errata.add_bugs_with_retry(advisory, bugs, noop=noop)
+        bug_tracker.attach_bugs(advisory, [b.id for b in bugs], noop=noop)

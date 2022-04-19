@@ -8,7 +8,6 @@ from elliottlib.cli.find_bugs_sweep_cli import extras_bugs
 from elliottlib.cli.common import cli, Runtime
 from elliottlib.cli.find_bugs_sweep_cli import FindBugsSweep
 import elliottlib.cli.find_bugs_sweep_cli as sweep_cli
-from elliottlib import errata
 from elliottlib.cli import common
 
 
@@ -69,7 +68,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
         flexmock(FindBugsSweep).should_receive("search").and_return(bugs)
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
-        flexmock(errata).should_receive("add_bugs_with_retry").with_args(123, bugs, noop=False)
+        flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args(123, bugs, noop=False)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--add', '123'])
 
@@ -90,7 +89,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
         flexmock(sweep_cli).should_receive("categorize_bugs_by_type").and_return({"image": set(bugs)})
         flexmock(common).should_receive("find_default_advisory").and_return(123)
-        flexmock(errata).should_receive("add_bugs_with_retry").with_args(123, bugs, noop=False)
+        flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args(123, bugs, noop=False)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--use-default-advisory', 'image'])
 
@@ -117,7 +116,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
             "extras": set(extras_bugs)
         })
         flexmock(common).should_receive("find_default_advisory").times(3).and_return(123)
-        flexmock(errata).should_receive("add_bugs_with_retry").times(3)
+        flexmock(BugzillaBugTracker).should_receive("attach_bugs").times(3)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--into-default-advisories'])
 

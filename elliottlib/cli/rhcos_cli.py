@@ -70,8 +70,7 @@ def rhcos_cli(runtime, release, packages, arch, go):
                     arch = a
     else:
         runtime.initialize()
-        major = runtime.group_config.vars.MAJOR
-        minor = runtime.group_config.vars.MINOR
+        major, minor = runtime.get_major_minor()
 
     version = f'{major}.{minor}'
     logger = runtime.logger
