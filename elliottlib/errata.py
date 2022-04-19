@@ -565,15 +565,6 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
     :param batch_size: perform operation in batches of given size
     """
     click.echo(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
-
-    try:
-        advisory = Erratum(errata_id=advisory_id)
-    except GSSError:
-        exit_unauthenticated()
-
-    if advisory is False:
-        raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
-
     for chunk_of_bugs in chunk(bugids, batch_size):
         if noop:
             logger.info('Dry run: Would have attached bugs')
