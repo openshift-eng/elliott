@@ -177,8 +177,11 @@ class JIRABugTracker(BugTracker):
                 linkdict[link.relationship] = link.object.url
         return linkdict
 
-    def update_bug_status(self, bugid, target_status, comment_for_release=None):
+    def update_bug_status(self, bugid, target_status, comment_for_release=None, noop=False):
         current_state = self._client.issue(bugid).fields.status.name
+        if noop:
+            logger.info(f"Would have changed BZ#{bugid} from {current_state} to {target_status}")
+            return
         self._client.transition_issue(self._client.issue(bugid), target_status)
         comment = f'Elliott changed bug status from {current_state} to {target_status}.'
         self.add_comment_to_bug(self, bugid, comment, True, comment_for_release)
@@ -314,8 +317,11 @@ class BugzillaBugTracker(BugTracker):
             print(ex)
         return newbug
 
-    def update_bug_status(self, bugid, target_status, comment_for_release=None):
+    def update_bug_status(self, bugid, target_status, comment_for_release=None, noop=False):
         current_state = self._client.getbug(bugid).status
+        if noop:
+            logger.info(f"Would have changed BZ#{bugid} from {current_state} to {target_status}")
+            return
         self._client.update_bugs([bugid], self._client.build_update(status=target_status))
         comment = f'Elliott changed bug status from {current_state} to {target_status}.'
         self.add_comment_to_bug(self, bugid, comment, True, comment_for_release)
