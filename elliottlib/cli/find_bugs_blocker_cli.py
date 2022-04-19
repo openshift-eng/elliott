@@ -1,13 +1,26 @@
 import click
 
-from elliottlib.cli.find_bugs_cli import print_report, FindBugsBlocker
-from elliottlib.bzutil import BugzillaBugTracker
+from elliottlib.cli.find_bugs_sweep_cli import print_report, FindBugsMode
+from elliottlib.bzutil import BugzillaBugTracker, BugTracker
 from elliottlib import (Runtime, constants)
 from elliottlib.cli.common import cli
 from elliottlib.util import green_prefix
 
 
-@cli.command("find-bugs:blocker", short_help="List active blocker bugs for an OCP release")
+class FindBugsBlocker(FindBugsMode):
+    def __init__(self):
+        super().__init__(
+            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'}
+        )
+
+    def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
+        return bug_tracker_obj.blocker_search(
+            self.status,
+            verbose=verbose
+        )
+
+
+@cli.command("find-bugs:blocker", short_help="List active blocker bugs")
 @click.option("--include-status", 'include_status',
               multiple=True,
               default=None,

@@ -108,20 +108,34 @@ class BugTracker:
         self.config = config
         self._server = config.get('server')
 
-    def target_release(self):
+    def target_release(self) -> List:
         return self.config.get('target_release')
 
-    def search(self):
+    def search(self, status, search_filter='default', verbose=False, **kwargs):
         raise NotImplementedError
 
-    def blocker_search(self):
+    def blocker_search(self, status, search_filter='default', verbose=False, **kwargs):
         raise NotImplementedError
+
+    def get_bug(self, bugid, **kwargs):
+        raise NotImplementedError
+
+    def get_bugs(self, ids, permissive=False, **kwargs):
+        raise NotImplementedError
+
+    def get_bugs_map(self, ids: List[int], permissive: bool = False, **kwargs) -> Dict[int, Bug]:
+        id_bug_map: Dict[int, Bug] = {}
+        bugs: List[Bug] = self.get_bugs(ids, permissive=permissive, **kwargs)
+        for i, bug in enumerate(bugs):
+            id_bug_map[ids[i]] = bug
+        return id_bug_map
 
 
 class JIRABugTracker(BugTracker):
     @staticmethod
-    def get_config(runtime):
-        version = f'{runtime.group_config.vars.MAJOR}.{runtime.group_config.vars.MINOR}'
+    def get_config(runtime) -> Dict:
+        major, minor = runtime.get_major_minor()
+        version = f'{major}.{minor}'
         # TODO: have jira.yml file for all versions 4.6-4.11
         if version != '4.11':
             return {
@@ -144,15 +158,12 @@ class JIRABugTracker(BugTracker):
         self._project = config.get('project')
         self._client: JIRA = self.login()
 
-    def target_release(self):
-        return self.config.get('target_release')
-
     def get_bug(self, bugid, **kwargs) -> JIRABug:
         return JIRABug(self._client.issue(bugid, **kwargs))
 
-    def get_bugs(self, bugids, strict=True, verbose=False, **kwargs):
-        bugs = self._search(self._query(bug_list=bugids), verbose=verbose, **kwargs)
-        if strict and len(bugs) < len(bugids):
+    def get_bugs(self, bugids, permissive=False, **kwargs) -> List[JIRABug]:
+        bugs = self._search(self._query(bug_list=bugids), **kwargs)
+        if not permissive and len(bugs) < len(bugids):
             raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
         return bugs
 
@@ -254,8 +265,8 @@ class BugzillaBugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
-    def get_bugs(self, bugids, **kwargs):
-        return [BugzillaBug(b) for b in self._client.getbugs(bugids, **kwargs)]
+    def get_bugs(self, bugids, permissive=False, **kwargs):
+        return [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
 
     def client(self):
         return self._client
@@ -263,13 +274,13 @@ class BugzillaBugTracker(BugTracker):
     def blocker_search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter, flag='blocker+')
         fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs', 'whiteboard',
-                  'keywords']
+                  'keywords', 'target_release']
         return self._search(query, fields, verbose)
 
     def search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter)
         fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs', 'whiteboard',
-                  'keywords']
+                  'keywords', 'target_release']
         return self._search(query, fields, verbose)
 
     def _search(self, query, fields, verbose=False):
@@ -277,51 +288,135 @@ class BugzillaBugTracker(BugTracker):
             click.echo(query)
         return [BugzillaBug(b) for b in _perform_query(self._client, query, include_fields=fields)]
 
-    def get_bugs_map(self, ids: List[int], raise_on_error: bool = True, **kwargs) -> Dict[int, Bug]:
-        id_bug_map: Dict[int, Bug] = {}
-        bugs: List[Bug] = self._client.getbugs(ids, permissive=not raise_on_error, **kwargs)
-        for i, bug in enumerate(bugs):
-            id_bug_map[ids[i]] = bug
-        return id_bug_map
-
-    def create_bug(self, bugtitle, bugdescription, target_status, keywords: List):
-        createinfo = self._client.build_createbug(
+    def create_bug(self, title, description, target_status, keywords: List) -> BugzillaBug:
+        create_info = self._client.build_createbug(
             product=self.config.get('product'),
             version=self.config.get('version')[0],
             component="Release",
-            summary=bugtitle,
+            summary=title,
             keywords=keywords,
-            description=bugdescription)
-        newbug = self._client.createbug(createinfo)
+            description=description)
+        new_bug = self._client.createbug(create_info)
         # change state to VERIFIED, set target release
         try:
             update = self._client.build_update(status=target_status, target_release=self.config.get('target_release')[0])
-            self._client.update_bugs([newbug.id], update)
+            self._client.update_bugs([new_bug.id], update)
         except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
             sleep(5)
-            self._client.update_bugs([newbug.id], update)
+            self._client.update_bugs([new_bug.id], update)
             print(ex)
 
-        return newbug
+        return BugzillaBug(new_bug)
 
-    def create_placeholder(self, kind):
+    def create_placeholder(self, kind) -> BugzillaBug:
         """Create a placeholder bug
 
         :param kind: The "kind" of placeholder to create. Generally 'rpm' or 'image'
 
         :return: Placeholder Bug object
         """
-        boilerplate = "Placeholder bug for OCP {} {} release".format(self.config.get('target_release')[0], kind)
+        boilerplate = f"Placeholder bug for OCP {self.config.get('target_release')[0]} {kind} release"
         return self.create_bug(boilerplate, boilerplate, "VERIFIED", ["Automation"])
 
-    def create_textonly(self, bugtitle, bugdescription):
+    def create_textonly(self, title, description) -> BugzillaBug:
         """Create a text only bug
-        :param bugtitle: The title of the bug to create
-        :param bugdescription: The description of the bug to create
+        :param title: The title of the bug to create
+        :param description: The description of the bug to create
 
         :return: Text only Bug object
         """
-        return self.create_bug(bugtitle, bugdescription, "VERIFIED")
+        return self.create_bug(title, description, "VERIFIED")
+
+    def filter_bugs_by_cutoff_event(self, bugs: Iterable, desired_statuses: Iterable[str],
+                                    sweep_cutoff_timestamp: float) -> List:
+        """ Given a list of bugs, finds those that have changed to one of the desired statuses before the given timestamp.
+
+        According to @jupierce:
+
+        Let:
+        - Z be a non-closed BZ in a monitored component
+        - S2 be the current state (as in the moment we are scanning) of Z
+        - S1 be the state of the Z at the moment of the cutoff
+        - A be the set of state changes Z after the cutoff
+        - F be the sweep states (MODIFIED, ON_QA, VERIFIED)
+
+        Then Z is swept in if all the following are true:
+        - S1 ∈ F
+        - S2 ∈ F
+        - A | ∄v : v <= S1
+
+        In prose: if a BZ seems to qualify for a sweep currently and at the cutoff event, then all state changes after the cutoff event must be to a greater than the state which qualified the BZ at the cutoff event.
+
+        :param bugs: a list of bugs
+        :param desired_statuses: desired bug statuses
+        :param sweep_cutoff_timestamp: a unix timestamp
+        :return: a list of found bugs
+        """
+        qualified_bugs = []
+        desired_statuses = set(desired_statuses)
+
+        # Filters out bugs that are created after the sweep cutoff timestamp
+        before_cutoff_bugs = [bug for bug in bugs if to_timestamp(bug.creation_time) <= sweep_cutoff_timestamp]
+        if len(before_cutoff_bugs) < len(bugs):
+            logger.info(
+                f"{len(bugs) - len(before_cutoff_bugs)} of {len(bugs)} bugs are ignored because they were created after the sweep cutoff timestamp {sweep_cutoff_timestamp} ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
+
+        # Queries bug history
+        bugs_history = self._client.bugs_history_raw([bug.id for bug in before_cutoff_bugs])
+
+        class BugStatusChange:
+            def __init__(self, timestamp: int, old: str, new: str) -> None:
+                self.timestamp = timestamp  # when this change is made?
+                self.old = old  # old status
+                self.new = new  # new status
+
+            @classmethod
+            def from_history_ent(cls, history):
+                """ Converts from bug history dict returned from Bugzilla to BugStatusChange object.
+                The history dict returned from Bugzilla includes bug changes on all fields, but we are only interested in the "status" field change.
+                :return: BugStatusChange object, or None if the history doesn't include a "status" field change.
+                """
+                status_change = next(filter(lambda change: change["field_name"] == "status", history["changes"]), None)
+                if not status_change:
+                    return None
+                return cls(to_timestamp(history["when"]), status_change["removed"], status_change["added"])
+
+        for bug, bug_history in zip(before_cutoff_bugs, bugs_history["bugs"]):
+            assert bug.id == bug_history[
+                "id"]  # `bugs_history["bugs"]` returned from Bugzilla API should have the same order as `before_cutoff_bugs`, but be safe
+
+            # We are only interested in "status" field changes
+            status_changes = filter(None, map(BugStatusChange.from_history_ent, bug_history["history"]))
+
+            # status changes after the cutoff event
+            after_cutoff_status_changes = list(
+                itertools.dropwhile(lambda change: change.timestamp <= sweep_cutoff_timestamp, status_changes))
+
+            # determines the status of the bug at the moment of the sweep cutoff event
+            if not after_cutoff_status_changes:
+                sweep_cutoff_status = bug.status  # no status change after the cutoff event; use current status
+            else:
+                sweep_cutoff_status = after_cutoff_status_changes[
+                    0].old  # sweep_cutoff_status should be the old status of the first status change after the sweep cutoff event
+
+            if sweep_cutoff_status not in desired_statuses:
+                logger.info(
+                    f"BZ {bug.id} is ignored because its status was {sweep_cutoff_status} at the moment of sweep cutoff ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
+                continue
+
+            # Per @Justin Pierce: If a BZ seems to qualify for a sweep currently and at the sweep cutoff event, then all state changes after the sweep cutoff event must be to a greater than the state which qualified the BZ at the sweep cutoff event.
+            regressed_changes = [change.new for change in after_cutoff_status_changes if
+                                 constants.VALID_BUG_STATES.index(change.new) <= constants.VALID_BUG_STATES.index(
+                                     sweep_cutoff_status)]
+            if regressed_changes:
+                logger.warning(
+                    f"BZ {bug.id} is ignored because its status was {sweep_cutoff_status} at the moment of sweep cutoff ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})"
+                    f", however its status changed back to {regressed_changes} afterwards")
+                continue
+
+            qualified_bugs.append(bug)
+
+        return qualified_bugs
 
 
 def get_highest_impact(trackers, tracker_flaws_map):
@@ -668,90 +763,6 @@ def to_timestamp(dt: xmlrpc.client.DateTime):
     return datetime.strptime(dt.value, "%Y%m%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
 
 
-def filter_bugs_by_cutoff_event(bzapi, bugs: Iterable, desired_statuses: Iterable[str], sweep_cutoff_timestamp: float) -> List:
-    """ Given a list of bugs, finds those that have changed to one of the desired statuses before the given timestamp.
-
-    According to @jupierce:
-
-    Let:
-    - Z be a non-closed BZ in a monitored component
-    - S2 be the current state (as in the moment we are scanning) of Z
-    - S1 be the state of the Z at the moment of the cutoff
-    - A be the set of state changes Z after the cutoff
-    - F be the sweep states (MODIFIED, ON_QA, VERIFIED)
-
-    Then Z is swept in if all the following are true:
-    - S1 ∈ F
-    - S2 ∈ F
-    - A | ∄v : v <= S1
-
-    In prose: if a BZ seems to qualify for a sweep currently and at the cutoff event, then all state changes after the cutoff event must be to a greater than the state which qualified the BZ at the cutoff event.
-
-    :param bzapi: Bugzilla API object
-    :param bugs: a list of bugs
-    :param desired_statuses: desired bug statuses
-    :param timestamp: a unix timestamp
-    :return: a list of found bugs
-    """
-    qualified_bugs = []
-    desired_statuses = set(desired_statuses)
-
-    # Filters out bugs that are created after the sweep cutoff timestamp
-    before_cutoff_bugs = [bug for bug in bugs if to_timestamp(bug.creation_time) <= sweep_cutoff_timestamp]
-    if len(before_cutoff_bugs) < len(bugs):
-        logger.info(f"{len(bugs) - len(before_cutoff_bugs)} of {len(bugs)} bugs are ignored because they were created after the sweep cutoff timestamp {sweep_cutoff_timestamp} ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
-
-    # Queries bug history
-    bugs_history = bzapi.bugs_history_raw([bug.id for bug in before_cutoff_bugs])
-
-    class BugStatusChange:
-        def __init__(self, timestamp: int, old: str, new: str) -> None:
-            self.timestamp = timestamp  # when this change is made?
-            self.old = old  # old status
-            self.new = new  # new status
-
-        @classmethod
-        def from_history_ent(cls, history):
-            """ Converts from bug history dict returned from Bugzilla to BugStatusChange object.
-            The history dict returned from Bugzilla includes bug changes on all fields, but we are only interested in the "status" field change.
-            :return: BugStatusChange object, or None if the history doesn't include a "status" field change.
-            """
-            status_change = next(filter(lambda change: change["field_name"] == "status", history["changes"]), None)
-            if not status_change:
-                return None
-            return cls(to_timestamp(history["when"]), status_change["removed"], status_change["added"])
-
-    for bug, bug_history in zip(before_cutoff_bugs, bugs_history["bugs"]):
-        assert bug.id == bug_history["id"]  # `bugs_history["bugs"]` returned from Bugzilla API should have the same order as `before_cutoff_bugs`, but be safe
-
-        # We are only interested in "status" field changes
-        status_changes = filter(None, map(BugStatusChange.from_history_ent, bug_history["history"]))
-
-        # status changes after the cutoff event
-        after_cutoff_status_changes = list(itertools.dropwhile(lambda change: change.timestamp <= sweep_cutoff_timestamp, status_changes))
-
-        # determines the status of the bug at the moment of the sweep cutoff event
-        if not after_cutoff_status_changes:
-            sweep_cutoff_status = bug.status  # no status change after the cutoff event; use current status
-        else:
-            sweep_cutoff_status = after_cutoff_status_changes[0].old  # sweep_cutoff_status should be the old status of the first status change after the sweep cutoff event
-
-        if sweep_cutoff_status not in desired_statuses:
-            logger.info(f"BZ {bug.id} is ignored because its status was {sweep_cutoff_status} at the moment of sweep cutoff ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
-            continue
-
-        # Per @Justin Pierce: If a BZ seems to qualify for a sweep currently and at the sweep cutoff event, then all state changes after the sweep cutoff event must be to a greater than the state which qualified the BZ at the sweep cutoff event.
-        regressed_changes = [change.new for change in after_cutoff_status_changes if constants.VALID_BUG_STATES.index(change.new) <= constants.VALID_BUG_STATES.index(sweep_cutoff_status)]
-        if regressed_changes:
-            logger.warning(f"BZ {bug.id} is ignored because its status was {sweep_cutoff_status} at the moment of sweep cutoff ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})"
-                           f", however its status changed back to {regressed_changes} afterwards")
-            continue
-
-        qualified_bugs.append(bug)
-
-    return qualified_bugs
-
-
 def approximate_cutoff_timestamp(basis_event: int, koji_api: ClientSession, metas: Iterable[Metadata]) -> float:
     """ Calculate an approximate sweep cutoff timestamp from the given basis event
     """
@@ -760,5 +771,6 @@ def approximate_cutoff_timestamp(basis_event: int, koji_api: ClientSession, meta
     nvrs = [b["nvr"] for b in builds]
     rebase_timestamp_strings = filter(None, [isolate_timestamp_in_release(nvr) for nvr in nvrs])  # the timestamp in the release field of NVR is the approximate rebase time
     # convert to UNIX timestamps
-    rebase_timestamps = [datetime.strptime(ts, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc).timestamp() for ts in rebase_timestamp_strings]
+    rebase_timestamps = [datetime.strptime(ts, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc).timestamp()
+                         for ts in rebase_timestamp_strings]
     return min(basis_timestamp, max(rebase_timestamps, default=basis_timestamp))

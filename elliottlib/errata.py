@@ -517,7 +517,7 @@ def add_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_
     :param batch_size: perform operation in batches of given size
     :return:
     """
-    print(f'Request to attach {len(bugs)} bugs to the advisory {advisory_id}')
+    click.echo(f'Request to attach {len(bugs)} bugs to the advisory {advisory_id}')
 
     try:
         advisory = Erratum(errata_id=advisory_id)

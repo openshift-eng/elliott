@@ -3,7 +3,7 @@ import click
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib import (Runtime, bzutil, logutil)
 from elliottlib.cli.common import cli
-from elliottlib.cli.find_bugs_cli import FindBugsMode
+from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -15,7 +15,7 @@ class FindBugsQE(FindBugsMode):
         )
 
 
-@cli.command("find-bugs:qe", short_help="Find or add MODIFIED/VERIFIED bugs to ADVISORY")
+@cli.command("find-bugs:qe", short_help="Change MODIFIED bugs to ON_QA")
 @click.option("--jira", 'use_jira',
               is_flag=True,
               default=False,

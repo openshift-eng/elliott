@@ -101,6 +101,9 @@ class TestBZUtil(unittest.TestCase):
 
     def test_filter_bugs_by_cutoff_event(self):
         bzapi = mock.MagicMock()
+        with mock.patch("elliottlib.bzutil.BugzillaBugTracker.login") as mock_login:
+            mock_login.return_value = bzapi
+            bug_tracker = bzutil.BugzillaBugTracker({})
         desired_statuses = ["MODIFIED", "ON_QA", "VERIFIED"]
         sweep_cutoff_timestamp = datetime(2021, 6, 30, 12, 30, 00, 0, tzinfo=timezone.utc).timestamp()
         bugs = [
@@ -266,7 +269,7 @@ class TestBZUtil(unittest.TestCase):
                 },
             ]
         }
-        actual = bzutil.filter_bugs_by_cutoff_event(bzapi, bugs, desired_statuses, sweep_cutoff_timestamp)
+        actual = bug_tracker.filter_bugs_by_cutoff_event(bugs, desired_statuses, sweep_cutoff_timestamp)
         self.assertListEqual([1, 2, 4, 5, 7, 8], [bug.id for bug in actual])
 
     def test_approximate_cutoff_timestamp(self):
