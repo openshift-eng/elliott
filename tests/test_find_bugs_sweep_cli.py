@@ -116,7 +116,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
             "rpm": set(rpm_bugs),
             "extras": set(extras_bugs)
         })
-        flexmock(common).should_receive("find_default_advisory").and_return(123)
+        flexmock(common).should_receive("find_default_advisory").times(3).and_return(123)
         flexmock(errata).should_receive("add_bugs_with_retry").times(3)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--into-default-advisories'])
