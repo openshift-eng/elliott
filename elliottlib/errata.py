@@ -557,15 +557,10 @@ def add_bugzilla_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=const
 
 def add_jira_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants.BUG_ATTACH_CHUNK_SIZE):
     """
-    adding specified bugs into advisory, retry 2 times: first time
-    parse the exception message to get failed bug id list, remove from original
-    list then add bug to advisory again, if still has failures raise exceptions
-
     :param advisory_id: advisory id
     :param bugs: iterable of BugzillaBug to attach to advisory
     :param noop: do not modify anything
     :param batch_size: perform operation in batches of given size
-    :return:
     """
     click.echo(f'Request to attach {len(bugs)} bugs to the advisory {advisory_id}')
 
@@ -586,7 +581,8 @@ def add_jira_bugs_with_retry(advisory_id, bugs, noop=False, batch_size=constants
             if result.status_code != 201:
                 rt = add_jira_issue(advisory_id, chunk_of_bugs[i])
                 if rt.status_code != 201:
-                    raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with post link {rt.url}")
+                    raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
+                                                       f"{rt.status_code=}")
         logger.info("All jira bugs attached")
 
 
