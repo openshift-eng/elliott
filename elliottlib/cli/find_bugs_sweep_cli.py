@@ -171,11 +171,9 @@ advisory with the --add option.
         errata.add_bugs_with_retry(advisory_id, bugs, noop=noop)
         return
 
-    if check_builds:
-        rpm_advisory_id = common.find_default_advisory(runtime, 'rpm')
-    else:
-        rpm_advisory_id = None
-    bugs_by_type = categorize_bugs_by_type(bugs, rpm_advisory_id=rpm_advisory_id, major_version=major_version,
+    rpm_advisory_id = common.find_default_advisory(runtime, 'rpm') if check_builds else None
+    bugs_by_type = categorize_bugs_by_type(bugs, rpm_advisory_id=rpm_advisory_id,
+                                           major_version=major_version,
                                            check_builds=check_builds)
 
     advisory_types_to_attach = [default_advisory_type] if default_advisory_type else bugs_by_type.keys()
