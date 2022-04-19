@@ -6,8 +6,7 @@ from typing import List, Set, Optional
 from elliottlib.assembly import assembly_issues_config
 from elliottlib.bzutil import BugzillaBugTracker, BugTracker, Bug
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
-from elliottlib.cli.common import (cli, find_default_advisory,
-                                   use_default_advisory_option)
+from elliottlib.cli import common
 from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print, chunk
 
 
@@ -36,11 +35,11 @@ class FindBugsSweep(FindBugsMode):
         super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'})
 
 
-@cli.command("find-bugs:sweep", short_help="Find and (optional) add qualified bugs to ADVISORY")
-@click.option("--add", "-a", 'advisory',
+@common.cli.command("find-bugs:sweep", short_help="Find and (optional) add qualified bugs to advisory(s)")
+@click.option("--add", "-a", 'advisory_id',
               type=int, metavar='ADVISORY',
-              help="Add found/listed bugs to ADVISORY")
-@use_default_advisory_option
+              help="Add found bugs to ADVISORY")
+@common.use_default_advisory_option
 @click.option("--check-builds",
               default=None,
               required=False,
@@ -61,7 +60,7 @@ class FindBugsSweep(FindBugsMode):
 @click.option("--report",
               required=False,
               is_flag=True,
-              help="Output a detailed report of the found bugs")
+              help="Output a detailed report of found bugs")
 @click.option('--output', '-o',
               required=False,
               type=click.Choice(['text', 'json', 'slack']),
@@ -78,7 +77,7 @@ class FindBugsSweep(FindBugsMode):
               default=False,
               help="Don't change anything")
 @click.pass_obj
-def find_bugs_sweep_cli(runtime: Runtime, advisory, default_advisory_type, check_builds, include_status, exclude_status,
+def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
                         report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY.
 
@@ -109,7 +108,7 @@ advisory with the --add option.
     $ elliott -g openshift-4.8 --assembly 4.8.32 find-bugs:sweep --use-default-advisory rpm
 
 """
-    count_advisory_attach_flags = sum(map(bool, [advisory, default_advisory_type, into_default_advisories]))
+    count_advisory_attach_flags = sum(map(bool, [advisory_id, default_advisory_type, into_default_advisories]))
     if count_advisory_attach_flags > 1:
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
 
@@ -142,15 +141,7 @@ advisory with the --add option.
                    f"{utc_ts}...")
         bugs = qualified_bugs
 
-    # Loads included/excluded bugs from assembly config
-    issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
-    # JIRA issues are not supported yet. Only loads issues with integer IDs.
-
-    def valid_issue(x):
-        return isinstance(x["id"], int) or x["id"].isdigit()
-
-    included_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.include if valid_issue(i)}
-    excluded_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.exclude if valid_issue(i)}
+    included_bug_ids, excluded_bug_ids = get_assembly_bug_ids(runtime)
     if included_bug_ids & excluded_bug_ids:
         raise ValueError("The following bugs are defined in both 'include' and 'exclude': "
                          f"{included_bug_ids & excluded_bug_ids}")
@@ -171,14 +162,17 @@ advisory with the --add option.
     if report:
         print_report(bugs, output)
 
+    if count_advisory_attach_flags < 1:
+        return
+
     # `--add ADVISORY_NUMBER` should respect the user's wish
     # and attach all available bugs to whatever advisory is specified.
-    if advisory and not default_advisory_type:
-        errata.add_bugs_with_retry(advisory, bugs, noop=noop)
+    if advisory_id and not default_advisory_type:
+        errata.add_bugs_with_retry(advisory_id, bugs, noop=noop)
         return
 
     if check_builds:
-        rpm_advisory_id = find_default_advisory(runtime, 'rpm')
+        rpm_advisory_id = common.find_default_advisory(runtime, 'rpm')
     else:
         rpm_advisory_id = None
     bugs_by_type = categorize_bugs_by_type(bugs, rpm_advisory_id=rpm_advisory_id, major_version=major_version,
@@ -189,12 +183,26 @@ advisory with the --add option.
         bugs = bugs_by_type.get(advisory_type)
         green_prefix(f'{advisory_type} advisory: ')
         if bugs:
-            errata.add_bugs_with_retry(runtime.group_config.advisories[advisory_type], bugs, noop=noop)
+            adv_id = common.find_default_advisory(runtime, advisory_type)
+            errata.add_bugs_with_retry(adv_id, list(bugs), noop=noop)
         else:
             click.echo("0 bugs found")
 
 
 type_bug_list = List[Bug]
+
+
+def get_assembly_bug_ids(runtime):
+    # Loads included/excluded bugs from assembly config
+    issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
+    # JIRA issues are not supported yet. Only loads issues with integer IDs.
+
+    def valid_issue(x):
+        return isinstance(x["id"], int) or x["id"].isdigit()
+
+    included_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.include if valid_issue(i)}
+    excluded_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.exclude if valid_issue(i)}
+    return included_bug_ids, excluded_bug_ids
 
 
 def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, major_version: int = 4, check_builds:
