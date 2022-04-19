@@ -1,7 +1,7 @@
 import json
 import click
 from datetime import datetime
-from typing import List, Set
+from typing import List, Set, Optional
 
 from elliottlib.assembly import assembly_issues_config
 from elliottlib.bzutil import BugzillaBugTracker, BugTracker, Bug
@@ -42,7 +42,7 @@ class FindBugsSweep(FindBugsMode):
               help="Add found/listed bugs to ADVISORY")
 @use_default_advisory_option
 @click.option("--check-builds",
-              default=True,
+              default=None,
               required=False,
               is_flag=True,
               help='When attaching, add bugs only if corresponding builds are attached to advisory')
@@ -115,8 +115,7 @@ advisory with the --add option.
 
     runtime.initialize(mode="both")
     major_version, minor_version = runtime.get_major_minor()
-    if default_advisory_type is not None:
-        advisory = find_default_advisory(runtime, default_advisory_type)
+
     bz_config = BugzillaBugTracker.get_config(runtime)
     bugzilla = BugzillaBugTracker(bz_config)
 
@@ -178,35 +177,28 @@ advisory with the --add option.
         errata.add_bugs_with_retry(advisory, bugs, noop=noop)
         return
 
-    # If --use-default-advisory or --into-default-advisories is given,
-    # we need to determine which bugs should be swept into which advisory.
-    # Otherwise we don't need to sweep bugs at all.
-    if not (into_default_advisories or default_advisory_type):
-        return
-
-    if not check_builds:
-        rpm_advisory = False
+    if check_builds:
+        rpm_advisory_id = find_default_advisory(runtime, 'rpm')
     else:
-        rpm_advisory = find_default_advisory(runtime, 'rpm')
-    bugs_by_kind = categorize_bugs_by_kind(bugs, rpm_advisory=rpm_advisory, major_version=major_version,
+        rpm_advisory_id = None
+    bugs_by_type = categorize_bugs_by_type(bugs, rpm_advisory_id=rpm_advisory_id, major_version=major_version,
                                            check_builds=check_builds)
 
-    if default_advisory_type:
-        if bugs_by_kind.get(default_advisory_type):
-            errata.add_bugs_with_retry(advisory, bugs_by_kind[default_advisory_type], noop=noop)
+    advisory_types_to_attach = [default_advisory_type if default_advisory_type else bugs_by_type.keys()]
+    for advisory_type in advisory_types_to_attach:
+        bugs = bugs_by_type.get(advisory_type)
+        if bugs:
+            green_prefix(f'{advisory_type} advisory: ')
+            errata.add_bugs_with_retry(runtime.group_config.advisories[advisory_type], bugs, noop=noop)
         else:
-            click.echo(f"0 bugs found for kind={default_advisory_type}. Exiting")
-    elif into_default_advisories:
-        for kind, bugs in bugs_by_kind.items():
-            if bugs:
-                green_prefix(f'{kind} advisory: ')
-                errata.add_bugs_with_retry(runtime.group_config.advisories[kind], bugs, noop=noop)
+            click.echo(f"0 bugs found for type={advisory_type}")
 
 
 type_bug_list = List[Bug]
 
 
-def categorize_bugs_by_kind(bugs: List, rpm_advisory: bool = False, major_version: int = 4, check_builds: bool = True):
+def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, major_version: int = 4, check_builds:
+                            bool = True):
     # key is kind ("rpm", "image", "extras"), value is a set of bug IDs.
     bugs_by_kind = {
         "rpm": set(),
@@ -225,9 +217,9 @@ def categorize_bugs_by_kind(bugs: List, rpm_advisory: bool = False, major_versio
         if rpm_bugs:
             # if --check-builds flag is set
             # only attach bugs that have corresponding brew builds attached to rpm advisory
-            if check_builds and rpm_advisory:
+            if check_builds and rpm_advisory_id:
                 click.echo("Validating bugs with builds attached to the rpm advisory")
-                attached_builds = errata.get_advisory_nvrs(rpm_advisory)
+                attached_builds = errata.get_advisory_nvrs(rpm_advisory_id)
                 packages = attached_builds.keys()
                 not_found = []
                 for bug, package_name in rpm_bugs.items():
