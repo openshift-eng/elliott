@@ -18,7 +18,7 @@ class FindBugsQETestCase(unittest.TestCase):
         })
         flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
         flexmock(FindBugsQE).should_receive("search").and_return(bugs)
-        expected_comment = 'This bug is expected to ship in the next 4.6 release created.'
+        expected_comment = 'This bug is expected to ship in the next 4.6 release.'
         flexmock(BugzillaBugTracker).should_receive("update_bug_status").with_args(
             bug, 'ON_QA', comment=expected_comment, noop=True
         )
@@ -41,7 +41,7 @@ class FindBugsQETestCase(unittest.TestCase):
         })
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
         flexmock(FindBugsQE).should_receive("search").and_return(bugs)
-        expected_comment = 'This bug is expected to ship in the next 4.6 release created.'
+        expected_comment = 'This bug is expected to ship in the next 4.6 release.'
         flexmock(JIRABugTracker).should_receive("update_bug_status").with_args(
             bug, 'ON_QA', comment=expected_comment, noop=True
         )

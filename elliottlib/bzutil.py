@@ -135,10 +135,7 @@ class BugTracker:
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         raise NotImplementedError
 
-    def update_bug_status(self, bug, target_status, comment=None, log_comment=True, noop=False):
-        raise NotImplementedError
-
-    def add_comment(self, bug, comment, private=True, noop=False):
+    def add_comment(self, bugid, comment: str, private: bool, noop=False):
         raise NotImplementedError
 
     def create_bug(self, bug_title, bug_description, target_status, keywords: List, noop=False):
