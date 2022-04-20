@@ -168,7 +168,7 @@ advisory with the --add option.
     # `--add ADVISORY_NUMBER` should respect the user's wish
     # and attach all available bugs to whatever advisory is specified.
     if advisory_id and not default_advisory_type:
-        errata.add_bugs_with_retry(advisory_id, bugs, noop=noop)
+        bugzilla.attach_bugs(advisory_id, [b.id for b in bugs], noop=noop)
         return
 
     rpm_advisory_id = common.find_default_advisory(runtime, 'rpm') if check_builds else None
@@ -182,7 +182,7 @@ advisory with the --add option.
         green_prefix(f'{advisory_type} advisory: ')
         if bugs:
             adv_id = common.find_default_advisory(runtime, advisory_type)
-            errata.add_bugs_with_retry(adv_id, list(bugs), noop=noop)
+            bugzilla.attach_bugs(adv_id, [b.id for b in bugs], noop=noop)
         else:
             click.echo("0 bugs found")
 

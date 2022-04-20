@@ -10,7 +10,6 @@ import xmlrpc.client
 from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
-from urllib.parse import urlparse
 from jira import JIRA, Issue
 
 import bugzilla
@@ -19,7 +18,7 @@ import os
 from bugzilla.bug import Bug
 from koji import ClientSession
 
-from elliottlib import constants, exceptions, exectools, logutil, bzutil
+from elliottlib import constants, exceptions, exectools, logutil, bzutil, errata
 from elliottlib.metadata import Metadata
 from elliottlib.util import isolate_timestamp_in_release, red_print
 
@@ -123,15 +122,18 @@ class BugTracker:
     def get_bug(self, bugid, **kwargs):
         raise NotImplementedError
 
-    def get_bugs(self, ids, permissive=False, **kwargs):
+    def get_bugs(self, bugids: List, permissive=False, **kwargs):
         raise NotImplementedError
 
-    def get_bugs_map(self, ids: List[int], permissive: bool = False, **kwargs) -> Dict[int, Bug]:
-        id_bug_map: Dict[int, Bug] = {}
-        bugs: List[Bug] = self.get_bugs(ids, permissive=permissive, **kwargs)
+    def get_bugs_map(self, bugids: List, permissive: bool = False, **kwargs) -> Dict:
+        id_bug_map = {}
+        bugs = self.get_bugs(bugids, permissive=permissive, **kwargs)
         for i, bug in enumerate(bugs):
-            id_bug_map[ids[i]] = bug
+            id_bug_map[bugids[i]] = bug
         return id_bug_map
+
+    def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
+        raise NotImplementedError
 
 
 class JIRABugTracker(BugTracker):
@@ -248,6 +250,9 @@ class JIRABugTracker(BugTracker):
         )
         return self._search(query, verbose, **kwargs)
 
+    def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
+        return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
+
 
 class BugzillaBugTracker(BugTracker):
     @staticmethod
@@ -290,6 +295,9 @@ class BugzillaBugTracker(BugTracker):
         if verbose:
             click.echo(query)
         return [BugzillaBug(b) for b in _perform_query(self._client, query, include_fields=fields)]
+
+    def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
+        return errata.add_bugzilla_bugs_with_retry(advisory_id, bugids, noop=noop)
 
     def create_bug(self, title, description, target_status, keywords: List) -> BugzillaBug:
         create_info = self._client.build_createbug(
