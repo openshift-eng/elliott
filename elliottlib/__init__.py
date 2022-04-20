@@ -12,5 +12,5 @@ def version():
         stream = pkg_resources.resource_stream('elliottlib', 'VERSION')
         return stream.read().decode()
     except FileNotFoundError:
-        proc = subprocess.run(['git', 'describe', '--tags'], stdout=subprocess.PIPE)
+        proc = subprocess.run(['git', 'describe', '--tags'], stdout=subprocess.PIPE, check=True)
         return proc.stdout.decode().strip()

@@ -11,7 +11,7 @@ with open('./requirements.txt') as f:
 
 
 def get_version():
-    proc = subprocess.run(['git', 'describe', '--tags'], stdout=subprocess.PIPE)
+    proc = subprocess.run(['git', 'describe', '--tags'], stdout=subprocess.PIPE, check=True)
     return proc.stdout.decode().strip()
 
 
