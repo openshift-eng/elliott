@@ -123,7 +123,7 @@ def remove_multi_jira_issues(advisory_id, jira_list: List):
     Remove multi jira issues from advisory
     Return a list of response code
     """
-    return  [remove_jira_issue(advisory_id, jira_id) for jira_id in jira_list]
+    return [remove_jira_issue(advisory_id, jira_id) for jira_id in jira_list]
 
 
 def add_multi_jira_issues(advisory_id, jira_list: List):

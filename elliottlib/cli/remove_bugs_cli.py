@@ -3,6 +3,7 @@ import requests
 
 import elliottlib
 from elliottlib import constants, logutil, Runtime, errata
+from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
@@ -16,6 +17,7 @@ from spnego.exceptions import GSSError
 LOGGER = logutil.getLogger(__name__)
 
 pass_runtime = click.make_pass_decorator(Runtime)
+
 
 # -----------------------------------------------------------------------------
 # CLI Commands - Please keep these in alphabetical order
@@ -88,7 +90,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, issue, remove_all)
                 jira_bug_ids = [issue.key for issue in errata.get_jira_issue(advisory)]
             else:
                 bugzilla_bug_ids = [bugzilla_tracker.get_bug(i).id for i in cli_opts.id_convert(id)]
-                jira_bug_ids = [errata.get_jira_issue(i).key for i in cli_opts.id_convert(issue)]
+                jira_bug_ids = [jira_tracker.get_bug(i).id for i in cli_opts.id_convert(issue)]
             green_prefix("Found {} bugzilla bugs:".format(len(bugzilla_bug_ids)))
             click.echo(" {}".format(", ".join([str(b) for b in bugzilla_bug_ids])))
             green_prefix("Found {} jira bugs:".format(len(jira_bug_ids)))
