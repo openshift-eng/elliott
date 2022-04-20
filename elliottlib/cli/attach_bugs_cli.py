@@ -85,7 +85,7 @@ For attaching use --advisory, --use-default-advisory <TYPE>
         advisory = find_default_advisory(runtime, default_advisory_type)
 
     bug_ids = cli_opts.id_convert_str(bug_ids)
-    bugs = bug_tracker.get_bugs(bug_ids)
+    bugs = bug_tracker.get_bugs(bug_ids, verbose=runtime.debug)
 
     # Check if target release and OCP version match
     target_release = Bug.get_target_release(bugs)
