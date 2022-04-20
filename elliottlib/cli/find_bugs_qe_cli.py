@@ -47,5 +47,6 @@ def find_bugs_qe_cli(runtime: Runtime, use_jira, noop):
     bugs = FindBugsQE().search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
     click.echo(f"Found {len(bugs)} bugs: {', '.join(sorted(str(b.id) for b in bugs))}")
 
+    release_comment = f"This bug is expected to ship in the next {major_version}.{minor_version} release created."
     for bug in bugs:
-        bug_tracker.update_bug_status(bug.id, 'ON_QA', comment_for_release=f"{major_version}.{minor_version}", noop=noop)
+        bug_tracker.update_bug_status(bug.id, 'ON_QA', comment=release_comment, noop=noop)
