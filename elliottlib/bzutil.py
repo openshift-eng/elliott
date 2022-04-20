@@ -83,7 +83,10 @@ class BugzillaBug(Bug):
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
         self.id = self.bug.id
-        self.target_release = self.bug.target_release
+
+    @property
+    def target_release(self):
+        return self.bug.target_release
 
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
