@@ -9,7 +9,8 @@ from flexmock import flexmock
 class FindBugsQETestCase(unittest.TestCase):
     def test_find_bugs_qe_bz(self):
         runner = CliRunner()
-        bugs = [flexmock(id=123, status="MODIFIED")]
+        bug = flexmock(id=123, status="MODIFIED")
+        bugs = [bug]
         flexmock(Runtime).should_receive("initialize").and_return(None)
         flexmock(Runtime).should_receive("get_major_minor").and_return(4, 6)
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({
@@ -17,7 +18,10 @@ class FindBugsQETestCase(unittest.TestCase):
         })
         flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
         flexmock(FindBugsQE).should_receive("search").and_return(bugs)
-        flexmock(BugzillaBugTracker).should_receive("update_bug_status")
+        expected_comment = 'This bug is expected to ship in the next 4.6 release created.'
+        flexmock(BugzillaBugTracker).should_receive("update_bug_status").with_args(
+            bug, 'ON_QA', comment=expected_comment, noop=True
+        )
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:qe', '--noop'])
         search_string1 = 'Searching for bugs with status MODIFIED and target release(s): 4.6.z'
@@ -28,7 +32,8 @@ class FindBugsQETestCase(unittest.TestCase):
 
     def test_find_bugs_qe_jira(self):
         runner = CliRunner()
-        bugs = [flexmock(id='OCPBUGS-123', status="MODIFIED")]
+        bug = flexmock(id='OCPBUGS-123', status="MODIFIED")
+        bugs = [bug]
         flexmock(Runtime).should_receive("initialize").and_return(None)
         flexmock(Runtime).should_receive("get_major_minor").and_return(4, 6)
         flexmock(JIRABugTracker).should_receive("get_config").and_return({
@@ -36,7 +41,10 @@ class FindBugsQETestCase(unittest.TestCase):
         })
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
         flexmock(FindBugsQE).should_receive("search").and_return(bugs)
-        flexmock(JIRABugTracker).should_receive("update_bug_status")
+        expected_comment = 'This bug is expected to ship in the next 4.6 release created.'
+        flexmock(JIRABugTracker).should_receive("update_bug_status").with_args(
+            bug, 'ON_QA', comment=expected_comment, noop=True
+        )
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:qe', '--jira', '--noop'])
         search_string1 = 'Searching for bugs with status MODIFIED and target release(s): 4.6.z'

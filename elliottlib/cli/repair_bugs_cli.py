@@ -104,7 +104,7 @@ providing an advisory with the -a/--advisory option.
         # error, no bugs, advisory, or default selected
         raise click.BadParameter("No input provided: Must use one of --id, --advisory, or --use-default-advisory")
 
-    # Load bugzilla infomation and get a reference to the api
+    # Load bugzilla information and get a reference to the api
     runtime.initialize()
     if use_jira:
         jira_config = JIRABugTracker.get_config(runtime)
@@ -113,12 +113,10 @@ providing an advisory with the -a/--advisory option.
         bz_config = BugzillaBugTracker.get_config(runtime)
         bug_tracker = BugzillaBugTracker(bz_config)
     changed_bug_count = 0
-    attached_bugs = []
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    raw_bug_list = []
     if auto:
         click.echo("Fetching Advisory(errata_id={})".format(advisory))
         e = elliottlib.errata.Advisory(errata_id=advisory)
@@ -149,12 +147,12 @@ providing an advisory with the -a/--advisory option.
     for bug in attached_bugs:
         if bug.status in original_state:
             if close_placeholder and "Placeholder" in bug.summary:
-                bug_tracker.update_bug_status(bug.id, "CLOSED")
+                bug_tracker.update_bug_status(bug, "CLOSED")
             else:
-                bug_tracker.update_bug_status(bug.id, new_state)
+                bug_tracker.update_bug_status(bug, new_state)
                 # only add comments for non-placeholder bug
                 if comment and not noop:
-                    bug_tracker.add_comment_to_bug(bug.id, comment, False)
+                    bug_tracker.add_comment(bug, comment, private=False)
             changed_bug_count += 1
 
     green_print("{} bugs successfully modified (or would have been)".format(changed_bug_count))

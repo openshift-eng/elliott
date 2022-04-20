@@ -369,19 +369,19 @@ class BugzillaBugTracker(BugTracker):
             comment_lines.append(comment)
 
         if current_status == target_status:
-            logger.info(f'Bug#{bug.id} is already on {target_status}')
+            click.echo(f'Bug#{bug.id} is already on {target_status}')
             return
         elif noop:
-            logger.info(f"Would have changed BZ#{bug.id} from {current_status} to {target_status}")
+            click.echo(f"Would have changed BZ#{bug.id} from {current_status} to {target_status}")
         else:
             self._client.update_bugs([bug.id], self._client.build_update(status=target_status))
 
         if comment_lines:
             self.add_comment(bug, '\n'.join(comment_lines), private=True, noop=noop)
 
-    def add_comment(self, bug, comment, private=True, noop=False):
+    def add_comment(self, bug: BugzillaBug, comment: str, private=True, noop=False):
         if noop:
-            logger.info(f"Would have added private={private} comment={comment} to bug={bug.id}")
+            click.echo(f"Would have added private={private} comment={comment} to bug={bug.id}")
             return
         self._client.update_bugs([bug.id], self._client.build_update(comment=comment, comment_private=private))
 
