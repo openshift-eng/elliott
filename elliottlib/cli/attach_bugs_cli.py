@@ -5,7 +5,7 @@ from elliottlib import Runtime, errata, logutil
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, find_default_advisory, use_default_advisory_option
-from elliottlib.cli.find_bugs_cli import print_report
+from elliottlib.cli.find_bugs_sweep_cli import print_report
 
 
 LOGGER = logutil.getLogger(__name__)
@@ -84,7 +84,7 @@ For attaching use --advisory, --use-default-advisory <TYPE>
         advisory = find_default_advisory(runtime, default_advisory_type)
 
     bug_ids = cli_opts.id_convert_str(bug_ids)
-    bugs = bug_tracker.get_bugs(bug_ids, verbose=runtime.debug)
+    bugs = bug_tracker.get_bugs(bug_ids)
 
     # Check if target release and OCP version match
     target_release = Bug.get_target_release(bugs)
