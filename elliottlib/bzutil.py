@@ -295,6 +295,7 @@ class BugzillaBugTracker(BugTracker):
         create_info = self._client.build_createbug(
             product=self.config.get('product'),
             version=self.config.get('version')[0],
+            target_release=self.config.get('target_release')[0],
             component="Release",
             summary=title,
             keywords=keywords,
@@ -302,7 +303,7 @@ class BugzillaBugTracker(BugTracker):
         new_bug = self._client.createbug(create_info)
         # change state to VERIFIED, set target release
         try:
-            update = self._client.build_update(status=target_status, target_release=self.config.get('target_release')[0])
+            update = self._client.build_update(status=target_status)
             self._client.update_bugs([new_bug.id], update)
         except Exception as ex:  # figure out the actual bugzilla error. it only happens sometimes
             sleep(5)
