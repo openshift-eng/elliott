@@ -38,7 +38,6 @@ setup(
     license="Apache License, Version 2.0",
     packages=find_packages(exclude=["tests", "tests.*", "functional_tests", "functional_tests.*"]),
     include_package_data=True,
-    package_data={'': ['elliottlib/VERSION']},
     entry_points={
         'console_scripts': [
             'elliott = elliottlib.cli.__main__:main'
