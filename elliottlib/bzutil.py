@@ -115,6 +115,7 @@ class JIRABug(Bug):
                 blocks.append(link.outwardIssue)
         return blocks
 
+
 class BugTracker:
     def __init__(self, config):
         self.config = config
