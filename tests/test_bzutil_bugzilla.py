@@ -31,7 +31,7 @@ class BugzillaBugTrackerUpdateBugStatus(unittest.TestCase):
         client.should_receive("update_bugs").ordered()
         comment = 'Elliott changed bug status from status1 to status2.\ncomment'
         flexmock(BugzillaBugTracker).should_receive("add_comment").with_args(
-            bug, comment, private=True, noop=False
+            bug.id, comment, private=True, noop=False
         )
 
         bz = BugzillaBugTracker({})
@@ -51,7 +51,7 @@ class BugzillaBugTrackerUpdateAddComment(unittest.TestCase):
 
         bz = BugzillaBugTracker({})
         bz._client = client
-        bz.add_comment(bug, 'comment', private=True)
+        bz.add_comment(bug.id, 'comment', private=True)
 
 
 if __name__ == '__main__':

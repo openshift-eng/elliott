@@ -144,12 +144,36 @@ class BugTracker:
     def create_bug(self, bug_title, bug_description, target_status, keywords: List, noop=False):
         raise NotImplementedError
 
+    def _update_bug_status(self, bugid, target_status):
+        raise NotImplementedError
+
     def create_placeholder(self, kind, noop=False):
         title = f"Placeholder bug for OCP {self.config.get('target_release')[0]} {kind} release"
         return self.create_bug(self, title, title, "VERIFIED", ["Automation"], noop=noop)
 
     def create_textonly(self, bug_title, bug_description, noop=False):
         return self.create_bug(self, bug_title, bug_description, "VERIFIED", noop=noop)
+
+    def update_bug_status(self, bug: Bug, target_status: str,
+                          comment: Optional[str] = None, log_comment: bool = True, noop=False):
+        current_status = bug.status
+        action = f'changed {bug.id} from {current_status} to {target_status}'
+        if current_status == target_status:
+            click.echo(f'{bug.id} is already on {target_status}')
+            return
+        elif noop:
+            click.echo(f"Would have {action}")
+        else:
+            self._update_bug_status(bug.id, target_status)
+            click.echo(action)
+
+        comment_lines = []
+        if log_comment:
+            comment_lines.append(f'Elliott changed bug status from {current_status} to {target_status}.')
+        if comment:
+            comment_lines.append(comment)
+        if comment_lines:
+            self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
 
 
 class JIRABugTracker(BugTracker):
@@ -214,34 +238,17 @@ class JIRABugTracker(BugTracker):
         self._client.transition_issue(bug, target_status)
         return JIRABug(bug)
 
-    def update_bug_status(self, bug: JIRABug, target_status: str,
-                          comment: Optional[str] = None, log_comment: bool = True,
-                          noop: bool = False):
-        current_status = bug.status
-        if current_status == target_status:
-            click.echo(f'Bug#{bug.id} is already on {target_status}')
-            return
-        elif noop:
-            click.echo(f"Would have changed Bug#{bug.id} from {current_status} to {target_status}")
-        else:
-            self._client.transition_issue(bug, target_status)
+    def _update_bug_status(self, bugid, target_status):
+        return self._client.transition_issue(bugid, target_status)
 
-        comment_lines = []
-        if log_comment:
-            comment_lines.append(f'Elliott changed bug status from {current_status} to {target_status}.')
-        if comment:
-            comment_lines.append(comment)
-        if comment_lines:
-            self.add_comment(bug, '\n'.join(comment_lines), private=True, noop=noop)
-
-    def add_comment(self, bug: JIRABug, comment, private, noop=False):
+    def add_comment(self, bugid: str, comment: str, private: bool, noop=False):
         if noop:
-            click.echo(f"Would have added private={private} comment={comment} to bug={bug.id}")
+            click.echo(f"Would have added a private={private} comment to {bugid}")
             return
         if private:
-            self._client.add_comment(bug, comment, visibility={'type': 'group', 'value': 'Red Hat Employee'})
+            self._client.add_comment(bugid, comment, visibility={'type': 'group', 'value': 'Red Hat Employee'})
         else:
-            self._client.add_comment(bug, comment)
+            self._client.add_comment(bugid, comment)
 
     def _query(self, bugids: Optional[List] = None,
                status: Optional[List] = None,
@@ -359,31 +366,11 @@ class BugzillaBugTracker(BugTracker):
 
         return BugzillaBug(new_bug)
 
-    def update_bug_status(self, bug: BugzillaBug, target_status: str,
-                          comment: Optional[str] = None, log_comment: bool = True, noop=False):
-        current_status = bug.status
-        comment_lines = []
-        if log_comment:
-            comment_lines.append(f'Elliott changed bug status from {current_status} to {target_status}.')
-        if comment:
-            comment_lines.append(comment)
+    def _update_bug_status(self, bugid, target_status):
+        return self._client.update_bugs([bugid], self._client.build_update(status=target_status))
 
-        if current_status == target_status:
-            click.echo(f'Bug#{bug.id} is already on {target_status}')
-            return
-        elif noop:
-            click.echo(f"Would have changed BZ#{bug.id} from {current_status} to {target_status}")
-        else:
-            self._client.update_bugs([bug.id], self._client.build_update(status=target_status))
-
-        if comment_lines:
-            self.add_comment(bug, '\n'.join(comment_lines), private=True, noop=noop)
-
-    def add_comment(self, bug: BugzillaBug, comment: str, private=True, noop=False):
-        if noop:
-            click.echo(f"Would have added private={private} comment={comment} to bug={bug.id}")
-            return
-        self._client.update_bugs([bug.id], self._client.build_update(comment=comment, comment_private=private))
+    def add_comment(self, bugid, comment: str, private, noop=False):
+        self._client.update_bugs([bugid], self._client.build_update(comment=comment, comment_private=private))
 
     def filter_bugs_by_cutoff_event(self, bugs: Iterable, desired_statuses: Iterable[str],
                                     sweep_cutoff_timestamp: float) -> List:

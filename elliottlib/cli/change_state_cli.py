@@ -43,7 +43,7 @@ unless Bugzilla Bugs or JIRA Issues have been attached.
     be used together.
 
 See the find-bugs help for additional information on adding
-Bugzilla Bugs.
+Bugs.
 
     Move assembly release advisories to QE
 
