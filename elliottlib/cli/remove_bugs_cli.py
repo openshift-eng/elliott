@@ -98,8 +98,10 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, issue, remove_all)
 
             green_prefix("Removing {count} bugzilla bugs and {number} jira bugs from advisory:".format(count=len(bugzilla_bug_ids), number=len(jira_bug_ids)))
             click.echo(" {advs}".format(advs=advisory))
-            advs.removeBugs([bug for bug in bugzilla_bug_ids])
-            advs.commit()
-            errata.remove_multi_jira_issues(advisory, jira_bug_ids)
+            if bugzilla_bug_ids:
+                advs.removeBugs([bug for bug in bugzilla_bug_ids])
+                advs.commit()
+            if jira_bug_ids:
+                errata.remove_multi_jira_issues(advisory, jira_bug_ids)
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
