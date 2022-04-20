@@ -575,7 +575,7 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
                 rt = add_jira_issue(advisory_id, chunk_of_bugs[i])
                 if rt.status_code != 201:
                     raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
-                                                       f"{rt.status_code=}")
+                                                       f"status={rt.status_code}")
         logger.info("All jira bugs attached")
 
 
