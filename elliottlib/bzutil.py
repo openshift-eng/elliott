@@ -135,11 +135,21 @@ class BugTracker:
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         raise NotImplementedError
 
-    def update_bug_status(self, bugid, target_status, comment_for_release=None, log_comment=True, noop=False):
+    def update_bug_status(self, bug, target_status, comment=None, log_comment=True, noop=False):
         raise NotImplementedError
 
-    def add_comment_to_bug(self, bugid, comment, private, comment_for_release):
+    def add_comment(self, bug, comment, private=True, noop=False):
         raise NotImplementedError
+
+    def create_bug(self, bug_title, bug_description, target_status, keywords: List, noop=False):
+        raise NotImplementedError
+
+    def create_placeholder(self, kind, noop=False):
+        title = f"Placeholder bug for OCP {self.config.get('target_release')[0]} {kind} release"
+        return self.create_bug(self, title, title, "VERIFIED", ["Automation"], noop=noop)
+
+    def create_textonly(self, bug_title, bug_description, noop=False):
+        return self.create_bug(self, bug_title, bug_description, "VERIFIED", noop=noop)
 
 
 class JIRABugTracker(BugTracker):
@@ -169,24 +179,25 @@ class JIRABugTracker(BugTracker):
         self._project = config.get('project')
         self._client: JIRA = self.login()
 
-    def get_bug(self, bugid, **kwargs) -> JIRABug:
+    def get_bug(self, bugid: str, **kwargs) -> JIRABug:
         return JIRABug(self._client.issue(bugid, **kwargs))
 
-    def get_bugs(self, bugids, permissive=False, **kwargs) -> List[JIRABug]:
-        bugs = self._search(self._query(bug_list=bugids), **kwargs)
+    def get_bugs(self, bugids: List[str], permissive=False, **kwargs) -> List[JIRABug]:
+        bugs = self._search(self._query(bugids=bugids), **kwargs)
         if not permissive and len(bugs) < len(bugids):
             raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
         return bugs
 
-    def get_remote_links(self, bugid):
-        remote_links = self._client.remote_links(self._client.issue(bugid))
+    def get_bug_remote_links(self, bug: JIRABug):
+        remote_links = self._client.remote_links(bug)
         link_dict = {}
         for link in remote_links:
             if link.__contains__('relationship'):
                 link_dict[link.relationship] = link.object.url
         return link_dict
 
-    def create_bug(self, bug_title, bug_description, target_status, keywords: List, noop=False) -> JIRABug:
+    def create_bug(self, bug_title: str, bug_description: str, target_status: str, keywords: List, noop=False) -> \
+            JIRABug:
         fields = {
             'project': {'key': self._project},
             'issuetype': {'name': 'Bug'},
@@ -203,46 +214,43 @@ class JIRABugTracker(BugTracker):
         self._client.transition_issue(bug, target_status)
         return JIRABug(bug)
 
-    def update_bug_status(self, bugid, target_status, comment=None, log_comment=True, noop=False):
-        current_status = self._client.issue(bugid).fields.status.name
+    def update_bug_status(self, bug: JIRABug, target_status: str,
+                          comment: Optional[str] = None, log_comment: bool = True,
+                          noop: bool = False):
+        current_status = bug.status
+        if current_status == target_status:
+            click.echo(f'Bug#{bug.id} is already on {target_status}')
+            return
+        elif noop:
+            click.echo(f"Would have changed Bug#{bug.id} from {current_status} to {target_status}")
+        else:
+            self._client.transition_issue(bug, target_status)
+
         comment_lines = []
         if log_comment:
             comment_lines.append(f'Elliott changed bug status from {current_status} to {target_status}.')
         if comment:
             comment_lines.append(comment)
-
-        if noop:
-            logger.info(f"Would have changed JIRA Issue#{bugid} from {current_status} to {target_status}")
-        else:
-            self._client.transition_issue(self._client.issue(bugid), target_status)
         if comment_lines:
-            self.add_comment_to_bug(self, bugid, '\n'.join(comment_lines), private=True, noop=noop)
+            self.add_comment(bug, '\n'.join(comment_lines), private=True, noop=noop)
 
-    def add_comment_to_bug(self, bugid, comment, private=True, noop=False):
+    def add_comment(self, bug: JIRABug, comment, private, noop=False):
         if noop:
-            logger.info(f"Would have added private={private} comment={comment} to bug={bugid}")
+            click.echo(f"Would have added private={private} comment={comment} to bug={bug.id}")
             return
         if private:
-            self._client.add_comment(self._client.issue(bugid), comment,
-                                     visibility={'type': 'group', 'value': 'Red Hat Employee'})
+            self._client.add_comment(bug, comment, visibility={'type': 'group', 'value': 'Red Hat Employee'})
         else:
-            self._client.add_comment(self._client.issue(bugid), comment)
+            self._client.add_comment(bug, comment)
 
-    def create_placeholder(self, kind, noop=False):
-        title = f"Placeholder bug for OCP {self.config.get('target_release')[0]} {kind} release"
-        return self.create_bug(self, title, title, "VERIFIED", ["Automation"], noop=noop)
-
-    def create_textonly(self, bug_title, bug_description, noop=False):
-        return self.create_bug(self, bug_title, bug_description, "VERIFIED", noop=noop)
-
-    def _query(self, bug_list: Optional[List] = None,
+    def _query(self, bugids: Optional[List] = None,
                status: Optional[List] = None,
                target_release: Optional[List] = None,
                include_labels: Optional[List] = None,
                exclude_labels: Optional[List] = None) -> str:
         query = f"project={self._project}"
-        if bug_list:
-            query += f" and issue in ({','.join(bug_list)})"
+        if bugids:
+            query += f" and issue in ({','.join(bugids)})"
         if status:
             query += f" and status in ({','.join(status)})"
         if target_release:
@@ -351,45 +359,31 @@ class BugzillaBugTracker(BugTracker):
 
         return BugzillaBug(new_bug)
 
-    def update_bug_status(self, bugid, target_status, comment=None, log_comment=True, noop=False):
-        current_status = self._client.getbug(bugid).status
+    def update_bug_status(self, bug: BugzillaBug, target_status: str,
+                          comment: Optional[str] = None, log_comment: bool = True, noop=False):
+        current_status = bug.status
         comment_lines = []
         if log_comment:
             comment_lines.append(f'Elliott changed bug status from {current_status} to {target_status}.')
         if comment:
             comment_lines.append(comment)
 
-        if noop:
-            logger.info(f"Would have changed BZ#{bugid} from {current_status} to {target_status}")
-        else:
-            self._client.update_bugs([bugid], self._client.build_update(status=target_status))
-        if comment_lines:
-            self.add_comment_to_bug(self, bugid, '\n'.join(comment_lines), private=True, noop=noop)
-
-    def add_comment_to_bug(self, bugid, comment, private=True, noop=False):
-        if noop:
-            logger.info(f"Would have added private={private} comment={comment} to bug={bugid}")
+        if current_status == target_status:
+            logger.info(f'Bug#{bug.id} is already on {target_status}')
             return
-        self._client.update_bugs([bugid], self._client.build_update(comment=comment, comment_private=private))
+        elif noop:
+            logger.info(f"Would have changed BZ#{bug.id} from {current_status} to {target_status}")
+        else:
+            self._client.update_bugs([bug.id], self._client.build_update(status=target_status))
 
-    def create_placeholder(self, kind) -> BugzillaBug:
-        """Create a placeholder bug
+        if comment_lines:
+            self.add_comment(bug, '\n'.join(comment_lines), private=True, noop=noop)
 
-        :param kind: The "kind" of placeholder to create. Generally 'rpm' or 'image'
-
-        :return: Placeholder Bug object
-        """
-        boilerplate = f"Placeholder bug for OCP {self.config.get('target_release')[0]} {kind} release"
-        return self.create_bug(boilerplate, boilerplate, "VERIFIED", ["Automation"])
-
-    def create_textonly(self, title, description) -> BugzillaBug:
-        """Create a text only bug
-        :param title: The title of the bug to create
-        :param description: The description of the bug to create
-
-        :return: Text only Bug object
-        """
-        return self.create_bug(title, description, "VERIFIED")
+    def add_comment(self, bug, comment, private=True, noop=False):
+        if noop:
+            logger.info(f"Would have added private={private} comment={comment} to bug={bug.id}")
+            return
+        self._client.update_bugs([bug.id], self._client.build_update(comment=comment, comment_private=private))
 
     def filter_bugs_by_cutoff_event(self, bugs: Iterable, desired_statuses: Iterable[str],
                                     sweep_cutoff_timestamp: float) -> List:
