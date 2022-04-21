@@ -117,20 +117,36 @@ def remove_jira_issue(advisory_id, jira_issue_id):
     return ErrataConnector()._post(f"/api/v1/erratum/{advisory_id}/remove_jira_issue", data={'jira_issue': jira_issue_id})
 
 
+def remove_multi_jira_issues(advisory_id, jira_list: List):
+    """
+    Remove multi jira issues from advisory
+    Return a list of response code
+    """
+    return [remove_jira_issue(advisory_id, jira_id) for jira_id in jira_list]
+
+
 def add_multi_jira_issues(advisory_id, jira_list: List):
     """
     Add multi jira issues to advisory
-    Return a list to response code
+    Return a list of response code
     """
     return [add_jira_issue(advisory_id, jira_id) for jira_id in jira_list]
 
 
-def get_jira_issue(advisory_id):
+def get_jira_issue_from_advisory(advisory_id):
     """
     Get a list of jira issues from a advisory
     Will return a list of dict contains jira issue data
     """
     return ErrataConnector()._get(f"/advisory/{advisory_id}/jira_issues.json")
+
+
+def get_jira_issue(jira_issue_id):
+    """
+    Get a jira issue by errata
+    Will return a dict contains jira issue data
+    """
+    return ErrataConnector()._get(f"/jira_issues/{jira_issue_id}.json")
 
 
 def get_bug_ids(advisory_id):

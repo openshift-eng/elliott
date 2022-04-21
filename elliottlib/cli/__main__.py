@@ -64,6 +64,7 @@ from elliottlib.cli.rhcos_cli import rhcos_cli
 from elliottlib.cli.create_textonly_cli import create_textonly_cli
 from elliottlib.cli.advisory_commons_cli import advisory_commons_cli
 from elliottlib.cli.find_bugs_blocker_cli import find_bugs_blocker_cli
+from elliottlib.cli.remove_bugs_cli import remove_bugs_cli
 
 # 3rd party
 import click
@@ -75,80 +76,6 @@ from spnego.exceptions import GSSError
 # Constants and defaults
 # -----------------------------------------------------------------------------
 pass_runtime = click.make_pass_decorator(Runtime)
-
-
-# -----------------------------------------------------------------------------
-# CLI Commands - Please keep these in alphabetical order
-# -----------------------------------------------------------------------------
-#
-#
-# Remove bugs
-#
-@cli.command("remove-bugs", short_help="Remove provided BUGS from ADVISORY")
-@click.option('--advisory', '-a', 'advisory',
-              type=int, metavar='ADVISORY',
-              help='Remove found bugs from ADVISORY')
-@use_default_advisory_option
-@click.option("--id", metavar='BUGID', default=[],
-              multiple=True, required=False,
-              help="Bugzilla IDs to add.")
-@click.option("--all", "remove_all",
-              required=False,
-              default=False, is_flag=True,
-              help="Remove all bugs attached to Advisory")
-@pass_runtime
-def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all):
-    """Remove given BUGS from ADVISORY.
-
-    Remove bugs that have been attached an advisory:
-
-\b
-    $ elliott --group openshift-3.7 remove-bugs --id 123456 --advisory 1234123
-
-    Remove two bugs from default rpm advisory. Note that --group is required
-    because default advisory is from ocp-build-data:
-
-\b
-    $ elliott --group openshift-3.7 remove-bugs --id 123456 --id 3412311 --use-default-advisory rpm
-
-
-"""
-    if remove_all and id:
-        raise click.BadParameter("Combining the automatic and manual bug modification options is not supported")
-    if not remove_all and not id:
-        raise click.BadParameter("If not using --all then one or more --id's must be provided")
-    if bool(advisory) == bool(default_advisory_type):
-        raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
-
-    runtime.initialize()
-    bz_data = runtime.gitdata.load_data(key='bugzilla').data
-    bzapi = elliottlib.bzutil.get_bzapi(bz_data)
-
-    if default_advisory_type is not None:
-        advisory = find_default_advisory(runtime, default_advisory_type)
-
-    if advisory:
-        try:
-            advs = elliottlib.errata.Advisory(errata_id=advisory)
-        except GSSError:
-            exit_unauthenticated()
-
-        if advs is False:
-            raise ElliottFatalError("Error: Could not locate advisory {advs}".format(advs=advisory))
-
-        try:
-            if remove_all:
-                bug_ids = advs.errata_bugs
-            else:
-                bug_ids = [bzapi.getbug(i).id for i in cli_opts.id_convert(id)]
-            green_prefix("Found {} bugs:".format(len(bug_ids)))
-            click.echo(" {}".format(", ".join([str(b) for b in bug_ids])))
-            green_prefix("Removing {count} bugs from advisory:".format(count=len(bug_ids)))
-            click.echo(" {advs}".format(advs=advisory))
-            advs.removeBugs([bug for bug in bug_ids])
-            advs.commit()
-        except ErrataException as ex:
-            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
 
 #
@@ -550,6 +477,7 @@ cli.add_command(validate_rhsa_cli)
 cli.add_command(rhcos_cli)
 cli.add_command(advisory_commons_cli)
 cli.add_command(find_bugs_blocker_cli)
+cli.add_command(remove_bugs_cli)
 
 
 # -----------------------------------------------------------------------------
