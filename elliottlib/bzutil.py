@@ -301,7 +301,7 @@ class BugzillaBugTracker(BugTracker):
             keywords=keywords,
             description=description)
         new_bug = self._client.createbug(create_info)
-        # change state to VERIFIED, set target release
+        # change state to VERIFIED
         try:
             update = self._client.build_update(status=target_status)
             self._client.update_bugs([new_bug.id], update)
