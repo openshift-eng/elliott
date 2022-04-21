@@ -48,19 +48,6 @@ class TestJIRABugTracker(unittest.TestCase):
         jira._client = client
         jira.add_comment(bug.id, 'comment', private=True)
 
-    def test_filter_bugs_by_cutoff_event(self):
-        all_bugs = [flexmock(id='1'), flexmock(id='2')]
-        desired_statuses = ["MODIFIED", "ON_QA", "VERIFIED"]
-        sweep_cutoff_timestamp = datetime(2021, 6, 30, 12, 30, 00, 0, tzinfo=timezone.utc).timestamp()
-        flexmock(JIRABugTracker).should_receive("login").and_return(None)
-        client = flexmock()
-        client.should_receive("add_comment")
-
-        jira = JIRABugTracker({})
-        jira._client = client
-        bugs = jira.filter_bugs_by_cutoff_event()
-
-
 
 if __name__ == '__main__':
     unittest.main()

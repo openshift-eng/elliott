@@ -25,13 +25,18 @@ from elliottlib.util import isolate_timestamp_in_release, red_print
 logger = logutil.getLogger(__name__)
 
 
+# This is easier to patch in unit tests
+def datetime_now():
+    return datetime.now(timezone.utc)
+
+
 class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
     def created_days_ago(self):
         created_date = self.creation_time_parsed()
-        return (datetime.now(timezone.utc) - created_date).days
+        return (datetime_now() - created_date).days
 
     def creation_time_parsed(self):
         raise NotImplementedError
@@ -824,10 +829,10 @@ class SearchURL(object):
     url_format = "https://{}/buglist.cgi?"
 
     def __init__(self, bz_data):
-        self.bz_host = bz_data.get('server')
+        self.bz_host = bz_data.get('server', '')
 
-        self.classification = bz_data.get('classification')
-        self.product = bz_data.get('product')
+        self.classification = bz_data.get('classification', '')
+        self.product = bz_data.get('product', '')
         self.bug_status = []
         self.filters = []
         self.filter_operator = ""
