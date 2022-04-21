@@ -1,6 +1,5 @@
 import unittest
 import subprocess
-import six
 from functional_tests import constants
 
 
@@ -12,7 +11,7 @@ class RPMDiffTestCase(unittest.TestCase):
                 "--group=openshift-4.2", "rpmdiff", "show",
             ]
         )
-        six.assertRegex(self, out.decode("utf-8"), "good: \\d+, bad: \\d+, incomplete: \\d+")
+        self.assertRegex(self, out.decode("utf-8"), "good: \\d+, bad: \\d+, incomplete: \\d+")
 
     def test_rpmdiff_show_with_specified_advisory(self):
         out = subprocess.check_output(
@@ -21,7 +20,7 @@ class RPMDiffTestCase(unittest.TestCase):
                 "rpmdiff", "show", "49981"
             ]
         )
-        six.assertRegex(self, out.decode("utf-8"), "good: \\d+, bad: \\d+, incomplete: \\d+")
+        self.assertRegex(self, out.decode("utf-8"), "good: \\d+, bad: \\d+, incomplete: \\d+")
 
 
 if __name__ == '__main__':

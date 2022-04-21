@@ -11,7 +11,6 @@ pyyaml
 requests
 requests_kerberos >= 0.13
 ruamel.yaml
-six
 typing ; python_version <= '3.4'
 tenacity
 jira
