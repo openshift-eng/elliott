@@ -100,6 +100,8 @@ class JIRABug(Bug):
         self.status = self.bug.fields.status.name
         self.summary = self.bug.fields.summary
         self.blocks = self._get_blocks()
+        self.depends_on = self._get_depends()
+        slef.product = self.bug.fields.project.key
         self.keywords = self.bug.fields.labels
         self.version = [x.name for x in self.bug.fields.versions]
         self.target_release = [x.name for x in self.bug.fields.fixVersions]
@@ -112,6 +114,13 @@ class JIRABug(Bug):
         for link in self.bugs.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "outwardIssue"):
                 blocks.append(link.outwardIssue)
+        return blocks
+
+    def _get_depends(self):
+        blocks = []
+        for link in self.bugs.fields.issuelinks:
+            if link.type.name == "Blocks" and hasattr(link, "inwardIssue"):
+                blocks.append(link.inwardIssue)
         return blocks
 
 

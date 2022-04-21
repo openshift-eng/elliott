@@ -38,8 +38,9 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
     validator = BugValidator(runtime, output="text")
     try:
         await validator.errata_api.login()
-        advisory_bugs = await validator.get_attached_bugs(advisories)
-        non_flaw_bugs = validator.filter_bugs_by_product({b for bugs in advisory_bugs.values() for b in bugs})
+        advisory_bugzilla_bugs, advisory_jira_bugs = await validator.get_attached_bugs(advisories)
+        non_flaw_bugs = validator.filter_bugs_by_product(
+            [b for bugs in advisory_bugzilla_bugs.values() for b in bugs])
         validator.validate(non_flaw_bugs, verify_bug_status)
         if verify_flaws:
             await validator.verify_attached_flaws(advisory_bugs)
@@ -62,7 +63,7 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
     validator = BugValidator(runtime, output)
-    bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs(bug_ids))
+    bugs = validator.filter_bugs_by_product(validator.bugzilla_bug_tracker.get_bugs(bug_ids))
     try:
         validator.validate(bugs, verify_bug_status)
     finally:
@@ -74,8 +75,12 @@ class BugValidator:
     def __init__(self, runtime: Runtime, output: str = 'text'):
         self.runtime = runtime
         self.bz_data: Dict[str, Any] = runtime.gitdata.load_data(key='bugzilla').data
+        self.jr_data: Dict[str, Any] = runtime.gitdata.load_data(key='jira').data
         self.target_releases: List[str] = self.bz_data['target_release']
         self.product: str = self.bz_data['product']
+        self.jira_product: str = self.jr_data['product']
+        self.bugzilla_bug_tracker = bzutil.BugzillaBugTracker(self.bz_data)
+        self.bzapi = self.bugzilla_bug_tracker.client()
         self.bug_tracker = bzutil.BugzillaBugTracker(self.bz_data)
         self.bzapi = self.bug_tracker.client()
         self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
@@ -115,7 +120,7 @@ class BugValidator:
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
         # Retrieve flaw bugs in Bugzilla for attached_tracker_bugs
         tracker_flaws, flaw_id_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
-            self.bug_tracker,
+            self.bugzilla_bug_tracker,
             attached_trackers,
             fields=["depends_on", "alias", "severity", "summary"]
         )
@@ -193,15 +198,15 @@ class BugValidator:
         """
         green_print(f"Retrieving bugs for advisory {advisory_ids}")
         advisories = await asyncio.gather(*[self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids])
-        bug_map = self.bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"][
-            "bugs"]}))
-        result = {ad["content"]["content"]["errata_id"]: {bug_map[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad
-                  in advisories}
-        return result
+        bugzilla_bug_map = self.bugzilla_bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"]["bugs"]}))
+        jira_bug_map = self.jira_bug_tracker.get_bugs_map(list({b["jira_issue"]["key"] for ad in advisories for b in ad["jira_issues"]["jira_issues"]}))
+        bugzilla_result = {ad["content"]["content"]["errata_id"]: {bugzilla_bug_map[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad in advisories}
+        jira_result = {ad["content"]["content"]["errata_id"]: {bugzilla_bug_map[b["jira_issue"]["key"]] for b in ad["jira_issues"]["jira_issues"]} for ad in advisories}
+        return bugzilla_result, jira_result
 
     def filter_bugs_by_product(self, bugs):
         # filter out bugs for different product (presumably security flaw bugs)
-        return [b for b in bugs if b.product == self.product]
+        return [b for b in bugs if b.product == self.product or b.product == self.jira_product]
 
     def filter_bugs_by_release(self, bugs: Iterable[Bug], complain: bool = False) -> List[Bug]:
         # filter out bugs with an invalid target release
@@ -230,7 +235,7 @@ class BugValidator:
         # retrieve blockers and filter to those with correct product and target version
         blocking_bugs = {
             bug.id: bug
-            for bug in self.bug_tracker.get_bugs(list(candidate_blockers))
+            for bug in self.bugzilla_bug_tracker.get_bugs(list(candidate_blockers))
             # b.target release is a list of size 0 or 1
             if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
             and bug.product == self.product
