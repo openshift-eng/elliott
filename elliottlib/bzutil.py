@@ -355,6 +355,74 @@ class JIRABugTracker(BugTracker):
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
 
+    def filter_bugs_by_cutoff_event(self, bugs: Iterable, desired_statuses: Iterable[str],
+                                    sweep_cutoff_timestamp: float) -> List:
+        qualified_bugs = []
+        desired_statuses = set(desired_statuses)
+
+        # Filters out bugs that are created after the sweep cutoff timestamp
+        before_cutoff_bugs = [bug for bug in bugs if to_timestamp(bug.creation_time) <= sweep_cutoff_timestamp]
+        if len(before_cutoff_bugs) < len(bugs):
+            logger.info(
+                f"{len(bugs) - len(before_cutoff_bugs)} of {len(bugs)} bugs are ignored because they were created after the sweep cutoff timestamp {sweep_cutoff_timestamp} ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
+
+        # Queries bug history
+        bugs_history = self._client.bugs_history_raw([bug.id for bug in before_cutoff_bugs])
+
+        class BugStatusChange:
+            def __init__(self, timestamp: int, old: str, new: str) -> None:
+                self.timestamp = timestamp  # when this change is made?
+                self.old = old  # old status
+                self.new = new  # new status
+
+            @classmethod
+            def from_history_ent(cls, history):
+                """ Converts from bug history dict returned from Bugzilla to BugStatusChange object.
+                The history dict returned from Bugzilla includes bug changes on all fields, but we are only interested in the "status" field change.
+                :return: BugStatusChange object, or None if the history doesn't include a "status" field change.
+                """
+                status_change = next(filter(lambda change: change["field_name"] == "status", history["changes"]), None)
+                if not status_change:
+                    return None
+                return cls(to_timestamp(history["when"]), status_change["removed"], status_change["added"])
+
+        for bug, bug_history in zip(before_cutoff_bugs, bugs_history["bugs"]):
+            assert bug.id == bug_history[
+                "id"]  # `bugs_history["bugs"]` returned from Bugzilla API should have the same order as `before_cutoff_bugs`, but be safe
+
+            # We are only interested in "status" field changes
+            status_changes = filter(None, map(BugStatusChange.from_history_ent, bug_history["history"]))
+
+            # status changes after the cutoff event
+            after_cutoff_status_changes = list(
+                itertools.dropwhile(lambda change: change.timestamp <= sweep_cutoff_timestamp, status_changes))
+
+            # determines the status of the bug at the moment of the sweep cutoff event
+            if not after_cutoff_status_changes:
+                sweep_cutoff_status = bug.status  # no status change after the cutoff event; use current status
+            else:
+                sweep_cutoff_status = after_cutoff_status_changes[
+                    0].old  # sweep_cutoff_status should be the old status of the first status change after the sweep cutoff event
+
+            if sweep_cutoff_status not in desired_statuses:
+                logger.info(
+                    f"BZ {bug.id} is ignored because its status was {sweep_cutoff_status} at the moment of sweep cutoff ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})")
+                continue
+
+            # Per @Justin Pierce: If a BZ seems to qualify for a sweep currently and at the sweep cutoff event, then all state changes after the sweep cutoff event must be to a greater than the state which qualified the BZ at the sweep cutoff event.
+            regressed_changes = [change.new for change in after_cutoff_status_changes if
+                                 constants.VALID_BUG_STATES.index(change.new) <= constants.VALID_BUG_STATES.index(
+                                     sweep_cutoff_status)]
+            if regressed_changes:
+                logger.warning(
+                    f"BZ {bug.id} is ignored because its status was {sweep_cutoff_status} at the moment of sweep cutoff ({datetime.utcfromtimestamp(sweep_cutoff_timestamp)})"
+                    f", however its status changed back to {regressed_changes} afterwards")
+                continue
+
+            qualified_bugs.append(bug)
+
+        return qualified_bugs
+
 
 class BugzillaBugTracker(BugTracker):
     @staticmethod
