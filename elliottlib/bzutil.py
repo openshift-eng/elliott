@@ -117,11 +117,11 @@ class JIRABug(Bug):
         return blocks
 
     def _get_depends(self):
-        blocks = []
+        depends = []
         for link in self.bugs.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "inwardIssue"):
-                blocks.append(link.inwardIssue)
-        return blocks
+                depends.append(link.inwardIssue)
+        return depends
 
 
 class BugTracker:
