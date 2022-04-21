@@ -213,8 +213,11 @@ class JIRABugTracker(BugTracker):
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
         return JIRABug(self._client.issue(bugid, **kwargs))
 
-    def get_bugs(self, bugids: List[str], permissive=False, **kwargs) -> List[JIRABug]:
-        bugs = self._search(self._query(bugids=bugids), **kwargs)
+    def get_bugs(self, bugids: List[str], permissive=False, verbose=False, **kwargs) -> List[JIRABug]:
+        query = self._query(bugids=bugids, with_target_release=False)
+        if verbose:
+            click.echo(query)
+        bugs = self._search(query, **kwargs)
         if not permissive and len(bugs) < len(bugids):
             raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
         return bugs
@@ -261,7 +264,14 @@ class JIRABugTracker(BugTracker):
                status: Optional[List] = None,
                target_release: Optional[List] = None,
                include_labels: Optional[List] = None,
-               exclude_labels: Optional[List] = None) -> str:
+               exclude_labels: Optional[List] = None,
+               with_target_release=True) -> str:
+
+        if target_release and with_target_release:
+            raise ValueError("cannot use target_release and with_target_release together")
+        if not target_release and with_target_release:
+            target_release = self.target_release()
+
         query = f"project={self._project}"
         if bugids:
             query += f" and issue in ({','.join(bugids)})"
@@ -295,14 +305,6 @@ class JIRABugTracker(BugTracker):
             status=status,
         )
         return self._search(query, verbose=verbose, **kwargs)
-
-    def search_with_target_release(self, status, search_filter='default',
-                                   verbose=False, **kwargs):
-        query = self._query(
-            status=status,
-            target_release=self.target_release()
-        )
-        return self._search(query, verbose, **kwargs)
 
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
