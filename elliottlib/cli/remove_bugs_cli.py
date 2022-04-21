@@ -30,7 +30,6 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option('--advisory', '-a', 'advisory',
               type=int, metavar='ADVISORY',
               help='Remove found bugs from ADVISORY')
-@use_default_advisory_option
 @click.option("--id", metavar='BUGID', default=[],
               multiple=True, required=False,
               help="Bugzilla IDs to remove from advisory.")
@@ -42,7 +41,8 @@ pass_runtime = click.make_pass_decorator(Runtime)
               default=False, is_flag=True,
               help="Remove all bugs attached to Advisory")
 @pass_runtime
-def remove_bugs(runtime, advisory, default_advisory_type, id, issue, remove_all):
+@use_default_advisory_option
+def remove_bugs_cli(runtime, advisory, default_advisory_type, id, issue, remove_all):
     """Remove given BUGS from ADVISORY.
 
     Remove bugs that have been attached an advisory:
@@ -58,7 +58,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, issue, remove_all)
 
 
 """
-    if remove_all and id or issue:
+    if remove_all and (id or issue):
         raise click.BadParameter("Combining the automatic and manual bug modification options is not supported")
     if not remove_all and not id and not issue:
         raise click.BadParameter("If not using --all then one or more --id's must be provided")
@@ -77,7 +77,7 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, issue, remove_all)
 
     if advisory:
         try:
-            advs = elliottlib.errata.Advisory(errata_id=advisory)
+            advs = errata.Advisory(errata_id=advisory)
         except GSSError:
             exit_unauthenticated()
 
