@@ -1,7 +1,7 @@
 import click
 import sys
 
-from elliottlib import Runtime, errata, logutil
+from elliottlib import Runtime, logutil
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, find_default_advisory, use_default_advisory_option
