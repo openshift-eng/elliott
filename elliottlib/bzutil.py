@@ -100,7 +100,7 @@ class JIRABug(Bug):
         self.component = self.bug.fields.components[0].name
         self.status = self.bug.fields.status.name
         self.summary = self.bug.fields.summary
-        self.blocks = self.get_blocks()
+        self.blocks = self._get_blocks()
         self.keywords = self.bug.fields.labels
         self.version = [x.name for x in self.bug.fields.versions]
         self.target_release = [x.name for x in self.bug.fields.fixVersions]
@@ -108,7 +108,7 @@ class JIRABug(Bug):
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
 
-    def get_blocks(self):
+    def _get_blocks(self):
         blocks = []
         for link in self.bugs.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "outwardIssue"):
