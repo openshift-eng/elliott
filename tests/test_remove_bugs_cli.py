@@ -51,7 +51,6 @@ class RemoveBugsTestCase(unittest.TestCase):
 
     def test_remove_all(self):
         runner = CliRunner()
-        bugs = [flexmock(id=1), flexmock(id=2)]
         issues = [flexmock(key=3, id=3), flexmock(key=4, id=4)]
         flexmock(Runtime).should_receive("initialize")
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
