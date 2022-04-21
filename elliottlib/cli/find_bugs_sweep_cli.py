@@ -201,13 +201,8 @@ type_bug_list = List[Bug]
 def get_assembly_bug_ids(runtime):
     # Loads included/excluded bugs from assembly config
     issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
-    # JIRA issues are not supported yet. Only loads issues with integer IDs.
-
-    def valid_issue(x):
-        return isinstance(x["id"], int) or x["id"].isdigit()
-
-    included_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.include if valid_issue(i)}
-    excluded_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.exclude if valid_issue(i)}
+    included_bug_ids = {i["id"] for i in issues_config.include}
+    excluded_bug_ids = {i["id"] for i in issues_config.exclude}
     return included_bug_ids, excluded_bug_ids
 
 
