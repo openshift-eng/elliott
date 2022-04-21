@@ -43,7 +43,7 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
             [b for bugs in advisory_bugzilla_bugs.values() for b in bugs])
         validator.validate(non_flaw_bugs, verify_bug_status)
         if verify_flaws:
-            await validator.verify_attached_flaws(advisory_bugs)
+            await validator.verify_attached_flaws(advisory_bugzilla_bugs)
     except GSSError:
         exit_unauthenticated()
     finally:
@@ -201,7 +201,7 @@ class BugValidator:
         bugzilla_bug_map = self.bugzilla_bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"]["bugs"]}))
         jira_bug_map = self.jira_bug_tracker.get_bugs_map(list({b["jira_issue"]["key"] for ad in advisories for b in ad["jira_issues"]["jira_issues"]}))
         bugzilla_result = {ad["content"]["content"]["errata_id"]: {bugzilla_bug_map[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad in advisories}
-        jira_result = {ad["content"]["content"]["errata_id"]: {bugzilla_bug_map[b["jira_issue"]["key"]] for b in ad["jira_issues"]["jira_issues"]} for ad in advisories}
+        jira_result = {ad["content"]["content"]["errata_id"]: {jira_bug_map[b["jira_issue"]["key"]] for b in ad["jira_issues"]["jira_issues"]} for ad in advisories}
         return bugzilla_result, jira_result
 
     def filter_bugs_by_product(self, bugs):

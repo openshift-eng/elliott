@@ -101,7 +101,7 @@ class JIRABug(Bug):
         self.summary = self.bug.fields.summary
         self.blocks = self._get_blocks()
         self.depends_on = self._get_depends()
-        slef.product = self.bug.fields.project.key
+        self.product = self.bug.fields.project.key
         self.keywords = self.bug.fields.labels
         self.version = [x.name for x in self.bug.fields.versions]
         self.target_release = [x.name for x in self.bug.fields.fixVersions]
