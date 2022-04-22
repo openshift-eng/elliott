@@ -50,8 +50,6 @@ class RemoveBugsTestCase(unittest.TestCase):
         flexmock(Runtime).should_receive("initialize")
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
         flexmock(BugzillaBugTracker).should_receive("login")
-        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
-        flexmock(JIRABugTracker).should_receive("login")
         flexmock(common).should_receive("find_default_advisory")
         Advisory = flexmock(errata_bugs=[1, 2])
         flexmock(Advisory).should_receive("removeBugs")
@@ -60,8 +58,8 @@ class RemoveBugsTestCase(unittest.TestCase):
         flexmock(errata).should_receive("get_jira_issue").and_return(issues)
         flexmock(errata).should_receive("remove_multi_jira_issues")
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '--all', '-a', '99999'])
-        self.assertIn("Found 2 bugzilla bugs", result.output)
-        self.assertIn("Removing 2 bugzilla bugs and 2 jira bugs from advisory", result.output)
+        self.assertIn("Found 2 bugs", result.output)
+        self.assertIn("Removing bugs from advisory 99999", result.output)
         self.assertEqual(result.exit_code, 0)
 
 
