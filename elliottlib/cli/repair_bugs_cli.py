@@ -42,7 +42,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("--jira", 'use_jira',
               is_flag=True,
               default=False,
-              help="Use jira in combination with bugzilla")
+              help="Use jira instead of bugzilla")
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,

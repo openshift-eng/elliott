@@ -32,17 +32,18 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help='Remove found bugs from ADVISORY')
 @click.option("--id", metavar='BUGID', default=[],
               multiple=True, required=False,
-              help="Bugzilla IDs to remove from advisory.")
-@click.option("--issue", metavar='JIRAID', default=[],
-              multiple=True, required=False,
-              help="JIRA IDs to remove from advisory.")
+              help="Bug IDs to remove from advisory.")
 @click.option("--all", "remove_all",
               required=False,
               default=False, is_flag=True,
               help="Remove all bugs attached to Advisory")
+@click.option("--jira", 'use_jira',
+              is_flag=True,
+              default=False,
+              help="Use jira instead of bugzilla")
 @pass_runtime
 @use_default_advisory_option
-def remove_bugs_cli(runtime, advisory, default_advisory_type, id, issue, remove_all):
+def remove_bugs_cli(runtime, advisory, default_advisory_type, id, remove_all, use_jira):
     """Remove given BUGS from ADVISORY.
 
     Remove bugs that have been attached an advisory:
@@ -58,19 +59,21 @@ def remove_bugs_cli(runtime, advisory, default_advisory_type, id, issue, remove_
 
 
 """
-    if remove_all and (id or issue):
+    if remove_all and id:
         raise click.BadParameter("Combining the automatic and manual bug modification options is not supported")
-    if not remove_all and not id and not issue:
+    if not remove_all and not id:
         raise click.BadParameter("If not using --all then one or more --id's must be provided")
     if bool(advisory) == bool(default_advisory_type):
         raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
 
     runtime.initialize()
 
-    jira_config = JIRABugTracker.get_config(runtime)
-    jira_tracker = JIRABugTracker(jira_config)
-    bz_config = BugzillaBugTracker.get_config(runtime)
-    bugzilla_tracker = BugzillaBugTracker(bz_config)
+    if use_jira:
+        jira_config = JIRABugTracker.get_config(runtime)
+        bug_tracker = JIRABugTracker(jira_config)
+    else:
+        bz_config = BugzillaBugTracker.get_config(runtime)
+        bug_tracker = BugzillaBugTracker(bz_config)
 
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
@@ -86,22 +89,21 @@ def remove_bugs_cli(runtime, advisory, default_advisory_type, id, issue, remove_
 
         try:
             if remove_all:
-                bugzilla_bug_ids = advs.errata_bugs
-                jira_bug_ids = [issue.key for issue in errata.get_jira_issue(advisory)]
+                if use_jira:
+                    # TODO: this will soon become advs.jira_issues
+                    bug_ids = [issue.key for issue in errata.get_jira_issue(advisory)]
+                else:
+                    bug_ids = advs.errata_bugs
             else:
-                bugzilla_bug_ids = [bugzilla_tracker.get_bug(i).id for i in cli_opts.id_convert(id)]
-                jira_bug_ids = [jira_tracker.get_bug(i).id for i in cli_opts.id_convert(issue)]
-            green_prefix("Found {} bugzilla bugs:".format(len(bugzilla_bug_ids)))
-            click.echo(" {}".format(", ".join([str(b) for b in bugzilla_bug_ids])))
-            green_prefix("Found {} jira bugs:".format(len(jira_bug_ids)))
-            click.echo(" {}".format(", ".join([str(b) for b in jira_bug_ids])))
-
-            green_prefix("Removing {count} bugzilla bugs and {number} jira bugs from advisory:".format(count=len(bugzilla_bug_ids), number=len(jira_bug_ids)))
-            click.echo(" {advs}".format(advs=advisory))
-            if bugzilla_bug_ids:
-                advs.removeBugs([bug for bug in bugzilla_bug_ids])
-                advs.commit()
-            if jira_bug_ids:
-                errata.remove_multi_jira_issues(advisory, jira_bug_ids)
+                bug_ids = [bug_tracker.get_bug(i).id for i in cli_opts.id_convert(id)]
+            green_prefix(f"Found {len(bug_ids)} bugs:")
+            click.echo(f" {', '.join([str(b) for b in bug_ids])}")
+            green_prefix(f"Removing bugs from advisory {advisory}:")
+            if bug_ids:
+                if use_jira:
+                    errata.remove_multi_jira_issues(advisory, bug_ids)
+                else:
+                    advs.removeBugs([bug for bug in bug_ids])
+                    advs.commit()
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
