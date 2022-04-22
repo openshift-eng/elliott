@@ -55,7 +55,7 @@ def get_corresponding_flaw_bugs(bug_tracker: bzutil.BugzillaBugTracker, tracker_
         fields.append("component")
 
     blocking_bugs = bug_tracker.get_bugs(unique(flatten([t.blocks for t in tracker_bugs])), include_fields=fields)
-    flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs if bzutil.is_flaw_bug(bug)}
+    flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs if bug.is_flaw_bug()}
 
     # Validate that each tracker has a corresponding flaw bug
     flaw_ids = set(flaw_id_bugs.keys())
@@ -77,7 +77,7 @@ def get_corresponding_flaw_bugs(bug_tracker: bzutil.BugzillaBugTracker, tracker_
     return tracker_flaws, flaw_id_bugs
 
 
-def is_first_fix_any(bzapi, flaw_bug, current_target_release):
+def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
     """
     Check if a flaw bug is considered a first-fix for a GA target release
     for any of its trackers components. A return value of True means it should be
@@ -96,11 +96,7 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
         return True
 
     # filter tracker bugs by OCP product
-    tracker_bugs = [b for b in bzapi.query(bzapi.build_query(
-        product=constants.BUGZILLA_PRODUCT_OCP,
-        bug_id=tracker_ids,
-        include_fields=["keywords", "target_release", "status", "resolution", "whiteboard"]
-    )) if is_tracker_bug(b)]
+    tracker_bugs = [b for b in bugtracker.get_bugs(tracker_ids) if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug()]
     if not tracker_bugs:
         # No OCP trackers found
         # is a first fix
@@ -108,9 +104,7 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
 
     # make sure 3.X or 4.X bugs are being compared to each other
     def same_major_release(bug):
-        current_major_version = util.minor_version_tuple(current_target_release)[0]
-        bug_target_major_version = util.minor_version_tuple(bug.target_release[0])[0]
-        return bug_target_major_version == current_major_version
+        return util.minor_version_tuple(current_target_release)[0] == util.minor_version_tuple(bug.target_release[0])[0]
 
     def already_fixed(bug):
         pending = bug.status == 'RELEASE_PENDING'
