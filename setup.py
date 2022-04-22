@@ -1,4 +1,3 @@
-
 import sys
 if sys.version_info < (3, 6):
     sys.exit('Sorry, Python < 3.6 is not supported.')
@@ -9,17 +8,12 @@ with open('./requirements.txt') as f:
     INSTALL_REQUIRES = f.read().splitlines()
 
 
-def _get_version():
-    from os.path import abspath, dirname, join
-    filename = join(dirname(abspath(__file__)), 'elliottlib', 'VERSION')
-    return open(filename).read().strip()
-
-
 setup(
     name="rh-elliott",
     author="AOS ART Team",
     author_email="aos-team-art@redhat.com",
-    version=_get_version(),
+    use_scm_version=True,
+    setup_requires=['setuptools_scm'],
     description="CLI tool for managing and automating Red Hat software releases",
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
