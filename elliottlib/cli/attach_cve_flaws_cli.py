@@ -8,6 +8,7 @@ from elliottlib import attach_cve_flaws, bzutil, constants
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
+from elliottlib.errata import get_jira_issue_from_advisory
 from elliottlib.runtime import Runtime
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corresponding_flaw_bugs
 
