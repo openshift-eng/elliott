@@ -45,19 +45,24 @@ class TestAttachCVEFlaws(unittest.TestCase):
         bugs = [1, 2, 3, 4]
         product = 'Security Response'
         component = 'vulnerability'
+        bug_a = flexmock(product=product, component=component, id=1)
+        flexmock(bug_a).should_receive("is_flaw_bug").and_return(True)
+        bug_b = flexmock(product=product, component=component, id=2)
+        flexmock(bug_b).should_receive("is_flaw_bug").and_return(True)
+        bug_c = flexmock(product='foo', component=component, id=3)
+        flexmock(bug_c).should_receive("is_flaw_bug").and_return(False)
+        bug_d = flexmock(product=product, component='bar', id=4)
+        flexmock(bug_d).should_receive("is_flaw_bug").and_return(False)
         flaw_bugs = [
-            flexmock(product=product, component=component, id=1),
-            flexmock(product=product, component=component, id=2),
-            flexmock(product='foo', component=component, id=3),
-            flexmock(product=product, component='bar', id=4)
+            bug_a,
+            bug_b,
+            bug_c,
+            bug_d
         ]
 
         fields = ["somefield"]
         bzapi = flexmock()
-        (bzapi
-         .should_receive("get_bugs")
-         .with_args(bugs, include_fields=["somefield", "product", "component"])
-         .and_return(flaw_bugs))
+        flexmock(bzapi).should_receive("get_bugs").with_args(bugs, include_fields=["somefield", "product", "component"]).and_return(flaw_bugs)
 
         expected = 2
         actual = len(attach_cve_flaws.get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields)[1])
@@ -71,11 +76,13 @@ class TestAttachCVEFlaws(unittest.TestCase):
         ]
         product = 'Security Response'
         component = 'vulnerability'
-        flaw_bugs = [
-            flexmock(product=product, component='wrong_component', id=1),
-            flexmock(product='wrong_product', component=component, id=2),
-            flexmock(product=product, component=component, id=3)
-        ]
+        bug_a = flexmock(product=product, component='wrong_component', id=1)
+        flexmock(bug_a).should_receive("is_flaw_bug").and_return(False)
+        bug_b = flexmock(product='wrong_product', component=component, id=2)
+        flexmock(bug_b).should_receive("is_flaw_bug").and_return(False)
+        bug_c = flexmock(product=product, component=component, id=3)
+        flexmock(bug_c).should_receive("is_flaw_bug").and_return(True)
+        flaw_bugs = [bug_a, bug_b, bug_c]
 
         bzapi = flexmock()
         (bzapi
@@ -104,12 +111,13 @@ class TestAttachCVEFlaws(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_no_trackers(self):
-        tracker_bug_ids = [1, 2]
-        tracker_bug_objs = [flexmock(id=1, keywords=['foo'])]
-        flaw_bug = flexmock(depends_on=tracker_bug_ids)
         tr = '4.8.0'
+        tracker_bug_ids = [1, 2]
+        bug_a = flexmock(id=1, product=constants.BUGZILLA_PRODUCT_OCP, keywords=['foo'], whiteboard='', target_release=[tr])
+        flexmock(bug_a).should_receive("is_tracker_bug").and_return(False)
+        tracker_bug_objs = [bug_a]
+        flaw_bug = flexmock(id=6, depends_on=tracker_bug_ids)
         bzapi = flexmock()
-
         fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
         (bzapi
             .should_receive("build_query")
@@ -120,6 +128,9 @@ class TestAttachCVEFlaws(unittest.TestCase):
         (bzapi
             .should_receive("query")
             .and_return(tracker_bug_objs))
+        (bzapi
+            .should_receive("get_bugs")
+            .and_return(tracker_bug_objs))
 
         expected = True
         actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
@@ -127,11 +138,11 @@ class TestAttachCVEFlaws(unittest.TestCase):
 
     def test_is_first_fix_any_missing_component(self):
         tr = '4.8.0'
-        tracker_bug_objs = [
-            flexmock(id=1, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard='', target_release=[tr])
-        ]
+        bug_a = flexmock(id=1, product=constants.BUGZILLA_PRODUCT_OCP, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard='', target_release=[tr])
+        flexmock(bug_a).should_receive("is_tracker_bug").and_return(True)
+        tracker_bug_objs = [bug_a]
         tracker_bugs_ids = [1, 2]
-        flaw_bug = flexmock(id=5, depends_on=tracker_bugs_ids)
+        flaw_bug = flexmock(id=5, product=constants.BUGZILLA_PRODUCT_OCP, depends_on=tracker_bugs_ids)
 
         bzapi = flexmock()
         fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
@@ -144,26 +155,35 @@ class TestAttachCVEFlaws(unittest.TestCase):
         (bzapi
             .should_receive("query")
             .and_return(tracker_bug_objs))
+        (bzapi
+            .should_receive("get_bugs")
+            .and_return(tracker_bug_objs))
 
         expected = False
         actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_same_major(self):
+        bug_a = flexmock(
+            id=1,
+            keywords=constants.TRACKER_BUG_KEYWORDS,
+            product=constants.BUGZILLA_PRODUCT_OCP,
+            whiteboard='component:runc',
+            target_release=['3.11.z'],
+            status='RELEASE_PENDING')
+        flexmock(bug_a).should_receive("is_tracker_bug").and_return(True)
+        bug_b = flexmock(
+            id=2,
+            keywords=constants.TRACKER_BUG_KEYWORDS,
+            product=constants.BUGZILLA_PRODUCT_OCP,
+            whiteboard='component:runc',
+            target_release=['4.8.0'],
+            status='ON_QA')
+        flexmock(bug_b).should_receive("is_tracker_bug").and_return(True)
         tracker_bug_objs = [
             # bug that should be ignored
-            flexmock(
-                id=1,
-                keywords=constants.TRACKER_BUG_KEYWORDS,
-                whiteboard='component:runc',
-                target_release=['3.11.z'],
-                status='RELEASE_PENDING'),
-            flexmock(
-                id=2,
-                keywords=constants.TRACKER_BUG_KEYWORDS,
-                whiteboard='component:runc',
-                target_release=['4.8.0'],
-                status='ON_QA')
+            bug_a,
+            bug_b
         ]
         tracker_bug_ids = [t.id for t in tracker_bug_objs]
         flaw_bug = flexmock(id=3, depends_on=tracker_bug_ids)
@@ -179,6 +199,9 @@ class TestAttachCVEFlaws(unittest.TestCase):
                 include_fields=fields))
         (bzapi
             .should_receive("query")
+            .and_return(tracker_bug_objs))
+        (bzapi
+            .should_receive("get_bugs")
             .and_return(tracker_bug_objs))
 
         expected = True
@@ -186,20 +209,23 @@ class TestAttachCVEFlaws(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_already_fixed(self):
-        tracker_bug_objs = [
-            flexmock(
-                id=1,
-                keywords=constants.TRACKER_BUG_KEYWORDS,
-                whiteboard='component:runc',
-                target_release=['4.7.z'],
-                status='RELEASE_PENDING'),
-            flexmock(
-                id=2,
-                keywords=constants.TRACKER_BUG_KEYWORDS,
-                whiteboard='component:runc',
-                target_release=['4.8.0'],
-                status='ON_QA')
-        ]
+        bug_a = flexmock(
+            id=1,
+            keywords=constants.TRACKER_BUG_KEYWORDS,
+            whiteboard='component:runc',
+            product=constants.BUGZILLA_PRODUCT_OCP,
+            target_release=['4.7.z'],
+            status='RELEASE_PENDING')
+        flexmock(bug_a).should_receive("is_tracker_bug").and_return(True)
+        bug_b = flexmock(
+            id=2,
+            keywords=constants.TRACKER_BUG_KEYWORDS,
+            whiteboard='component:runc',
+            product=constants.BUGZILLA_PRODUCT_OCP,
+            target_release=['4.8.0'],
+            status='ON_QA')
+        flexmock(bug_b).should_receive("is_tracker_bug").and_return(True)
+        tracker_bug_objs = [bug_a, bug_b]
         tracker_bug_ids = [t.id for t in tracker_bug_objs]
         flaw_bug = flexmock(id=3, depends_on=tracker_bug_ids)
         tr = '4.8.0'
@@ -215,32 +241,40 @@ class TestAttachCVEFlaws(unittest.TestCase):
         (bzapi
             .should_receive("query")
             .and_return(tracker_bug_objs))
+        (bzapi
+            .should_receive("get_bugs")
+            .and_return(tracker_bug_objs))
 
         expected = False
         actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_any(self):
-        tracker_bug_objs = [
-            flexmock(
-                id=1,
-                keywords=constants.TRACKER_BUG_KEYWORDS,
-                whiteboard='component:runc',
-                target_release=['4.7.z'],
-                status='RELEASE_PENDING'),
-            flexmock(
-                id=2,
-                keywords=constants.TRACKER_BUG_KEYWORDS,
-                whiteboard='component:runc',
-                target_release=['4.8.0'],
-                status='ON_QA'),
-            flexmock(
-                id=3,
-                keywords=constants.TRACKER_BUG_KEYWORDS,
-                whiteboard='component:crio',
-                target_release=['4.8.0'],
-                status='ON_QA')
-        ]
+        bug_a = flexmock(
+            id=1,
+            keywords=constants.TRACKER_BUG_KEYWORDS,
+            whiteboard='component:runc',
+            product=constants.BUGZILLA_PRODUCT_OCP,
+            target_release=['4.7.z'],
+            status='RELEASE_PENDING')
+        bug_b = flexmock(
+            id=2,
+            keywords=constants.TRACKER_BUG_KEYWORDS,
+            whiteboard='component:runc',
+            product=constants.BUGZILLA_PRODUCT_OCP,
+            target_release=['4.8.0'],
+            status='ON_QA')
+        bug_c = flexmock(
+            id=3,
+            keywords=constants.TRACKER_BUG_KEYWORDS,
+            whiteboard='component:crio',
+            product=constants.BUGZILLA_PRODUCT_OCP,
+            target_release=['4.8.0'],
+            status='ON_QA')
+        flexmock(bug_a).should_receive("is_tracker_bug").and_return(True)
+        flexmock(bug_b).should_receive("is_tracker_bug").and_return(True)
+        flexmock(bug_c).should_receive("is_tracker_bug").and_return(True)
+        tracker_bug_objs = [bug_a, bug_b, bug_c]
         tracker_bug_ids = [t.id for t in tracker_bug_objs]
         flaw_bug = flexmock(id=4, depends_on=tracker_bug_ids)
         tr = '4.8.0'
@@ -255,6 +289,9 @@ class TestAttachCVEFlaws(unittest.TestCase):
                 include_fields=fields))
         (bzapi
             .should_receive("query")
+            .and_return(tracker_bug_objs))
+        (bzapi
+            .should_receive("get_bugs")
             .and_return(tracker_bug_objs))
 
         expected = True
