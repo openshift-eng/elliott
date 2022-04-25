@@ -248,7 +248,7 @@ class JIRABugTracker(BugTracker):
         if not permissive and len(bugs) < len(bugids):
             raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
         if check_tracker:
-            bugs = [but for bug in bugs if bug.is_tracker_bug()]
+            bugs = [bug for bug in bugs if bug.is_tracker_bug()]
         return bugs
 
     def get_bug_remote_links(self, bug: JIRABug):
@@ -518,7 +518,7 @@ def get_corresponding_flaw_bugs(bug_tracker, tracker_bugs: List, fields: List, s
     if "component" not in fields:
         fields.append("component")
 
-    blocking_bugs = bug_tracker.get_bugs(unique(flatten([t.blocks for t in tracker_bugs])), include_fields=fields)
+    blocking_bugs = bug_tracker.get_bugs(list(set(sum([t.blocks for t in tracker_bugs], []))), include_fields=fields)
     flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs if bug.is_flaw_bug()}
 
     # Validate that each tracker has a corresponding flaw bug
