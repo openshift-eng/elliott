@@ -1,7 +1,6 @@
 import unittest
 import subprocess
 from functional_tests import constants
-import six
 
 
 class FindBugsBlockerTestCase(unittest.TestCase):
@@ -16,7 +15,7 @@ class FindBugsBlockerTestCase(unittest.TestCase):
                         "4.3.z, 4.3.0"
         result = out.decode("utf-8")
         self.assertIn(search_string, result)
-        six.assertRegex(self, result, "Found \\d+ bugs")
+        self.assertRegex(self, result, "Found \\d+ bugs")
 
 
 if __name__ == '__main__':

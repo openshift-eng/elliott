@@ -21,13 +21,8 @@ Then run the test suite using any tool that is compatible with Python unittest f
 
 # Run with Python 3
 python3 -m unittest discover -s functional_tests/
-# Run with Python 2
-python2 -m unittest discover -s functional_tests/
 # Use Pytest with Python 3
 python3 -m pytest functional_tests/
-# Use Pytest with Python 3
- Python 2
-python2 -m pytest functional_tests/
 ```
 
 ## Known Issues
