@@ -105,23 +105,37 @@ class JIRABug(Bug):
         self.component = self.bug.fields.components[0].name
         self.status = self.bug.fields.status.name
         self.summary = self.bug.fields.summary
+        self.resolution = self.bug.fields.resolution
         self.blocks = self._get_blocks()
         self.depends_on = self._get_depends()
         self.release_blocker = self._get_release_blocker()
+        self.severity = self._get_severity()
         self.product = self.bug.fields.project.key
         self.keywords = self.bug.fields.labels
         self.version = [x.name for x in self.bug.fields.versions]
         self.target_release = [x.name for x in self.bug.fields.fixVersions]
 
     def _get_release_blocker(self):
-        # release blocker can be ['None','Approved','Proposed','Rejected']
+        # release blocker can be ['None','Approved'=='+','Proposed'=='?','Rejected'=='-']
         if self.bug.fields.customfield_12319743:
             return self.bug.fields.customfield_12319743.value
         return None
 
     def _get_blocked_reason(self):
         if self.bug.fields.customfield_12316544:
-            return self.bug.fields.customfield_12319743.value
+            return self.bug.fields.customfield_12316544.value
+        return None
+
+    def _get_severity(self):
+        if self.bug.fields.customfield_12316142:
+            if "Urgent" in self.bug.fields.customfield_12316142.value:
+                return "Urgent"
+            if "High" in self.bug.fields.customfield_12316142.value:
+                return "High"
+            if "Medium" in self.bug.fields.customfield_12316142.value:
+                return "Medium"
+            if "Low" in self.bug.fields.customfield_12316142.value:
+                return "Low"
         return None
 
     def creation_time_parsed(self):
@@ -131,14 +145,14 @@ class JIRABug(Bug):
         blocks = []
         for link in self.bugs.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "outwardIssue"):
-                blocks.append(link.outwardIssue)
+                blocks.append(link.outwardIssue.key)
         return blocks
 
     def _get_depends(self):
         depends = []
         for link in self.bugs.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "inwardIssue"):
-                depends.append(link.inwardIssue)
+                depends.append(link.inwardIssue.key)
         return depends
 
 
