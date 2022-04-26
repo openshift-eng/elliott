@@ -24,7 +24,7 @@ def advisory_drop_cli(advisory):
 
     r = requests.post(url, auth=HTTPKerberosAuth(), data=data, headers=headers)
     adv = Erratum(errata_id=advisory)
-    if adv.errata_state == "DROPPED_NO_SHIP"
+    if adv.errata_state == "DROPPED_NO_SHIP":
         click.echo(f'Succesfully dropped advisory {advisory}')
         sys.exit(0)
     else:
