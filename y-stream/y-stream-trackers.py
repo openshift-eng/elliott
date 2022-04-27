@@ -32,7 +32,7 @@ query = bz.build_query(
 
 
 def _get_flaw_cve(flaw):
-    # python2 has no .get() for lists
+    # python has no .get() for lists
     try:
         return flaw.alias[0]
     except IndexError:

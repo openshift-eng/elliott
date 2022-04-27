@@ -42,14 +42,14 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option("--jira", 'use_jira',
               is_flag=True,
               default=False,
-              help="Use jira in combination with bugzilla")
+              help="Use jira instead of bugzilla")
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
               help="Check bugs attached, print what would change, but don't change anything")
 @use_default_advisory_option
 @pass_runtime
-def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, use_jira, noop, default_advisory_type):
+def repair_bugs_cli(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, use_jira, noop, default_advisory_type):
     """Move bugs attached to the advisory from one state to another
 state. This is useful if the bugs have changed states *after* they
 were attached. Similar to `find-bugs` but in reverse. `repair-bugs`

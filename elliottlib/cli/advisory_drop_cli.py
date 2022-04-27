@@ -5,6 +5,7 @@ import sys
 
 from elliottlib.constants import errata_drop_url
 from elliottlib.cli.common import cli
+from errata_tool import Erratum
 
 
 @cli.command("advisory-drop", short_help="Drop advisory")
@@ -22,11 +23,9 @@ def advisory_drop_cli(advisory):
     headers = {"Content-Type": "text/plain"}
 
     r = requests.post(url, auth=HTTPKerberosAuth(), data=data, headers=headers)
-    if r.status_code == 200:
+    adv = Erratum(errata_id=advisory)
+    if adv.errata_state == "DROPPED_NO_SHIP":
         click.echo(f'Succesfully dropped advisory {advisory}')
-        sys.exit(0)
-    elif "ERROR: Validation failed: Previous - Transition DROPPED_NO_SHIP =&gt; DROPPED_NO_SHIP is invalid" in r.text:
-        click.echo(f'Advisory {advisory} already seems dropped')
         sys.exit(0)
     else:
         click.echo(f'Failed to drop advisory {advisory}. Got status code {r.status_code}')

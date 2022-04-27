@@ -8,18 +8,6 @@ Making them functions keeps the exception definition localized.
 import os
 import errno
 
-# Create FileNotFound for Python2
-try:
-    FileNotFoundError
-except NameError:
-    FileNotFoundError = IOError
-
-# Create ChildProcessError for Python2
-try:
-    ChildProcessError
-except NameError:
-    ChildProcessError = IOError
-
 
 def isdir(path, message):
     """

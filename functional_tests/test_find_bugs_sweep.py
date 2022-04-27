@@ -1,6 +1,5 @@
 import unittest
 import subprocess
-import six
 from functional_tests import constants
 
 
@@ -12,7 +11,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
                 "--group=openshift-4.3", "find-bugs:sweep",
             ]
         )
-        six.assertRegex(self, out.decode("utf-8"), "Found \\d+ bugs")
+        self.assertRegex(self, out.decode("utf-8"), "Found \\d+ bugs")
 
 
 if __name__ == '__main__':
