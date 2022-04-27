@@ -355,7 +355,7 @@ class BugzillaBugTracker(BugTracker):
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_bugzilla_bugs_with_retry(advisory_id, bugids, noop=noop)
 
-    def create_bug(self, title, description, target_status, keywords: List) -> BugzillaBug:
+    def create_bug(self, title, description, target_status, keywords: List, noop=False) -> BugzillaBug:
         create_info = self._client.build_createbug(
             product=self.config.get('product'),
             version=self.config.get('version')[0],
@@ -364,6 +364,9 @@ class BugzillaBugTracker(BugTracker):
             summary=title,
             keywords=keywords,
             description=description)
+        if noop:
+            logger.info(f"Would have created BugzillaBug with status={target_status} and fields={create_info}")
+            return
         new_bug = self._client.createbug(create_info)
         # change state to VERIFIED
         try:
