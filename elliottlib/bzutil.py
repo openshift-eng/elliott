@@ -159,7 +159,7 @@ class BugTracker:
         return self.create_bug(self, title, title, "VERIFIED", ["Automation"], noop)
 
     def create_textonly(self, bug_title, bug_description, noop=False):
-        return self.create_bug(self, bug_title, bug_description, "VERIFIED", noop)
+        return self.create_bug(self, bug_title, bug_description, "VERIFIED", [], noop)
 
     def update_bug_status(self, bug: Bug, target_status: str,
                           comment: Optional[str] = None, log_comment: bool = True, noop=False):
