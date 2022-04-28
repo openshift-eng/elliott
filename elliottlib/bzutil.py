@@ -343,7 +343,7 @@ class BugzillaBugTracker(BugTracker):
 
     def search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter)
-        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs', 'whiteboard',
+        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'sub_components', 'external_bugs', 'whiteboard',
                   'keywords', 'target_release']
         return self._search(query, fields, verbose)
 
