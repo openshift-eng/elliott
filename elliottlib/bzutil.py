@@ -18,7 +18,7 @@ import os
 from bugzilla.bug import Bug
 from koji import ClientSession
 
-from elliottlib import constants, exceptions, exectools, logutil, bzutil, errata
+from elliottlib import constants, exceptions, exectools, logutil, bzutil, errata, util
 from elliottlib.metadata import Metadata
 from elliottlib.util import isolate_timestamp_in_release, red_print
 
@@ -894,3 +894,93 @@ def approximate_cutoff_timestamp(basis_event: int, koji_api: ClientSession, meta
     rebase_timestamps = [datetime.strptime(ts, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc).timestamp()
                          for ts in rebase_timestamp_strings]
     return min(basis_timestamp, max(rebase_timestamps, default=basis_timestamp))
+
+
+def get_highest_security_impact(bugs):
+    security_impacts = set(bug.severity.lower() for bug in bugs)
+    if 'urgent' in security_impacts:
+        return 'Critical'
+    if 'high' in security_impacts:
+        return 'Important'
+    if 'medium' in security_impacts:
+        return 'Moderate'
+    return 'Low'
+
+
+def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
+    """
+    Check if a flaw bug is considered a first-fix for a GA target release
+    for any of its trackers components. A return value of True means it should be
+    attached to an advisory.
+    """
+    # all z stream bugs are considered first fix
+    if current_target_release[-1] != '0':
+        return True
+
+    # get all tracker bugs for a flaw bug
+    tracker_ids = flaw_bug.depends_on
+    if not tracker_ids:
+        # No trackers found
+        # is a first fix
+        # shouldn't happen ideally
+        return True
+
+    # filter tracker bugs by OCP product
+    tracker_bugs = [b for b in bugtracker.get_bugs(tracker_ids) if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug()]
+    if not tracker_bugs:
+        # No OCP trackers found
+        # is a first fix
+        return True
+
+    # make sure 3.X or 4.X bugs are being compared to each other
+    def same_major_release(bug):
+        return util.minor_version_tuple(current_target_release)[0] == util.minor_version_tuple(bug.target_release[0])[0]
+
+    def already_fixed(bug):
+        pending = bug.status == 'RELEASE_PENDING'
+        closed = bug.status == 'CLOSED' and bug.resolution in ['ERRATA', 'CURRENTRELEASE', 'NEXTRELEASE']
+        if pending or closed:
+            return True
+        return False
+
+    # group trackers by components
+    component_tracker_groups = dict()
+    component_not_found = '[NotFound]'
+    for b in tracker_bugs:
+        # filter out trackers that don't belong ex. 3.X bugs for 4.X target release
+        if not same_major_release(b):
+            continue
+        component = bzutil.get_whiteboard_component(b)
+        if not component:
+            component = component_not_found
+
+        if component not in component_tracker_groups:
+            component_tracker_groups[component] = set()
+        component_tracker_groups[component].add(b)
+
+    if component_not_found in component_tracker_groups:
+        invalid_trackers = sorted([b.id for b in component_tracker_groups[component_not_found]])
+        logger.warning(f"For flaw bug {flaw_bug.id} - these tracker bugs do not have a valid "
+                       f"whiteboard component value: {invalid_trackers} "
+                       "Cannot reliably determine if flaw bug is first "
+                       "fix. Check tracker bugs manually")
+        return False
+
+    # if any tracker bug for the flaw bug
+    # has been fixed for the same major release version
+    # then it is not a first fix
+    def is_first_fix_group(trackers):
+        for b in trackers:
+            if already_fixed(b):
+                return False
+        return True
+
+    # if for any component is_first_fix_group is true
+    # then flaw bug is first fix
+    for component, trackers in component_tracker_groups.items():
+        if is_first_fix_group(trackers):
+            logger.info(f'{flaw_bug.id} considered first-fix for component: {component} for trackers: '
+                        f'{[t.id for t in trackers]}')
+            return True
+
+    return False

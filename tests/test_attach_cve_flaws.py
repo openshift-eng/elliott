@@ -1,40 +1,20 @@
 import unittest
 from flexmock import flexmock
-from elliottlib import attach_cve_flaws, constants, exceptions
+from elliottlib import constants, exceptions, bzutil
+from elliottlib.bzutil import Bug, BugzillaBugTracker
 
 
 class TestAttachCVEFlaws(unittest.TestCase):
     def test_is_tracker_bug(self):
         bug = flexmock(keywords=constants.TRACKER_BUG_KEYWORDS)
         expected = True
-        actual = attach_cve_flaws.is_tracker_bug(bug)
+        actual = Bug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
 
     def test_is_tracker_bug_fail(self):
         bug = flexmock(keywords=['SomeOtherKeyword'])
         expected = False
-        actual = attach_cve_flaws.is_tracker_bug(bug)
-        self.assertEqual(expected, actual)
-
-    def test_get_tracker_bugs(self):
-        valid_tracker = flexmock(id=123, keywords=constants.TRACKER_BUG_KEYWORDS)
-        invalid_tracker = flexmock(id=456, keywords=[])
-        bug_objs = [
-            valid_tracker,
-            invalid_tracker
-        ]
-        bugs = [valid_tracker.id, invalid_tracker.id]
-
-        advisory = flexmock(errata_bugs=bugs)
-        fields = ["keywords"]
-        bzapi = flexmock()
-        (bzapi
-         .should_receive("getbugs")
-         .with_args(bugs, permissive=False, include_fields=['keywords'])
-         .and_return(bug_objs))
-
-        expected = [valid_tracker]
-        actual = attach_cve_flaws.get_tracker_bugs(bzapi, advisory, fields)
+        actual = Bug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
 
     def test_get_corresponding_flaw_bugs(self):
@@ -65,7 +45,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
         flexmock(bzapi).should_receive("get_bugs").with_args(bugs, include_fields=["somefield", "product", "component"]).and_return(flaw_bugs)
 
         expected = 2
-        actual = len(attach_cve_flaws.get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields)[1])
+        actual = len(bzutil.get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields)[1])
         self.assertEqual(expected, actual)
 
     def test_validate_tracker_has_flaw(self):
@@ -92,7 +72,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
         self.assertRaisesRegex(
             exceptions.ElliottFatalError,
             r'^No flaw bugs could be found for these trackers: {10, 12}$',
-            attach_cve_flaws.get_corresponding_flaw_bugs,
+            bzutil.get_corresponding_flaw_bugs,
             bzapi, tracker_bugs, ['some_field'], strict=True)
 
     def test_is_first_fix_any_validate(self):
@@ -100,14 +80,14 @@ class TestAttachCVEFlaws(unittest.TestCase):
         bug = None
         tr = '4.8.z'
         expected = True
-        actual = attach_cve_flaws.is_first_fix_any(bzapi, bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, bug, tr)
         self.assertEqual(expected, actual)
 
         bzapi = None
         bug = flexmock(depends_on=[])
         tr = '4.8.0'
         expected = True
-        actual = attach_cve_flaws.is_first_fix_any(bzapi, bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_no_trackers(self):
@@ -130,10 +110,10 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .and_return(tracker_bug_objs))
         (bzapi
             .should_receive("get_bugs")
-            .and_return(tracker_bug_objs))
+            .and_return([]))
 
         expected = True
-        actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_missing_component(self):
@@ -160,7 +140,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .and_return(tracker_bug_objs))
 
         expected = False
-        actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_same_major(self):
@@ -205,7 +185,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .and_return(tracker_bug_objs))
 
         expected = True
-        actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_already_fixed(self):
@@ -246,7 +226,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .and_return(tracker_bug_objs))
 
         expected = False
-        actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_any(self):
@@ -295,7 +275,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .and_return(tracker_bug_objs))
 
         expected = True
-        actual = attach_cve_flaws.is_first_fix_any(bzapi, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
 

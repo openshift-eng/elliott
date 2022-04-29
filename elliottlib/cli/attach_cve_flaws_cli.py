@@ -1,16 +1,14 @@
 from typing import Dict, List, Set
-
-from bugzilla.bug import Bug
 import click
 from errata_tool import Erratum
 
-from elliottlib import attach_cve_flaws, bzutil, constants
+from elliottlib import bzutil, constants
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
-from elliottlib.errata import get_jira_issue_from_advisory, add_multi_jira_issues
+from elliottlib.errata import get_jira_issue_from_advisory, add_multi_jira_issues, is_security_advisory
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corresponding_flaw_bugs
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corresponding_flaw_bugs, get_highest_security_impact, is_first_fix_any
 
 
 @cli.command('attach-cve-flaws',
@@ -104,7 +102,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, use_jira: boo
         runtime.logger.info("detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in flaw_id_bugs.values()
-            if attach_cve_flaws.is_first_fix_any(bug_tracker, flaw_bug, current_target_release)
+            if is_first_fix_any(bug_tracker, flaw_bug, current_target_release)
         ]
 
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
@@ -174,7 +172,7 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
     :param flaw_bugs: flaw bug objects determined to be attached to the advisory
     :returns: updated advisory object, that can be committed i.e advisory.commit()
     """
-    if not attach_cve_flaws.is_security_advisory(advisory):
+    if not is_security_advisory(advisory):
         logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
         advisory.update(
             errata_type='RHSA',
@@ -196,7 +194,7 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
             cve_str = f"{advisory.cve_names} {s}".strip()
             advisory.update(cve_names=cve_str)
 
-    highest_impact = attach_cve_flaws.get_highest_security_impact(flaw_bugs)
+    highest_impact = get_highest_security_impact(flaw_bugs)
     logger.info('Adjusting advisory security impact from {} to {}'.format(
         advisory.security_impact, highest_impact
     ))
