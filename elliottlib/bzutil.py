@@ -907,7 +907,7 @@ def get_highest_security_impact(bugs):
     return 'Low'
 
 
-def is_first_fix_any(bzapi, flaw_bug, current_target_release):
+def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
     """
     Check if a flaw bug is considered a first-fix for a GA target release
     for any of its trackers components. A return value of True means it should be
@@ -926,10 +926,7 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
         return True
 
     # filter tracker bugs by OCP product
-    tracker_bugs = [b for b in bzapi.get_bugs(tracker_ids, check_tracker=True,
-        product=constants.BUGZILLA_PRODUCT_OCP,
-        include_fields=["keywords", "target_release", "status", "resolution", "whiteboard"]
-    )]
+    tracker_bugs = [b for b in bugtracker.get_bugs(tracker_ids) if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug()]
     if not tracker_bugs:
         # No OCP trackers found
         # is a first fix
@@ -937,9 +934,7 @@ def is_first_fix_any(bzapi, flaw_bug, current_target_release):
 
     # make sure 3.X or 4.X bugs are being compared to each other
     def same_major_release(bug):
-        current_major_version = util.minor_version_tuple(current_target_release)[0]
-        bug_target_major_version = util.minor_version_tuple(bug.target_release[0])[0]
-        return bug_target_major_version == current_major_version
+        return util.minor_version_tuple(current_target_release)[0] == util.minor_version_tuple(bug.target_release[0])[0]
 
     def already_fixed(bug):
         pending = bug.status == 'RELEASE_PENDING'
