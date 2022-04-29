@@ -103,6 +103,7 @@ class JIRABug(Bug):
         self.id = self.bug.key
         self.weburl = self.bug.permalink()
         self.component = self.bug.fields.components[0].name
+        self.sub_component = [c.name for c in self.bug.fields.components]
         self.status = self.bug.fields.status.name
         self.summary = self.bug.fields.summary
         self.resolution = self.bug.fields.resolution
@@ -112,6 +113,8 @@ class JIRABug(Bug):
         self.severity = self._get_severity()
         self.product = self.bug.fields.project.key
         self.keywords = self.bug.fields.labels
+        self.alias = self.bug.fields.labels
+        self.whiteboard = self.bug.fields.labels
         self.version = [x.name for x in self.bug.fields.versions]
         self.target_release = [x.name for x in self.bug.fields.fixVersions]
 
