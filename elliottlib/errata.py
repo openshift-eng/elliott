@@ -718,3 +718,11 @@ def get_all_advisory_nvrs(advisory):
                 all_advisory_nvrs.append((n, v, r))
 
     return all_advisory_nvrs
+
+
+def get_advisory(advisory_id):
+    return ErrataConnector()._get(f'/api/v1/erratum/{advisory_id}')
+
+
+def is_security_advisory(advisory):
+    return advisory.errata_type == 'RHSA'
