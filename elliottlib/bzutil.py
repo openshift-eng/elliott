@@ -36,6 +36,12 @@ class Bug:
     def creation_time_parsed(self):
         raise NotImplementedError
 
+    def is_tracker_bug(self):
+        return set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.bug.keywords))
+
+    def is_flaw_bug(self):
+        return self.bug.product == "Security Response" and self.bug.component == "vulnerability"
+
     @staticmethod
     def get_target_release(bugs: List[bzutil.Bug]) -> str:
         """
@@ -97,12 +103,43 @@ class JIRABug(Bug):
         self.id = self.bug.key
         self.weburl = self.bug.permalink()
         self.component = self.bug.fields.components[0].name
+        self.sub_component = [c.name for c in self.bug.fields.components]
         self.status = self.bug.fields.status.name
         self.summary = self.bug.fields.summary
+        self.resolution = self.bug.fields.resolution
         self.blocks = self._get_blocks()
+        self.depends_on = self._get_depends()
+        self.release_blocker = self._get_release_blocker()
+        self.severity = self._get_severity()
+        self.product = self.bug.fields.project.key
         self.keywords = self.bug.fields.labels
+        self.alias = self.bug.fields.labels
+        self.whiteboard = self.bug.fields.labels
         self.version = [x.name for x in self.bug.fields.versions]
         self.target_release = [x.name for x in self.bug.fields.fixVersions]
+
+    def _get_release_blocker(self):
+        # release blocker can be ['None','Approved'=='+','Proposed'=='?','Rejected'=='-']
+        if self.bug.fields.customfield_12319743:
+            return self.bug.fields.customfield_12319743.value
+        return None
+
+    def _get_blocked_reason(self):
+        if self.bug.fields.customfield_12316544:
+            return self.bug.fields.customfield_12316544.value
+        return None
+
+    def _get_severity(self):
+        if self.bug.fields.customfield_12316142:
+            if "Urgent" in self.bug.fields.customfield_12316142.value:
+                return "Urgent"
+            if "High" in self.bug.fields.customfield_12316142.value:
+                return "High"
+            if "Medium" in self.bug.fields.customfield_12316142.value:
+                return "Medium"
+            if "Low" in self.bug.fields.customfield_12316142.value:
+                return "Low"
+        return None
 
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
@@ -111,8 +148,15 @@ class JIRABug(Bug):
         blocks = []
         for link in self.bugs.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "outwardIssue"):
-                blocks.append(link.outwardIssue)
+                blocks.append(link.outwardIssue.key)
         return blocks
+
+    def _get_depends(self):
+        depends = []
+        for link in self.bugs.fields.issuelinks:
+            if link.type.name == "Blocks" and hasattr(link, "inwardIssue"):
+                depends.append(link.inwardIssue.key)
+        return depends
 
 
 class BugTracker:
@@ -213,13 +257,15 @@ class JIRABugTracker(BugTracker):
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
         return JIRABug(self._client.issue(bugid, **kwargs))
 
-    def get_bugs(self, bugids: List[str], permissive=False, verbose=False, **kwargs) -> List[JIRABug]:
+    def get_bugs(self, bugids: List[str], permissive=False, verbose=False, check_tracker=False, **kwargs) -> List[JIRABug]:
         query = self._query(bugids=bugids, with_target_release=False)
         if verbose:
             click.echo(query)
         bugs = self._search(query, **kwargs)
         if not permissive and len(bugs) < len(bugids):
             raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
+        if check_tracker:
+            bugs = [bug for bug in bugs if bug.is_tracker_bug()]
         return bugs
 
     def get_bug_remote_links(self, bug: JIRABug):
@@ -329,7 +375,9 @@ class BugzillaBugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
-    def get_bugs(self, bugids, permissive=False, **kwargs):
+    def get_bugs(self, bugids, permissive=False, check_tracker=False, **kwargs):
+        if check_tracker:
+            return [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs) if BugzillaBug(b).is_tracker_bug()]
         return [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
 
     def client(self):
@@ -475,6 +523,42 @@ class BugzillaBugTracker(BugTracker):
             qualified_bugs.append(bug)
 
         return qualified_bugs
+
+
+def get_corresponding_flaw_bugs(bug_tracker, tracker_bugs: List, fields: List, strict: bool = False):
+    """
+    Get corresponding flaw bugs objects for the
+    given tracker bug objects
+    :return (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw bug id as value,
+                                        flaw_bugs is a dict with flaw bug id as key and flaw bug object as value
+    """
+    # fields needed for is_flaw_bug()
+    if "product" not in fields:
+        fields.append("product")
+    if "component" not in fields:
+        fields.append("component")
+
+    blocking_bugs = bug_tracker.get_bugs(list(set(sum([t.blocks for t in tracker_bugs], []))), include_fields=fields)
+    flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs if bug.is_flaw_bug()}
+
+    # Validate that each tracker has a corresponding flaw bug
+    flaw_ids = set(flaw_id_bugs.keys())
+    no_flaws = set()
+    for tracker in tracker_bugs:
+        if not set(tracker.blocks).intersection(flaw_ids):
+            no_flaws.add(tracker.id)
+    if no_flaws:
+        msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
+        if strict:
+            raise exceptions.ElliottFatalError(msg)
+        else:
+            logger.warn(msg)
+
+    tracker_flaws: Dict[int, List[int]] = {
+        tracker.id: [blocking for blocking in tracker.blocks if blocking in flaw_id_bugs]
+        for tracker in tracker_bugs
+    }
+    return tracker_flaws, flaw_id_bugs
 
 
 def get_highest_impact(trackers, tracker_flaws_map):

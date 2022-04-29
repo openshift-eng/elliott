@@ -8,7 +8,9 @@ from elliottlib import attach_cve_flaws, bzutil, constants
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
+from elliottlib.errata import get_jira_issue_from_advisory, add_multi_jira_issues
 from elliottlib.runtime import Runtime
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corresponding_flaw_bugs
 
 
 @cli.command('attach-cve-flaws',
@@ -16,6 +18,10 @@ from elliottlib.runtime import Runtime
 @click.option('--advisory', '-a', 'advisory_id',
               type=int,
               help='Find tracker bugs in given advisory')
+@click.option("--jira", 'use_jira',
+              is_flag=True,
+              default=False,
+              help="Use jira in combination with bugzilla")
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
@@ -23,7 +29,7 @@ from elliottlib.runtime import Runtime
 @use_default_advisory_option
 @click.pass_obj
 @click_coroutine
-async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, default_advisory_type: str):
+async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, use_jira: bool, noop: bool, default_advisory_type: str):
     """Attach corresponding flaw bugs for trackers in advisory (first-fix only).
 
     Also converts advisory to RHSA, if not already.
@@ -44,8 +50,11 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     if sum(map(bool, [advisory_id, default_advisory_type])) != 1:
         raise click.BadParameter("Use one of --use-default-advisory or --advisory")
     runtime.initialize()
-    bz_config = runtime.gitdata.load_data(key='bugzilla').data
-    bug_tracker_bz = bzutil.BugzillaBugTracker(bz_config)
+
+    if use_jira:
+        bug_tracker = JIRABugTracker(JIRABugTracker.get_config(runtime))
+    else:
+        bug_tracker = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime))
 
     if not advisory_id and default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
@@ -54,21 +63,28 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     advisory = Erratum(errata_id=advisory_id)
 
     # get attached bugs from advisory
-    runtime.logger.info("Querying Bugzilla for CVE trackers")
+    runtime.logger.info("Querying bugs for CVE trackers")
     fields = ["target_release", "blocks", 'whiteboard', 'keywords']
-    attached_tracker_bugs = attach_cve_flaws.get_tracker_bugs(bug_tracker_bz.client(), advisory, fields=fields)
+    if use_jira:
+        attached_tracker_bugs = bug_tracker.get_bugs(
+            [issue["key"] for issue in get_jira_issue_from_advisory(advisory.errata_id)],
+            check_tracker=True,
+            include_fields=fields)
+    else:
+        attached_tracker_bugs = bug_tracker.get_bugs(advisory.errata_bugs, check_tracker=True, include_fields=fields)
     runtime.logger.info('found {} tracker bugs attached to the advisory: {}'.format(
         len(attached_tracker_bugs), sorted(bug.id for bug in attached_tracker_bugs)
     ))
+
     if len(attached_tracker_bugs) == 0:
         exit(0)
 
     # validate and get target_release
-    current_target_release = bzutil.Bug.get_target_release(attached_tracker_bugs)
+    current_target_release = Bug.get_target_release(attached_tracker_bugs)
     runtime.logger.info('current_target_release: {}'.format(current_target_release))
 
-    tracker_flaws, flaw_id_bugs = attach_cve_flaws.get_corresponding_flaw_bugs(
-        bug_tracker_bz,
+    tracker_flaws, flaw_id_bugs = get_corresponding_flaw_bugs(
+        bug_tracker,
         attached_tracker_bugs,
         fields=["depends_on", "alias", "severity", "summary"],
         strict=True
@@ -88,7 +104,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         runtime.logger.info("detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in flaw_id_bugs.values()
-            if attach_cve_flaws.is_first_fix_any(bug_tracker_bz.client(), flaw_bug, current_target_release)
+            if attach_cve_flaws.is_first_fix_any(bug_tracker, flaw_bug, current_target_release)
         ]
 
     runtime.logger.info('{} out of {} flaw bugs considered "first-fix"'.format(
@@ -105,7 +121,10 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
 
     flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
     runtime.logger.info(f'Request to attach {len(flaw_ids)} bugs to the advisory')
-    existing_bug_ids = advisory.errata_bugs
+    if use_jira:
+        existing_bug_ids = [issue["key"] for issue in get_jira_issue_from_advisory(advisory.errata_id)]
+    else:
+        existing_bug_ids = advisory.errata_bugs
     new_bugs = set(flaw_ids) - set(existing_bug_ids)
     runtime.logger.info(f'Bugs already attached: {len(existing_bug_ids)}')
     runtime.logger.info(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
@@ -113,9 +132,12 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     if not noop:
         if new_bugs:
             runtime.logger.info('Attaching bugs %s', flaw_ids)
-            advisory.addBugs(flaw_ids)
-        runtime.logger.info("Updating advisory %s", advisory_id)
-        advisory.commit()
+            if use_jira:
+                add_multi_jira_issues(advisory.errata_id, flaw_ids)
+            else:
+                advisory.addBugs(flaw_ids)
+                runtime.logger.info("Updating advisory %s", advisory_id)
+                advisory.commit()
 
     runtime.logger.info('Associating CVEs with builds')
     errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
