@@ -726,3 +726,8 @@ def get_advisory(advisory_id):
 
 def is_security_advisory(advisory):
     return advisory.errata_type == 'RHSA'
+
+
+def is_advisory_impact_smaller_than(advisory, impact):
+    i = [None] + constants.SECURITY_IMPACT
+    return i.index(advisory.security_impact) < i.index(impact)
