@@ -17,7 +17,6 @@ class TestAttachCVEFlaws(unittest.TestCase):
         actual = Bug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
 
-
     def test_get_corresponding_flaw_bugs(self):
         tracker_bugs = [
             flexmock(blocks=[1, 2], id=10),
