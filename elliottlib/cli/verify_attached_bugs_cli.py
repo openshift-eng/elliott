@@ -6,7 +6,7 @@ import click
 from bugzilla.bug import Bug
 from spnego.exceptions import GSSError
 
-from elliottlib import attach_cve_flaws, bzutil, constants, util
+from elliottlib import bzutil, constants, util
 from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
@@ -130,7 +130,7 @@ class BugValidator:
             else:
                 first_fix_flaw_ids = {
                     flaw_bug.id for flaw_bug in flaw_id_bugs.values()
-                    if attach_cve_flaws.is_first_fix_any(self.bzapi, flaw_bug, current_target_release)
+                    if bzutil.is_first_fix_any(self.bzapi, flaw_bug, current_target_release)
                 }
 
         # Check if attached flaws match attached trackers
