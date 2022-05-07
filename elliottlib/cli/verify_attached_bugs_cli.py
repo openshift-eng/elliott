@@ -45,7 +45,7 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
     try:
         await validator.errata_api.login()
         if use_jira:
-            advisory_bugs = await validator.get_attached_jira_bugs(advisories) #
+            advisory_bugs = await validator.get_attached_jira_bugs(advisories)
         else:
             advisory_bugs = await validator.get_attached_bugs(advisories)
         non_flaw_bugs = validator.filter_bugs_by_product({b for bugs in advisory_bugs.values() for b in bugs})
