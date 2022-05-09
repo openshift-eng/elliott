@@ -119,12 +119,9 @@ advisory with the --add option.
     runtime.initialize(mode="both")
     major_version, minor_version = runtime.get_major_minor()
 
-    if jira:
-        jira_config = JIRABugTracker.get_config(runtime)
-        bug_tracker = JIRABugTracker(jira_config)
-    else:
-        bz_config = BugzillaBugTracker.get_config(runtime)
-        bug_tracker = BugzillaBugTracker(bz_config)
+    bug_tracker_cls = JIRABugTracker if jira else BugzillaBugTracker
+    config = bug_tracker_cls.get_config(runtime)
+    bug_tracker = bug_tracker_cls(config)
 
     find_bugs_obj = FindBugsSweep()
     find_bugs_obj.include_status(include_status)

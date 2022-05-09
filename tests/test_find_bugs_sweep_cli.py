@@ -172,6 +172,20 @@ class FindBugsSweepTestCase(unittest.TestCase):
         result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly', '4.6.52', 'find-bugs:sweep', '--jira'])
         self.assertEqual(result.exit_code, 0)
 
+    def test_find_bugs_sweep_advisory_jira(self):
+        runner = CliRunner()
+        bugs = [flexmock(id='BZ1')]
+        flexmock(Runtime).should_receive("initialize").and_return(None)
+        flexmock(Runtime).should_receive("get_major_minor").and_return(4, 6)
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
+        flexmock(JIRABugTracker).should_receive("login").and_return(None)
+        flexmock(JIRABugTracker).should_receive("search").and_return(bugs)
+        flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
+        flexmock(JIRABugTracker).should_receive("attach_bugs").with_args(123, [b.id for b in bugs], noop=False)
+
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--add', '123', '--jira'])
+        self.assertEqual(result.exit_code, 0)
+
 
 class TestExtrasBugs(unittest.TestCase):
     def test_payload_bug(self):
