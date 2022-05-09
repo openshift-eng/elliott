@@ -56,7 +56,7 @@ class VerifyBugs(unittest.TestCase):
         loop = asyncio.get_event_loop()
 
         # Login with errata tool
-        bv = BugValidator(self.runtime_fixture(), False)
+        bv = BugValidator(self.runtime_fixture())
         loop.run_until_complete(bv.errata_api.login())
 
         # Get attached bugs
@@ -71,7 +71,7 @@ class VerifyBugs(unittest.TestCase):
         loop = asyncio.get_event_loop()
 
         # Initialize validator
-        bv = BugValidator(self.runtime_fixture(), False)
+        bv = BugValidator(self.runtime_fixture())
         bv.product = "OpenShift Container Platform"
         bv.target_releases = ['4.5.0', '4.5.z']
 
@@ -97,7 +97,7 @@ class VerifyBugs(unittest.TestCase):
         loop = asyncio.get_event_loop()
 
         # Initialize validator
-        bv = BugValidator(self.runtime_fixture(), False)
+        bv = BugValidator(self.runtime_fixture())
         bv.product = "OpenShift Container Platform"
         bv.target_releases = ['4.5.0', '4.5.z']
 
@@ -121,7 +121,7 @@ class VerifyBugs(unittest.TestCase):
         )
 
     def test_get_and_verify_blocking_bugs(self):
-        bv = BugValidator(self.runtime_fixture(), False)
+        bv = BugValidator(self.runtime_fixture())
         bv.product = "OpenShift Container Platform"
         bv.target_releases = ['4.4.0', '4.4.z']
         bugs = bv.bug_tracker.get_bugs([1875258, 1878798, 1881212, 1869790, 1840719])
