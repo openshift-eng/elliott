@@ -8,6 +8,7 @@ from elliottlib.bzutil import JIRABugTracker
 from flexmock import flexmock
 import asyncio
 
+
 def async_test(f):
     def wrapper(*args, **kwargs):
         coro = asyncio.coroutine(f)
@@ -15,6 +16,7 @@ def async_test(f):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(future)
     return wrapper
+
 
 class VerifyAttachedBugs(unittest.TestCase):
     def test_validator_target_release(self):
@@ -24,6 +26,7 @@ class VerifyAttachedBugs(unittest.TestCase):
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
         validator = BugValidator(runtime, True)
         self.assertEqual(validator.target_releases, ['4.9.z'])
+
 
 class TestGetAttachedBugs(unittest.TestCase):
     @async_test
@@ -42,8 +45,6 @@ class TestGetAttachedBugs(unittest.TestCase):
         advisory_bugs = await validator.get_attached_bugs(['12345'])
         self.assertEqual(advisory_bugs, {'12345': {bug_map['bug-1'], bug_map['bug-2']}})
 
-# test validate
-# test verify_attached_flaws
 
 if __name__ == '__main__':
     unittest.main()
