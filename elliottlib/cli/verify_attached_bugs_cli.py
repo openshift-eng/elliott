@@ -21,7 +21,7 @@ from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corre
 @click.option("--jira", 'use_jira',
               is_flag=True,
               default=False,
-              help="Use jira in combination with bugzilla")
+              help="Use jira as bug type")
 @click.argument("advisories", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
@@ -64,7 +64,7 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
 @click.option("--jira", 'use_jira',
               is_flag=True,
               default=False,
-              help="Use jira in combination with bugzilla")
+              help="Use jira bug as bugtype")
 @click.argument("bug_ids", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
