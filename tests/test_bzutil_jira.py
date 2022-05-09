@@ -1,9 +1,10 @@
 import unittest
 from elliottlib.bzutil import JIRABugTracker
 from flexmock import flexmock
+from datetime import datetime
 
 
-class JIRABugTrackerUpdateBugStatus(unittest.TestCase):
+class TestJIRABugTracker(unittest.TestCase):
     def test_update_bug_status_same(self):
         bug = flexmock(id=123, status="status1")
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
@@ -31,12 +32,10 @@ class JIRABugTrackerUpdateBugStatus(unittest.TestCase):
             bug.id, comment, private=True, noop=False
         )
 
-        bz = JIRABugTracker({})
-        bz._client = client
-        bz.update_bug_status(bug, target_status='status2', comment='comment')
+        jira = JIRABugTracker({})
+        jira._client = client
+        jira.update_bug_status(bug, target_status='status2', comment='comment')
 
-
-class JIRABugTrackerUpdateAddComment(unittest.TestCase):
     def test_add_comment_private(self):
         bug = flexmock(id=123)
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
@@ -45,9 +44,9 @@ class JIRABugTrackerUpdateAddComment(unittest.TestCase):
             bug.id, 'comment', visibility={'type': 'group', 'value': 'Red Hat Employee'}
         )
 
-        bz = JIRABugTracker({})
-        bz._client = client
-        bz.add_comment(bug.id, 'comment', private=True)
+        jira = JIRABugTracker({})
+        jira._client = client
+        jira.add_comment(bug.id, 'comment', private=True)
 
 
 if __name__ == '__main__':

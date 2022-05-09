@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Set, Optional
 
 from elliottlib.assembly import assembly_issues_config
-from elliottlib.bzutil import BugzillaBugTracker, BugTracker, Bug
+from elliottlib.bzutil import BugzillaBugTracker, BugTracker, Bug, JIRABugTracker
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import common
 from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print, chunk
@@ -72,13 +72,17 @@ class FindBugsSweep(FindBugsMode):
                    '"extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
 @click.option('--brew-event', type=click.INT, required=False,
               help='Only in sweep mode: SWEEP bugs that have changed to the desired status before the Brew event')
+@click.option('--jira',
+              required=False,
+              is_flag=True,
+              help='Use jira instead of bugzilla as bug tracker')
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @click.pass_obj
 def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
-                        report, output, into_default_advisories, brew_event, noop):
+                        report, output, into_default_advisories, brew_event, jira, noop):
     """Find OCP bugs and (optional) add them to ADVISORY.
 
  The --group automatically determines the correct target-releases to search
@@ -115,8 +119,12 @@ advisory with the --add option.
     runtime.initialize(mode="both")
     major_version, minor_version = runtime.get_major_minor()
 
-    bz_config = BugzillaBugTracker.get_config(runtime)
-    bugzilla = BugzillaBugTracker(bz_config)
+    if jira:
+        jira_config = JIRABugTracker.get_config(runtime)
+        bug_tracker = JIRABugTracker(jira_config)
+    else:
+        bz_config = BugzillaBugTracker.get_config(runtime)
+        bug_tracker = BugzillaBugTracker(bz_config)
 
     find_bugs_obj = FindBugsSweep()
     find_bugs_obj.include_status(include_status)
@@ -124,8 +132,8 @@ advisory with the --add option.
 
     if output == 'text':
         green_prefix(f"Searching for bugs with status {' '.join(sorted(find_bugs_obj.status))} and target release(s):")
-        click.echo(" {tr}".format(tr=", ".join(bugzilla.target_release())))
-    bugs = find_bugs_obj.search(bug_tracker_obj=bugzilla, verbose=runtime.debug)
+        click.echo(" {tr}".format(tr=", ".join(bug_tracker.target_release())))
+    bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
     if sweep_cutoff_timestamp:
@@ -134,8 +142,8 @@ advisory with the --add option.
                     f"cutoff time {utc_ts}...")
         qualified_bugs = []
         for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
-            b = bugzilla.filter_bugs_by_cutoff_event(chunk_of_bugs, find_bugs_obj.status,
-                                                     sweep_cutoff_timestamp)
+            b = bug_tracker.filter_bugs_by_cutoff_event(chunk_of_bugs, find_bugs_obj.status,
+                                                        sweep_cutoff_timestamp)
             qualified_bugs.extend(b)
         click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time "
                    f"{utc_ts}...")
@@ -148,7 +156,7 @@ advisory with the --add option.
     if included_bug_ids:
         yellow_print("The following bugs will be additionally included because they are "
                      f"explicitly defined in the assembly config: {included_bug_ids}")
-        included_bugs = bugzilla.get_bugs(included_bug_ids)
+        included_bugs = bug_tracker.get_bugs(included_bug_ids)
         bugs.extend(included_bugs)
     if excluded_bug_ids:
         yellow_print("The following bugs will be excluded because they are explicitly "
@@ -168,7 +176,7 @@ advisory with the --add option.
     # `--add ADVISORY_NUMBER` should respect the user's wish
     # and attach all available bugs to whatever advisory is specified.
     if advisory_id and not default_advisory_type:
-        bugzilla.attach_bugs(advisory_id, [b.id for b in bugs], noop=noop)
+        bug_tracker.attach_bugs(advisory_id, [b.id for b in bugs], noop=noop)
         return
 
     rpm_advisory_id = common.find_default_advisory(runtime, 'rpm') if check_builds else None
@@ -182,7 +190,7 @@ advisory with the --add option.
         green_prefix(f'{advisory_type} advisory: ')
         if bugs:
             adv_id = common.find_default_advisory(runtime, advisory_type)
-            bugzilla.attach_bugs(adv_id, [b.id for b in bugs], noop=noop)
+            bug_tracker.attach_bugs(adv_id, [b.id for b in bugs], noop=noop)
         else:
             click.echo("0 bugs found")
 
@@ -193,13 +201,8 @@ type_bug_list = List[Bug]
 def get_assembly_bug_ids(runtime):
     # Loads included/excluded bugs from assembly config
     issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
-    # JIRA issues are not supported yet. Only loads issues with integer IDs.
-
-    def valid_issue(x):
-        return isinstance(x["id"], int) or x["id"].isdigit()
-
-    included_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.include if valid_issue(i)}
-    excluded_bug_ids: Set[int] = {int(i["id"]) for i in issues_config.exclude if valid_issue(i)}
+    included_bug_ids = {i["id"] for i in issues_config.include}
+    excluded_bug_ids = {i["id"] for i in issues_config.exclude}
     return included_bug_ids, excluded_bug_ids
 
 

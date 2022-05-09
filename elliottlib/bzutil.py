@@ -25,13 +25,18 @@ from elliottlib.util import isolate_timestamp_in_release, red_print
 logger = logutil.getLogger(__name__)
 
 
+# This is easier to patch in unit tests
+def datetime_now():
+    return datetime.now(timezone.utc)
+
+
 class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
     def created_days_ago(self):
         created_date = self.creation_time_parsed()
-        return (datetime.now(timezone.utc) - created_date).days
+        return (datetime_now() - created_date).days
 
     def creation_time_parsed(self):
         raise NotImplementedError
@@ -101,22 +106,70 @@ class JIRABug(Bug):
     def __init__(self, bug_obj: Issue):
         super().__init__(bug_obj)
         self.id = self.bug.key
-        self.weburl = self.bug.permalink()
-        self.component = self.bug.fields.components[0].name
-        self.sub_component = [c.name for c in self.bug.fields.components]
-        self.status = self.bug.fields.status.name
-        self.summary = self.bug.fields.summary
-        self.resolution = self.bug.fields.resolution
-        self.blocks = self._get_blocks()
-        self.depends_on = self._get_depends()
-        self.release_blocker = self._get_release_blocker()
-        self.severity = self._get_severity()
-        self.product = self.bug.fields.project.key
-        self.keywords = self.bug.fields.labels
-        self.alias = self.bug.fields.labels
-        self.whiteboard = self.bug.fields.labels
-        self.version = [x.name for x in self.bug.fields.versions]
-        self.target_release = [x.name for x in self.bug.fields.fixVersions]
+
+    @property
+    def weburl(self):
+        return self.bug.permalink()
+
+    @property
+    def component(self):
+        return self.bug.fields.components[0].name
+
+    @property
+    def status(self):
+        return self.bug.fields.status.name
+
+    @property
+    def summary(self):
+        return self.bug.fields.summary
+
+    @property
+    def blocks(self):
+        return self._get_blocks()
+
+    @property
+    def keywords(self):
+        return self.bug.fields.labels
+
+    @property
+    def version(self):
+        return [x.name for x in self.bug.fields.versions]
+
+    @property
+    def target_release(self):
+        return [x.name for x in self.bug.fields.fixVersions]
+
+    @property
+    def sub_component(self):
+        return [c.name for c in self.bug.fields.components]
+
+    @property
+    def resolution(self):
+        return self.bug.fields.resolution
+
+    @property
+    def depends_on(self):
+        return self._get_depends()
+
+    @property
+    def release_blocker(self):
+        return self._get_release_blocker()
+
+    @property
+    def severity(self):
+        return self._get_severity()
+
+    @property
+    def produc(self):
+        return self.bug.fields.project.key
+
+    @property
+    def alias(self):
+        return self.bug.fields.labels
+
+    @property
+    def whiteboard(self):
+        return self.bug.fields.labels
 
     def _get_release_blocker(self):
         # release blocker can be ['None','Approved'=='+','Proposed'=='?','Rejected'=='-']
@@ -146,7 +199,7 @@ class JIRABug(Bug):
 
     def _get_blocks(self):
         blocks = []
-        for link in self.bugs.fields.issuelinks:
+        for link in self.bug.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "outwardIssue"):
                 blocks.append(link.outwardIssue.key)
         return blocks
@@ -354,6 +407,14 @@ class JIRABugTracker(BugTracker):
 
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
+
+    def filter_bugs_by_cutoff_event(self, bugs: Iterable, desired_statuses: Iterable[str],
+                                    sweep_cutoff_timestamp: float) -> List:
+        dt = datetime.utcfromtimestamp(sweep_cutoff_timestamp).strftime("%Y/%m/%d %H:%M")
+        query = f"issue in ({','.join([b.id for b in bugs])}) " \
+                f"and status was in ({','.join(desired_statuses)}) " \
+                f'before("{dt}")'
+        return self._search(query, verbose=True)
 
 
 class BugzillaBugTracker(BugTracker):
@@ -816,10 +877,10 @@ class SearchURL(object):
     url_format = "https://{}/buglist.cgi?"
 
     def __init__(self, bz_data):
-        self.bz_host = bz_data.get('server')
+        self.bz_host = bz_data.get('server', '')
 
-        self.classification = bz_data.get('classification')
-        self.product = bz_data.get('product')
+        self.classification = bz_data.get('classification', '')
+        self.product = bz_data.get('product', '')
         self.bug_status = []
         self.filters = []
         self.filter_operator = ""

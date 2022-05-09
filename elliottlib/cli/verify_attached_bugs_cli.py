@@ -6,6 +6,7 @@ import click
 from bugzilla.bug import Bug
 from spnego.exceptions import GSSError
 
+
 from elliottlib import bzutil, constants, util, errata
 from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
