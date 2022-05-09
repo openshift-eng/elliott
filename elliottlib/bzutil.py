@@ -146,14 +146,14 @@ class JIRABug(Bug):
 
     def _get_blocks(self):
         blocks = []
-        for link in self.bugs.fields.issuelinks:
+        for link in self.bug.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "outwardIssue"):
                 blocks.append(link.outwardIssue.key)
         return blocks
 
     def _get_depends(self):
         depends = []
-        for link in self.bugs.fields.issuelinks:
+        for link in self.bug.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "inwardIssue"):
                 depends.append(link.inwardIssue.key)
         return depends
