@@ -106,22 +106,70 @@ class JIRABug(Bug):
     def __init__(self, bug_obj: Issue):
         super().__init__(bug_obj)
         self.id = self.bug.key
-        self.weburl = self.bug.permalink()
-        self.component = self.bug.fields.components[0].name
-        self.sub_component = [c.name for c in self.bug.fields.components]
-        self.status = self.bug.fields.status.name
-        self.summary = self.bug.fields.summary
-        self.resolution = self.bug.fields.resolution
-        self.blocks = self._get_blocks()
-        self.depends_on = self._get_depends()
-        self.release_blocker = self._get_release_blocker()
-        self.severity = self._get_severity()
-        self.product = self.bug.fields.project.key
-        self.keywords = self.bug.fields.labels
-        self.alias = self.bug.fields.labels
-        self.whiteboard = self.bug.fields.labels
-        self.version = [x.name for x in self.bug.fields.versions]
-        self.target_release = [x.name for x in self.bug.fields.fixVersions]
+
+    @property
+    def weburl(self):
+        return self.bug.permalink()
+
+    @property
+    def component(self):
+        return self.bug.fields.components[0].name
+
+    @property
+    def status(self):
+        return self.bug.fields.status.name
+
+    @property
+    def summary(self):
+        return self.bug.fields.summary
+
+    @property
+    def blocks(self):
+        return self._get_blocks()
+
+    @property
+    def keywords(self):
+        return self.bug.fields.labels
+
+    @property
+    def version(self):
+        return [x.name for x in self.bug.fields.versions]
+
+    @property
+    def target_release(self):
+        return [x.name for x in self.bug.fields.fixVersions]
+
+    @property
+    def sub_component(self):
+        return [c.name for c in self.bug.fields.components]
+
+    @property
+    def resolution(self):
+        return self.bug.fields.resolution
+
+    @property
+    def depends_on(self):
+        return self._get_depends()
+
+    @property
+    def release_blocker(self):
+        return self._get_release_blocker()
+
+    @property
+    def severity(self):
+        return self._get_severity()
+
+    @property
+    def produc(self):
+        return self.bug.fields.project.key
+
+    @property
+    def alias(self):
+        return self.bug.fields.labels
+
+    @property
+    def whiteboard(self):
+        return self.bug.fields.labels
 
     def _get_release_blocker(self):
         # release blocker can be ['None','Approved'=='+','Proposed'=='?','Rejected'=='-']

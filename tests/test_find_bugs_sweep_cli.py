@@ -134,19 +134,22 @@ class FindBugsSweepTestCase(unittest.TestCase):
         runner = CliRunner()
         bugs = [
             flexmock(
-                id='OCPBUGS-1',
-                created_days_ago=lambda: 33,
-                component='OLM',
-                status='ON_QA',
-                summary='summary'
+                key='OCPBUGS-1',
+                fields=flexmock(
+                    components=[flexmock(name='OLM')],
+                    status=flexmock(name='ON_QA'),
+                    summary='summary',
+                    created='2021-12-23T19:49:49.328+0000'
+                )
             )
         ]
         flexmock(Runtime).should_receive("initialize").and_return(None)
         flexmock(Runtime).should_receive("get_major_minor").and_return(4, 6)
-        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
-        flexmock(JIRABugTracker).should_receive("login").and_return(None)
-        flexmock(JIRABugTracker).should_receive("search").and_return(bugs)
+        client = flexmock()
+        flexmock(JIRABugTracker).should_receive("login").and_return(client)
+        client.should_receive("search_issues").and_return(bugs)
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
+        flexmock(bzutil).should_receive("datetime_now").and_return(datetime(2022, 1, 21, tzinfo=timezone.utc))
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--jira', '--report'])
         search_string = 'Found 1 bugs: OCPBUGS-1'
