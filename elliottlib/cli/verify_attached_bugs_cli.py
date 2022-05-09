@@ -6,7 +6,8 @@ import click
 from bugzilla.bug import Bug
 from spnego.exceptions import GSSError
 
-from elliottlib import bzutil, constants, util
+
+from elliottlib import bzutil, constants, util, errata
 from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
@@ -18,10 +19,14 @@ from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corre
 @cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
 @click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
 @click.option("--verify-flaws", is_flag=True, help="Check that flaw bugs are attached and associated with specific builds", type=bool, default=False)
+@click.option("--jira", 'use_jira',
+              is_flag=True,
+              default=False,
+              help="Use jira as bug type")
 @click.argument("advisories", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
-async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool):
+async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool, use_jira: bool):
     """
     Verify the bugs in the advisories (specified as arguments or in group.yml) for a release.
     Requires a runtime to ensure that all bugs in the advisories match the runtime version.
@@ -36,7 +41,7 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
     if not advisories:
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
-    validator = BugValidator(runtime, output="text")
+    validator = BugValidator(runtime, use_jira, output="text")
     try:
         await validator.errata_api.login()
         advisory_bugs = await validator.get_attached_bugs(advisories)
@@ -57,12 +62,16 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
               type=click.Choice(['text', 'json', 'slack']),
               default='text',
               help='Applies chosen format to command output')
+@click.option("--jira", 'use_jira',
+              is_flag=True,
+              default=False,
+              help="Use jira bug as bugtype")
 @click.argument("bug_ids", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
-async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
+async def verify_bugs_cli(runtime, verify_bug_status, output, use_jira, bug_ids):
     runtime.initialize()
-    validator = BugValidator(runtime, output)
+    validator = BugValidator(runtime, use_jira, output)
     bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs(bug_ids))
     try:
         validator.validate(bugs, verify_bug_status)
@@ -72,13 +81,14 @@ async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
 
 class BugValidator:
 
-    def __init__(self, runtime: Runtime, output: str = 'text'):
+    def __init__(self, runtime: Runtime, use_jira: bool = False, output: str = 'text'):
         self.runtime = runtime
-        self.bz_data: Dict[str, Any] = runtime.gitdata.load_data(key='bugzilla').data
-        self.target_releases: List[str] = self.bz_data['target_release']
-        self.product: str = self.bz_data['product']
-        self.bug_tracker = bzutil.BugzillaBugTracker(self.bz_data)
-        self.bzapi = self.bug_tracker.client()
+        self.use_jira = use_jira
+        bug_tracker_cls = JIRABugTracker if use_jira else BugzillaBugTracker
+        self.config = bug_tracker_cls.get_config(runtime)
+        self.bug_tracker = bug_tracker_cls(self.config)
+        self.target_releases: List[str] = self.config['target_release']
+        self.product: str = self.config['product']
         self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
@@ -105,7 +115,7 @@ class BugValidator:
         futures = []
         for advisory_id, attached_bugs in advisory_bugs.items():
             attached_trackers = [b for b in attached_bugs if bzutil.is_cve_tracker(b)]
-            attached_flaws = [b for b in attached_bugs if bzutil.is_flaw_bug(b)]
+            attached_flaws = [b for b in attached_bugs if b.is_flaw_bug()]
             futures.append(self._verify_attached_flaws_for(advisory_id, attached_trackers, attached_flaws))
         await asyncio.gather(*futures)
         if self.problems:
@@ -130,7 +140,7 @@ class BugValidator:
             else:
                 first_fix_flaw_ids = {
                     flaw_bug.id for flaw_bug in flaw_id_bugs.values()
-                    if bzutil.is_first_fix_any(self.bzapi, flaw_bug, current_target_release)
+                    if bzutil.is_first_fix_any(self.bug_tracker.client(), flaw_bug, current_target_release)
                 }
 
         # Check if attached flaws match attached trackers
@@ -188,16 +198,20 @@ class BugValidator:
         if missing_cves:
             self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in advisory's `CVE Names` field: {', '.join(sorted(missing_cves))}")
 
-    async def get_attached_bugs(self, advisory_ids: Iterable[int]) -> Dict[int, Set[Bug]]:
+    async def get_attached_bugs(self, advisory_ids: Iterable[str]) -> Dict[int, Set[Bug]]:
         """ Get bugs attached to specified advisories
         :return: a dict with advisory id as key and set of bug objects as value
         """
         green_print(f"Retrieving bugs for advisory {advisory_ids}")
-        advisories = await asyncio.gather(*[self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids])
-        bug_map = self.bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"][
-            "bugs"]}))
-        result = {ad["content"]["content"]["errata_id"]: {bug_map[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad
-                  in advisories}
+        if self.use_jira:
+            issue_keys = {advisory_id: [issue["key"] for issue in errata.get_jira_issue_from_advisory(advisory_id)] for advisory_id in advisory_ids}
+            bug_map = self.bug_tracker.get_bugs_map([key for keys in issue_keys.values() for key in keys])
+            result = {advisory_id: {bug_map[key] for key in issue_keys[advisory_id]} for advisory_id in advisory_ids}
+        else:
+            advisories = await asyncio.gather(*[self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids])
+            bug_map = self.bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"]["bugs"]}))
+            result = {ad["content"]["content"]["errata_id"]: {bug_map[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad
+                      in advisories}
         return result
 
     def filter_bugs_by_product(self, bugs):
