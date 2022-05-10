@@ -446,13 +446,13 @@ class BugzillaBugTracker(BugTracker):
 
     def blocker_search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter, flag='blocker+')
-        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs', 'whiteboard',
+        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'sub_component', 'external_bugs', 'whiteboard',
                   'keywords', 'target_release']
         return self._search(query, fields, verbose)
 
     def search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter)
-        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'external_bugs', 'whiteboard',
+        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'sub_component', 'external_bugs', 'whiteboard',
                   'keywords', 'target_release']
         return self._search(query, fields, verbose)
 
