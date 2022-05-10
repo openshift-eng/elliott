@@ -175,19 +175,19 @@ class FindBugsSweepTestCase(unittest.TestCase):
 
 class TestExtrasBugs(unittest.TestCase):
     def test_payload_bug(self):
-        bugs = [flexmock(id='123', component='Payload Component', subcomponent='Subcomponent')]
+        bugs = [flexmock(id='123', component='Payload Component', sub_component='Subcomponent')]
         self.assertEqual(len(extras_bugs(bugs)), 0)
 
     def test_extras_bug(self):
-        bugs = [flexmock(id='123', component='Metering Operator', subcomponent='Subcomponent')]
+        bugs = [flexmock(id='123', component='Metering Operator', sub_component='Subcomponent')]
         self.assertEqual(len(extras_bugs(bugs)), 1)
 
     def test_subcomponent_bug(self):
-        bugs = [flexmock(id='123', component='Networking', subcomponent='SR-IOV')]
+        bugs = [flexmock(id='123', component='Networking', sub_component='SR-IOV')]
         self.assertEqual(len(extras_bugs(bugs)), 1)
 
     def test_subcomponent_bug(self):
-        bugs = [flexmock(id='123', component='Networking', subcomponent='Not SR-IOV')]
+        bugs = [flexmock(id='123', component='Networking', sub_component='Not SR-IOV')]
         self.assertEqual(len(extras_bugs(bugs)), 0)
 
 
