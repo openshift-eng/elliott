@@ -204,7 +204,7 @@ class Runtime(object):
         if len(missed_include) > 0:
             raise ElliottFatalError('The following images or rpms were either missing or filtered out: {}'.format(', '.join(missed_include)))
 
-        self.assembly_basis_event = assembly_basis_event(self.get_releases_config(), self.assembly)
+        self.assembly_basis_event = assembly_basis_event(self.get_releases_config(), self.assembly, strict=True)
         if self.assembly_basis_event:
             if self.brew_event:
                 raise ElliottFatalError(f'Cannot run with assembly basis event {self.assembly_basis_event} and --brew-event at the same time.')

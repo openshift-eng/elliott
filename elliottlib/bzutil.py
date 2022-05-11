@@ -220,10 +220,10 @@ class BugTracker:
     def target_release(self) -> List:
         return self.config.get('target_release')
 
-    def search(self, status, search_filter='default', verbose=False, **kwargs):
+    def search(self, status, search_filter, verbose=False, **kwargs):
         raise NotImplementedError
 
-    def blocker_search(self, status, search_filter='default', verbose=False, **kwargs):
+    def blocker_search(self, status, search_filter, verbose=False, **kwargs):
         raise NotImplementedError
 
     def get_bug(self, bugid, **kwargs):
@@ -364,12 +364,17 @@ class JIRABugTracker(BugTracker):
                target_release: Optional[List] = None,
                include_labels: Optional[List] = None,
                exclude_labels: Optional[List] = None,
-               with_target_release=True) -> str:
+               with_target_release: bool = True,
+               search_filter: str = None) -> str:
 
         if target_release and with_target_release:
             raise ValueError("cannot use target_release and with_target_release together")
         if not target_release and with_target_release:
             target_release = self.target_release()
+
+        exclude_components = []
+        if search_filter:
+            exclude_components = self.config.get('filters', {}).get(search_filter)
 
         query = f"project={self._project}"
         if bugids:
@@ -382,6 +387,9 @@ class JIRABugTracker(BugTracker):
             query += f" and labels in ({','.join(exclude_labels)})"
         if exclude_labels:
             query += f" and labels not in ({','.join(exclude_labels)})"
+        if exclude_components:
+            val = ','.join(f'"{c}"' for c in exclude_components)
+            query += f" and component not in ({val})"
         return query
 
     def _search(self, query, verbose=False, **kwargs) -> List[JIRABug]:
@@ -395,13 +403,15 @@ class JIRABugTracker(BugTracker):
         query = self._query(
             status=status,
             include_labels=include_labels,
-            target_release=self.target_release()
+            target_release=self.target_release(),
+            search_filter=search_filter
         )
         return self._search(query, verbose=verbose, **kwargs)
 
     def search(self, status, search_filter='default', verbose=False, **kwargs):
         query = self._query(
             status=status,
+            search_filter=search_filter
         )
         return self._search(query, verbose=verbose, **kwargs)
 

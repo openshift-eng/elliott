@@ -11,6 +11,7 @@ import xmlrpc.client
 import elliottlib.cli.find_bugs_sweep_cli as sweep_cli
 import elliottlib.bzutil as bzutil
 from elliottlib.cli import common
+import traceback
 
 
 class TestFindBugsMode(unittest.TestCase):
@@ -58,9 +59,12 @@ class FindBugsSweepTestCase(unittest.TestCase):
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--report'])
         search_string1 = 'Searching for bugs with status MODIFIED ON_QA VERIFIED and target release(s): 4.6.z'
         search_string2 = 'Found 1 bugs: BZ1'
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
         self.assertIn(search_string1, result.output)
         self.assertIn(search_string2, result.output)
-        self.assertEqual(result.exit_code, 0)
 
     def test_find_bugs_sweep_brew_event(self):
         runner = CliRunner()
@@ -76,7 +80,10 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly', '4.6.52', 'find-bugs:sweep'])
-        self.assertEqual(result.exit_code, 0)
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
 
     def test_find_bugs_sweep_advisory(self):
         runner = CliRunner()
@@ -90,7 +97,10 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args(123, [b.id for b in bugs], noop=False)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--add', '123'])
-        self.assertEqual(result.exit_code, 0)
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
 
     def test_find_bugs_sweep_advisory_type(self):
         runner = CliRunner()
@@ -106,7 +116,10 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args(123, ['BZ1'], noop=False)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--use-default-advisory', 'image'])
-        self.assertEqual(result.exit_code, 0)
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
 
     def test_find_bugs_sweep_default_advisories(self):
         runner = CliRunner()
@@ -128,7 +141,10 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("attach_bugs").times(3)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--into-default-advisories'])
-        self.assertEqual(result.exit_code, 0)
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
 
     def test_find_bugs_sweep_report_jira(self):
         runner = CliRunner()
@@ -152,9 +168,12 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(bzutil).should_receive("datetime_now").and_return(datetime(2022, 1, 21, tzinfo=timezone.utc))
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--jira', '--report'])
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
         search_string = 'Found 1 bugs: OCPBUGS-1'
         self.assertIn(search_string, result.output)
-        self.assertEqual(result.exit_code, 0)
 
     def test_find_bugs_sweep_brew_event_jira(self):
         runner = CliRunner()
@@ -170,7 +189,27 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly', '4.6.52', 'find-bugs:sweep', '--jira'])
-        self.assertEqual(result.exit_code, 0)
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
+
+    def test_find_bugs_sweep_advisory_jira(self):
+        runner = CliRunner()
+        bugs = [flexmock(id='BZ1')]
+        flexmock(Runtime).should_receive("initialize").and_return(None)
+        flexmock(Runtime).should_receive("get_major_minor").and_return(4, 6)
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
+        flexmock(JIRABugTracker).should_receive("login").and_return(None)
+        flexmock(JIRABugTracker).should_receive("search").and_return(bugs)
+        flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
+        flexmock(JIRABugTracker).should_receive("attach_bugs").with_args(123, [b.id for b in bugs], noop=False)
+
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--add', '123', '--jira'])
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
 
 
 class TestExtrasBugs(unittest.TestCase):
