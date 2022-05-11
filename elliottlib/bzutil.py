@@ -374,7 +374,7 @@ class JIRABugTracker(BugTracker):
 
         exclude_components = []
         if search_filter:
-            exclude_components = self.config.get('filters').get(search_filter)
+            exclude_components = self.config.get('filters', {}).get(search_filter)
 
         query = f"project={self._project}"
         if bugids:
