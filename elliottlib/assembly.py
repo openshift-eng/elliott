@@ -158,22 +158,24 @@ def _assembly_field(field_name: str, releases_config: Model, assembly: str) -> M
     return Model(dict_to_model=config_dict)
 
 
-def assembly_basis_event(releases_config: Model, assembly: str) -> typing.Optional[int]:
+def assembly_basis_event(releases_config: Model, assembly: str, strict: bool = False) -> typing.Optional[int]:
     """
     :param releases_config: The content of releases.yml in Model form.
     :param assembly: The name of the assembly to assess
+    :param strict: Raise exception if assembly not found
     Returns the basis event for a given assembly. If the assembly has no basis event,
     None is returned.
     """
     if not assembly or not isinstance(releases_config, Model):
+        if strict:
+            raise ValueError("given assembly not found in releases config")
         return None
 
     _check_recursion(releases_config, assembly)
     target_assembly = releases_config.releases[assembly].assembly
     if target_assembly.basis.brew_event:
         return int(target_assembly.basis.brew_event)
-
-    return assembly_basis_event(releases_config, target_assembly.basis.assembly)
+    return assembly_basis_event(releases_config, target_assembly.basis.assembly, strict=strict)
 
 
 def assembly_config_finalize(releases_config: Model, assembly: str, rpm_metas, ordered_image_metas):
