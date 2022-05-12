@@ -165,11 +165,15 @@ class JIRABug(Bug):
 
     @property
     def alias(self):
-        return self.bug.fields.labels
+        return [label for label in self.bug.fields.labels if "CVE-" in label]
+
+    @property
+    def description(self):
+        return self.bug.fields.description
 
     @property
     def whiteboard(self):
-        return self.bug.fields.labels
+        return [lable for label in self.bug.fields.labels if "component" in lable][0]
 
     def _get_release_blocker(self):
         # release blocker can be ['None','Approved'=='+','Proposed'=='?','Rejected'=='-']
@@ -586,12 +590,12 @@ class BugzillaBugTracker(BugTracker):
         return qualified_bugs
 
 
-def get_corresponding_flaw_bugs(bug_tracker, tracker_bugs: List, fields: List, strict: bool = False):
+def get_corresponding_flaw_bugs(bug_tracker, tracker_bugs: List, fields: List, strict: bool = False, flaw_bug_tracker: None):
     """
     Get corresponding flaw bugs objects for the
     given tracker bug objects
     :return (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw bug id as value,
-                                        flaw_bugs is a dict with flaw bug id as key and flaw bug object as value
+                                        flaw_id_bugs is a dict with flaw bug id as key and flaw bug object as value
     """
     # fields needed for is_flaw_bug()
     if "product" not in fields:
@@ -605,9 +609,19 @@ def get_corresponding_flaw_bugs(bug_tracker, tracker_bugs: List, fields: List, s
     # Validate that each tracker has a corresponding flaw bug
     flaw_ids = set(flaw_id_bugs.keys())
     no_flaws = set()
+    tracker_flaws: Dict[int, List] = {}
     for tracker in tracker_bugs:
+        # check jira tracker bug have a bugzilla flaw bug
+        if tracker.alias[0] and flaw_bug_tracker:
+            bugzilla_url = re.search("https://bugzilla.redhat.com/show_bug.cgi\?id=\d*", tracker.description)
+            if bugzilla_url:
+                flaw_id_bugs[bugzilla_bug.id] = flaw_bug_tracker.get_bug(re.search("\d*$", bugzilla_url[0])[0])
+                tracker_flaws[tracker.id] += [bugzilla_bug.id] 
+        # check jira tracker bug have a jira flaw bug
         if not set(tracker.blocks).intersection(flaw_ids):
             no_flaws.add(tracker.id)
+        else:
+            tracker_flaws[tracker.id] += set(tracker.blocks).intersection(flaw_ids)
     if no_flaws:
         msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
         if strict:
@@ -615,10 +629,6 @@ def get_corresponding_flaw_bugs(bug_tracker, tracker_bugs: List, fields: List, s
         else:
             logger.warn(msg)
 
-    tracker_flaws: Dict[int, List[int]] = {
-        tracker.id: [blocking for blocking in tracker.blocks if blocking in flaw_id_bugs]
-        for tracker in tracker_bugs
-    }
     return tracker_flaws, flaw_id_bugs
 
 

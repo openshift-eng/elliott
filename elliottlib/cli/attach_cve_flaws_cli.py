@@ -51,8 +51,10 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, use_jira: boo
 
     if use_jira:
         bug_tracker = JIRABugTracker(JIRABugTracker.get_config(runtime))
+        second_tracker = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)) # second_tracker is for bugzilla flaw bug
     else:
         bug_tracker = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime))
+        second_tracker = None
 
     if not advisory_id and default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
@@ -85,7 +87,8 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, use_jira: boo
         bug_tracker,
         attached_tracker_bugs,
         fields=["depends_on", "alias", "severity", "summary"],
-        strict=True
+        strict=True,
+        second_tracker
     )
     runtime.logger.info('found {} corresponding flaw bugs: {}'.format(
         len(flaw_id_bugs), sorted(flaw_id_bugs.keys())
@@ -146,7 +149,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, use_jira: boo
         await errata_api.close()
 
 
-async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, attached_tracker_bugs: List[Bug], tracker_flaws: Dict[int, List[int]], flaw_id_bugs: Dict[int, Bug], dry_run: bool):
+async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, attached_tracker_bugs: List[Bug], tracker_flaws: Dict[int, List], flaw_id_bugs: Dict[int, Bug], dry_run: bool):
     attached_builds = [b for pv in advisory.errata_builds.values() for b in pv]
     cve_components_mapping: Dict[str, Set[str]] = {}
     for tracker in attached_tracker_bugs:
