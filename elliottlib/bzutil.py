@@ -612,11 +612,11 @@ def get_corresponding_flaw_bugs(bug_tracker, tracker_bugs: List, fields: List, s
     tracker_flaws: Dict[int, List] = {}
     for tracker in tracker_bugs:
         # check jira tracker bug have a bugzilla flaw bug
-        if tracker.alias[0] and flaw_bug_tracker:
+        if flaw_bug_tracker:
             bugzilla_url = re.search("https://bugzilla.redhat.com/show_bug.cgi\?id=\d*", tracker.description)
             if bugzilla_url:
                 flaw_id_bugs[bugzilla_bug.id] = flaw_bug_tracker.get_bug(re.search("\d*$", bugzilla_url[0])[0])
-                tracker_flaws[tracker.id] += [bugzilla_bug.id] 
+                tracker_flaws[tracker.id] += [bugzilla_bug.id]
         # check jira tracker bug have a jira flaw bug
         if not set(tracker.blocks).intersection(flaw_ids):
             no_flaws.add(tracker.id)

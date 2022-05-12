@@ -88,7 +88,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, use_jira: boo
         attached_tracker_bugs,
         fields=["depends_on", "alias", "severity", "summary"],
         strict=True,
-        second_tracker
+        flaw_bug_tracker=second_tracker
     )
     runtime.logger.info('found {} corresponding flaw bugs: {}'.format(
         len(flaw_id_bugs), sorted(flaw_id_bugs.keys())
