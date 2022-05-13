@@ -7,6 +7,8 @@ import click
 from elliottlib.cli.common import cli
 from elliottlib import logutil, Runtime
 from elliottlib.exceptions import ElliottFatalError
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
+from elliottlib.errata import add_jira_issue
 from elliottlib.util import exit_unauthorized, green_prefix, validate_release_date, \
     YMD, validate_email_address
 import elliottlib
@@ -56,9 +58,13 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option('--yes', '-y', is_flag=True,
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
+@click.option("--jira", 'use_jira',
+              is_flag=True,
+              default=False,
+              help="Use jira instead of bugzilla")
 @pass_runtime
 @click.pass_context
-def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes):
+def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, use_jira):
     """
     Create a text only advisory with all required input passed from args, need to manually decide the statement for each release.
     Also will create the notification bug along with the text only advisory, the bug also need some special comment and title.
@@ -76,8 +82,10 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     runtime.initialize()
 
     # create textonly bug
-    bz_config = runtime.gitdata.load_data(key='bugzilla').data
-    newbug = elliottlib.bzutil.BugzillaBugTracker(bz_config).create_textonly(bugtitle, bugdescription)
+    if use_jira:
+        newbug = JIRABugTracker(JIRABugTracker.get_config(runtime)).create_textonly(bugtitle, bugdescription)
+    else:
+        newbug = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)).create_textonly(bugtitle, bugdescription)
     click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
 
     # create textonly advisory
@@ -103,7 +111,8 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     except elliottlib.exceptions.ErrataToolError as ex:
         raise repr(ex)
 
-    erratum.addBugs(newbug.id)
+    if not use_jira:
+        erratum.addBugs(newbug.id)
     cdn_repos = et_data.get('cdn_repos')
     if cdn_repos:
         click.echo(f"Configuring CDN repos {', '.join(cdn_repos)}...")
@@ -112,6 +121,8 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
         erratum.commit()
         green_prefix("Created new text only advisory: ")
         click.echo(str(erratum))
+        if use_jira:
+            add_jira_issue(erratum.id, newbug.id)
     else:
         green_prefix("Would have created advisory: ")
         click.echo("")

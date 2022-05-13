@@ -6,6 +6,8 @@ from elliottlib.cli.common import cli, use_default_advisory_option, find_default
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated, ensure_erratatool_auth
 from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
+from elliottlib.errata import add_jira_issue
 
 from errata_tool import Erratum, ErrataException
 from spnego.exceptions import GSSError
@@ -32,9 +34,13 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option('--attach', '-a', 'advisory',
               type=int, metavar='ADVISORY',
               help='Attach the bug to ADVISORY')
+@click.option("--jira", 'use_jira',
+              is_flag=True,
+              default=False,
+              help="Use jira instead of bugzilla")
 @use_default_advisory_option
 @pass_runtime
-def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
+def create_placeholder_cli(runtime, kind, advisory, use_jira, default_advisory_type):
     """Create a placeholder bug for attaching to an advisory.
 
     KIND - The kind of placeholder to create ({}).
@@ -55,10 +61,11 @@ def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
     if kind is None:
         raise click.BadParameter(
             "--kind must be specified when not using --use-default-advisory")
-
-    bz_config = runtime.gitdata.load_data(key='bugzilla').data
-    newbug = elliottlib.bzutil.BugzillaBugTracker(bz_config).create_placeholder(kind)
-    click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
+    if use_jira:
+        newbug = JIRABugTracker(JIRABugTracker.get_config(runtime)).create_placeholder(kind)
+    else:
+        newbug = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)).create_placeholder(kind)
+    click.echo("Created Bug: {} {}".format(newbug.id, newbug.weburl))
 
     if advisory:
         click.echo("Attaching to advisory...")
@@ -75,7 +82,10 @@ def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
         try:
             green_prefix("Adding placeholder bug to advisory:")
             click.echo(" {advs}".format(advs=advisory))
-            advs.addBugs([newbug.id])
-            advs.commit()
+            if use_jira:
+                add_jira_issue(advisory, newbug.id)
+            else:
+                advs.addBugs([newbug.id])
+                advs.commit()
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))

@@ -97,7 +97,7 @@ advisory.
     runtime.initialize()
 
     et_data = runtime.gitdata.load_data(key='erratatool').data
-    bz_data = runtime.gitdata.load_data(key='bugzilla').data
+    bz_data = runtime.gitdata.load_data(key='bug').data
 
     # User entered a valid value for --date, set the release date
     release_date = datetime.datetime.strptime(date, YMD)

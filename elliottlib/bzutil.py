@@ -215,7 +215,8 @@ class JIRABug(Bug):
 class BugTracker:
     def __init__(self, config):
         self.config = config
-        self._server = config.get('server')
+        self._server = config.get('bugzilla_server')
+        self._jira_server = config.get('jira_server')
 
     def target_release(self) -> List:
         return self.config.get('target_release')
@@ -292,14 +293,14 @@ class JIRABugTracker(BugTracker):
                 'project': 'OCPBUGS',
                 'target_release': [f"{version}.0", f"{version}.z"]
             }
-        return runtime.gitdata.load_data(key='jira').data
+        return runtime.gitdata.load_data(key='bug').data
 
     def login(self, token_auth=None) -> JIRA:
         if not token_auth:
             token_auth = os.environ.get("JIRA_TOKEN")
             if not token_auth:
-                raise ValueError(f"elliott requires login credentials for {self._server}. Set a JIRA_TOKEN env var ")
-        client = JIRA(self._server, token_auth=token_auth)
+                raise ValueError(f"elliott requires login credentials for {self._jira_server}. Set a JIRA_TOKEN env var ")
+        client = JIRA(self._jira_server, token_auth=token_auth)
         return client
 
     def __init__(self, config):
@@ -430,7 +431,7 @@ class JIRABugTracker(BugTracker):
 class BugzillaBugTracker(BugTracker):
     @staticmethod
     def get_config(runtime):
-        return runtime.gitdata.load_data(key='bugzilla').data
+        return runtime.gitdata.load_data(key='bug').data
 
     def login(self):
         client = bugzilla.Bugzilla(self._server)
@@ -824,7 +825,7 @@ def _construct_query_url(bz_data, status, search_filter='default', flag=None):
         filter_list = bz_data.get('filters').get(search_filter)
 
     for f in filter_list:
-        query_url.addFilter(f.get('field'), f.get('operator'), f.get('value'))
+        query_url.addFilter('component', 'notequals', f)
 
     for s in status:
         query_url.addBugStatus(s)
