@@ -215,8 +215,8 @@ class JIRABug(Bug):
 class BugTracker:
     def __init__(self, config):
         self.config = config
-        self._server = config.get('bugzilla_server')
-        self._jira_server = config.get('jira_server')
+        self._server = config.get('bugzilla_config').get('server')
+        self._jira_server = config.get('jira_config').get('server')
 
     def target_release(self) -> List:
         return self.config.get('target_release')
@@ -305,7 +305,7 @@ class JIRABugTracker(BugTracker):
 
     def __init__(self, config):
         super().__init__(config)
-        self._project = config.get('project')
+        self._project = config.get('jira_config').get('project')
         self._client: JIRA = self.login()
 
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
@@ -477,7 +477,7 @@ class BugzillaBugTracker(BugTracker):
 
     def create_bug(self, title, description, target_status, keywords: List, noop=False) -> BugzillaBug:
         create_info = self._client.build_createbug(
-            product=self.config.get('product'),
+            product=self.config.get('bugzilla_config').get('product'),
             version=self.config.get('version')[0],
             target_release=self.config.get('target_release')[0],
             component="Release",
@@ -804,7 +804,7 @@ def get_valid_rpm_cves(bugs):
 
 
 def get_bzapi(bz_data, interactive_login=False):
-    bzapi = bugzilla.Bugzilla(bz_data['server'])
+    bzapi = bugzilla.Bugzilla(bz_data['bugzilla_config']['server'])
     if not bzapi.logged_in:
         print("elliott requires cached login credentials for {}".format(bz_data['server']))
         if interactive_login:
@@ -888,10 +888,10 @@ class SearchURL(object):
     url_format = "https://{}/buglist.cgi?"
 
     def __init__(self, bz_data):
-        self.bz_host = bz_data.get('server', '')
+        self.bz_host = bz_data.get('bugzilla_config').get('server', '')
 
-        self.classification = bz_data.get('classification', '')
-        self.product = bz_data.get('product', '')
+        self.classification = bz_data.get('bugzilla_config').get('classification', '')
+        self.product = bz_data.get('bugzilla_config').get('product', '')
         self.bug_status = []
         self.filters = []
         self.filter_operator = ""
