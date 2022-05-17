@@ -8,7 +8,7 @@ class FindBugsBlockerTestCase(unittest.TestCase):
         out = subprocess.check_output(
             constants.ELLIOTT_CMD
             + [
-                "--group=openshift-4.3", "find-bugs:blocker", '--exclude-status=ON_QA'
+                "--assembly=stream", "--group=openshift-4.3", "find-bugs:blocker", '--exclude-status=ON_QA'
             ]
         )
         search_string = "Searching for bugs with status ASSIGNED MODIFIED NEW ON_DEV POST and target release(s): " \

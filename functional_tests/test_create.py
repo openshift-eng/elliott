@@ -8,7 +8,7 @@ class GreateTestCase(unittest.TestCase):
         out = subprocess.check_output(
             constants.ELLIOTT_CMD
             + [
-                "--group=openshift-4.2", "create", "--type=RHBA", "--impetus=standard", "--kind=rpm",
+                "--assembly=stream", "--group=openshift-4.2", "create", "--type=RHBA", "--impetus=standard", "--kind=rpm",
                 "--date=2020-Jan-1", "--assigned-to=openshift-qe-errata@redhat.com", "--manager=vlaad@redhat.com", "--package-owner=lmeyer@redhat.com"
             ]
         )

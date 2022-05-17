@@ -8,7 +8,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         out = subprocess.check_output(
             constants.ELLIOTT_CMD
             + [
-                "--group=openshift-4.3", "find-bugs:sweep",
+                "--assembly=stream", "--group=openshift-4.3", "find-bugs:sweep",
             ]
         )
         self.assertRegex(self, out.decode("utf-8"), "Found \\d+ bugs")

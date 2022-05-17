@@ -215,8 +215,8 @@ class JIRABug(Bug):
 class BugTracker:
     def __init__(self, config):
         self.config = config
-        self._server = config.get('bugzilla_config').get('server')
-        self._jira_server = config.get('jira_config').get('server')
+        self._server = config['bugzilla_config'].get('server', '') if config.get('bugzilla_config') else None
+        self._jira_server = config['jira_config'].get('server', '') if config.get('jira_config') else None
 
     def target_release(self) -> List:
         return self.config.get('target_release')
@@ -305,7 +305,7 @@ class JIRABugTracker(BugTracker):
 
     def __init__(self, config):
         super().__init__(config)
-        self._project = config.get('jira_config').get('project')
+        self._project = config['jira_config'].get('project', '') if config.get('jira_config') else None
         self._client: JIRA = self.login()
 
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
@@ -888,10 +888,9 @@ class SearchURL(object):
     url_format = "https://{}/buglist.cgi?"
 
     def __init__(self, bz_data):
-        self.bz_host = bz_data.get('bugzilla_config').get('server', '')
-
-        self.classification = bz_data.get('bugzilla_config').get('classification', '')
-        self.product = bz_data.get('bugzilla_config').get('product', '')
+        self.bz_host = bz_data['bugzilla_config'].get('server', '') if bz_data.get('jira_config') else ''
+        self.classification = bz_data['bugzilla_config'].get('classification', '') if bz_data.get('jira_config') else ''
+        self.product = bz_data['bugzilla_config'].get('product', '') if bz_data.get('jira_config') else ''
         self.bug_status = []
         self.filters = []
         self.filter_operator = ""

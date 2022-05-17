@@ -9,7 +9,7 @@ class GetTestCase(unittest.TestCase):
         self.assertIn("49982", out.decode("utf-8"))
 
     def test_get_errutum_with_group(self):
-        out = subprocess.check_output(constants.ELLIOTT_CMD + ["--group=openshift-4.2", "get", "--use-default-advisory", "rpm"])
+        out = subprocess.check_output(constants.ELLIOTT_CMD + ["--assembly=stream", "--group=openshift-4.2", "get", "--use-default-advisory", "rpm"])
         self.assertIn(constants.ERRATA_TOOL_URL, out.decode("utf-8"))
 
 
