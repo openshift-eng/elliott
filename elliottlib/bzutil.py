@@ -215,8 +215,8 @@ class JIRABug(Bug):
 class BugTracker:
     def __init__(self, config):
         self.config = config
-        self._server = config['bugzilla_config'].get('server', '') if config.get('bugzilla_config') else None
-        self._jira_server = config['jira_config'].get('server', '') if config.get('jira_config') else None
+        self._server = config['bugzilla_config'].get('server', '') if config.get('bugzilla_config') else ''
+        self._jira_server = config['jira_config'].get('server', '') if config.get('jira_config') else ''
 
     def target_release(self) -> List:
         return self.config.get('target_release')
@@ -305,7 +305,7 @@ class JIRABugTracker(BugTracker):
 
     def __init__(self, config):
         super().__init__(config)
-        self._project = config['jira_config'].get('project', '') if config.get('jira_config') else None
+        self._project = config['jira_config'].get('project', '') if config.get('jira_config') else ''
         self._client: JIRA = self.login()
 
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
