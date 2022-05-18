@@ -215,7 +215,8 @@ class JIRABug(Bug):
 class BugTracker:
     def __init__(self, config):
         self.config = config
-        self._server = config.get('server')
+        self._server = config['bugzilla_config'].get('server', '') if config.get('bugzilla_config') else ''
+        self._jira_server = config['jira_config'].get('server', '') if config.get('jira_config') else ''
 
     def target_release(self) -> List:
         return self.config.get('target_release')
@@ -292,19 +293,19 @@ class JIRABugTracker(BugTracker):
                 'project': 'OCPBUGS',
                 'target_release': [f"{version}.0", f"{version}.z"]
             }
-        return runtime.gitdata.load_data(key='jira').data
+        return runtime.gitdata.load_data(key='bug').data
 
     def login(self, token_auth=None) -> JIRA:
         if not token_auth:
             token_auth = os.environ.get("JIRA_TOKEN")
             if not token_auth:
-                raise ValueError(f"elliott requires login credentials for {self._server}. Set a JIRA_TOKEN env var ")
-        client = JIRA(self._server, token_auth=token_auth)
+                raise ValueError(f"elliott requires login credentials for {self._jira_server}. Set a JIRA_TOKEN env var ")
+        client = JIRA(self._jira_server, token_auth=token_auth)
         return client
 
     def __init__(self, config):
         super().__init__(config)
-        self._project = config.get('project')
+        self._project = config['jira_config'].get('project', '') if config.get('jira_config') else ''
         self._client: JIRA = self.login()
 
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
@@ -430,7 +431,7 @@ class JIRABugTracker(BugTracker):
 class BugzillaBugTracker(BugTracker):
     @staticmethod
     def get_config(runtime):
-        return runtime.gitdata.load_data(key='bugzilla').data
+        return runtime.gitdata.load_data(key='bug').data
 
     def login(self):
         client = bugzilla.Bugzilla(self._server)
@@ -476,7 +477,7 @@ class BugzillaBugTracker(BugTracker):
 
     def create_bug(self, title, description, target_status, keywords: List, noop=False) -> BugzillaBug:
         create_info = self._client.build_createbug(
-            product=self.config.get('product'),
+            product=self.config.get('bugzilla_config').get('product'),
             version=self.config.get('version')[0],
             target_release=self.config.get('target_release')[0],
             component="Release",
@@ -803,7 +804,7 @@ def get_valid_rpm_cves(bugs):
 
 
 def get_bzapi(bz_data, interactive_login=False):
-    bzapi = bugzilla.Bugzilla(bz_data['server'])
+    bzapi = bugzilla.Bugzilla(bz_data['bugzilla_config']['server'])
     if not bzapi.logged_in:
         print("elliott requires cached login credentials for {}".format(bz_data['server']))
         if interactive_login:
@@ -824,7 +825,7 @@ def _construct_query_url(bz_data, status, search_filter='default', flag=None):
         filter_list = bz_data.get('filters').get(search_filter)
 
     for f in filter_list:
-        query_url.addFilter(f.get('field'), f.get('operator'), f.get('value'))
+        query_url.addFilter('component', 'notequals', f)
 
     for s in status:
         query_url.addBugStatus(s)
@@ -887,10 +888,9 @@ class SearchURL(object):
     url_format = "https://{}/buglist.cgi?"
 
     def __init__(self, bz_data):
-        self.bz_host = bz_data.get('server', '')
-
-        self.classification = bz_data.get('classification', '')
-        self.product = bz_data.get('product', '')
+        self.bz_host = bz_data['bugzilla_config'].get('server', '') if bz_data.get('jira_config') else ''
+        self.classification = bz_data['bugzilla_config'].get('classification', '') if bz_data.get('jira_config') else ''
+        self.product = bz_data['bugzilla_config'].get('product', '') if bz_data.get('jira_config') else ''
         self.bug_status = []
         self.filters = []
         self.filter_operator = ""

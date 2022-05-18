@@ -170,7 +170,7 @@ class GitData(object):
             raise GitDataPathException('{} is not a valid sub-directory in the data'.format(self.sub_dir))
 
     def bz(self):
-        return self.load_data(key='bugzilla')
+        return self.load_data(key='bug')
 
     def bz_server_url(self):
         return self.bz().data['server']

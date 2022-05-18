@@ -12,7 +12,7 @@ class FindBuildsTestCase(unittest.TestCase):
         out = subprocess.check_output(
             constants.ELLIOTT_CMD
             + [
-                f"--group=openshift-{version}", "find-builds", "--kind=rpm",
+                "--assembly=stream", f"--group=openshift-{version}", "find-builds", "--kind=rpm",
             ]
         )
         self.assertIn("may be attached to an advisory", out.decode("utf-8"))
