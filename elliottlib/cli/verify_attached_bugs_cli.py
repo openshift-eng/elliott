@@ -88,7 +88,7 @@ class BugValidator:
         self.config = bug_tracker_cls.get_config(runtime)
         self.bug_tracker = bug_tracker_cls(self.config)
         self.target_releases: List[str] = self.config['target_release']
-        self.product: str = self.config['product']
+        self.product: str = self.config['bugzilla_config']['product'] if not use_jira else ''
         self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
