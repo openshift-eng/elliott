@@ -160,7 +160,7 @@ class JIRABug(Bug):
         return self._get_severity()
 
     @property
-    def produc(self):
+    def product(self):
         return self.bug.fields.project.key
 
     @property
