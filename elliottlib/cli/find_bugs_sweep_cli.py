@@ -268,7 +268,7 @@ def extras_bugs(bugs: type_bug_list) -> type_bug_list:
     for bug in bugs:
         if bug.component in extras_components:
             extra_bugs.add(bug)
-        elif bug.sub_component and (bug.component, bug.sub_component) in extras_subcomponents:
+        elif hasattr(bug, 'sub_component') and (bug.component, bug.sub_component) in extras_subcomponents:
             extra_bugs.add(bug)
     return extra_bugs
 
