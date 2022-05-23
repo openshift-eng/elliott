@@ -5,7 +5,8 @@ errata-tool >= 1.22
 future
 koji >= 1.18
 semver
-pygit2 == 1.6.*
+pygit2 == 1.6.*; python_version == '3.6'
+pygit2; python_version > '3.6'
 python-bugzilla >= 3.2
 pyyaml
 requests
