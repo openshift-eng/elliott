@@ -1,5 +1,4 @@
 import json
-import os
 
 import elliottlib
 from elliottlib import constants, logutil, Runtime
@@ -59,7 +58,7 @@ def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
         raise click.BadParameter(
             "--kind must be specified when not using --use-default-advisory")
 
-    if os.environ.get('USEJIRA'):
+    if runtime.use_jira:
         create_placeholder(runtime, kind, advisory, default_advisory_type, True, JIRABugTracker(JIRABugTracker.get_config(runtime)))
     create_placeholder(runtime, kind, advisory, default_advisory_type, False, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 

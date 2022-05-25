@@ -1,6 +1,5 @@
 import click
 import elliottlib
-import os
 
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
@@ -103,7 +102,7 @@ providing an advisory with the -a/--advisory option.
 
     # Load bugzilla information and get a reference to the api
     runtime.initialize()
-    if os.environ.get('USEJIRA'):
+    if runtime.use_jira:
         repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, True, noop, default_advisory_type, JIRABugTracker(JIRABugTracker.get_config(runtime)))
     repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, False, noop, default_advisory_type, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 

@@ -1,6 +1,5 @@
 import click
 import sys
-import os
 
 from elliottlib import Runtime, logutil
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
@@ -65,10 +64,12 @@ For attaching use --advisory, --use-default-advisory <TYPE>
         raise click.BadParameter("Use only one of --use-default-advisory <TYPE> or --advisory <ADVISORY_ID>")
 
     runtime.initialize()
-    if os.environ.get('USEJIRA'):
+    if runtime.use_jira:
         attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop,
             JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+
+    attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop,
+        BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
 
 def attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop, bug_tracker):
