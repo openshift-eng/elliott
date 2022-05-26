@@ -39,6 +39,7 @@ class RepairBugsTestCase(unittest.TestCase):
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'repair-bugs', '--id', '1', '--to', 'ON_QA', '-a', '99999'])
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
+        del(os.environ['USEJIRA'])
 
     def test_repair_placeholder_jira_bug(self):
         runner = CliRunner()
@@ -56,6 +57,7 @@ class RepairBugsTestCase(unittest.TestCase):
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'repair-bugs', '--close-placeholder', '--id', '1', '--to', 'ON_QA', '-a', '99999'])
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
+        del(os.environ['USEJIRA'])
 
     def test_repair_bugzilla_bug_with_comment(self):
         runner = CliRunner()
