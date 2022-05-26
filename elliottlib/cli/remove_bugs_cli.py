@@ -64,10 +64,10 @@ def remove_bugs_cli(runtime, advisory, default_advisory_type, id, remove_all):
 
     runtime.initialize()
     if runtime.use_jira:
-        #print([i for i in cli_opts.id_convert_str(id) if not str(i).isdigit()])
-        remove_bugs(runtime, advisory, default_advisory_type, [i for i in cli_opts.id_convert_str(id) if not str(i).isdigit()], remove_all, True, JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    #print([i for i in cli_opts.id_convert_str(id) if str(i).isdigit()])
-    remove_bugs(runtime, advisory, default_advisory_type, [int(i) for i in cli_opts.id_convert_str(id) if str(i).isdigit()], remove_all, False, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+        remove_bugs(runtime, advisory, default_advisory_type, [i for i in cli_opts.id_convert_str(id) if not str(i).isdigit()], remove_all,
+                    True, JIRABugTracker(JIRABugTracker.get_config(runtime)))
+    remove_bugs(runtime, advisory, default_advisory_type, [int(i) for i in cli_opts.id_convert_str(id) if str(i).isdigit()], remove_all,
+                False, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
 
 def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all, use_jira, bug_tracker):

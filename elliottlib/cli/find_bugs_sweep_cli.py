@@ -116,13 +116,13 @@ advisory with the --add option.
 
     if runtime.use_jira:
         find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status, report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags,
-            JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status, report, output, into_default_advisories, brew_event, noop,count_advisory_attach_flags,
-        BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+                        JIRABugTracker(JIRABugTracker.get_config(runtime)))
+    find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status, report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags,
+                    BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
 
 def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
-                        report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags, bug_tracker):
+                    report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags, bug_tracker):
     major_version, minor_version = runtime.get_major_minor()
     find_bugs_obj = FindBugsSweep()
     find_bugs_obj.include_status(include_status)

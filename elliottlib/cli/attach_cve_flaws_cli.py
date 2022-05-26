@@ -48,6 +48,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         await attach_cve_flaws(runtime, advisory_id, noop, default_advisory_type, True, JIRABugTracker(JIRABugTracker.get_config(runtime)))
     await attach_cve_flaws(runtime, advisory_id, noop, default_advisory_type, False, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
+
 async def attach_cve_flaws(runtime, advisory_id, noop, default_advisory_type, use_jira, bug_tracker):
     if not advisory_id and default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)

@@ -78,9 +78,9 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     runtime.initialize()
     if runtime.use_jira:
         create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, True,
-            JIRABugTracker(JIRABugTracker.get_config(runtime)))
+                        JIRABugTracker(JIRABugTracker.get_config(runtime)))
     create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, False,
-        BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+                    BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
 
 def create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, use_jira, bug_tracker):

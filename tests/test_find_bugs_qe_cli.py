@@ -55,7 +55,7 @@ class FindBugsQETestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("update_bug_status").with_args(
             bug, 'ON_QA', comment=expected_comment, noop=True
         )
-        os.environ['USEJIRA']="True"
+        os.environ['USEJIRA'] = "True"
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:qe', '--noop'])
         search_string1 = 'Searching for bugs with status MODIFIED and target release(s): 4.6.z'
         search_string2 = 'Found 1 bugs: OCPBUGS-123'

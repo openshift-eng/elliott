@@ -34,6 +34,7 @@ def find_bugs_qe_cli(runtime: Runtime, noop):
         find_bugs_qe(runtime, noop, JIRABugTracker(JIRABugTracker.get_config(runtime)))
     find_bugs_qe(runtime, noop, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
+
 def find_bugs_qe(runtime, noop, bug_tracker):
     major_version, minor_version = runtime.get_major_minor()
     click.echo(f"Searching for bugs with status MODIFIED and target release(s): {', '.join(bug_tracker.target_release())}")

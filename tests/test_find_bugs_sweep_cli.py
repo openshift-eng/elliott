@@ -184,7 +184,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("login").and_return(client)
         client.should_receive("url_to_query").and_return({})
         client.should_receive("query").and_return(bzbugs)
-        os.environ['USEJIRA']="True"
+        os.environ['USEJIRA'] = "True"
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--report'])
         if result.exit_code != 0:
             exc_type, exc_value, exc_traceback = result.exc_info
@@ -211,7 +211,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
         flexmock(BugzillaBugTracker).should_receive("search").and_return(bugs)
         flexmock(BugzillaBugTracker).should_receive("filter_bugs_by_cutoff_event").and_return([])
-        os.environ['USEJIRA']="True"
+        os.environ['USEJIRA'] = "True"
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly', '4.6.52', 'find-bugs:sweep'])
         if result.exit_code != 0:
@@ -235,7 +235,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
         flexmock(BugzillaBugTracker).should_receive("search").and_return(bugs)
         flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args(123, [b.id for b in bugs], noop=False)
-        os.environ['USEJIRA']="True"
+        os.environ['USEJIRA'] = "True"
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--add', '123'])
         if result.exit_code != 0:
             exc_type, exc_value, exc_traceback = result.exc_info

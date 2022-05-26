@@ -66,10 +66,10 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     runtime.initialize()
     if runtime.use_jira:
         attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop,
-            JIRABugTracker(JIRABugTracker.get_config(runtime)))
+                    JIRABugTracker(JIRABugTracker.get_config(runtime)))
 
     attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop,
-        BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+                BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
 
 def attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop, bug_tracker):

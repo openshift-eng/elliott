@@ -47,7 +47,7 @@ class RemoveBugsTestCase(unittest.TestCase):
         flexmock(errata).should_receive("remove_multi_jira_issues")
         flexmock(JIRABugTracker).should_receive("get_bug").with_args("OCPBUGS-3").and_return(issues[0])
         flexmock(JIRABugTracker).should_receive("get_bug").with_args("OCPBUGS-4").and_return(issues[1])
-        os.environ['USEJIRA']="True"
+        os.environ['USEJIRA'] = "True"
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '--id', 'OCPBUGS-3', '--id', 'OCPBUGS-4', '-a',
                                      '99999'])
         self.assertIn("Found 2 bugs:", result.output)
