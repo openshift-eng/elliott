@@ -16,10 +16,6 @@ from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corre
 @click.option('--advisory', '-a', 'advisory_id',
               type=int,
               help='Find tracker bugs in given advisory')
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira in combination with bugzilla")
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
@@ -27,7 +23,7 @@ from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corre
 @use_default_advisory_option
 @click.pass_obj
 @click_coroutine
-async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, use_jira: bool, noop: bool, default_advisory_type: str):
+async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, default_advisory_type: str):
     """Attach corresponding flaw bugs for trackers in advisory (first-fix only).
 
     Also converts advisory to RHSA, if not already.
@@ -48,12 +44,12 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, use_jira: boo
     if sum(map(bool, [advisory_id, default_advisory_type])) != 1:
         raise click.BadParameter("Use one of --use-default-advisory or --advisory")
     runtime.initialize()
+    if runtime.use_jira:
+        await attach_cve_flaws(runtime, advisory_id, noop, default_advisory_type, True, JIRABugTracker(JIRABugTracker.get_config(runtime)))
+    await attach_cve_flaws(runtime, advisory_id, noop, default_advisory_type, False, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
-    if use_jira:
-        bug_tracker = JIRABugTracker(JIRABugTracker.get_config(runtime))
-    else:
-        bug_tracker = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime))
 
+async def attach_cve_flaws(runtime, advisory_id, noop, default_advisory_type, use_jira, bug_tracker):
     if not advisory_id and default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 

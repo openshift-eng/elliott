@@ -34,13 +34,9 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option('--attach', '-a', 'advisory',
               type=int, metavar='ADVISORY',
               help='Attach the bug to ADVISORY')
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira instead of bugzilla")
 @use_default_advisory_option
 @pass_runtime
-def create_placeholder_cli(runtime, kind, advisory, use_jira, default_advisory_type):
+def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
     """Create a placeholder bug for attaching to an advisory.
 
     KIND - The kind of placeholder to create ({}).
@@ -61,10 +57,14 @@ def create_placeholder_cli(runtime, kind, advisory, use_jira, default_advisory_t
     if kind is None:
         raise click.BadParameter(
             "--kind must be specified when not using --use-default-advisory")
-    if use_jira:
-        newbug = JIRABugTracker(JIRABugTracker.get_config(runtime)).create_placeholder(kind)
-    else:
-        newbug = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)).create_placeholder(kind)
+
+    if runtime.use_jira:
+        create_placeholder(runtime, kind, advisory, default_advisory_type, True, JIRABugTracker(JIRABugTracker.get_config(runtime)))
+    create_placeholder(runtime, kind, advisory, default_advisory_type, False, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+
+
+def create_placeholder(runtime, kind, advisory, default_advisory_type, use_jira, bug_tracker):
+    newbug = bug_tracker.create_placeholder(kind)
     click.echo("Created Bug: {} {}".format(newbug.id, newbug.weburl))
 
     if advisory:

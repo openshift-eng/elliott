@@ -58,13 +58,9 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option('--yes', '-y', is_flag=True,
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira instead of bugzilla")
 @pass_runtime
 @click.pass_context
-def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, use_jira):
+def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes):
     """
     Create a text only advisory with all required input passed from args, need to manually decide the statement for each release.
     Also will create the notification bug along with the text only advisory, the bug also need some special comment and title.
@@ -80,12 +76,16 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     """
 
     runtime.initialize()
+    if runtime.use_jira:
+        create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, True,
+                        JIRABugTracker(JIRABugTracker.get_config(runtime)))
+    create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, False,
+                    BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
+
+def create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, use_jira, bug_tracker):
     # create textonly bug
-    if use_jira:
-        newbug = JIRABugTracker(JIRABugTracker.get_config(runtime)).create_textonly(bugtitle, bugdescription)
-    else:
-        newbug = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)).create_textonly(bugtitle, bugdescription)
+    newbug = bug_tracker.create_textonly(bugtitle, bugdescription)
     click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
 
     # create textonly advisory
@@ -122,7 +122,7 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
         green_prefix("Created new text only advisory: ")
         click.echo(str(erratum))
         if use_jira:
-            add_jira_issue(erratum.id, newbug.id)
+            add_jira_issue(erratum.errata_id, newbug.id)
     else:
         green_prefix("Would have created advisory: ")
         click.echo("")

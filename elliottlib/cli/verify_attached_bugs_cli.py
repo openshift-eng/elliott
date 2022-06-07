@@ -19,14 +19,10 @@ from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corre
 @cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
 @click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
 @click.option("--verify-flaws", is_flag=True, help="Check that flaw bugs are attached and associated with specific builds", type=bool, default=False)
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira as bug type")
 @click.argument("advisories", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
-async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool, use_jira: bool):
+async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool):
     """
     Verify the bugs in the advisories (specified as arguments or in group.yml) for a release.
     Requires a runtime to ensure that all bugs in the advisories match the runtime version.
@@ -41,6 +37,12 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
     if not advisories:
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
+    if runtime.use_jira:
+        await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, True)
+    await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, False)
+
+
+async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool, use_jira: bool):
     validator = BugValidator(runtime, use_jira, output="text")
     try:
         await validator.errata_api.login()
@@ -62,15 +64,17 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
               type=click.Choice(['text', 'json', 'slack']),
               default='text',
               help='Applies chosen format to command output')
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira bug as bugtype")
 @click.argument("bug_ids", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
-async def verify_bugs_cli(runtime, verify_bug_status, output, use_jira, bug_ids):
+async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
+    if runtime.use_jira:
+        verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
+    verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
+
+
+async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
     validator = BugValidator(runtime, use_jira, output)
     bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs(bug_ids))
     try:

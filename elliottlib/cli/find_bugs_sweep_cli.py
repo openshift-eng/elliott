@@ -72,17 +72,13 @@ class FindBugsSweep(FindBugsMode):
                    '"extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
 @click.option('--brew-event', type=click.INT, required=False,
               help='Only in sweep mode: SWEEP bugs that have changed to the desired status before the Brew event')
-@click.option('--jira',
-              required=False,
-              is_flag=True,
-              help='Use jira instead of bugzilla as bug tracker')
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @click.pass_obj
 def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
-                        report, output, into_default_advisories, brew_event, jira, noop):
+                        report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY.
 
  The --group automatically determines the correct target-releases to search
@@ -117,12 +113,17 @@ advisory with the --add option.
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
 
     runtime.initialize(mode="both")
+
+    if runtime.use_jira:
+        find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status, report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags,
+                        JIRABugTracker(JIRABugTracker.get_config(runtime)))
+    find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status, report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags,
+                    BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+
+
+def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
+                    report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags, bug_tracker):
     major_version, minor_version = runtime.get_major_minor()
-
-    bug_tracker_cls = JIRABugTracker if jira else BugzillaBugTracker
-    config = bug_tracker_cls.get_config(runtime)
-    bug_tracker = bug_tracker_cls(config)
-
     find_bugs_obj = FindBugsSweep()
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
@@ -169,7 +170,6 @@ advisory with the --add option.
 
     if count_advisory_attach_flags < 1:
         return
-
     # `--add ADVISORY_NUMBER` should respect the user's wish
     # and attach all available bugs to whatever advisory is specified.
     if advisory_id and not default_advisory_type:

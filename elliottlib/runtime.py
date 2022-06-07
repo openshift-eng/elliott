@@ -50,6 +50,7 @@ class Runtime(object):
         self.verbose = False
         self.quiet = False
         self.data_path = None
+        self.use_jira = os.environ.get('USEJIRA')
         self.brew_event: Optional[int] = None
         self.assembly: Optional[str] = 'stream'
         self.assembly_basis_event: Optional[int] = None

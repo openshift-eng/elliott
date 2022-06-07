@@ -37,13 +37,9 @@ pass_runtime = click.make_pass_decorator(Runtime)
               required=False,
               default=False, is_flag=True,
               help="Remove all bugs attached to Advisory")
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira instead of bugzilla")
 @pass_runtime
 @use_default_advisory_option
-def remove_bugs_cli(runtime, advisory, default_advisory_type, id, remove_all, use_jira):
+def remove_bugs_cli(runtime, advisory, default_advisory_type, id, remove_all):
     """Remove given BUGS from ADVISORY.
 
     Remove bugs that have been attached an advisory:
@@ -67,14 +63,14 @@ def remove_bugs_cli(runtime, advisory, default_advisory_type, id, remove_all, us
         raise click.BadParameter("Specify exactly one of --use-default-advisory or advisory arg")
 
     runtime.initialize()
+    if runtime.use_jira:
+        remove_bugs(runtime, advisory, default_advisory_type, [i for i in cli_opts.id_convert_str(id) if not str(i).isdigit()], remove_all,
+                    True, JIRABugTracker(JIRABugTracker.get_config(runtime)))
+    remove_bugs(runtime, advisory, default_advisory_type, [int(i) for i in cli_opts.id_convert_str(id) if str(i).isdigit()], remove_all,
+                False, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
-    if use_jira:
-        jira_config = JIRABugTracker.get_config(runtime)
-        bug_tracker = JIRABugTracker(jira_config)
-    else:
-        bz_config = BugzillaBugTracker.get_config(runtime)
-        bug_tracker = BugzillaBugTracker(bz_config)
 
+def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all, use_jira, bug_tracker):
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
@@ -95,7 +91,9 @@ def remove_bugs_cli(runtime, advisory, default_advisory_type, id, remove_all, us
                 else:
                     bug_ids = advs.errata_bugs
             else:
-                bug_ids = [bug_tracker.get_bug(i).id for i in cli_opts.id_convert(id)]
+                bug_ids = [bug_tracker.get_bug(i).id for i in id]
+                print(id)
+            print(bug_ids)
             green_prefix(f"Found {len(bug_ids)} bugs:")
             click.echo(f" {', '.join([str(b) for b in bug_ids])}")
             green_prefix(f"Removing bugs from advisory {advisory}:")

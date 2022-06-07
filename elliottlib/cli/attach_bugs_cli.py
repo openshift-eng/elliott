@@ -26,16 +26,12 @@ LOGGER = logutil.getLogger(__name__)
               type=int, metavar='ADVISORYID',
               help="Attach bugs to ADVISORY")
 @use_default_advisory_option
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira instead of bugzilla (https://issues.redhat.com/browse/ART-3818)")
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @click.pass_obj
-def attach_bugs_cli(runtime: Runtime, advisory, default_advisory_type, bug_ids, report, output, use_jira, noop):
+def attach_bugs_cli(runtime: Runtime, advisory, default_advisory_type, bug_ids, report, output, noop):
     """Attach OCP Bugs to ADVISORY
 Print bug details with --report
 For attaching use --advisory, --use-default-advisory <TYPE>
@@ -68,19 +64,17 @@ For attaching use --advisory, --use-default-advisory <TYPE>
         raise click.BadParameter("Use only one of --use-default-advisory <TYPE> or --advisory <ADVISORY_ID>")
 
     runtime.initialize()
+    if runtime.use_jira:
+        attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop,
+                    JIRABugTracker(JIRABugTracker.get_config(runtime)))
 
+    attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop,
+                BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+
+
+def attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop, bug_tracker):
     major, minor = runtime.get_major_minor()
     version = f'{major}.{minor}'
-
-    if use_jira:
-        jira_config = JIRABugTracker.get_config(runtime)
-        jira = JIRABugTracker(jira_config)
-        bug_tracker = jira
-    else:
-        bz_config = BugzillaBugTracker.get_config(runtime)
-        bugzilla = BugzillaBugTracker(bz_config)
-        bug_tracker = bugzilla
-
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 

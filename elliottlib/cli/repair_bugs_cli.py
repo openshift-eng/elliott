@@ -3,7 +3,7 @@ import elliottlib
 
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
-from elliottlib import Runtime
+from elliottlib import Runtime, errata
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib.util import green_print, progress_func, pbar_header
 from elliottlib.cli import cli_opts
@@ -39,17 +39,13 @@ pass_runtime = click.make_pass_decorator(Runtime)
               required=False,
               default=False, is_flag=True,
               help="When checking bug state, close the bug if it's a placehoder bug.")
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira instead of bugzilla")
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
               help="Check bugs attached, print what would change, but don't change anything")
 @use_default_advisory_option
 @pass_runtime
-def repair_bugs_cli(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, use_jira, noop, default_advisory_type):
+def repair_bugs_cli(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop, default_advisory_type):
     """Move bugs attached to the advisory from one state to another
 state. This is useful if the bugs have changed states *after* they
 were attached. Similar to `find-bugs` but in reverse. `repair-bugs`
@@ -106,12 +102,12 @@ providing an advisory with the -a/--advisory option.
 
     # Load bugzilla information and get a reference to the api
     runtime.initialize()
-    if use_jira:
-        jira_config = JIRABugTracker.get_config(runtime)
-        bug_tracker = JIRABugTracker(jira_config)
-    else:
-        bz_config = BugzillaBugTracker.get_config(runtime)
-        bug_tracker = BugzillaBugTracker(bz_config)
+    if runtime.use_jira:
+        repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, True, noop, default_advisory_type, JIRABugTracker(JIRABugTracker.get_config(runtime)))
+    repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, False, noop, default_advisory_type, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+
+
+def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, use_jira, noop, default_advisory_type, bug_tracker):
     changed_bug_count = 0
 
     if default_advisory_type is not None:
@@ -119,8 +115,11 @@ providing an advisory with the -a/--advisory option.
 
     if auto:
         click.echo("Fetching Advisory(errata_id={})".format(advisory))
-        e = elliottlib.errata.Advisory(errata_id=advisory)
-        raw_bug_list = e.errata_bugs
+        if use_jira:
+            raw_bug_list = [issue["key"] for issue in errata.get_jira_issue_from_advisory(advisory)]
+        else:
+            e = elliottlib.errata.Advisory(errata_id=advisory)
+            raw_bug_list = e.errata_bugs
     else:
         click.echo("Bypassed fetching erratum, using provided BZs")
         raw_bug_list = cli_opts.id_convert(id)

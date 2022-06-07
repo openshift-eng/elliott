@@ -16,16 +16,12 @@ class FindBugsQE(FindBugsMode):
 
 
 @cli.command("find-bugs:qe", short_help="Change MODIFIED bugs to ON_QA")
-@click.option("--jira", 'use_jira',
-              is_flag=True,
-              default=False,
-              help="Use jira in combination with bugzilla (https://issues.redhat.com/browse/ART-3818)")
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
               help="Don't change anything")
 @click.pass_obj
-def find_bugs_qe_cli(runtime: Runtime, use_jira, noop):
+def find_bugs_qe_cli(runtime: Runtime, noop):
     """Find MODIFIED bugs for the target-releases, and set them to ON_QA.
     with a release comment on each bug
 
@@ -34,14 +30,12 @@ def find_bugs_qe_cli(runtime: Runtime, use_jira, noop):
 
 """
     runtime.initialize()
+    if runtime.use_jira:
+        find_bugs_qe(runtime, noop, JIRABugTracker(JIRABugTracker.get_config(runtime)))
+    find_bugs_qe(runtime, noop, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
 
-    if use_jira:
-        jira_config = JIRABugTracker.get_config(runtime)
-        bug_tracker = JIRABugTracker(jira_config)
-    else:
-        bz_config = BugzillaBugTracker.get_config(runtime)
-        bug_tracker = BugzillaBugTracker(bz_config)
 
+def find_bugs_qe(runtime, noop, bug_tracker):
     major_version, minor_version = runtime.get_major_minor()
     click.echo(f"Searching for bugs with status MODIFIED and target release(s): {', '.join(bug_tracker.target_release())}")
 
