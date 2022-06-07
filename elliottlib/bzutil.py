@@ -174,8 +174,8 @@ class JIRABug(Bug):
     def _get_release_blocker(self):
         # release blocker can be ['None','Approved'=='+','Proposed'=='?','Rejected'=='-']
         if self.bug.fields.customfield_12319743:
-            return self.bug.fields.customfield_12319743.value
-        return None
+            return self.bug.fields.customfield_12319743.value == 'Approved'
+        return False
 
     def _get_blocked_reason(self):
         if self.bug.fields.customfield_12316544:
@@ -284,15 +284,6 @@ class BugTracker:
 class JIRABugTracker(BugTracker):
     @staticmethod
     def get_config(runtime) -> Dict:
-        major, minor = runtime.get_major_minor()
-        version = f'{major}.{minor}'
-        # TODO: have jira.yml file for all versions 4.6-4.11
-        if version != '4.11':
-            return {
-                'server': "https://issues.stage.redhat.com",
-                'project': 'OCPBUGS',
-                'target_release': [f"{version}.0", f"{version}.z"]
-            }
         return runtime.gitdata.load_data(key='bug').data
 
     def login(self, token_auth=None) -> JIRA:
@@ -366,7 +357,8 @@ class JIRABugTracker(BugTracker):
                include_labels: Optional[List] = None,
                exclude_labels: Optional[List] = None,
                with_target_release: bool = True,
-               search_filter: str = None) -> str:
+               search_filter: str = None,
+               custom_query: str = None) -> str:
 
         if target_release and with_target_release:
             raise ValueError("cannot use target_release and with_target_release together")
@@ -385,12 +377,14 @@ class JIRABugTracker(BugTracker):
         if target_release:
             query += f" and fixVersion in ({','.join(target_release)})"
         if include_labels:
-            query += f" and labels in ({','.join(exclude_labels)})"
+            query += f" and labels in ({','.join(include_labels)})"
         if exclude_labels:
             query += f" and labels not in ({','.join(exclude_labels)})"
         if exclude_components:
             val = ','.join(f'"{c}"' for c in exclude_components)
             query += f" and component not in ({val})"
+        if custom_query:
+            query += custom_query
         return query
 
     def _search(self, query, verbose=False, **kwargs) -> List[JIRABug]:
@@ -399,13 +393,11 @@ class JIRABugTracker(BugTracker):
         return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False, **kwargs)]
 
     def blocker_search(self, status, search_filter='default', verbose=False, **kwargs):
-        # TODO this would be the release_blocker custom field instead of label
-        include_labels = ['blocker+']
         query = self._query(
             status=status,
-            include_labels=include_labels,
-            target_release=self.target_release(),
-            search_filter=search_filter
+            with_target_release=True,
+            search_filter=search_filter,
+            custom_query='and "Release Blocker" = "Approved"'
         )
         return self._search(query, verbose=verbose, **kwargs)
 
