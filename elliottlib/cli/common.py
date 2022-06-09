@@ -62,7 +62,7 @@ context_settings = dict(help_option_names=['-h', '--help'])
     '--debug',
     default=False, is_flag=True,
     help='Show debug output on console.')
-@click.option("--brew-event", metavar='EVENT', default=None,
+@click.option("--brew-event", metavar='EVENT', type=click.INT, default=None,
               help="Lock koji clients from runtime to this brew event.")
 @click.pass_context
 def cli(ctx, **kwargs):
