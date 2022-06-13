@@ -1,12 +1,13 @@
 import unittest
 import os
+import traceback
+from mock import patch
 from click.testing import CliRunner
 from elliottlib import errata
 from elliottlib.cli import common
 from elliottlib.cli.common import cli, Runtime
 import elliottlib.cli.remove_bugs_cli
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
-from elliottlib import bzutil
 from flexmock import flexmock
 
 
@@ -24,10 +25,14 @@ class RemoveBugsTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("get_bug").with_args(1).and_return(bugs[0])
         flexmock(BugzillaBugTracker).should_receive("get_bug").with_args(2).and_return(bugs[1])
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '--id', '1', '--id', '2', '-a', '99999'])
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
         self.assertIn("Found 2 bugs", result.output)
         self.assertIn("Removing bugs from advisory 99999", result.output)
-        self.assertEqual(result.exit_code, 0)
 
+    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_remove_jira_bug(self):
         runner = CliRunner()
         # bugs = [flexmock(id=1), flexmock(id=2)]
@@ -47,13 +52,12 @@ class RemoveBugsTestCase(unittest.TestCase):
         flexmock(errata).should_receive("remove_multi_jira_issues")
         flexmock(JIRABugTracker).should_receive("get_bug").with_args("OCPBUGS-3").and_return(issues[0])
         flexmock(JIRABugTracker).should_receive("get_bug").with_args("OCPBUGS-4").and_return(issues[1])
-        os.environ['USEJIRA'] = "True"
+
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '--id', 'OCPBUGS-3', '--id', 'OCPBUGS-4', '-a',
                                      '99999'])
         self.assertIn("Found 2 bugs:", result.output)
         self.assertIn("Removing bugs from advisory 99999", result.output)
         self.assertEqual(result.exit_code, 0)
-        del(os.environ['USEJIRA'])
 
     def test_remove_all(self):
         runner = CliRunner()
