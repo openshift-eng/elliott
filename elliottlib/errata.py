@@ -125,6 +125,22 @@ def remove_multi_jira_issues(advisory_id, jira_list: List):
     return [remove_jira_issue(advisory_id, jira_id) for jira_id in jira_list]
 
 
+def remove_bug(advisory_id, bug_id):
+    """
+    Remove a bug from advisory
+    Response code will return
+    """
+    return ErrataConnector()._post(f"/api/v1/erratum/{advisory_id}/remove_bug", data={"bug": f"{bug_id}"})
+
+
+def remove_multi_bugs(advisory_id, bug_list: List):
+    """
+    Remove multi bugs from advisory
+    Return a list of response code
+    """
+    return [remove_bug(advisory_id, bug_id) for bug_id in bug_list]
+
+
 def add_multi_jira_issues(advisory_id, jira_list: List):
     """
     Add multi jira issues to advisory

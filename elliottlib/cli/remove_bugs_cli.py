@@ -101,7 +101,6 @@ def remove_bugs(runtime, advisory, default_advisory_type, id, remove_all, use_ji
                 if use_jira:
                     errata.remove_multi_jira_issues(advisory, bug_ids)
                 else:
-                    advs.removeBugs([bug for bug in bug_ids])
-                    advs.commit()
+                    errata.remove_multi_bugs(advisory, bug_ids)
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
