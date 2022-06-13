@@ -42,10 +42,10 @@ class Bug:
         raise NotImplementedError
 
     def is_tracker_bug(self):
-        return set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.bug.keywords))
+        return set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
 
     def is_flaw_bug(self):
-        return self.bug.product == "Security Response" and self.bug.component == "vulnerability"
+        return self.product == "Security Response" and self.component == "vulnerability"
 
     @staticmethod
     def get_target_release(bugs: List[bzutil.Bug]) -> str:
@@ -213,8 +213,9 @@ class JIRABug(Bug):
 
 
 class BugTracker:
-    def __init__(self, config):
+    def __init__(self, config: dict, tracker_type: str):
         self.config = config
+        self.type = tracker_type
         self._server = config['bugzilla_config'].get('server', '') if config.get('bugzilla_config') else ''
         self._jira_server = config['jira_config'].get('server', '') if config.get('jira_config') else ''
 
@@ -250,6 +251,9 @@ class BugTracker:
         raise NotImplementedError
 
     def _update_bug_status(self, bugid, target_status):
+        raise NotImplementedError
+
+    def advisory_bug_ids(self, advisory_obj):
         raise NotImplementedError
 
     def create_placeholder(self, kind, noop=False):
@@ -295,22 +299,20 @@ class JIRABugTracker(BugTracker):
         return client
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config, 'jira')
         self._project = config['jira_config'].get('project', '') if config.get('jira_config') else ''
         self._client: JIRA = self.login()
 
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
         return JIRABug(self._client.issue(bugid, **kwargs))
 
-    def get_bugs(self, bugids: List[str], permissive=False, verbose=False, check_tracker=False, **kwargs) -> List[JIRABug]:
+    def get_bugs(self, bugids: List[str], permissive=False, verbose=False, **kwargs) -> List[JIRABug]:
         query = self._query(bugids=bugids, with_target_release=False)
         if verbose:
             click.echo(query)
         bugs = self._search(query, **kwargs)
         if not permissive and len(bugs) < len(bugids):
             raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
-        if check_tracker:
-            bugs = [bug for bug in bugs if bug.is_tracker_bug()]
         return bugs
 
     def get_bug_remote_links(self, bug: JIRABug):
@@ -419,6 +421,9 @@ class JIRABugTracker(BugTracker):
                 f'before("{dt}")'
         return self._search(query, verbose=True)
 
+    def advisory_bug_ids(self, advisory_obj):
+        return advisory_obj.jira_issues
+
 
 class BugzillaBugTracker(BugTracker):
     @staticmethod
@@ -433,15 +438,13 @@ class BugzillaBugTracker(BugTracker):
         return client
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config, 'bugzilla')
         self._client = self.login()
 
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
     def get_bugs(self, bugids, permissive=False, check_tracker=False, **kwargs):
-        if check_tracker:
-            return [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs) if BugzillaBug(b).is_tracker_bug()]
         return [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
 
     def client(self):
@@ -583,6 +586,9 @@ class BugzillaBugTracker(BugTracker):
             qualified_bugs.append(bug)
 
         return qualified_bugs
+
+    def advisory_bug_ids(self, advisory_obj):
+        return advisory_obj.errata_bugs
 
 
 def get_corresponding_flaw_bugs(bug_tracker, tracker_bugs: List, fields: List, strict: bool = False):
