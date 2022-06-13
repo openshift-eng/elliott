@@ -310,7 +310,7 @@ class JIRABugTracker(BugTracker):
         query = self._query(bugids=bugids, with_target_release=False)
         if verbose:
             click.echo(query)
-        bugs = self._search(query, **kwargs)
+        bugs = self._search(query)
         if not permissive and len(bugs) < len(bugids):
             raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
         return bugs
@@ -389,10 +389,10 @@ class JIRABugTracker(BugTracker):
             query += custom_query
         return query
 
-    def _search(self, query, verbose=False, **kwargs) -> List[JIRABug]:
+    def _search(self, query, verbose=False) -> List[JIRABug]:
         if verbose:
             click.echo(query)
-        return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False, **kwargs)]
+        return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False)]
 
     def blocker_search(self, status, search_filter='default', verbose=False, **kwargs):
         query = self._query(
@@ -403,12 +403,12 @@ class JIRABugTracker(BugTracker):
         )
         return self._search(query, verbose=verbose, **kwargs)
 
-    def search(self, status, search_filter='default', verbose=False, **kwargs):
+    def search(self, status, search_filter='default', verbose=False):
         query = self._query(
             status=status,
             search_filter=search_filter
         )
-        return self._search(query, verbose=verbose, **kwargs)
+        return self._search(query, verbose=verbose)
 
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
@@ -445,6 +445,8 @@ class BugzillaBugTracker(BugTracker):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
     def get_bugs(self, bugids, permissive=False, check_tracker=False, **kwargs):
+        if 'verbose' in kwargs:
+            kwargs.pop('verbose')
         return [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
 
     def client(self):
