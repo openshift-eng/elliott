@@ -1,20 +1,32 @@
 import unittest
 from flexmock import flexmock
 from elliottlib import constants, exceptions, bzutil
-from elliottlib.bzutil import Bug, BugzillaBugTracker
+from elliottlib.bzutil import Bug, BugzillaBug, JIRABug
 
 
 class TestAttachCVEFlaws(unittest.TestCase):
-    def test_is_tracker_bug(self):
-        bug = flexmock(keywords=constants.TRACKER_BUG_KEYWORDS)
+    def test_is_tracker_bug_bz(self):
+        bug = flexmock(id='1', keywords=constants.TRACKER_BUG_KEYWORDS)
         expected = True
-        actual = Bug(bug).is_tracker_bug()
+        actual = BugzillaBug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
 
-    def test_is_tracker_bug_fail(self):
-        bug = flexmock(keywords=['SomeOtherKeyword'])
+    def test_is_tracker_bug_jira(self):
+        bug = flexmock(key='OCPBUGS1', fields=flexmock(labels=constants.TRACKER_BUG_KEYWORDS + ['somethingelse']))
+        expected = True
+        actual = JIRABug(bug).is_tracker_bug()
+        self.assertEqual(expected, actual)
+
+    def test_is_tracker_bug_fail_bz(self):
+        bug = flexmock(id='1', keywords=['SomeOtherKeyword'])
         expected = False
-        actual = Bug(bug).is_tracker_bug()
+        actual = BugzillaBug(bug).is_tracker_bug()
+        self.assertEqual(expected, actual)
+
+    def test_is_tracker_bug_fail_jira(self):
+        bug = flexmock(key='OCPBUGS1', fields=flexmock(labels=['somethingelse']))
+        expected = False
+        actual = JIRABug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
 
     def test_get_corresponding_flaw_bugs(self):

@@ -1,7 +1,7 @@
 aiohttp[speedups] >= 3.6
 click
 contextvars; python_version < '3.7'
-errata-tool >= 1.22
+errata-tool >= 1.27.1
 future
 koji >= 1.18
 semver
