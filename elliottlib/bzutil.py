@@ -449,20 +449,16 @@ class BugzillaBugTracker(BugTracker):
 
     def blocker_search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter, flag='blocker+')
-        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'sub_component', 'external_bugs', 'whiteboard',
-                  'keywords', 'target_release']
-        return self._search(query, fields, verbose)
+        return self._search(query, verbose)
 
     def search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter)
-        fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'sub_component', 'external_bugs', 'whiteboard',
-                  'keywords', 'target_release']
-        return self._search(query, fields, verbose)
+        return self._search(query, verbose)
 
-    def _search(self, query, fields, verbose=False):
+    def _search(self, query, verbose=False):
         if verbose:
             click.echo(query)
-        return [BugzillaBug(b) for b in _perform_query(self._client, query, include_fields=fields)]
+        return [BugzillaBug(b) for b in _perform_query(self._client, query)]
 
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_bugzilla_bugs_with_retry(advisory_id, bugids, noop=noop)
@@ -809,6 +805,8 @@ def get_bzapi(bz_data, interactive_login=False):
 
 def _construct_query_url(bz_data, status, search_filter='default', flag=None):
     query_url = SearchURL(bz_data)
+    query_url.fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'sub_component',
+                        'external_bugs', 'whiteboard', 'keywords', 'target_release']
 
     filter_list = []
     if bz_data.get('filter'):
@@ -831,7 +829,7 @@ def _construct_query_url(bz_data, status, search_filter='default', flag=None):
     return query_url
 
 
-def _perform_query(bzapi, query_url, include_fields=None):
+def _perform_query(bzapi, query_url):
     BZ_PAGE_SIZE = 1000
 
     def iterate_query(query):
@@ -842,7 +840,8 @@ def _perform_query(bzapi, query_url, include_fields=None):
             results += iterate_query(query)
         return results
 
-    if include_fields is None:
+    include_fields = query_url.fields
+    if not include_fields:
         include_fields = ['id']
 
     query = bzapi.url_to_query(str(query_url))
@@ -890,6 +889,7 @@ class SearchURL(object):
         self.target_releases = []
         self.keyword = ""
         self.keywords_type = ""
+        self.fields = []
 
     def __str__(self):
         root_string = SearchURL.url_format.format(self.bz_host)
