@@ -241,6 +241,9 @@ class BugTracker:
             id_bug_map[bugids[i]] = bug
         return id_bug_map
 
+    def remove_bugs(self, advisory_obj, bugids: List, noop=False):
+        raise NotImplementedError
+
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         raise NotImplementedError
 
@@ -410,6 +413,12 @@ class JIRABugTracker(BugTracker):
         )
         return self._search(query, verbose=verbose)
 
+    def remove_bugs(self, advisory_obj, bugids: List, noop=False):
+        if noop:
+            print(f"Would've removed bugs: {bugids}")
+            return
+        return errata.remove_multi_jira_issues(advisory_obj, bugids)
+
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
 
@@ -464,6 +473,12 @@ class BugzillaBugTracker(BugTracker):
         if verbose:
             click.echo(query)
         return [BugzillaBug(b) for b in _perform_query(self._client, query)]
+
+    def remove_bugs(self, advisory_obj, bugids: List, noop=False):
+        if noop:
+            print(f"Would've removed bugs: {bugids}")
+            return
+        return errata.remove_bugzilla_bugs(advisory_obj, bugids)
 
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_bugzilla_bugs_with_retry(advisory_id, bugids, noop=noop)

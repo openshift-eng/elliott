@@ -122,6 +122,7 @@ def remove_multi_jira_issues(advisory_id, jira_list: List):
     Remove multi jira issues from advisory
     Return a list of response code
     """
+    print("im hereere")
     return [remove_jira_issue(advisory_id, jira_id) for jira_id in jira_list]
 
 
@@ -518,6 +519,11 @@ def parse_exception_error_message(e):
     :return: [1685399, 1685398]
     """
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
+
+
+def remove_bugzilla_bugs(advisory_obj, bugids: List):
+    advisory_obj.removeBugs([bug for bug in bugids])
+    advisory_obj.commit()
 
 
 def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = False,
