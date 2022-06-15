@@ -34,13 +34,17 @@ def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove
     Remove bugs that have been attached an advisory:
 
 \b
-    $ elliott --group openshift-3.7 remove-bugs --id 123456 --advisory 1234123
+    $ elliott --group openshift-4.10 remove-bugs 123456 --advisory 1234123
 
-    Remove two bugs from default rpm advisory. Note that --group is required
-    because default advisory is from ocp-build-data:
+    Remove two bugs from default image advisory
 
 \b
-    $ elliott --group openshift-3.7 remove-bugs --id 123456 --id 3412311 --use-default-advisory rpm
+    $ elliott --group openshift-4.10 --assembly 4.10.19 remove-bugs 123456 3412311 --use-default-advisory image
+
+    Remove all bugs from default image advisory
+
+\b
+    $ elliott --group openshift-4.10 --assembly 4.10.19 remove-bugs --all --use-default-advisory image
 
 """
     if bool(remove_all) == bool(bug_ids):
