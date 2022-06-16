@@ -3,7 +3,6 @@ from elliottlib import logutil, errata
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib.util import exit_unauthenticated
 from elliottlib.util import green_prefix
 
@@ -56,16 +55,15 @@ def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove
     if default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
-    if runtime.use_jira:
+    bug_trackers = runtime.bug_trackers
+    if runtime.use_jira or runtime.only_jira:
         bug_ids = cli_opts.id_convert_str(bug_ids)
-        bug_tracker = JIRABugTracker(JIRABugTracker.get_config(runtime))
         remove_bugs(advisory_id, bug_ids, remove_all,
-                    bug_tracker, noop)
+                    bug_trackers['jira'], noop)
     else:
         bug_ids = cli_opts.id_convert(bug_ids)
-        bug_tracker = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime))
         remove_bugs(advisory_id, bug_ids, remove_all,
-                    bug_tracker, noop)
+                    bug_trackers['bugzilla'], noop)
 
 
 def remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop):

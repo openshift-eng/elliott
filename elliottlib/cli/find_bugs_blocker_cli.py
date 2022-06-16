@@ -1,7 +1,7 @@
 import click
 
 from elliottlib.cli.find_bugs_sweep_cli import print_report, FindBugsMode
-from elliottlib.bzutil import BugzillaBugTracker, BugTracker, JIRABugTracker
+from elliottlib.bzutil import BugTracker
 from elliottlib import (Runtime, constants)
 from elliottlib.cli.common import cli
 from elliottlib.util import green_prefix
@@ -54,10 +54,8 @@ Use --exclude_status to filter out from default status list.
     $ elliott -g openshift-4.6 find-bugs:blocker --output json
 """
     runtime.initialize()
-    if runtime.use_jira:
-        find_bugs_blocker(runtime, output, include_status, exclude_status, JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    find_bugs_blocker(runtime, output, include_status, exclude_status, BugzillaBugTracker(
-        BugzillaBugTracker.get_config(runtime)))
+    for b in runtime.bug_trackers.values():
+        find_bugs_blocker(runtime, output, include_status, exclude_status, b)
 
 
 def find_bugs_blocker(runtime, output, include_status, exclude_status, bug_tracker):
@@ -66,8 +64,9 @@ def find_bugs_blocker(runtime, output, include_status, exclude_status, bug_track
     find_bugs_obj.exclude_status(exclude_status)
 
     if output == 'text':
-        green_prefix(f"Searching for bugs with status {' '.join(sorted(find_bugs_obj.status))} and target release(s):")
-        click.echo(" {tr}".format(tr=", ".join(bug_tracker.target_release())))
+        statuses = sorted(find_bugs_obj.status)
+        tr = bug_tracker.target_release()
+        green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
