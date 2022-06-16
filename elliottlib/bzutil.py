@@ -301,8 +301,10 @@ class JIRABugTracker(BugTracker):
 
     def login(self, token_auth=None) -> JIRA:
         if not token_auth:
-            raise ValueError(f"elliott requires login credentials for {self._server}. Set a JIRA_TOKEN env var ")
-            client = JIRA(self._server, token_auth=token_auth)
+            token_auth = os.environ.get("JIRA_TOKEN")
+            if not token_auth:
+                raise ValueError(f"elliott requires login credentials for {self._server}. Set a JIRA_TOKEN env var ")
+        client = JIRA(self._server, token_auth=token_auth)
         return client
 
     def __init__(self, config):
