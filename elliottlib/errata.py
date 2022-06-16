@@ -545,7 +545,7 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
     except GSSError:
         exit_unauthenticated()
 
-    if advisory is False:
+    if not advisory:
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
     existing_bugs = advisory.errata_bugs

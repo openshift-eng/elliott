@@ -74,7 +74,7 @@ def remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop):
     except GSSError:
         exit_unauthenticated()
 
-    if advisory is False:
+    if not advisory:
         raise ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
     try:
