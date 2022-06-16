@@ -520,6 +520,11 @@ def parse_exception_error_message(e):
     return [int(b.split('#')[1]) for b in re.findall(r'Bug #[0-9]*', str(e))]
 
 
+def remove_bugzilla_bugs(advisory_obj, bugids: List):
+    advisory_obj.removeBugs([bug for bug in bugids])
+    advisory_obj.commit()
+
+
 def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = False,
                                  batch_size: int = constants.BUG_ATTACH_CHUNK_SIZE):
     """
@@ -540,7 +545,7 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
     except GSSError:
         exit_unauthenticated()
 
-    if advisory is False:
+    if not advisory:
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
     existing_bugs = advisory.errata_bugs

@@ -14,17 +14,15 @@ from flexmock import flexmock
 class RemoveBugsTestCase(unittest.TestCase):
     def test_remove_bugzilla_bug(self):
         runner = CliRunner()
-        bugs = [flexmock(id=1), flexmock(id=2)]
+
         flexmock(Runtime).should_receive("initialize")
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
         flexmock(BugzillaBugTracker).should_receive("login")
-        Advisory = flexmock(errata_bugs=[1, 2])
-        flexmock(Advisory).should_receive("removeBugs")
-        flexmock(Advisory).should_receive("commit")
-        flexmock(errata).should_receive("Advisory").and_return(Advisory)
-        flexmock(BugzillaBugTracker).should_receive("get_bug").with_args(1).and_return(bugs[0])
-        flexmock(BugzillaBugTracker).should_receive("get_bug").with_args(2).and_return(bugs[1])
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '--id', '1', '--id', '2', '-a', '99999'])
+        advisory = flexmock(errata_bugs=[1, 2, 3])
+        flexmock(errata).should_receive("Advisory").and_return(advisory)
+        flexmock(BugzillaBugTracker).should_receive("remove_bugs").with_args(advisory, [1, 2], False)
+
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '1', '2', '-a', '99999'])
         if result.exit_code != 0:
             exc_type, exc_value, exc_traceback = result.exc_info
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -35,47 +33,36 @@ class RemoveBugsTestCase(unittest.TestCase):
     @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_remove_jira_bug(self):
         runner = CliRunner()
-        # bugs = [flexmock(id=1), flexmock(id=2)]
-        issues = [flexmock(key="OCPBUGS-3", id="OCPBUGS-3"), flexmock(key="OCPBUGS-4", id="OCPBUGS-4")]
+
         flexmock(Runtime).should_receive("initialize")
-        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
-        flexmock(BugzillaBugTracker).should_receive("login")
-        Advisory = flexmock(errata_bugs=[1, 2])
-        flexmock(Advisory).should_receive("removeBugs")
-        flexmock(Advisory).should_receive("commit")
-        flexmock(errata).should_receive("Advisory").and_return(Advisory)
-        # flexmock(BugzillaBugTracker).should_receive("get_bug").with_args(1).and_return(bugs[0])
-        # flexmock(BugzillaBugTracker).should_receive("get_bug").with_args(2).and_return(bugs[1])
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
         flexmock(JIRABugTracker).should_receive("login")
-        flexmock(errata).should_receive("Advisory").and_return(Advisory)
-        flexmock(errata).should_receive("remove_multi_jira_issues")
-        flexmock(JIRABugTracker).should_receive("get_bug").with_args("OCPBUGS-3").and_return(issues[0])
-        flexmock(JIRABugTracker).should_receive("get_bug").with_args("OCPBUGS-4").and_return(issues[1])
+        advisory = flexmock(jira_issues=['OCPBUGS-3', 'OCPBUGS-4', 'OCPBUGS-5'])
+        flexmock(errata).should_receive("Advisory").and_return(advisory)
+        flexmock(JIRABugTracker).should_receive("remove_bugs").with_args(advisory, ['OCPBUGS-3', 'OCPBUGS-4'], False)
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '--id', 'OCPBUGS-3', '--id', 'OCPBUGS-4', '-a',
-                                     '99999'])
-        self.assertIn("Found 2 bugs:", result.output)
-        self.assertIn("Removing bugs from advisory 99999", result.output)
-        self.assertEqual(result.exit_code, 0)
-
-    def test_remove_all(self):
-        runner = CliRunner()
-        issues = [flexmock(key=3, id=3), flexmock(key=4, id=4)]
-        flexmock(Runtime).should_receive("initialize")
-        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
-        flexmock(BugzillaBugTracker).should_receive("login")
-        flexmock(common).should_receive("find_default_advisory")
-        Advisory = flexmock(errata_bugs=[1, 2])
-        flexmock(Advisory).should_receive("removeBugs")
-        flexmock(Advisory).should_receive("commit")
-        flexmock(errata).should_receive("Advisory").and_return(Advisory)
-        flexmock(errata).should_receive("get_jira_issue").and_return(issues)
-        flexmock(errata).should_receive("remove_multi_jira_issues")
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '--all', '-a', '99999'])
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', 'OCPBUGS-3', 'OCPBUGS-4', '-a', '99999'])
         self.assertIn("Found 2 bugs", result.output)
         self.assertIn("Removing bugs from advisory 99999", result.output)
         self.assertEqual(result.exit_code, 0)
+
+    def test_remove_all_bugzilla(self):
+        runner = CliRunner()
+
+        flexmock(Runtime).should_receive("initialize")
+        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
+        flexmock(BugzillaBugTracker).should_receive("login")
+        advisory = flexmock(errata_bugs=[1, 2, 3])
+        flexmock(errata).should_receive("Advisory").and_return(advisory)
+        flexmock(BugzillaBugTracker).should_receive("remove_bugs").with_args(advisory, [1, 2, 3], False)
+
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '--all', '-a', '99999'])
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
+        self.assertIn("Found 3 bugs", result.output)
+        self.assertIn("Removing bugs from advisory 99999", result.output)
 
 
 if __name__ == '__main__':
