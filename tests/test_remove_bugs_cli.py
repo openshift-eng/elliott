@@ -56,7 +56,6 @@ class RemoveBugsTestCase(unittest.TestCase):
         flexmock(errata).should_receive("Advisory").and_return(advisory)
         flexmock(BugzillaBugTracker).should_receive("remove_bugs").with_args(advisory, [1, 2, 3], False)
 
-
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'remove-bugs', '--all', '-a', '99999'])
         if result.exit_code != 0:
             exc_type, exc_value, exc_traceback = result.exc_info
