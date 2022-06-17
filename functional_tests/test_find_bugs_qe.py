@@ -12,7 +12,7 @@ class FindBugsQETestCase(unittest.TestCase):
             ]
         )
         result = out.decode("utf-8")
-        self.assertRegex(self, result, "Found \\d+ bugs")
+        self.assertRegex(result, "Found \\d+ bugs")
 
 
 if __name__ == '__main__':
