@@ -432,8 +432,7 @@ def _filter_out_inviable_builds(kind, results, errata):
                 # though not very useful (there's a command for adding them,
                 # but not much point in doing it). just looking at the first one is fine.
                 errata_version_cache[eid] = metadata_comments_json[0]['release']
-            k = get_release_version(b.product_version)
-            if errata_version_cache[eid] == k:
+            if errata_version_cache[eid] == get_release_version(b.product_version):
                 in_same_version = True
                 break
         if not in_same_version:
