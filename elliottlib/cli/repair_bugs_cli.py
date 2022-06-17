@@ -144,14 +144,16 @@ def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment,
 
     green_print("Got bugs for advisory")
     for bug in attached_bugs:
-        if bug.status in original_state:
-            if close_placeholder and "Placeholder" in bug.summary:
-                bug_tracker.update_bug_status(bug, "CLOSED")
-            else:
+        if close_placeholder and "Placeholder" in bug.summary:
+            # if set close placeholder, ignore bug state
+            bug_tracker.update_bug_status(bug, "CLOSED")
+            changed_bug_count += 1
+        else:
+            if bug.status in original_state:
                 bug_tracker.update_bug_status(bug, new_state)
                 # only add comments for non-placeholder bug
                 if comment and not noop:
                     bug_tracker.add_comment(bug, comment, private=False)
-            changed_bug_count += 1
+                changed_bug_count += 1
 
     green_print("{} bugs successfully modified (or would have been)".format(changed_bug_count))
