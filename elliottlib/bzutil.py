@@ -215,9 +215,8 @@ class JIRABug(Bug):
 class BugTracker:
     def __init__(self, config: dict, tracker_type: str):
         self.config = config
+        self._server = self.config.get('server', '')
         self.type = tracker_type
-        self._server = config['bugzilla_config'].get('server', '') if config.get('bugzilla_config') else ''
-        self._jira_server = config['jira_config'].get('server', '') if config.get('jira_config') else ''
 
     def target_release(self) -> List:
         return self.config.get('target_release')
@@ -291,19 +290,26 @@ class BugTracker:
 class JIRABugTracker(BugTracker):
     @staticmethod
     def get_config(runtime) -> Dict:
-        return runtime.gitdata.load_data(key='bug').data
+        bug_config = runtime.gitdata.load_data(key='bug').data
+        # construct config so that all jira_config keys become toplevel keys
+        jira_config = bug_config.pop('jira_config')
+        for key in jira_config:
+            if key in bug_config:
+                raise ValueError(f"unexpected: top level config contains same key ({key}) as jira_config")
+            bug_config[key] = jira_config[key]
+        return bug_config
 
     def login(self, token_auth=None) -> JIRA:
         if not token_auth:
             token_auth = os.environ.get("JIRA_TOKEN")
             if not token_auth:
-                raise ValueError(f"elliott requires login credentials for {self._jira_server}. Set a JIRA_TOKEN env var ")
-        client = JIRA(self._jira_server, token_auth=token_auth)
+                raise ValueError(f"elliott requires login credentials for {self._server}. Set a JIRA_TOKEN env var ")
+        client = JIRA(self._server, token_auth=token_auth)
         return client
 
     def __init__(self, config):
         super().__init__(config, 'jira')
-        self._project = config['jira_config'].get('project', '') if config.get('jira_config') else ''
+        self._project = self.config.get('project', '')
         self._client: JIRA = self.login()
 
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
@@ -438,7 +444,14 @@ class JIRABugTracker(BugTracker):
 class BugzillaBugTracker(BugTracker):
     @staticmethod
     def get_config(runtime):
-        return runtime.gitdata.load_data(key='bug').data
+        bug_config = runtime.gitdata.load_data(key='bug').data
+        # construct config so that all bugzilla_config keys become toplevel keys
+        bz_config = bug_config.pop('bugzilla_config')
+        for key in bz_config:
+            if key in bug_config:
+                raise ValueError(f"unexpected: top level config contains same key ({key}) as bugzilla_config")
+            bug_config[key] = bz_config[key]
+        return bug_config
 
     def login(self):
         client = bugzilla.Bugzilla(self._server)
@@ -487,7 +500,7 @@ class BugzillaBugTracker(BugTracker):
 
     def create_bug(self, title, description, target_status, keywords: List, noop=False) -> BugzillaBug:
         create_info = self._client.build_createbug(
-            product=self.config.get('bugzilla_config').get('product'),
+            product=self.config.get('product'),
             version=self.config.get('version')[0],
             target_release=self.config.get('target_release')[0],
             component="Release",
@@ -905,10 +918,10 @@ class SearchURL(object):
 
     url_format = "https://{}/buglist.cgi?"
 
-    def __init__(self, bz_data):
-        self.bz_host = bz_data['bugzilla_config'].get('server', '') if bz_data.get('jira_config') else ''
-        self.classification = bz_data['bugzilla_config'].get('classification', '') if bz_data.get('jira_config') else ''
-        self.product = bz_data['bugzilla_config'].get('product', '') if bz_data.get('jira_config') else ''
+    def __init__(self, config):
+        self.bz_host = config.get('server', '')
+        self.classification = config.get('classification', '')
+        self.product = config.get('product', '')
         self.bug_status = []
         self.filters = []
         self.filter_operator = ""
