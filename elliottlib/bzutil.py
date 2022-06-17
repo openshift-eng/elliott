@@ -479,7 +479,8 @@ class BugzillaBugTracker(BugTracker):
         if noop:
             print(f"Would've removed bugs: {bugids}")
             return
-        return errata.remove_bugzilla_bugs(advisory_obj, bugids)
+        advisory_id = advisory_obj.errata_id
+        return errata.remove_multi_bugs(advisory_id, bugids)
 
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_bugzilla_bugs_with_retry(advisory_id, bugids, noop=noop)
@@ -509,6 +510,8 @@ class BugzillaBugTracker(BugTracker):
         return BugzillaBug(new_bug)
 
     def _update_bug_status(self, bugid, target_status):
+        if target_status == 'CLOSED':
+            return self._client.update_bugs([bugid], self._client.build_update(status=target_status,resolution='WONTFIX'))
         return self._client.update_bugs([bugid], self._client.build_update(status=target_status))
 
     def add_comment(self, bugid, comment: str, private, noop=False):
