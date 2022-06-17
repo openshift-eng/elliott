@@ -524,7 +524,8 @@ class BugzillaBugTracker(BugTracker):
 
     def _update_bug_status(self, bugid, target_status):
         if target_status == 'CLOSED':
-            return self._client.update_bugs([bugid], self._client.build_update(status=target_status,resolution='WONTFIX'))
+            return self._client.update_bugs([bugid], self._client.build_update(status=target_status,
+                                                                               resolution='WONTFIX'))
         return self._client.update_bugs([bugid], self._client.build_update(status=target_status))
 
     def add_comment(self, bugid, comment: str, private, noop=False):
