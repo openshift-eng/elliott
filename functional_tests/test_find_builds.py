@@ -4,7 +4,7 @@ from functional_tests import constants
 
 # This test may start failing once this version is EOL and we either change the
 # ocp-build-data bugzilla schema or all of the non-shipped builds are garbage-collected.
-version = "4.6"
+version = "4.3"
 
 
 class FindBuildsTestCase(unittest.TestCase):
