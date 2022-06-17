@@ -243,8 +243,15 @@ def parallel_results_with_progress(inputs, func, file=None):
 
 
 def get_release_version(pv):
-    """ there are two kind of format of product_version: OSE-4.1-RHEL-8 RHEL-7-OSE-4.1 RHEL-7-OSE-4.1-FOR-POWER-LE """
-    return re.search(r'OSE-(\d+\.\d+)', pv).groups()[0]
+    """ known formats of product_version:
+        - OSE-4.1-RHEL-8
+        - RHEL-7-OSE-4.1
+        - ...-FOR-POWER-LE and similar suffixes we probably no longer need
+        - OSE-IRONIC-4.11-RHEL-8
+
+        this will break and need fixing if we introduce more.
+    """
+    return re.search(r'OSE-(IRONIC-)?(\d+\.\d+)', pv).groups()[0]
 
 
 def convert_remote_git_to_https(source):
