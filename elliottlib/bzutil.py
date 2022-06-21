@@ -290,6 +290,9 @@ class BugTracker:
 class JIRABugTracker(BugTracker):
     @staticmethod
     def get_config(runtime) -> Dict:
+        major, minor = runtime.get_major_minor()
+        if major == 4 and minor < 6:
+            raise ValueError("ocp-build-data/bug.yml is not expected to be available for 4.X versions < 4.6")
         bug_config = runtime.gitdata.load_data(key='bug').data
         # construct config so that all jira_config keys become toplevel keys
         jira_config = bug_config.pop('jira_config')
@@ -444,6 +447,9 @@ class JIRABugTracker(BugTracker):
 class BugzillaBugTracker(BugTracker):
     @staticmethod
     def get_config(runtime):
+        major, minor = runtime.get_major_minor()
+        if major == 4 and minor < 6:
+            raise ValueError("ocp-build-data/bug.yml is not expected to be available for 4.X versions < 4.6")
         bug_config = runtime.gitdata.load_data(key='bug').data
         # construct config so that all bugzilla_config keys become toplevel keys
         bz_config = bug_config.pop('bugzilla_config')

@@ -251,7 +251,7 @@ def get_release_version(pv):
 
         this will break and need fixing if we introduce more.
     """
-    return re.search(r'OSE-(IRONIC-)?(\d+\.\d+)', pv).groups()[0]
+    return re.search(r'OSE-(IRONIC-)?(\d+\.\d+)', pv).groups()[1]
 
 
 def convert_remote_git_to_https(source):

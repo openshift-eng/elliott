@@ -8,13 +8,11 @@ class FindBugsQETestCase(unittest.TestCase):
         out = subprocess.check_output(
             constants.ELLIOTT_CMD
             + [
-                "--assembly=stream", "--group=openshift-4.3", "find-bugs:qe", '--noop'
+                "--assembly=stream", "--group=openshift-4.6", "find-bugs:qe", '--noop'
             ]
         )
-        search_string = "Searching for bugs with status MODIFIED and target release(s): 4.3.z, 4.3.0"
         result = out.decode("utf-8")
-        self.assertIn(search_string, result)
-        self.assertRegex(self, result, "Found \\d+ bugs")
+        self.assertRegex(result, "Found \\d+ bugs")
 
 
 if __name__ == '__main__':
