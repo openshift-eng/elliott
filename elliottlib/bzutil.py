@@ -1036,7 +1036,8 @@ def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
         return True
 
     # filter tracker bugs by OCP product
-    tracker_bugs = [b for b in bugtracker.get_bugs(tracker_ids) if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug()]
+    tracker_bugs = [b for b in bugtracker.get_bugs(tracker_ids, permissive=True)
+                    if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug()]
     if not tracker_bugs:
         # No OCP trackers found
         # is a first fix
