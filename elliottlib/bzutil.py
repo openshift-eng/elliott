@@ -323,8 +323,13 @@ class JIRABugTracker(BugTracker):
         if verbose:
             click.echo(query)
         bugs = self._search(query)
-        if not permissive and len(bugs) < len(bugids):
-            raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
+        if len(bugs) < len(bugids):
+            bugids_not_found = set(bugids) - {b.id for b in bugs}
+            msg = f"Some bugs could not be fetched ({len(bugids) - len(bugs)}): {bugids_not_found}"
+            if not permissive:
+                raise ValueError(msg)
+            else:
+                print(msg)
         return bugs
 
     def get_bug_remote_links(self, bug: JIRABug):
@@ -476,7 +481,13 @@ class BugzillaBugTracker(BugTracker):
     def get_bugs(self, bugids, permissive=False, check_tracker=False, **kwargs):
         if 'verbose' in kwargs:
             kwargs.pop('verbose')
-        return [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
+        bugs = [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
+        if len(bugs) < len(bugids):
+            bugids_not_found = set(bugids) - {b.id for b in bugs}
+            msg = f"Some bugs could not be fetched ({len(bugids)-len(bugs)}): {bugids_not_found}"
+            if permissive:
+                print(msg)
+        return bugs
 
     def client(self):
         return self._client
@@ -1036,7 +1047,8 @@ def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
         return True
 
     # filter tracker bugs by OCP product
-    tracker_bugs = [b for b in bugtracker.get_bugs(tracker_ids) if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug()]
+    tracker_bugs = [b for b in bugtracker.get_bugs(tracker_ids)
+                    if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug()]
     if not tracker_bugs:
         # No OCP trackers found
         # is a first fix
