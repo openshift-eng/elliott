@@ -141,6 +141,7 @@ class JIRABug(Bug):
 
     @property
     def sub_component(self):
+        # TODO: See usage. this can be correct or incorrect based in usage.
         return [c.name for c in self.bug.fields.components]
 
     @property
@@ -165,10 +166,12 @@ class JIRABug(Bug):
 
     @property
     def alias(self):
+        # TODO: See usage. this can be correct or incorrect based in usage.
         return self.bug.fields.labels
 
     @property
     def whiteboard(self):
+        # TODO: See usage. this can be correct or incorrect based in usage.
         return self.bug.fields.labels
 
     def _get_release_blocker(self):
@@ -478,7 +481,7 @@ class BugzillaBugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
-    def get_bugs(self, bugids, permissive=False, check_tracker=False, **kwargs):
+    def get_bugs(self, bugids, permissive=False, **kwargs):
         if 'verbose' in kwargs:
             kwargs.pop('verbose')
         bugs = [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
@@ -861,16 +864,16 @@ def get_bzapi(bz_data, interactive_login=False):
     return bzapi
 
 
-def _construct_query_url(bz_data, status, search_filter='default', flag=None):
-    query_url = SearchURL(bz_data)
+def _construct_query_url(config, status, search_filter='default', flag=None):
+    query_url = SearchURL(config)
     query_url.fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'sub_component',
                         'external_bugs', 'whiteboard', 'keywords', 'target_release']
 
     filter_list = []
-    if bz_data.get('filter'):
-        filter_list = bz_data.get('filter')
-    elif bz_data.get('filters'):
-        filter_list = bz_data.get('filters').get(search_filter)
+    if config.get('filter'):
+        filter_list = config.get('filter')
+    elif config.get('filters'):
+        filter_list = config.get('filters').get(search_filter)
 
     for f in filter_list:
         query_url.addFilter('component', 'notequals', f)
@@ -878,7 +881,7 @@ def _construct_query_url(bz_data, status, search_filter='default', flag=None):
     for s in status:
         query_url.addBugStatus(s)
 
-    for r in bz_data.get('target_release', []):
+    for r in config.get('target_release', []):
         query_url.addTargetRelease(r)
 
     if flag:

@@ -1,5 +1,6 @@
 from typing import Dict, List, Set
 import click
+import sys
 from errata_tool import Erratum
 
 from elliottlib import bzutil, constants
@@ -8,7 +9,7 @@ from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.errata import is_security_advisory
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corresponding_flaw_bugs, get_highest_security_impact, is_first_fix_any
+from elliottlib.bzutil import Bug, get_corresponding_flaw_bugs, get_highest_security_impact, is_first_fix_any
 
 
 @cli.command('attach-cve-flaws',
@@ -49,14 +50,17 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
 
     runtime.logger.info("Getting advisory %s", advisory_id)
     advisory = Erratum(errata_id=advisory_id)
-    if runtime.use_jira:
-        await attach_cve_flaws(runtime, advisory_id, advisory, noop, JIRABugTracker(
-            JIRABugTracker.get_config(runtime)))
-    await attach_cve_flaws(runtime, advisory_id, advisory, noop, BugzillaBugTracker(
-        BugzillaBugTracker.get_config(runtime)))
+    exit_code = 0
+    for b in runtime.bug_trackers.values():
+        try:
+            await attach_cve_flaws(runtime, advisory_id, noop, advisory, b)
+        except Exception as e:
+            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
+            exit_code = 1
+    sys.exit(exit_code)
 
 
-async def attach_cve_flaws(runtime, advisory_id, advisory, noop, bug_tracker):
+async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker):
     # get attached bugs from advisory
     runtime.logger.info("Querying bugs for CVE trackers")
     fields = ["target_release", "blocks", 'whiteboard', 'keywords']

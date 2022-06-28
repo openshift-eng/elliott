@@ -1,10 +1,11 @@
 import json
 import click
+import sys
 from datetime import datetime
 from typing import List, Set, Optional
 
 from elliottlib.assembly import assembly_issues_config
-from elliottlib.bzutil import BugzillaBugTracker, BugTracker, Bug, JIRABugTracker
+from elliottlib.bzutil import BugTracker, Bug
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import common
 from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print, chunk
@@ -113,24 +114,29 @@ advisory with the --add option.
         raise click.BadParameter("Use only one of --use-default-advisory, --add, or --into-default-advisories")
 
     runtime.initialize(mode="both")
-
-    if runtime.use_jira:
-        find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status, report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags,
-                        JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status, report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags,
-                    BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
-
-
-def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
-                    report, output, into_default_advisories, brew_event, noop, count_advisory_attach_flags, bug_tracker):
-    major_version, minor_version = runtime.get_major_minor()
+    major_version, _ = runtime.get_major_minor()
     find_bugs_obj = FindBugsSweep()
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
 
+    exit_code = 0
+    for b in runtime.bug_trackers.values():
+        try:
+            find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
+                            report, output, brew_event, noop, count_advisory_attach_flags, b)
+        except Exception as e:
+            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
+            exit_code = 1
+    sys.exit(exit_code)
+
+
+def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
+                    report, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
     if output == 'text':
-        green_prefix(f"Searching for bugs with status {' '.join(sorted(find_bugs_obj.status))} and target release(s):")
-        click.echo(" {tr}".format(tr=", ".join(bug_tracker.target_release())))
+        statuses = sorted(find_bugs_obj.status)
+        tr = bug_tracker.target_release()
+        green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
+
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)

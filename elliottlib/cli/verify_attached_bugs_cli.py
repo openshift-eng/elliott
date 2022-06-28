@@ -70,8 +70,8 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
     if runtime.use_jira:
-        verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
-    verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
+        await verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
+    await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
 
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):

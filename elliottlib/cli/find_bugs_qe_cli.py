@@ -1,9 +1,10 @@
 import click
+import sys
 
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib import (Runtime, bzutil, logutil)
 from elliottlib.cli.common import cli
 from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
+from elliottlib.util import green_prefix
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -30,16 +31,24 @@ def find_bugs_qe_cli(runtime: Runtime, noop):
 
 """
     runtime.initialize()
-    if runtime.use_jira:
-        find_bugs_qe(runtime, noop, JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    find_bugs_qe(runtime, noop, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+    find_bugs_obj = FindBugsQE()
+    exit_code = 0
+    for b in runtime.bug_trackers.values():
+        try:
+            find_bugs_qe(runtime, find_bugs_obj, noop, b)
+        except Exception as e:
+            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
+            exit_code = 1
+    sys.exit(exit_code)
 
 
-def find_bugs_qe(runtime, noop, bug_tracker):
+def find_bugs_qe(runtime, find_bugs_obj, noop, bug_tracker):
     major_version, minor_version = runtime.get_major_minor()
-    click.echo(f"Searching for bugs with status MODIFIED and target release(s): {', '.join(bug_tracker.target_release())}")
+    statuses = sorted(find_bugs_obj.status)
+    tr = bug_tracker.target_release()
+    green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
 
-    bugs = FindBugsQE().search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
+    bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
     click.echo(f"Found {len(bugs)} bugs: {', '.join(sorted(str(b.id) for b in bugs))}")
 
     release_comment = f"This bug is expected to ship in the next {major_version}.{minor_version} release."

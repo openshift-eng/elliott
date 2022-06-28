@@ -58,12 +58,16 @@ def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
         raise click.BadParameter(
             "--kind must be specified when not using --use-default-advisory")
 
-    if runtime.use_jira:
-        create_placeholder(runtime, kind, advisory, default_advisory_type, True, JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    create_placeholder(runtime, kind, advisory, default_advisory_type, False, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+    bug_trackers = runtime.bug_trackers
+    # we want to create one placeholder bug regardless of multiple bug trackers being used
+    # we give priority to jira in case both are in use
+    if runtime.use_jira or runtime.only_jira:
+        create_placeholder(kind, advisory, bug_trackers['jira'])
+    else:
+        create_placeholder(kind, advisory, bug_trackers['bugzilla'])
 
 
-def create_placeholder(runtime, kind, advisory, default_advisory_type, use_jira, bug_tracker):
+def create_placeholder(kind, advisory, bug_tracker):
     newbug = bug_tracker.create_placeholder(kind)
     click.echo("Created Bug: {} {}".format(newbug.id, newbug.weburl))
 
@@ -80,12 +84,7 @@ def create_placeholder(runtime, kind, advisory, default_advisory_type, use_jira,
                 "Error: Could not locate advisory {advs}".format(advs=advisory))
 
         try:
-            green_prefix("Adding placeholder bug to advisory:")
-            click.echo(" {advs}".format(advs=advisory))
-            if use_jira:
-                add_jira_issue(advisory, newbug.id)
-            else:
-                advs.addBugs([newbug.id])
-                advs.commit()
+            green_prefix(f"Adding placeholder bug to advisory: {advisory}")
+            bug_tracker.attach_bugs([newbug.id])
         except ErrataException as ex:
             raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
