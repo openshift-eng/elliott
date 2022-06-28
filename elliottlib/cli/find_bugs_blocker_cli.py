@@ -54,15 +54,14 @@ Use --exclude_status to filter out from default status list.
     $ elliott -g openshift-4.6 find-bugs:blocker --output json
 """
     runtime.initialize()
-    for b in runtime.bug_trackers.values():
-        find_bugs_blocker(runtime, output, include_status, exclude_status, b)
-
-
-def find_bugs_blocker(runtime, output, include_status, exclude_status, bug_tracker):
     find_bugs_obj = FindBugsBlocker()
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
+    for b in runtime.bug_trackers.values():
+        find_bugs_blocker(runtime, output, find_bugs_obj, b)
 
+
+def find_bugs_blocker(runtime, output, find_bugs_obj, bug_tracker):
     if output == 'text':
         statuses = sorted(find_bugs_obj.status)
         tr = bug_tracker.target_release()
