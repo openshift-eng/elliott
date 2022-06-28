@@ -1,5 +1,6 @@
 import json
 import click
+import sys
 from datetime import datetime
 from typing import List, Set, Optional
 
@@ -118,9 +119,15 @@ advisory with the --add option.
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
 
+    exit_code = 0
     for b in runtime.bug_trackers.values():
-        find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
-                        report, output, brew_event, noop, count_advisory_attach_flags, b)
+        try:
+            find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
+                            report, output, brew_event, noop, count_advisory_attach_flags, b)
+        except Exception as e:
+            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
+            exit_code = 1
+    sys.exit(exit_code)
 
 
 def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,

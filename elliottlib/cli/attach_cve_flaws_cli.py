@@ -1,5 +1,6 @@
 from typing import Dict, List, Set
 import click
+import sys
 from errata_tool import Erratum
 
 from elliottlib import bzutil, constants
@@ -49,8 +50,14 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
 
     runtime.logger.info("Getting advisory %s", advisory_id)
     advisory = Erratum(errata_id=advisory_id)
+    exit_code = 0
     for b in runtime.bug_trackers.values():
-        await attach_cve_flaws(runtime, advisory_id, noop, advisory, b)
+        try:
+            await attach_cve_flaws(runtime, advisory_id, noop, advisory, b)
+        except Exception as e:
+            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
+            exit_code = 1
+    sys.exit(exit_code)
 
 
 async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker):

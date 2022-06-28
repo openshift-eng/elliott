@@ -1,4 +1,5 @@
 import click
+import sys
 
 from elliottlib import (Runtime, bzutil, logutil)
 from elliottlib.cli.common import cli
@@ -31,8 +32,14 @@ def find_bugs_qe_cli(runtime: Runtime, noop):
 """
     runtime.initialize()
     find_bugs_obj = FindBugsQE()
+    exit_code = 0
     for b in runtime.bug_trackers.values():
-        find_bugs_qe(runtime, find_bugs_obj, noop, b)
+        try:
+            find_bugs_qe(runtime, find_bugs_obj, noop, b)
+        except Exception as e:
+            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
+            exit_code = 1
+    sys.exit(exit_code)
 
 
 def find_bugs_qe(runtime, find_bugs_obj, noop, bug_tracker):
