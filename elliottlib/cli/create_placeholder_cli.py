@@ -31,12 +31,12 @@ pass_runtime = click.make_pass_decorator(Runtime)
                   elliottlib.constants.standard_advisory_types),
               help='KIND [{}] of placeholder bug to create. Affects BZ title.'.format(
                   ', '.join(elliottlib.constants.standard_advisory_types)))
-@click.option('--attach', '-a', 'advisory',
+@click.option('--attach', '-a', 'advisory_id',
               type=int, metavar='ADVISORY',
               help='Attach the bug to ADVISORY')
 @use_default_advisory_option
 @pass_runtime
-def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
+def create_placeholder_cli(runtime, kind, advisory_id, default_advisory_type):
     """Create a placeholder bug for attaching to an advisory.
 
     KIND - The kind of placeholder to create ({}).
@@ -44,14 +44,14 @@ def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
 
     $ elliott --group openshift-4.1 create-placeholder --kind rpm --attach 12345
 """.format('/'.join(elliottlib.constants.standard_advisory_types))
-    if advisory and default_advisory_type:
+    if advisory_id and default_advisory_type:
         raise click.BadParameter(
             "Use only one of --use-default-advisory or --advisory")
 
     runtime.initialize()
 
     if default_advisory_type is not None:
-        advisory = find_default_advisory(runtime, default_advisory_type)
+        advisory_id = find_default_advisory(runtime, default_advisory_type)
         kind = default_advisory_type
 
     if kind is None:
@@ -62,29 +62,22 @@ def create_placeholder_cli(runtime, kind, advisory, default_advisory_type):
     # we want to create one placeholder bug regardless of multiple bug trackers being used
     # we give priority to jira in case both are in use
     if runtime.use_jira or runtime.only_jira:
-        create_placeholder(kind, advisory, bug_trackers['jira'])
+        create_placeholder(kind, advisory_id, bug_trackers['jira'])
     else:
-        create_placeholder(kind, advisory, bug_trackers['bugzilla'])
+        create_placeholder(kind, advisory_id, bug_trackers['bugzilla'])
 
 
-def create_placeholder(kind, advisory, bug_tracker):
+def create_placeholder(kind, advisory_id, bug_tracker):
     newbug = bug_tracker.create_placeholder(kind)
-    click.echo("Created Bug: {} {}".format(newbug.id, newbug.weburl))
+    click.echo(f"Created Bug: {newbug.id} {newbug.weburl}")
 
-    if advisory:
-        click.echo("Attaching to advisory...")
+    try:
+        advisory = Erratum(errata_id=advisory_id)
+    except GSSError:
+        exit_unauthenticated()
 
-        try:
-            advs = Erratum(errata_id=advisory)
-        except GSSError:
-            exit_unauthenticated()
+    if advisory is False:
+        raise ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
-        if advs is False:
-            raise ElliottFatalError(
-                "Error: Could not locate advisory {advs}".format(advs=advisory))
-
-        try:
-            green_prefix(f"Adding placeholder bug to advisory: {advisory}")
-            bug_tracker.attach_bugs([newbug.id])
-        except ErrataException as ex:
-            raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
+    click.echo("Attaching bug to advisory...")
+    bug_tracker.attach_bugs(advisory_id, [newbug.id])
