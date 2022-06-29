@@ -119,9 +119,9 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker):
     runtime.logger.info(f'Bugs already attached: {len(existing_bug_ids)}')
     runtime.logger.info(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
 
-    if not noop and new_bugs:
+    if new_bugs:
         runtime.logger.info('Attaching bugs %s', flaw_ids)
-        bug_tracker.attach_bugs(flaw_ids)
+        bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
 
     runtime.logger.info('Associating CVEs with builds')
     errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
