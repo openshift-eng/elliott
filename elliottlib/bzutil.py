@@ -301,6 +301,9 @@ class BugTracker:
         if comment_lines:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
 
+    def get_corresponding_flaw_bugs(self, tracker_bugs: List, flaw_bug_tracker=None, strict: bool = False):
+        raise NotImplementedError
+
 
 class JIRABugTracker(BugTracker):
     @staticmethod
@@ -463,6 +466,9 @@ class JIRABugTracker(BugTracker):
 
     def advisory_bug_ids(self, advisory_obj):
         return advisory_obj.jira_issues
+
+    def get_corresponding_flaw_bugs(self, tracker_bugs: List, flaw_bug_tracker=None, strict: bool = False):
+        raise NotImplementedError
 
 
 class BugzillaBugTracker(BugTracker):
@@ -658,41 +664,35 @@ class BugzillaBugTracker(BugTracker):
     def advisory_bug_ids(self, advisory_obj):
         return advisory_obj.errata_bugs
 
+    def get_corresponding_flaw_bugs(self, tracker_bugs: List, flaw_bug_tracker=None, strict: bool = False):
+        """
+        Get corresponding flaw bugs objects for the
+        given tracker bug objects
+        :return (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw bug id as value,
+                                            flaw_bugs is a dict with flaw bug id as key and flaw bug object as value
+        """
+        fields = ["product", "component", "depends_on", "alias", "severity", "summary"]
+        blocking_bugs = self.get_bugs(list(set(sum([t.blocks for t in tracker_bugs], []))), include_fields=fields)
+        flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs if bug.is_flaw_bug()}
 
-def get_corresponding_flaw_bugs(bug_tracker, tracker_bugs: List, fields: List, strict: bool = False):
-    """
-    Get corresponding flaw bugs objects for the
-    given tracker bug objects
-    :return (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw bug id as value,
-                                        flaw_bugs is a dict with flaw bug id as key and flaw bug object as value
-    """
-    # fields needed for is_flaw_bug()
-    if "product" not in fields:
-        fields.append("product")
-    if "component" not in fields:
-        fields.append("component")
+        # Validate that each tracker has a corresponding flaw bug
+        flaw_ids = set(flaw_id_bugs.keys())
+        no_flaws = set()
+        for tracker in tracker_bugs:
+            if not set(tracker.blocks).intersection(flaw_ids):
+                no_flaws.add(tracker.id)
+        if no_flaws:
+            msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
+            if strict:
+                raise exceptions.ElliottFatalError(msg)
+            else:
+                logger.warn(msg)
 
-    blocking_bugs = bug_tracker.get_bugs(list(set(sum([t.blocks for t in tracker_bugs], []))), include_fields=fields)
-    flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs if bug.is_flaw_bug()}
-
-    # Validate that each tracker has a corresponding flaw bug
-    flaw_ids = set(flaw_id_bugs.keys())
-    no_flaws = set()
-    for tracker in tracker_bugs:
-        if not set(tracker.blocks).intersection(flaw_ids):
-            no_flaws.add(tracker.id)
-    if no_flaws:
-        msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
-        if strict:
-            raise exceptions.ElliottFatalError(msg)
-        else:
-            logger.warn(msg)
-
-    tracker_flaws: Dict[int, List[int]] = {
-        tracker.id: [blocking for blocking in tracker.blocks if blocking in flaw_id_bugs]
-        for tracker in tracker_bugs
-    }
-    return tracker_flaws, flaw_id_bugs
+        tracker_flaws: Dict[int, List[int]] = {
+            tracker.id: [blocking for blocking in tracker.blocks if blocking in flaw_id_bugs]
+            for tracker in tracker_bugs
+        }
+        return tracker_flaws, flaw_id_bugs
 
 
 def get_highest_impact(trackers, tracker_flaws_map):

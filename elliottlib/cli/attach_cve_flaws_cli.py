@@ -52,9 +52,19 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     runtime.logger.info("Getting advisory %s", advisory_id)
     advisory = Erratum(errata_id=advisory_id)
     exit_code = 0
+
+    # Flaw bugs associated with jira tracker bugs
+    # exist in bugzilla. so to work with jira trackers
+    # we need both bugzilla and jira instances initialized
+    if runtime.only_jira:
+        runtime.use_jira = True
+
     for b in runtime.bug_trackers.values():
         try:
-            await attach_cve_flaws(runtime, advisory_id, noop, advisory, b)
+            flaw_bug_tracker = b
+            if b.type == 'jira':
+                flaw_bug_tracker = runtime.bug_trackers['bugzilla']
+            await attach_cve_flaws(runtime, advisory_id, noop, advisory, b, flaw_bug_tracker)
         except Exception as e:
             runtime.logger.error(traceback.format_exc())
             runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
@@ -62,7 +72,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     sys.exit(exit_code)
 
 
-async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker):
+async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, flaw_bug_tracker):
     # get attached bugs from advisory
     runtime.logger.info("Querying bugs for CVE trackers")
     fields = ["target_release", "blocks", 'whiteboard', 'keywords']
@@ -79,10 +89,9 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker):
     current_target_release = Bug.get_target_release(attached_tracker_bugs)
     runtime.logger.info(f'current_target_release: {current_target_release}')
 
-    tracker_flaws, flaw_id_bugs = get_corresponding_flaw_bugs(
-        bug_tracker,
+    tracker_flaws, flaw_id_bugs = bug_tracker.get_corresponding_flaw_bugs(
         attached_tracker_bugs,
-        fields=["depends_on", "alias", "severity", "summary"],
+        flaw_bug_tracker,
         strict=True
     )
     runtime.logger.info(f'Found {len(flaw_id_bugs)} corresponding flaw bugs: {sorted(flaw_id_bugs.keys())}')
