@@ -137,7 +137,8 @@ class JIRABug(Bug):
 
     @property
     def target_release(self):
-        return [x.name for x in self.bug.fields.fixVersions]
+        # field "Target Version"
+        return [x.name for x in self.bug.fields.customfield_12319940]
 
     @property
     def sub_component(self):
@@ -348,8 +349,8 @@ class JIRABugTracker(BugTracker):
         fields = {
             'project': {'key': self._project},
             'issuetype': {'name': 'Bug'},
-            'fixVersions': {'name': self.config.get('version')[0]},
-            'components': {'name': 'Release'},
+            'components': [{'name': 'Release'}],
+            'versions': [{'name': self.config.get('version')[0]}],  # Affects Version/s
             'summary': bug_title,
             'labels': keywords,
             'description': bug_description
@@ -397,7 +398,8 @@ class JIRABugTracker(BugTracker):
         if status:
             query += f" and status in ({','.join(status)})"
         if target_release:
-            query += f" and fixVersion in ({','.join(target_release)})"
+            tr = ','.join(target_release)
+            query += f' and "Target Version" in ({tr})'
         if include_labels:
             query += f" and labels in ({','.join(include_labels)})"
         if exclude_labels:
