@@ -264,11 +264,16 @@ def extras_bugs(bugs: type_bug_list) -> type_bug_list:
         "Logging",
         "Service Brokers",
         "Metering Operator",
-        "Node Feature Discovery Operator"
+        "Node Feature Discovery Operator",
+        "Cloud Native Events",
+        "Telco Edge",
     }  # we will probably find more
     extras_subcomponents = {
         ("Networking", "SR-IOV"),
         ("Storage", "Local Storage Operator"),
+        ("Cloud Native Events", "Hardware Event Proxy"),
+        ("Cloud Native Events", "Hardware Event Proxy Operator"),
+        ("Telco Edge", "TALO"),
     }
     extra_bugs = set()
     for bug in bugs:
