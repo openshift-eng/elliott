@@ -1,27 +1,14 @@
-import json
-
 import elliottlib
-from elliottlib import constants, logutil, Runtime
+from elliottlib import constants, logutil
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import exit_unauthenticated, ensure_erratatool_auth
-from elliottlib.util import green_prefix, green_print, parallel_results_with_progress, pbar_header
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
-from elliottlib.errata import add_jira_issue
+from elliottlib.util import exit_unauthenticated
 
-from errata_tool import Erratum, ErrataException
+from errata_tool import Erratum
 from spnego.exceptions import GSSError
-import requests
 import click
 
 LOGGER = logutil.getLogger(__name__)
-
-pass_runtime = click.make_pass_decorator(Runtime)
-
-#
-# Create Placeholder BZ
-# bugzilla:create-placeholder
-#
 
 
 @cli.command('create-placeholder',
@@ -35,8 +22,12 @@ pass_runtime = click.make_pass_decorator(Runtime)
               type=int, metavar='ADVISORY',
               help='Attach the bug to ADVISORY')
 @use_default_advisory_option
-@pass_runtime
-def create_placeholder_cli(runtime, kind, advisory_id, default_advisory_type):
+@click.option("--noop", "--dry-run",
+              required=False,
+              default=False, is_flag=True,
+              help="Print what would change, but don't change anything")
+@click.pass_obj
+def create_placeholder_cli(runtime, kind, advisory_id, default_advisory_type, noop):
     """Create a placeholder bug for attaching to an advisory.
 
     KIND - The kind of placeholder to create ({}).
@@ -45,30 +36,30 @@ def create_placeholder_cli(runtime, kind, advisory_id, default_advisory_type):
     $ elliott --group openshift-4.1 create-placeholder --kind rpm --attach 12345
 """.format('/'.join(elliottlib.constants.standard_advisory_types))
     if advisory_id and default_advisory_type:
-        raise click.BadParameter(
-            "Use only one of --use-default-advisory or --advisory")
+        raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
 
     runtime.initialize()
-
     if default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
         kind = default_advisory_type
 
-    if kind is None:
-        raise click.BadParameter(
-            "--kind must be specified when not using --use-default-advisory")
+    if not kind:
+        raise click.BadParameter("--kind must be specified when not using --use-default-advisory")
 
     bug_trackers = runtime.bug_trackers
     # we want to create one placeholder bug regardless of multiple bug trackers being used
     # we give priority to jira in case both are in use
     if runtime.use_jira or runtime.only_jira:
-        create_placeholder(kind, advisory_id, bug_trackers['jira'])
+        create_placeholder(kind, advisory_id, bug_trackers['jira'], noop)
     else:
-        create_placeholder(kind, advisory_id, bug_trackers['bugzilla'])
+        create_placeholder(kind, advisory_id, bug_trackers['bugzilla'], noop)
 
 
-def create_placeholder(kind, advisory_id, bug_tracker):
-    newbug = bug_tracker.create_placeholder(kind)
+def create_placeholder(kind, advisory_id, bug_tracker, noop):
+    newbug = bug_tracker.create_placeholder(kind, noop)
+    if noop:
+        return
+
     click.echo(f"Created Bug: {newbug.id} {newbug.weburl}")
 
     try:
