@@ -1,8 +1,9 @@
 import json
 import click
 import sys
+import traceback
 from datetime import datetime
-from typing import List, Set, Optional
+from typing import List, Optional
 
 from elliottlib.assembly import assembly_issues_config
 from elliottlib.bzutil import BugTracker, Bug
@@ -125,6 +126,7 @@ advisory with the --add option.
             find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
                             report, output, brew_event, noop, count_advisory_attach_flags, b)
         except Exception as e:
+            runtime.logger.error(traceback.format_exc())
             runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
             exit_code = 1
     sys.exit(exit_code)
@@ -279,7 +281,7 @@ def extras_bugs(bugs: type_bug_list) -> type_bug_list:
     for bug in bugs:
         if bug.component in extras_components:
             extra_bugs.add(bug)
-        elif hasattr(bug, 'sub_component') and (bug.component, bug.sub_component) in extras_subcomponents:
+        elif bug.sub_component and (bug.component, bug.sub_component) in extras_subcomponents:
             extra_bugs.add(bug)
     return extra_bugs
 

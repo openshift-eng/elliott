@@ -98,6 +98,13 @@ class BugzillaBug(Bug):
     def target_release(self):
         return self.bug.target_release
 
+    @property
+    def sub_component(self):
+        if hasattr(self.bug, 'sub_component'):
+            return self.bug.sub_component
+        else:
+            return None
+
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
 
@@ -113,7 +120,8 @@ class JIRABug(Bug):
 
     @property
     def component(self):
-        return self.bug.fields.components[0].name
+        component0 = self.bug.fields.components[0].name
+        return component0.split('/')[0]
 
     @property
     def status(self):
@@ -142,8 +150,11 @@ class JIRABug(Bug):
 
     @property
     def sub_component(self):
-        # TODO: See usage. this can be correct or incorrect based in usage.
-        return [c.name for c in self.bug.fields.components]
+        component0 = self.bug.fields.components[0].name
+        split = component0.split('/')
+        if len(split) < 2:
+            return None
+        return split[1]
 
     @property
     def resolution(self):

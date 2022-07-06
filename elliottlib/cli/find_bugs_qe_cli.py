@@ -1,7 +1,8 @@
 import click
 import sys
+import traceback
 
-from elliottlib import (Runtime, bzutil, logutil)
+from elliottlib import (Runtime, logutil)
 from elliottlib.cli.common import cli
 from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
 from elliottlib.util import green_prefix
@@ -37,6 +38,7 @@ def find_bugs_qe_cli(runtime: Runtime, noop):
         try:
             find_bugs_qe(runtime, find_bugs_obj, noop, b)
         except Exception as e:
+            runtime.logger.error(traceback.format_exc())
             runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
             exit_code = 1
     sys.exit(exit_code)

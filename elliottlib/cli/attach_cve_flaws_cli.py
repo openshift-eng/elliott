@@ -1,6 +1,7 @@
 from typing import Dict, List, Set
 import click
 import sys
+import traceback
 from errata_tool import Erratum
 
 from elliottlib import bzutil, constants
@@ -55,6 +56,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         try:
             await attach_cve_flaws(runtime, advisory_id, noop, advisory, b)
         except Exception as e:
+            runtime.logger.error(traceback.format_exc())
             runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
             exit_code = 1
     sys.exit(exit_code)
