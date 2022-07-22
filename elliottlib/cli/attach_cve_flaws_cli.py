@@ -10,7 +10,7 @@ from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.errata import is_security_advisory
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import Bug, get_corresponding_flaw_bugs, get_highest_security_impact, is_first_fix_any
+from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any
 
 
 @cli.command('attach-cve-flaws',
@@ -59,15 +59,13 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     if runtime.only_jira:
         runtime.use_jira = True
 
-    for b in runtime.bug_trackers.values():
+    for bug_tracker in runtime.bug_trackers.values():
         try:
-            flaw_bug_tracker = b
-            if b.type == 'jira':
-                flaw_bug_tracker = runtime.bug_trackers['bugzilla']
-            await attach_cve_flaws(runtime, advisory_id, noop, advisory, b, flaw_bug_tracker)
+            flaw_bug_tracker = runtime.bug_trackers['bugzilla'] if bug_tracker.type == 'jira' else None
+            await attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, flaw_bug_tracker)
         except Exception as e:
             runtime.logger.error(traceback.format_exc())
-            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
+            runtime.logger.error(f'exception with {bug_tracker.type} bug tracker: {e}')
             exit_code = 1
     sys.exit(exit_code)
 
@@ -77,8 +75,8 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, fl
     runtime.logger.info("Querying bugs for CVE trackers")
     fields = ["target_release", "blocks", 'whiteboard', 'keywords']
     advisory_bug_ids = bug_tracker.advisory_bug_ids(advisory)
-    attached_tracker_bugs = [bug for bug in bug_tracker.get_bugs(advisory_bug_ids, include_fields=fields,
-                                                                 permissive=True) if bug.is_tracker_bug()]
+    attached_tracker_bugs: List[Bug] = [bug for bug in bug_tracker.get_bugs(advisory_bug_ids, include_fields=fields,
+                                                                            permissive=True) if bug.is_tracker_bug()]
     runtime.logger.info(f'Found {len(attached_tracker_bugs)} {bug_tracker.type} tracker bugs attached to the advisory: '
                         f'{sorted(bug.id for bug in attached_tracker_bugs)}')
 

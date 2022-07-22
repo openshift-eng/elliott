@@ -301,7 +301,13 @@ class BugTracker:
         if comment_lines:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
 
-    def get_corresponding_flaw_bugs(self, tracker_bugs: List, flaw_bug_tracker=None, strict: bool = False):
+    def get_corresponding_flaw_bugs(self, tracker_bugs: List[Bug], flaw_bug_tracker=None, strict: bool = False):
+        """Get corresponding flaw bug objects for given list of tracker bug objects.
+        Accepts a flaw_bug_tracker object to fetch flaw bugs from incase it's different from self
+
+        :return: dict with tracker bug id as key and list of flaw bug objects as value
+        """
+
         raise NotImplementedError
 
 
@@ -467,7 +473,14 @@ class JIRABugTracker(BugTracker):
     def advisory_bug_ids(self, advisory_obj):
         return advisory_obj.jira_issues
 
-    def get_corresponding_flaw_bugs(self, tracker_bugs: List, flaw_bug_tracker=None, strict: bool = False):
+    def get_corresponding_flaw_bugs(self, tracker_bugs: List[Bug], flaw_bug_tracker: BugTracker = None, strict: bool =
+                                    False) -> (Dict[str, List[int]], Dict[int, Bug]):
+        """Get corresponding flaw bug objects for given list of tracker bug objects.
+        Accepts a flaw_bug_tracker object to fetch flaw bugs from incase it's different from self
+
+        :return: (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw
+        bug id as value, flaw_id_bugs is a dict with flaw bug id as key and flaw bug object as value
+        """
         raise NotImplementedError
 
 
@@ -664,12 +677,13 @@ class BugzillaBugTracker(BugTracker):
     def advisory_bug_ids(self, advisory_obj):
         return advisory_obj.errata_bugs
 
-    def get_corresponding_flaw_bugs(self, tracker_bugs: List, flaw_bug_tracker=None, strict: bool = False):
-        """
-        Get corresponding flaw bugs objects for the
-        given tracker bug objects
-        :return (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw bug id as value,
-                                            flaw_bugs is a dict with flaw bug id as key and flaw bug object as value
+    def get_corresponding_flaw_bugs(self, tracker_bugs: List[Bug], flaw_bug_tracker: BugTracker = None, strict: bool =
+                                    False) -> (Dict[int, List[int]], Dict[int, Bug]):
+        """Get corresponding flaw bug objects for given list of tracker bug objects.
+        Accepts a flaw_bug_tracker object to fetch flaw bugs from incase it's different from self
+
+        :return: (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw
+        bug id as value, flaw_id_bugs is a dict with flaw bug id as key and flaw bug object as value
         """
         fields = ["product", "component", "depends_on", "alias", "severity", "summary"]
         blocking_bugs = self.get_bugs(list(set(sum([t.blocks for t in tracker_bugs], []))), include_fields=fields)

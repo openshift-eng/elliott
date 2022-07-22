@@ -13,7 +13,7 @@ from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
 from elliottlib.util import (exit_unauthenticated, green_print,
                              minor_version_tuple, red_print)
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corresponding_flaw_bugs
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
 
 
 @cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
@@ -129,8 +129,7 @@ class BugValidator:
 
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
         # Retrieve flaw bugs in Bugzilla for attached_tracker_bugs
-        tracker_flaws, flaw_id_bugs = get_corresponding_flaw_bugs(
-            self.bug_tracker,
+        tracker_flaws, flaw_id_bugs = self.bug_tracker.get_corresponding_flaw_bugs(
             attached_trackers,
             fields=["depends_on", "alias", "severity", "summary"]
         )
