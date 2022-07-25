@@ -1,7 +1,7 @@
 import unittest
 from flexmock import flexmock
 from elliottlib import constants, exceptions, bzutil
-from elliottlib.bzutil import Bug, BugzillaBug, JIRABug
+from elliottlib.bzutil import Bug, BugzillaBug, JIRABug, BugzillaBugTracker
 
 
 class TestAttachCVEFlaws(unittest.TestCase):
@@ -29,12 +29,11 @@ class TestAttachCVEFlaws(unittest.TestCase):
         actual = JIRABug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
 
-    def test_get_corresponding_flaw_bugs(self):
+    def test_get_corresponding_flaw_bugs_bz(self):
         tracker_bugs = [
             flexmock(blocks=[1, 2], id=10),
             flexmock(blocks=[2, 3, 4], id=11),
         ]
-        bugs = [1, 2, 3, 4]
         product = 'Security Response'
         component = 'vulnerability'
         bug_a = flexmock(product=product, component=component, id=1)
@@ -52,13 +51,16 @@ class TestAttachCVEFlaws(unittest.TestCase):
             bug_d
         ]
 
-        fields = ["somefield"]
-        bzapi = flexmock()
-        flexmock(bzapi).should_receive("get_bugs").with_args(bugs, include_fields=["somefield", "product", "component"]).and_return(flaw_bugs)
+        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
+        flexmock(BugzillaBugTracker).should_receive("get_bugs").and_return(flaw_bugs)
+        bug_tracker = BugzillaBugTracker({})
 
         expected = 2
-        actual = len(bzutil.get_corresponding_flaw_bugs(bzapi, tracker_bugs, fields)[1])
+        actual = len(bug_tracker.get_corresponding_flaw_bugs(tracker_bugs)[1])
         self.assertEqual(expected, actual)
+
+    def test_get_corresponding_flaw_bugs_jira(self):
+        pass
 
     def test_validate_tracker_has_flaw(self):
         tracker_bugs = [
@@ -76,16 +78,15 @@ class TestAttachCVEFlaws(unittest.TestCase):
         flexmock(bug_c).should_receive("is_flaw_bug").and_return(True)
         flaw_bugs = [bug_a, bug_b, bug_c]
 
-        bzapi = flexmock()
-        (bzapi
-         .should_receive("get_bugs")
-         .and_return(flaw_bugs))
+        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
+        flexmock(BugzillaBugTracker).should_receive("get_bugs").and_return(flaw_bugs)
+        bug_tracker = BugzillaBugTracker({})
 
         self.assertRaisesRegex(
             exceptions.ElliottFatalError,
             r'^No flaw bugs could be found for these trackers: {10, 12}$',
-            bzutil.get_corresponding_flaw_bugs,
-            bzapi, tracker_bugs, ['some_field'], strict=True)
+            bug_tracker.get_corresponding_flaw_bugs,
+            tracker_bugs, strict=True)
 
     def test_is_first_fix_any_validate(self):
         bzapi = None
