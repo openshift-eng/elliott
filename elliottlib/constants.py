@@ -8,7 +8,7 @@ RHCOS_RELEASES_BASE_URL = "https://releases-rhcos-art.cloud.privileged.psi.redha
 CINCINNATI_BASE_URL = "https://api.openshift.com/api/upgrades_info/v1/graph"
 BREW_DOWNLOAD_TEMPLATE = BREW_DOWNLOAD_URL + "/packages/{name}/{version}/{release}/files/{file_path}"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
-RESULTSDB_API_URL = "https://resultsdb-api.engineering.redhat.com/api/v2.0"
+RESULTSDB_API_URL = "https://resultsdb-api.engineering.redhat.com"
 
 VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
 TRACKER_BUG_KEYWORDS = ['Security', 'SecurityTracking']

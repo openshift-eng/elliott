@@ -161,7 +161,7 @@ you read the docs.
     return ver.split('-')[1].split('.')[1]
 
 
-def pbar_header(msg_prefix='', msg='', seq=[], char='*'):
+def pbar_header(msg_prefix='', msg='', seq=[], char='*', file=None):
     """Generate a progress bar header for a given iterable or
 sequence. The given sequence must have a countable length. A bar of
 `char` characters is printed between square brackets.
@@ -171,6 +171,7 @@ sequence. The given sequence must have a countable length. A bar of
     :param sequence seq: A sequence (iterable) to size the progress
     bar against
     :param str char: The character to use when drawing the progress
+    :param file: the file to print the progress. None means stdout.
     bar
 
 For example:
@@ -188,9 +189,9 @@ default console fg color and weight.
 TODO: This would make a nice context wrapper.
 
     """
-    green_prefix(msg_prefix)
-    click.echo(msg)
-    click.echo("[" + (char * len(seq)) + "]")
+    green_prefix(msg_prefix, file=file)
+    click.echo(msg, file=file)
+    click.echo("[" + (char * len(seq)) + "]", file=file)
 
 
 def progress_func(func, char='*', file=None):
@@ -684,3 +685,10 @@ def brew_suffix_for_arch(arch: str) -> str:
 def chunk(a_sequence: Sequence[Any], chunk_size: int) -> List[Any]:
     for i in range(0, len(a_sequence), chunk_size):
         yield a_sequence[i:i + chunk_size]
+
+
+def all_same(items: Iterable[Any]):
+    """ Determine if all items are the same """
+    it = iter(items)
+    first = next(it, None)
+    return all(x == first for x in it)
