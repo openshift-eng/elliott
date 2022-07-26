@@ -486,18 +486,20 @@ class JIRABugTracker(BugTracker):
     def get_corresponding_flaw_bugs(self, tracker_bugs: List[JIRABug], flaw_bug_tracker: BugTracker = None,
                                     strict: bool = False):
         """Get corresponding flaw bug objects for given list of tracker bug objects.
-        Accepts a flaw_bug_tracker object to fetch flaw bugs from incase it's different from self
+        Accepts a flaw_bug_tracker object to fetch flaw bugs from, incase it's different from self
 
         :return: (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw
         bug id as value, flaw_id_bugs is a dict with flaw bug id as key and flaw bug object as value
         """
         bug_tracker = flaw_bug_tracker if flaw_bug_tracker else self
         flaw_bugs = bug_tracker.get_bugs(list(set(sum([t.corresponding_flaw_bug_ids for t in tracker_bugs], []))))
+        flaw_id_bugs = {}
         for f in flaw_bugs:
-            if not f.is_flaw_bug():
+            if f.is_flaw_bug():
+                flaw_id_bugs[f.id] = f
+            else:
                 logger.warn(f'{bug_tracker.type} Bug {f.id} is associated with a {self.type} tracker bug but is '
                             f'missing internal flaw bug attributes')
-        flaw_id_bugs = {bug.id: bug for bug in flaw_bugs}
 
         # Validate that each tracker has a corresponding flaw bug
         flaw_ids = set(flaw_id_bugs.keys())
@@ -512,7 +514,7 @@ class JIRABugTracker(BugTracker):
             else:
                 logger.warn(msg)
 
-        tracker_flaws: Dict[int, List[int]] = {
+        tracker_flaws: Dict[str, List[int]] = {
             tracker.id: [b for b in tracker.corresponding_flaw_bug_ids if b in flaw_id_bugs]
             for tracker in tracker_bugs
         }
