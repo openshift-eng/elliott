@@ -320,6 +320,9 @@ class BugTracker:
 
         raise NotImplementedError
 
+    def get_tracker_bugs(self, tracker_bug_ids: List, strict: bool = False):
+        raise NotImplementedError
+
 
 class JIRABugTracker(BugTracker):
     @staticmethod
@@ -482,6 +485,9 @@ class JIRABugTracker(BugTracker):
 
     def advisory_bug_ids(self, advisory_obj):
         return advisory_obj.jira_issues
+
+    def get_tracker_bugs(self, tracker_bug_ids: List, strict: bool = False):
+        return [b for b in self.get_bugs(tracker_bug_ids, permissive=not strict) if b.is_tracker_bug()]
 
     def get_corresponding_flaw_bugs(self, tracker_bugs: List[JIRABug], flaw_bug_tracker: BugTracker = None,
                                     strict: bool = False):
@@ -713,6 +719,11 @@ class BugzillaBugTracker(BugTracker):
 
     def advisory_bug_ids(self, advisory_obj):
         return advisory_obj.errata_bugs
+
+    def get_tracker_bugs(self, tracker_bug_ids: List, strict: bool = False):
+        fields = ["target_release", "blocks", 'whiteboard', 'keywords']
+        return [b for b in self.get_bugs(tracker_bug_ids, permissive=not strict, include_fields=fields) if
+                b.is_tracker_bug()]
 
     def get_corresponding_flaw_bugs(self, tracker_bugs: List[BugzillaBug], flaw_bug_tracker: BugTracker = None,
                                     strict: bool = False):

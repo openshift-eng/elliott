@@ -73,10 +73,8 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
 async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, flaw_bug_tracker):
     # get attached bugs from advisory
     runtime.logger.info("Querying bugs for CVE trackers")
-    fields = ["target_release", "blocks", 'whiteboard', 'keywords']
     advisory_bug_ids = bug_tracker.advisory_bug_ids(advisory)
-    attached_tracker_bugs: List[Bug] = [bug for bug in bug_tracker.get_bugs(advisory_bug_ids, include_fields=fields,
-                                                                            permissive=True) if bug.is_tracker_bug()]
+    attached_tracker_bugs: List[Bug] = bug_tracker.get_tracker_bugs(advisory_bug_ids)
     runtime.logger.info(f'Found {len(attached_tracker_bugs)} {bug_tracker.type} tracker bugs attached to the advisory: '
                         f'{sorted(bug.id for bug in attached_tracker_bugs)}')
 
