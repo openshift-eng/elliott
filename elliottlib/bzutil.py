@@ -526,43 +526,6 @@ class JIRABugTracker(BugTracker):
     def get_flaw_bugs(self, bug_ids: List, strict: bool = True):
         return [b for b in self.get_bugs(bug_ids, permissive=not strict) if b.is_flaw_bug()]
 
-    def get_corresponding_flaw_bugs(self, tracker_bugs: List[JIRABug], flaw_bug_tracker: BugTracker = None,
-                                    strict: bool = False):
-        """Get corresponding flaw bug objects for given list of tracker bug objects.
-        Accepts a flaw_bug_tracker object to fetch flaw bugs from, incase it's different from self
-
-        :return: (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw
-        bug id as value, flaw_id_bugs is a dict with flaw bug id as key and flaw bug object as value
-        """
-        bug_tracker = flaw_bug_tracker if flaw_bug_tracker else self
-        flaw_bugs = bug_tracker.get_bugs(list(set(sum([t.corresponding_flaw_bug_ids for t in tracker_bugs], []))))
-        flaw_id_bugs = {}
-        for f in flaw_bugs:
-            if f.is_flaw_bug():
-                flaw_id_bugs[f.id] = f
-            else:
-                logger.warn(f'{bug_tracker.type} Bug {f.id} is associated with a {self.type} tracker bug but is '
-                            f'missing internal flaw bug attributes')
-
-        # Validate that each tracker has a corresponding flaw bug
-        flaw_ids = set(flaw_id_bugs.keys())
-        no_flaws = set()
-        for tracker in tracker_bugs:
-            if not set(tracker.corresponding_flaw_bug_ids).intersection(flaw_ids):
-                no_flaws.add(tracker.id)
-        if no_flaws:
-            msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
-            if strict:
-                raise exceptions.ElliottFatalError(msg)
-            else:
-                logger.warn(msg)
-
-        tracker_flaws: Dict[str, List[int]] = {
-            tracker.id: [b for b in tracker.corresponding_flaw_bug_ids if b in flaw_id_bugs]
-            for tracker in tracker_bugs
-        }
-        return tracker_flaws, flaw_id_bugs
-
 
 class BugzillaBugTracker(BugTracker):
     @staticmethod
