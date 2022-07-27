@@ -74,11 +74,14 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, fl
     # get attached bugs from advisory
     runtime.logger.info("Querying bugs for CVE trackers")
     advisory_bug_ids = bug_tracker.advisory_bug_ids(advisory)
-    attached_tracker_bugs: List[Bug] = bug_tracker.get_tracker_bugs(advisory_bug_ids)
-    runtime.logger.info(f'Found {len(attached_tracker_bugs)} {bug_tracker.type} tracker bugs attached to the advisory: '
-                        f'{sorted(bug.id for bug in attached_tracker_bugs)}')
+    if not advisory_bug_ids:
+        runtime.logger.info(f'Found 0 {bug_tracker.type} bugs attached to advisory')
+        return
 
-    if len(attached_tracker_bugs) == 0:
+    attached_tracker_bugs: List[Bug] = bug_tracker.get_tracker_bugs(advisory_bug_ids, verbose=runtime.debug)
+    runtime.logger.info(f'Found {len(advisory_bug_ids)} {bug_tracker.type} tracker bugs attached to the advisory: '
+                        f'{sorted(advisory_bug_ids)}')
+    if not attached_tracker_bugs:
         return
 
     # validate and get target_release
@@ -103,7 +106,7 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, fl
         runtime.logger.info("detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in flaw_id_bugs.values()
-            if is_first_fix_any(bug_tracker, flaw_bug, current_target_release)
+            if is_first_fix_any(flaw_bug_tracker, flaw_bug, current_target_release)
         ]
 
     runtime.logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_id_bugs)} flaw bugs considered "first-fix"')
@@ -120,15 +123,8 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, fl
         advisory.commit()
 
     flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
-    runtime.logger.info(f'Request to attach {len(flaw_ids)} bugs to the advisory')
-    existing_bug_ids = bug_tracker.advisory_bug_ids(advisory)
-    new_bugs = set(flaw_ids) - set(existing_bug_ids)
-    runtime.logger.info(f'Bugs already attached: {len(existing_bug_ids)}')
-    runtime.logger.info(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
-
-    if new_bugs:
-        runtime.logger.info('Attaching bugs %s', flaw_ids)
-        bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
+    runtime.logger.info('Attaching bugs %s', flaw_ids)
+    flaw_bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
 
     runtime.logger.info('Associating CVEs with builds')
     errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))

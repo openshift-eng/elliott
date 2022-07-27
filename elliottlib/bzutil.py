@@ -340,7 +340,8 @@ class BugTracker:
     def _update_bug_status(self, bugid, target_status):
         raise NotImplementedError
 
-    def advisory_bug_ids(self, advisory_obj):
+    @staticmethod
+    def advisory_bug_ids(advisory_obj):
         raise NotImplementedError
 
     def create_placeholder(self, kind, noop=False):
@@ -372,7 +373,7 @@ class BugTracker:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
 
     def get_corresponding_flaw_bugs(self, tracker_bugs: List[Bug], flaw_bug_tracker=None,
-                                    strict: bool = False):
+                                    strict: bool = False, verbose: bool = False):
         """Get corresponding flaw bug objects for given list of tracker bug objects.
         Accepts a flaw_bug_tracker object to fetch flaw bugs from incase it's different from self
 
@@ -381,7 +382,9 @@ class BugTracker:
         """
         bug_tracker = flaw_bug_tracker if flaw_bug_tracker else self
         flaw_bugs = bug_tracker.get_flaw_bugs(
-            list(set(sum([t.corresponding_flaw_bug_ids for t in tracker_bugs], []))))
+            list(set(sum([t.corresponding_flaw_bug_ids for t in tracker_bugs], []))),
+            verbose=verbose
+        )
         flaw_id_bugs = {bug.id: bug for bug in flaw_bugs}
 
         # Validate that each tracker has a corresponding flaw bug
@@ -403,10 +406,10 @@ class BugTracker:
         }
         return tracker_flaws, flaw_id_bugs
 
-    def get_tracker_bugs(self, tracker_bug_ids: List, strict: bool = False):
+    def get_tracker_bugs(self, bug_ids: List, strict: bool = False, verbose: bool = False):
         raise NotImplementedError
 
-    def get_flaw_bugs(self, bug_ids: List, strict: bool = True):
+    def get_flaw_bugs(self, bug_ids: List, strict: bool = True, verbose: bool = False):
         raise NotImplementedError
 
 
@@ -442,6 +445,8 @@ class JIRABugTracker(BugTracker):
         return JIRABug(self._client.issue(bugid, **kwargs))
 
     def get_bugs(self, bugids: List[str], permissive=False, verbose=False, **kwargs) -> List[JIRABug]:
+        if not bugids:
+            return []
         query = self._query(bugids=bugids, with_target_release=False)
         if verbose:
             click.echo(query)
@@ -569,14 +574,15 @@ class JIRABugTracker(BugTracker):
                 f'before("{dt}")'
         return self._search(query, verbose=True)
 
-    def advisory_bug_ids(self, advisory_obj):
+    @staticmethod
+    def advisory_bug_ids(advisory_obj):
         return advisory_obj.jira_issues
 
-    def get_tracker_bugs(self, bug_ids: List, strict: bool = False):
-        return [b for b in self.get_bugs(bug_ids, permissive=not strict) if b.is_tracker_bug()]
+    def get_tracker_bugs(self, bug_ids: List, strict: bool = False, verbose: bool = False):
+        return [b for b in self.get_bugs(bug_ids, permissive=not strict, verbose=verbose) if b.is_tracker_bug()]
 
-    def get_flaw_bugs(self, bug_ids: List, strict: bool = True):
-        return [b for b in self.get_bugs(bug_ids, permissive=not strict) if b.is_flaw_bug()]
+    def get_flaw_bugs(self, bug_ids: List, strict: bool = True, verbose: bool = False):
+        return [b for b in self.get_bugs(bug_ids, permissive=not strict, verbose=verbose) if b.is_flaw_bug()]
 
 
 class BugzillaBugTracker(BugTracker):
@@ -609,8 +615,11 @@ class BugzillaBugTracker(BugTracker):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
     def get_bugs(self, bugids, permissive=False, **kwargs):
+        if not bugids:
+            return []
         if 'verbose' in kwargs:
-            kwargs.pop('verbose')
+            if kwargs.pop('verbose'):
+                click.echo(f'get_bugs called with bugids: {bugids}, permissive: {permissive} and kwargs: {kwargs}')
         bugs = [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
         if len(bugs) < len(bugids):
             bugids_not_found = set(bugids) - {b.id for b in bugs}
@@ -769,17 +778,18 @@ class BugzillaBugTracker(BugTracker):
 
         return qualified_bugs
 
-    def advisory_bug_ids(self, advisory_obj):
+    @staticmethod
+    def advisory_bug_ids(advisory_obj):
         return advisory_obj.errata_bugs
 
-    def get_tracker_bugs(self, bug_ids: List, strict: bool = False):
+    def get_tracker_bugs(self, bug_ids: List, strict: bool = False, verbose: bool = False):
         fields = ["target_release", "blocks", 'whiteboard', 'keywords']
-        return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields) if
+        return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields, verbose=verbose) if
                 b.is_tracker_bug()]
 
-    def get_flaw_bugs(self, bug_ids: List, strict: bool = True):
+    def get_flaw_bugs(self, bug_ids: List, strict: bool = True, verbose: bool = False):
         fields = ["product", "component", "depends_on", "alias", "severity", "summary"]
-        return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields) if
+        return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields, verbose=verbose) if
                 b.is_flaw_bug()]
 
 
