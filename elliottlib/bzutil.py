@@ -41,6 +41,10 @@ class Bug:
     def creation_time_parsed(self):
         raise NotImplementedError
 
+    @property
+    def corresponding_flaw_bug_ids(self):
+        raise NotImplementedError
+
     def is_tracker_bug(self):
         return set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
 
@@ -104,6 +108,10 @@ class BugzillaBug(Bug):
             return self.bug.sub_component
         else:
             return None
+
+    @property
+    def corresponding_flaw_bug_ids(self):
+        return self.bug.blocks
 
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
@@ -311,16 +319,42 @@ class BugTracker:
         if comment_lines:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
 
-    def get_corresponding_flaw_bugs(self, tracker_bugs: List[Bug], flaw_bug_tracker=None, strict: bool = False):
+    def get_corresponding_flaw_bugs(self, tracker_bugs: List[Bug], flaw_bug_tracker=None,
+                                    strict: bool = False):
         """Get corresponding flaw bug objects for given list of tracker bug objects.
         Accepts a flaw_bug_tracker object to fetch flaw bugs from incase it's different from self
 
-        :return: dict with tracker bug id as key and list of flaw bug objects as value
+        :return: (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw
+        bug id as value, flaw_id_bugs is a dict with flaw bug id as key and flaw bug object as value
         """
+        bug_tracker = flaw_bug_tracker if flaw_bug_tracker else self
+        flaw_bugs = bug_tracker.get_flaw_bugs(
+            list(set(sum([t.corresponding_flaw_bug_ids for t in tracker_bugs], []))))
+        flaw_id_bugs = {bug.id: bug for bug in flaw_bugs}
 
-        raise NotImplementedError
+        # Validate that each tracker has a corresponding flaw bug
+        flaw_ids = set(flaw_id_bugs.keys())
+        no_flaws = set()
+        for tracker in tracker_bugs:
+            if not set(tracker.corresponding_flaw_bug_ids).intersection(flaw_ids):
+                no_flaws.add(tracker.id)
+        if no_flaws:
+            msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
+            if strict:
+                raise exceptions.ElliottFatalError(msg)
+            else:
+                logger.warn(msg)
+
+        tracker_flaws = {
+            tracker.id: [b for b in tracker.corresponding_flaw_bug_ids if b in flaw_id_bugs]
+            for tracker in tracker_bugs
+        }
+        return tracker_flaws, flaw_id_bugs
 
     def get_tracker_bugs(self, tracker_bug_ids: List, strict: bool = False):
+        raise NotImplementedError
+
+    def get_flaw_bugs(self, bug_ids: List, strict: bool = True):
         raise NotImplementedError
 
 
@@ -486,8 +520,11 @@ class JIRABugTracker(BugTracker):
     def advisory_bug_ids(self, advisory_obj):
         return advisory_obj.jira_issues
 
-    def get_tracker_bugs(self, tracker_bug_ids: List, strict: bool = False):
-        return [b for b in self.get_bugs(tracker_bug_ids, permissive=not strict) if b.is_tracker_bug()]
+    def get_tracker_bugs(self, bug_ids: List, strict: bool = False):
+        return [b for b in self.get_bugs(bug_ids, permissive=not strict) if b.is_tracker_bug()]
+
+    def get_flaw_bugs(self, bug_ids: List, strict: bool = True):
+        return [b for b in self.get_bugs(bug_ids, permissive=not strict) if b.is_flaw_bug()]
 
     def get_corresponding_flaw_bugs(self, tracker_bugs: List[JIRABug], flaw_bug_tracker: BugTracker = None,
                                     strict: bool = False):
@@ -720,41 +757,15 @@ class BugzillaBugTracker(BugTracker):
     def advisory_bug_ids(self, advisory_obj):
         return advisory_obj.errata_bugs
 
-    def get_tracker_bugs(self, tracker_bug_ids: List, strict: bool = False):
+    def get_tracker_bugs(self, bug_ids: List, strict: bool = False):
         fields = ["target_release", "blocks", 'whiteboard', 'keywords']
-        return [b for b in self.get_bugs(tracker_bug_ids, permissive=not strict, include_fields=fields) if
+        return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields) if
                 b.is_tracker_bug()]
 
-    def get_corresponding_flaw_bugs(self, tracker_bugs: List[BugzillaBug], flaw_bug_tracker: BugTracker = None,
-                                    strict: bool = False):
-        """Get corresponding flaw bug objects for given list of tracker bug objects.
-        Accepts a flaw_bug_tracker object to fetch flaw bugs from incase it's different from self
-
-        :return: (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw
-        bug id as value, flaw_id_bugs is a dict with flaw bug id as key and flaw bug object as value
-        """
+    def get_flaw_bugs(self, bug_ids: List, strict: bool = True):
         fields = ["product", "component", "depends_on", "alias", "severity", "summary"]
-        blocking_bugs = self.get_bugs(list(set(sum([t.blocks for t in tracker_bugs], []))), include_fields=fields)
-        flaw_id_bugs: Dict[int, Bug] = {bug.id: bug for bug in blocking_bugs if bug.is_flaw_bug()}
-
-        # Validate that each tracker has a corresponding flaw bug
-        flaw_ids = set(flaw_id_bugs.keys())
-        no_flaws = set()
-        for tracker in tracker_bugs:
-            if not set(tracker.blocks).intersection(flaw_ids):
-                no_flaws.add(tracker.id)
-        if no_flaws:
-            msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
-            if strict:
-                raise exceptions.ElliottFatalError(msg)
-            else:
-                logger.warn(msg)
-
-        tracker_flaws: Dict[int, List[int]] = {
-            tracker.id: [blocking for blocking in tracker.blocks if blocking in flaw_id_bugs]
-            for tracker in tracker_bugs
-        }
-        return tracker_flaws, flaw_id_bugs
+        return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields) if
+                b.is_flaw_bug()]
 
 
 def get_highest_impact(trackers, tracker_flaws_map):

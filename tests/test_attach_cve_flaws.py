@@ -36,7 +36,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
         valid_flaw_b = BugzillaBug(flexmock(product=product, component=component, id=2))
         invalid_flaw_c = BugzillaBug(flexmock(product='foo', component=component, id=3))
         invalid_flaw_d = BugzillaBug(flexmock(product=product, component='bar', id=4))
-        flaw_bugs = [valid_flaw_a, valid_flaw_b, invalid_flaw_c, invalid_flaw_d]
+        flaw_bugs = [valid_flaw_a, valid_flaw_b]
 
         tracker_bugs = [
             BugzillaBug(flexmock(blocks=[valid_flaw_a.id, valid_flaw_b.id], id=10)),
@@ -83,9 +83,9 @@ class TestAttachCVEFlaws(unittest.TestCase):
 
     def test_get_corresponding_flaw_bugs_bz_strict(self):
         tracker_bugs = [
-            flexmock(blocks=[1, 2], id=10),
-            flexmock(blocks=[2, 3], id=11),
-            flexmock(blocks=[], id=12)
+            BugzillaBug(flexmock(blocks=[1, 2], id=10)),
+            BugzillaBug(flexmock(blocks=[2, 3], id=11)),
+            BugzillaBug(flexmock(blocks=[], id=12))
         ]
         product = 'Security Response'
         component = 'vulnerability'
