@@ -4,7 +4,7 @@ import sys
 import traceback
 from errata_tool import Erratum
 
-from elliottlib import bzutil, constants
+from elliottlib import constants
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
