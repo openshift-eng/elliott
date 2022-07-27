@@ -120,6 +120,7 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, fl
     advisory = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, first_fix_flaw_bugs)
     if not noop:
         runtime.logger.info("Updating advisory details %s", advisory_id)
+        # this removes all attached jira bugs :/
         advisory.commit()
 
     flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
