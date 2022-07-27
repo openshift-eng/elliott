@@ -248,6 +248,7 @@ def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, m
                                "no corresponding brew builds were found attached to the rpm advisory. "
                                "First attach builds and then rerun to attach the bugs")
                     click.echo(not_found)
+                    raise ValueError(f'No build found for CVE (bug, package) tuples: {not_found}')
             else:
                 click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
 
