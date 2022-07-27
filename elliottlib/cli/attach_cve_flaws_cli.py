@@ -141,11 +141,11 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, fl
         await errata_api.close()
 
 
-async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, attached_tracker_bugs: List[Bug], tracker_flaws: Dict[int, List[int]], flaw_id_bugs: Dict[int, Bug], dry_run: bool):
+async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, attached_tracker_bugs: List[Bug], tracker_flaws, flaw_id_bugs: Dict[int, Bug], dry_run: bool):
     attached_builds = [b for pv in advisory.errata_builds.values() for b in pv]
     cve_components_mapping: Dict[str, Set[str]] = {}
     for tracker in attached_tracker_bugs:
-        component_name = bzutil.get_whiteboard_component(tracker)
+        component_name = tracker.whiteboard_component
         if not component_name:
             raise ValueError(f"Bug {tracker.id} doesn't have a valid component name in its whiteboard field.")
         flaw_ids = tracker_flaws[tracker.id]

@@ -20,7 +20,7 @@ from koji import ClientSession
 
 from elliottlib import constants, exceptions, exectools, logutil, bzutil, errata, util
 from elliottlib.metadata import Metadata
-from elliottlib.util import isolate_timestamp_in_release, red_print
+from elliottlib.util import isolate_timestamp_in_release
 
 logger = logutil.getLogger(__name__)
 
@@ -45,6 +45,10 @@ class Bug:
     def corresponding_flaw_bug_ids(self):
         raise NotImplementedError
 
+    @property
+    def whiteboard_component(self):
+        raise NotImplementedError
+
     def is_tracker_bug(self):
         return set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
 
@@ -52,7 +56,27 @@ class Bug:
         return self.product == "Security Response" and self.component == "vulnerability"
 
     @staticmethod
-    def get_target_release(bugs: List[bzutil.Bug]) -> str:
+    def get_valid_rpm_cves(bugs: List[Bug]) -> Dict[Bug, str]:
+        """ Get valid rpm cve trackers with their component names
+
+        An OCP rpm cve tracker has a whiteboard value "component:<component_name>"
+        excluding suffixes (apb|container)
+
+        :param bugs: list of bug objects
+        :returns: A dict of bug object as key and component name as value
+        """
+
+        rpm_cves: Dict[Bug, str] = {}
+        for b in bugs:
+            if b.is_tracker_bug():
+                component_name = b.whiteboard_component
+                # filter out non-rpm suffixes
+                if component_name and not re.search(r'-(apb|container)$', component_name):
+                    rpm_cves[b] = component_name
+        return rpm_cves
+
+    @staticmethod
+    def get_target_release(bugs: List[Bug]) -> str:
         """
         Pass in a list of bugs and get their target release version back.
         Raises exception if they have different target release versions set.
@@ -112,6 +136,22 @@ class BugzillaBug(Bug):
     @property
     def corresponding_flaw_bug_ids(self):
         return self.bug.blocks
+
+    @property
+    def whiteboard_component(self):
+        """Get whiteboard component value of a bug.
+
+        An OCP cve tracker has a whiteboard value "component:<component_name>"
+        to indicate which component the bug belongs to.
+
+        :returns: a string if a value is found, otherwise None
+        """
+        marker = r'component:\s*(\S+)'
+        tmp = re.search(marker, self.bug.whiteboard)
+        if tmp and len(tmp.groups()) == 1:
+            component_name = tmp.groups()[0]
+            return component_name
+        return None
 
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
@@ -200,9 +240,21 @@ class JIRABug(Bug):
         return self.bug.fields.labels
 
     @property
-    def whiteboard(self):
-        # TODO: See usage. this can be correct or incorrect based in usage.
-        return self.bug.fields.labels
+    def whiteboard_component(self):
+        """Get whiteboard component value of a bug.
+
+        An OCP cve tracker has a whiteboard value "component:<component_name>"
+        to indicate which component the bug belongs to.
+
+        :returns: a string if a value is found, otherwise None
+        """
+        marker = r'component:\s*(\S+)'
+        for label in self.bug.fields.labels:
+            tmp = re.search(marker, label)
+            if tmp and len(tmp.groups()) == 1:
+                component_name = tmp.groups()[0]
+                return component_name
+        return None
 
     def _get_release_blocker(self):
         # release blocker can be ['None','Approved'=='+','Proposed'=='?','Rejected'=='-']
@@ -758,89 +810,6 @@ def get_highest_impact(trackers, tracker_flaws_map):
     return constants.SECURITY_IMPACT[severity_index]
 
 
-def get_flaw_bugs(trackers):
-    """Get a list of flaw bugs blocked by a list of tracking bugs. For a definition of these terms see
-    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
-
-    :param trackers: A list of tracking bugs
-
-    :return: A list of flaw bug ids
-    """
-    flaw_ids = []
-    for t in trackers:
-        # Tracker bugs can block more than one flaw bug, but must be more than 0
-        if not t.blocks:
-            # This should never happen, log a warning here if it does
-            logger.warning("Warning: found tracker bugs which doesn't block any other bugs")
-        else:
-            flaw_ids.extend(t.blocks)
-    return flaw_ids
-
-
-def get_tracker_flaws_map(bz_bug_tracker: BugzillaBugTracker, trackers: List):
-    """Get flaw bugs blocked by tracking bugs. For a definition of these terms see
-    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
-
-    :param bz_bug_tracker: An instance of the BugzillaBugTracker class
-    :param trackers: A list of tracking bugs
-
-    :return: A dict with tracking bug IDs as keys and lists of flaw bugs as values
-    """
-    tracker_flaw_ids_map = {
-        tracker.id: get_flaw_bugs([tracker]) for tracker in trackers
-    }
-
-    flaw_ids = [flaw_id for _, flaw_ids in tracker_flaw_ids_map.items() for flaw_id in flaw_ids]
-    flaw_id_bug_map = bz_bug_tracker.get_bugs_map(flaw_ids)
-
-    tracker_flaws_map = {tracker.id: [] for tracker in trackers}
-    for tracker_id, flaw_ids in tracker_flaw_ids_map.items():
-        for flaw_id in flaw_ids:
-            flaw_bug = flaw_id_bug_map.get(flaw_id)
-            if not flaw_bug or not is_flaw_bug(flaw_bug):
-                logger.warning("Bug {} is not a flaw bug.".format(flaw_id))
-                continue
-            tracker_flaws_map[tracker_id].append(flaw_bug)
-    return tracker_flaws_map
-
-
-def is_flaw_bug(bug):
-    return bug.product == "Security Response" and bug.component == "vulnerability"
-
-
-def get_flaw_aliases(flaws):
-    """Get a map of flaw bug ids and associated CVE aliases. For a definition of these terms see
-    https://docs.engineering.redhat.com/display/PRODSEC/%5BDRAFT%5D+Security+bug+types
-
-    :param bzapi: An instance of the python-bugzilla Bugzilla class
-    :param flaws: Flaw bugs you want to get the aliases for
-
-    :return: A map of flaw bug ids and associated CVE alisas.
-
-    :raises:
-        BugzillaFatalError: If bugs contains invalid bug ids, or if some other error occurs trying to
-        use the Bugzilla XMLRPC api. Could be because you are not logged in to Bugzilla or the login
-        session has expired.
-    """
-    flaw_cve_map = {}
-    for flaw in flaws:
-        if flaw is None:
-            raise exceptions.BugzillaFatalError("Couldn't find bug with list of ids provided")
-        if flaw.product == "Security Response" and flaw.component == "vulnerability":
-            alias = flaw.alias
-            if len(alias) >= 1:
-                logger.debug("Found flaw bug with more than one alias, only alias which starts with CVE-")
-                for a in alias:
-                    if a.startswith('CVE-'):
-                        flaw_cve_map[flaw.id] = a
-            else:
-                flaw_cve_map[flaw.id] = ""
-    for key in flaw_cve_map.keys():
-        if flaw_cve_map[key] == "":
-            logger.warning("Found flaw bug with no alias, this can happen if a flaw hasn't been assigned to a CVE")
-    return flaw_cve_map
-
-
 def is_viable_bug(bug_obj):
     """ Check if a bug is viable to attach to an advisory.
 
@@ -851,66 +820,6 @@ def is_viable_bug(bug_obj):
     :returns: True if viable
     """
     return bug_obj.status in ["MODIFIED", "ON_QA", "VERIFIED"]
-
-
-def is_cve_tracker(bug_obj):
-    """ Check if a bug is a CVE tracker.
-
-    A CVE tracker bug must have `SecurityTracking` and `Security` keywords.
-
-    :param bug_obj: bug object
-    :returns: True if the bug is a CVE tracker.
-    """
-    return "SecurityTracking" in bug_obj.keywords and "Security" in bug_obj.keywords
-
-
-def get_whiteboard_component(bug):
-    """Get whiteboard component value of a bug.
-
-    An OCP cve tracker has a whiteboard value "component:<component_name>"
-    to indicate which component the bug belongs to.
-
-    :param bug: bug object
-    :returns: a string if a value is found, otherwise False
-    """
-    marker = r'component:\s*(\S+)'
-    tmp = re.search(marker, bug.whiteboard)
-    if tmp and len(tmp.groups()) == 1:
-        component_name = tmp.groups()[0]
-        return component_name
-    return False
-
-
-def get_valid_rpm_cves(bugs):
-    """ Get valid rpm cve trackers with their component names
-
-    An OCP rpm cve tracker has a whiteboard value "component:<component_name>"
-    excluding suffixes (apb|container)
-
-    :param bugs: list of bug objects
-    :returns: A dict of bug object as key and component name as value
-    """
-
-    rpm_cves = {}
-    for b in bugs:
-        if is_cve_tracker(b):
-            component_name = get_whiteboard_component(b)
-            # filter out non-rpm suffixes
-            if component_name and not re.search(r'-(apb|container)$', component_name):
-                rpm_cves[b] = component_name
-    return rpm_cves
-
-
-def get_bzapi(bz_data, interactive_login=False):
-    bzapi = bugzilla.Bugzilla(bz_data['bugzilla_config']['server'])
-    if not bzapi.logged_in:
-        print("elliott requires cached login credentials for {}".format(bz_data['server']))
-        if interactive_login:
-            bzapi.interactive_login()
-        else:
-            red_print("Login using 'bugzilla login --api-key'")
-            exit(1)
-    return bzapi
 
 
 def _construct_query_url(config, status, search_filter='default', flag=None):
@@ -1124,7 +1033,7 @@ def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
         # filter out trackers that don't belong ex. 3.X bugs for 4.X target release
         if not same_major_release(b):
             continue
-        component = bzutil.get_whiteboard_component(b)
+        component = b.whiteboard_component
         if not component:
             component = component_not_found
 

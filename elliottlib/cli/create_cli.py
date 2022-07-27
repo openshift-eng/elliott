@@ -1,13 +1,14 @@
 import click
 import datetime
 import elliottlib
+from elliottlib.bzutil import BugzillaBugTracker
 from elliottlib.cli.common import cli
 from elliottlib.cli.add_metadata_cli import add_metadata_cli
 from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
 from elliottlib.exectools import cmd_assert
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import YMD, validate_release_date, \
-    validate_email_address, exit_unauthorized, green_prefix, yellow_print
+    validate_email_address, exit_unauthorized, green_prefix
 pass_runtime = click.make_pass_decorator(elliottlib.Runtime)
 
 LOGGER = elliottlib.logutil.getLogger(__name__)
@@ -97,7 +98,6 @@ advisory.
     runtime.initialize()
 
     et_data = runtime.gitdata.load_data(key='erratatool').data
-    bz_data = runtime.gitdata.load_data(key='bug').data
 
     # User entered a valid value for --date, set the release date
     release_date = datetime.datetime.strptime(date, YMD)
@@ -107,10 +107,10 @@ advisory.
     unique_bugs = set(bugs)
 
     if bugs:
-        bzapi = elliottlib.bzutil.get_bzapi(bz_data)
+        bug_tracker = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime))
         LOGGER.info("Fetching bugs {} from Bugzilla...".format(
             " ".join(map(str, bugs))))
-        bug_objects = bzapi.getbugs(bugs)
+        bug_objects = bug_tracker.get_bugs(bugs)
         # assert bugs are viable for a new advisory.
         _assert_bugs_are_viable(bugs, bug_objects)
 
