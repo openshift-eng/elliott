@@ -10,7 +10,7 @@ from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.errata import is_security_advisory
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any
+from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, JIRABugTracker
 
 
 @cli.command('attach-cve-flaws',
@@ -117,10 +117,10 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, fl
 
     errata_config = runtime.gitdata.load_data(key='erratatool').data
     cve_boilerplate = errata_config['boilerplates']['cve']
-    advisory = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, first_fix_flaw_bugs)
-    if not noop:
+    advisory, updated = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, first_fix_flaw_bugs)
+    if not noop and updated:
+        # this removes all attached jira bugs so use carefully
         runtime.logger.info("Updating advisory details %s", advisory_id)
-        # this removes all attached jira bugs :/
         advisory.commit()
 
     flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
@@ -162,10 +162,12 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
     :param cve_boilerplate: cve template for rhsa
     :param advisory: advisory object to update
     :param flaw_bugs: flaw bug objects determined to be attached to the advisory
-    :returns: updated advisory object, that can be committed i.e advisory.commit()
+    :returns: updated advisory object and a boolean indicating if advisory was updated
     """
+    updated = False
     if not is_security_advisory(advisory):
         logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
+        updated = True
         advisory.update(
             errata_type='RHSA',
             security_reviewer=cve_boilerplate['security_reviewer'],
@@ -179,28 +181,31 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
     if not advisory.cve_names:
         cve_str = ' '.join(cve_names)
         advisory.update(cve_names=cve_str)
+        updated = True
     else:
         cves_not_in_cve_names = [n for n in cve_names if n not in advisory.cve_names]
         if cves_not_in_cve_names:
             s = ' '.join(cves_not_in_cve_names)
             cve_str = f"{advisory.cve_names} {s}".strip()
             advisory.update(cve_names=cve_str)
+            updated = True
+
+    if updated:
+        formatted_cve_list = '\n'.join([
+            f'* {b.summary.replace(b.alias[0], "").strip()} ({b.alias[0]})' for b in flaw_bugs
+        ])
+        formatted_description = cve_boilerplate['description'].format(CVES=formatted_cve_list)
+        advisory.update(description=formatted_description)
 
     highest_impact = get_highest_security_impact(flaw_bugs)
-    logger.info('Adjusting advisory security impact from {} to {}'.format(
-        advisory.security_impact, highest_impact
-    ))
-    advisory.update(security_impact=highest_impact)
+    if highest_impact != advisory.security_impact:
+        logger.info(f'Adjusting advisory security impact from {advisory.security_impact} to {highest_impact}')
+        advisory.update(security_impact=highest_impact)
+        updated = True
 
     if highest_impact not in advisory.topic:
         topic = cve_boilerplate['topic'].format(IMPACT=highest_impact)
         logger.info('Topic updated to include impact of {}'.format(highest_impact))
         advisory.update(topic=topic)
 
-    formatted_cve_list = '\n'.join([
-        f'* {b.summary.replace(b.alias[0],"").strip()} ({b.alias[0]})' for b in flaw_bugs
-    ])
-    formatted_description = cve_boilerplate['description'].format(CVES=formatted_cve_list)
-    advisory.update(description=formatted_description)
-
-    return advisory
+    return advisory, updated
