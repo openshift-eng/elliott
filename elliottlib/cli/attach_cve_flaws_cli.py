@@ -2,6 +2,7 @@ from typing import Dict, List, Set
 import click
 import sys
 import traceback
+import asyncio
 from errata_tool import Erratum
 
 from elliottlib import constants
@@ -59,30 +60,37 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     if runtime.only_jira:
         runtime.use_jira = True
 
+    tasks = []
     for bug_tracker in runtime.bug_trackers.values():
-        try:
-            flaw_bug_tracker = runtime.bug_trackers['bugzilla'] if bug_tracker.type == 'jira' else None
-            await attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, flaw_bug_tracker)
-        except Exception as e:
-            runtime.logger.error(traceback.format_exc())
-            runtime.logger.error(f'exception with {bug_tracker.type} bug tracker: {e}')
-            exit_code = 1
+        flaw_bug_tracker = runtime.bug_trackers['bugzilla'] if bug_tracker.type == 'jira' else None
+        tasks.append(asyncio.create_task(get_flaws(runtime, advisory, bug_tracker,
+                                                   flaw_bug_tracker, noop)))
+    try:
+        lists_of_flaw_bugs = await asyncio.gather(*tasks)
+        flaw_bugs = sum(lists_of_flaw_bugs, [])
+        if flaw_bugs:
+            bug_tracker = runtime.bug_trackers['bugzilla']
+            _update(runtime, advisory, flaw_bugs, bug_tracker, noop)
+    except Exception as e:
+        runtime.logger.error(traceback.format_exc())
+        runtime.logger.error(f'Exception: {e}')
+        exit_code = 1
     sys.exit(exit_code)
 
 
-async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, flaw_bug_tracker):
+async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
     # get attached bugs from advisory
     runtime.logger.info("Querying bugs for CVE trackers")
     advisory_bug_ids = bug_tracker.advisory_bug_ids(advisory)
     if not advisory_bug_ids:
         runtime.logger.info(f'Found 0 {bug_tracker.type} bugs attached to advisory')
-        return
+        return []
 
     attached_tracker_bugs: List[Bug] = bug_tracker.get_tracker_bugs(advisory_bug_ids, verbose=runtime.debug)
     runtime.logger.info(f'Found {len(advisory_bug_ids)} {bug_tracker.type} tracker bugs attached to the advisory: '
                         f'{sorted(advisory_bug_ids)}')
     if not attached_tracker_bugs:
-        return
+        return []
 
     # validate and get target_release
     current_target_release = Bug.get_target_release(attached_tracker_bugs)
@@ -110,11 +118,24 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, fl
         ]
 
     runtime.logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_id_bugs)} flaw bugs considered "first-fix"')
-
     if not first_fix_flaw_bugs:
-        runtime.logger.info(f'No "first-fix" {bug_tracker.type} bugs found')
-        return
+        return []
 
+    runtime.logger.info('Associating CVEs with builds')
+    errata_config = runtime.gitdata.load_data(key='erratatool').data
+    errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
+    try:
+        await errata_api.login()
+        await associate_builds_with_cves(errata_api, advisory, attached_tracker_bugs, tracker_flaws, flaw_id_bugs, noop)
+    except ValueError as e:
+        click.echo(f"Error associating builds with cves: {e}")
+    finally:
+        await errata_api.close()
+    return first_fix_flaw_bugs
+
+
+def _update(runtime, advisory, first_fix_flaw_bugs, bug_tracker, noop):
+    advisory_id = advisory.errata_id
     errata_config = runtime.gitdata.load_data(key='erratatool').data
     cve_boilerplate = errata_config['boilerplates']['cve']
     advisory, updated = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, first_fix_flaw_bugs)
@@ -125,17 +146,7 @@ async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker, fl
 
     flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
     runtime.logger.info('Attaching bugs %s', flaw_ids)
-    flaw_bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
-
-    runtime.logger.info('Associating CVEs with builds')
-    errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
-    try:
-        await errata_api.login()
-        await associate_builds_with_cves(errata_api, advisory, attached_tracker_bugs, tracker_flaws, flaw_id_bugs, noop)
-    except ValueError as e:
-        click.echo(f"Error associating builds with cves: {e}")
-    finally:
-        await errata_api.close()
+    bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
 
 
 async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, attached_tracker_bugs: List[Bug], tracker_flaws, flaw_id_bugs: Dict[int, Bug], dry_run: bool):
