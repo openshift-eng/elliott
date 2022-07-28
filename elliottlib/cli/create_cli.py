@@ -9,15 +9,10 @@ from elliottlib.exectools import cmd_assert
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import YMD, validate_release_date, \
     validate_email_address, exit_unauthorized, green_prefix
-pass_runtime = click.make_pass_decorator(elliottlib.Runtime)
 
 LOGGER = elliottlib.logutil.getLogger(__name__)
 
 
-#
-# Create Advisory (RPM and image)
-# advisory:create
-#
 @cli.command("create", short_help="Create a new advisory")
 @click.option("--type", '-t', 'errata_type',
               type=click.Choice(['RHBA', 'RHEA']),
@@ -56,7 +51,7 @@ LOGGER = elliottlib.logutil.getLogger(__name__)
               help="Create the advisory (by default only a preview is displayed)")
 @click.option("--bug", "--bugs", "-b", 'bugs', type=int, multiple=True,
               help="Bug IDs for attaching to the advisory on creation. Required for creating a security advisory.")
-@pass_runtime
+@click.pass_obj
 @click.pass_context
 def create_cli(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, with_placeholder, with_liveid, yes, bugs):
     """Create a new advisory. The kind of advisory must be specified with

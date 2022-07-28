@@ -140,7 +140,6 @@ def _update(runtime, advisory, first_fix_flaw_bugs, bug_tracker, noop):
     cve_boilerplate = errata_config['boilerplates']['cve']
     advisory, updated = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, first_fix_flaw_bugs)
     if not noop and updated:
-        # this removes all attached jira bugs so use carefully
         runtime.logger.info("Updating advisory details %s", advisory_id)
         advisory.commit()
 
