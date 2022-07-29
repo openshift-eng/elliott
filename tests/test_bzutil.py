@@ -5,10 +5,34 @@ import xmlrpc.client
 
 from flexmock import flexmock
 import mock
-
+from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker
 from elliottlib import bzutil, constants
 
 hostname = "bugzilla.redhat.com"
+
+
+class TestJIRABugTracker(unittest.TestCase):
+    def test_get_config(self):
+        config = {'foo': 1, 'jira_config': {'bar': 2}}
+        runtime = flexmock(
+            gitdata=flexmock(load_data=flexmock(data=config)),
+            get_major_minor=lambda: (4, 9)
+        )
+        actual = JIRABugTracker.get_config(runtime)
+        expected = {'foo': 1, 'bar': 2}
+        self.assertEqual(actual, expected)
+
+
+class TestBugzillaBugTracker(unittest.TestCase):
+    def test_get_config(self):
+        config = {'foo': 1, 'bugzilla_config': {'bar': 2}}
+        runtime = flexmock(
+            gitdata=flexmock(load_data=flexmock(data=config)),
+            get_major_minor=lambda: (4, 9)
+        )
+        actual = BugzillaBugTracker.get_config(runtime)
+        expected = {'foo': 1, 'bar': 2}
+        self.assertEqual(actual, expected)
 
 
 class TestBZUtil(unittest.TestCase):

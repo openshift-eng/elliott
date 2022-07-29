@@ -26,10 +26,8 @@ class FindBugsQETestCase(unittest.TestCase):
         )
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:qe', '--noop'])
-        search_string1 = 'Searching for bugs with status MODIFIED and target release(s): 4.6.z'
-        search_string2 = 'Found 1 bugs: 123'
+        search_string1 = 'Found 1 bugs: 123'
         self.assertIn(search_string1, result.output)
-        self.assertIn(search_string2, result.output)
         self.assertEqual(result.exit_code, 0)
 
     @patch.dict(os.environ, {"USEJIRA": "True"})

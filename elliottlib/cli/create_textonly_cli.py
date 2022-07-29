@@ -7,7 +7,7 @@ import click
 from elliottlib.cli.common import cli
 from elliottlib import logutil, Runtime
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
+from elliottlib.bzutil import BugTracker
 from elliottlib.errata import add_jira_issue
 from elliottlib.util import exit_unauthorized, green_prefix, validate_release_date, \
     YMD, validate_email_address
@@ -76,14 +76,20 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     """
 
     runtime.initialize()
-    if runtime.use_jira:
-        create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, True,
-                        JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, False,
-                    BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+    bug_trackers = runtime.bug_trackers
+    # we want to create only one advisory regardless of multiple bug trackers being used
+    # we give priority to jira in case both are in use
+    if runtime.use_jira or runtime.only_jira:
+        create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
+                        description, solution, bugtitle, bugdescription, yes, bug_trackers['jira'])
+
+    else:
+        create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
+                        description, solution, bugtitle, bugdescription, yes, bug_trackers['bugzilla'])
 
 
-def create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes, use_jira, bug_tracker):
+def create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description,
+                    solution, bugtitle, bugdescription, yes, bug_tracker: BugTracker):
     # create textonly bug
     newbug = bug_tracker.create_textonly(bugtitle, bugdescription)
     click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
@@ -111,8 +117,6 @@ def create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, packa
     except elliottlib.exceptions.ErrataToolError as ex:
         raise repr(ex)
 
-    if not use_jira:
-        erratum.addBugs(newbug.id)
     cdn_repos = et_data.get('cdn_repos')
     if cdn_repos:
         click.echo(f"Configuring CDN repos {', '.join(cdn_repos)}...")
@@ -121,8 +125,8 @@ def create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, packa
         erratum.commit()
         green_prefix("Created new text only advisory: ")
         click.echo(str(erratum))
-        if use_jira:
-            add_jira_issue(erratum.errata_id, newbug.id)
+        click.echo("Attaching placeholder bug...")
+        bug_tracker.attach_bugs(erratum.errata_id, [newbug.id])
     else:
         green_prefix("Would have created advisory: ")
         click.echo("")

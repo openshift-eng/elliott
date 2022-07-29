@@ -70,8 +70,8 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
     if runtime.use_jira:
-        verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
-    verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
+        await verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
+    await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
 
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
@@ -92,7 +92,7 @@ class BugValidator:
         self.config = bug_tracker_cls.get_config(runtime)
         self.bug_tracker = bug_tracker_cls(self.config)
         self.target_releases: List[str] = self.config['target_release']
-        self.product: str = self.config['bugzilla_config']['product'] if not use_jira else ''
+        self.product: str = self.config['product']
         self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []

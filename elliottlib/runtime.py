@@ -18,6 +18,7 @@ from elliottlib.exceptions import ElliottFatalError
 from elliottlib.imagecfg import ImageMetadata
 from elliottlib.model import Missing, Model
 from elliottlib.rpmcfg import RPMMetadata
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 
 
 def remove_tmp_working_dir(runtime):
@@ -51,6 +52,8 @@ class Runtime(object):
         self.quiet = False
         self.data_path = None
         self.use_jira = os.environ.get('USEJIRA')
+        self.only_jira = os.environ.get('ONLYJIRA')
+        self._bug_trackers = {}
         self.brew_event: Optional[int] = None
         self.assembly: Optional[str] = 'stream'
         self.assembly_basis_event: Optional[int] = None
@@ -272,6 +275,16 @@ class Runtime(object):
 
     def rpm_metas(self):
         return list(self.rpm_map.values())
+
+    @property
+    def bug_trackers(self):
+        if self._bug_trackers:
+            return self._bug_trackers
+        if not self.only_jira:
+            self._bug_trackers['bugzilla'] = BugzillaBugTracker(BugzillaBugTracker.get_config(self))
+        if self.use_jira or self.only_jira:
+            self._bug_trackers['jira'] = JIRABugTracker(JIRABugTracker.get_config(self))
+        return self._bug_trackers
 
     @property
     def remove_tmp_working_dir(self):

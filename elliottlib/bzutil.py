@@ -98,6 +98,13 @@ class BugzillaBug(Bug):
     def target_release(self):
         return self.bug.target_release
 
+    @property
+    def sub_component(self):
+        if hasattr(self.bug, 'sub_component'):
+            return self.bug.sub_component
+        else:
+            return None
+
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
 
@@ -113,7 +120,8 @@ class JIRABug(Bug):
 
     @property
     def component(self):
-        return self.bug.fields.components[0].name
+        component0 = self.bug.fields.components[0].name
+        return component0.split('/')[0]
 
     @property
     def status(self):
@@ -137,11 +145,16 @@ class JIRABug(Bug):
 
     @property
     def target_release(self):
-        return [x.name for x in self.bug.fields.fixVersions]
+        # field "Target Version"
+        return [x.name for x in self.bug.fields.customfield_12319940]
 
     @property
     def sub_component(self):
-        return [c.name for c in self.bug.fields.components]
+        component0 = self.bug.fields.components[0].name
+        split = component0.split('/')
+        if len(split) < 2:
+            return None
+        return split[1]
 
     @property
     def resolution(self):
@@ -165,10 +178,12 @@ class JIRABug(Bug):
 
     @property
     def alias(self):
+        # TODO: See usage. this can be correct or incorrect based in usage.
         return self.bug.fields.labels
 
     @property
     def whiteboard(self):
+        # TODO: See usage. this can be correct or incorrect based in usage.
         return self.bug.fields.labels
 
     def _get_release_blocker(self):
@@ -215,9 +230,8 @@ class JIRABug(Bug):
 class BugTracker:
     def __init__(self, config: dict, tracker_type: str):
         self.config = config
+        self._server = self.config.get('server', '')
         self.type = tracker_type
-        self._server = config['bugzilla_config'].get('server', '') if config.get('bugzilla_config') else ''
-        self._jira_server = config['jira_config'].get('server', '') if config.get('jira_config') else ''
 
     def target_release(self) -> List:
         return self.config.get('target_release')
@@ -291,19 +305,29 @@ class BugTracker:
 class JIRABugTracker(BugTracker):
     @staticmethod
     def get_config(runtime) -> Dict:
-        return runtime.gitdata.load_data(key='bug').data
+        major, minor = runtime.get_major_minor()
+        if major == 4 and minor < 6:
+            raise ValueError("ocp-build-data/bug.yml is not expected to be available for 4.X versions < 4.6")
+        bug_config = runtime.gitdata.load_data(key='bug').data
+        # construct config so that all jira_config keys become toplevel keys
+        jira_config = bug_config.pop('jira_config')
+        for key in jira_config:
+            if key in bug_config:
+                raise ValueError(f"unexpected: top level config contains same key ({key}) as jira_config")
+            bug_config[key] = jira_config[key]
+        return bug_config
 
     def login(self, token_auth=None) -> JIRA:
         if not token_auth:
             token_auth = os.environ.get("JIRA_TOKEN")
             if not token_auth:
-                raise ValueError(f"elliott requires login credentials for {self._jira_server}. Set a JIRA_TOKEN env var ")
-        client = JIRA(self._jira_server, token_auth=token_auth)
+                raise ValueError(f"elliott requires login credentials for {self._server}. Set a JIRA_TOKEN env var ")
+        client = JIRA(self._server, token_auth=token_auth)
         return client
 
     def __init__(self, config):
         super().__init__(config, 'jira')
-        self._project = config['jira_config'].get('project', '') if config.get('jira_config') else ''
+        self._project = self.config.get('project', '')
         self._client: JIRA = self.login()
 
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
@@ -314,8 +338,13 @@ class JIRABugTracker(BugTracker):
         if verbose:
             click.echo(query)
         bugs = self._search(query)
-        if not permissive and len(bugs) < len(bugids):
-            raise ValueError(f"Not all bugs were not found, {len(bugs)} out of {len(bugids)}")
+        if len(bugs) < len(bugids):
+            bugids_not_found = set(bugids) - {b.id for b in bugs}
+            msg = f"Some bugs could not be fetched ({len(bugids) - len(bugs)}): {bugids_not_found}"
+            if not permissive:
+                raise ValueError(msg)
+            else:
+                print(msg)
         return bugs
 
     def get_bug_remote_links(self, bug: JIRABug):
@@ -331,8 +360,8 @@ class JIRABugTracker(BugTracker):
         fields = {
             'project': {'key': self._project},
             'issuetype': {'name': 'Bug'},
-            'fixVersions': {'name': self.config.get('version')[0]},
-            'components': {'name': 'Release'},
+            'components': [{'name': 'Release'}],
+            'versions': [{'name': self.config.get('version')[0]}],  # Affects Version/s
             'summary': bug_title,
             'labels': keywords,
             'description': bug_description
@@ -380,7 +409,8 @@ class JIRABugTracker(BugTracker):
         if status:
             query += f" and status in ({','.join(status)})"
         if target_release:
-            query += f" and fixVersion in ({','.join(target_release)})"
+            tr = ','.join(target_release)
+            query += f' and "Target Version" in ({tr})'
         if include_labels:
             query += f" and labels in ({','.join(include_labels)})"
         if exclude_labels:
@@ -438,7 +468,17 @@ class JIRABugTracker(BugTracker):
 class BugzillaBugTracker(BugTracker):
     @staticmethod
     def get_config(runtime):
-        return runtime.gitdata.load_data(key='bug').data
+        major, minor = runtime.get_major_minor()
+        if major == 4 and minor < 6:
+            raise ValueError("ocp-build-data/bug.yml is not expected to be available for 4.X versions < 4.6")
+        bug_config = runtime.gitdata.load_data(key='bug').data
+        # construct config so that all bugzilla_config keys become toplevel keys
+        bz_config = bug_config.pop('bugzilla_config')
+        for key in bz_config:
+            if key in bug_config:
+                raise ValueError(f"unexpected: top level config contains same key ({key}) as bugzilla_config")
+            bug_config[key] = bz_config[key]
+        return bug_config
 
     def login(self):
         client = bugzilla.Bugzilla(self._server)
@@ -454,10 +494,16 @@ class BugzillaBugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
-    def get_bugs(self, bugids, permissive=False, check_tracker=False, **kwargs):
+    def get_bugs(self, bugids, permissive=False, **kwargs):
         if 'verbose' in kwargs:
             kwargs.pop('verbose')
-        return [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
+        bugs = [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
+        if len(bugs) < len(bugids):
+            bugids_not_found = set(bugids) - {b.id for b in bugs}
+            msg = f"Some bugs could not be fetched ({len(bugids)-len(bugs)}): {bugids_not_found}"
+            if permissive:
+                print(msg)
+        return bugs
 
     def client(self):
         return self._client
@@ -487,7 +533,7 @@ class BugzillaBugTracker(BugTracker):
 
     def create_bug(self, title, description, target_status, keywords: List, noop=False) -> BugzillaBug:
         create_info = self._client.build_createbug(
-            product=self.config.get('bugzilla_config').get('product'),
+            product=self.config.get('product'),
             version=self.config.get('version')[0],
             target_release=self.config.get('target_release')[0],
             component="Release",
@@ -511,7 +557,8 @@ class BugzillaBugTracker(BugTracker):
 
     def _update_bug_status(self, bugid, target_status):
         if target_status == 'CLOSED':
-            return self._client.update_bugs([bugid], self._client.build_update(status=target_status,resolution='WONTFIX'))
+            return self._client.update_bugs([bugid], self._client.build_update(status=target_status,
+                                                                               resolution='WONTFIX'))
         return self._client.update_bugs([bugid], self._client.build_update(status=target_status))
 
     def add_comment(self, bugid, comment: str, private, noop=False):
@@ -830,16 +877,16 @@ def get_bzapi(bz_data, interactive_login=False):
     return bzapi
 
 
-def _construct_query_url(bz_data, status, search_filter='default', flag=None):
-    query_url = SearchURL(bz_data)
+def _construct_query_url(config, status, search_filter='default', flag=None):
+    query_url = SearchURL(config)
     query_url.fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'sub_component',
                         'external_bugs', 'whiteboard', 'keywords', 'target_release']
 
     filter_list = []
-    if bz_data.get('filter'):
-        filter_list = bz_data.get('filter')
-    elif bz_data.get('filters'):
-        filter_list = bz_data.get('filters').get(search_filter)
+    if config.get('filter'):
+        filter_list = config.get('filter')
+    elif config.get('filters'):
+        filter_list = config.get('filters').get(search_filter)
 
     for f in filter_list:
         query_url.addFilter('component', 'notequals', f)
@@ -847,7 +894,7 @@ def _construct_query_url(bz_data, status, search_filter='default', flag=None):
     for s in status:
         query_url.addBugStatus(s)
 
-    for r in bz_data.get('target_release', []):
+    for r in config.get('target_release', []):
         query_url.addTargetRelease(r)
 
     if flag:
@@ -905,10 +952,10 @@ class SearchURL(object):
 
     url_format = "https://{}/buglist.cgi?"
 
-    def __init__(self, bz_data):
-        self.bz_host = bz_data['bugzilla_config'].get('server', '') if bz_data.get('jira_config') else ''
-        self.classification = bz_data['bugzilla_config'].get('classification', '') if bz_data.get('jira_config') else ''
-        self.product = bz_data['bugzilla_config'].get('product', '') if bz_data.get('jira_config') else ''
+    def __init__(self, config):
+        self.bz_host = config.get('server', '')
+        self.classification = config.get('classification', '')
+        self.product = config.get('product', '')
         self.bug_status = []
         self.filters = []
         self.filter_operator = ""
@@ -1016,7 +1063,8 @@ def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
         return True
 
     # filter tracker bugs by OCP product
-    tracker_bugs = [b for b in bugtracker.get_bugs(tracker_ids) if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug()]
+    tracker_bugs = [b for b in bugtracker.get_bugs(tracker_ids)
+                    if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug()]
     if not tracker_bugs:
         # No OCP trackers found
         # is a first fix

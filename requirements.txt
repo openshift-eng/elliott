@@ -1,5 +1,5 @@
 aiohttp[speedups] >= 3.6
-click == 8.1.2
+click == 8.0.4
 contextvars; python_version < '3.7'
 errata-tool >= 1.27.1
 future

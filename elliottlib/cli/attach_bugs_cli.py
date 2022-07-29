@@ -1,8 +1,7 @@
 import click
-import sys
 
 from elliottlib import Runtime, logutil
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
+from elliottlib.bzutil import Bug
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, find_default_advisory, use_default_advisory_option
 from elliottlib.cli.find_bugs_sweep_cli import print_report
@@ -45,7 +44,7 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     Print bug report for jira bugs (no attach)
 
 \b
-    $ elliott -g openshift-4.10 attach-bugs OCPBUGS-10 OCPBUGS-9 --report --jira
+    $ USEJIRA=true elliott -g openshift-4.10 attach-bugs OCPBUGS-10 OCPBUGS-9 --report
 
 
     Attach bugs to the advisory 123456
@@ -64,30 +63,30 @@ For attaching use --advisory, --use-default-advisory <TYPE>
         raise click.BadParameter("Use only one of --use-default-advisory <TYPE> or --advisory <ADVISORY_ID>")
 
     runtime.initialize()
-    if runtime.use_jira:
-        attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop,
-                    JIRABugTracker(JIRABugTracker.get_config(runtime)))
-
-    else:
-        attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop,
-                    BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
-
-
-def attach_bugs(runtime, advisory, default_advisory_type, bug_ids, report, output, noop, bug_tracker):
-    major, minor = runtime.get_major_minor()
-    version = f'{major}.{minor}'
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    bug_ids = cli_opts.id_convert_str(bug_ids)
+    bug_trackers = runtime.bug_trackers
+    if runtime.use_jira or runtime.only_jira:
+        bug_ids = cli_opts.id_convert_str(bug_ids)
+        attach_bugs(runtime, advisory, bug_ids, report, output, noop, bug_trackers[
+            'jira'])
+    else:
+        bug_ids = cli_opts.id_convert(bug_ids)
+        attach_bugs(runtime, advisory, bug_ids, report, output, noop, bug_trackers[
+            'bugzilla'])
+
+
+def attach_bugs(runtime, advisory, bug_ids, report, output, noop, bug_tracker):
+    major, minor = runtime.get_major_minor()
+    version = f'{major}.{minor}'
     bugs = bug_tracker.get_bugs(bug_ids, verbose=runtime.debug)
 
     # Check if target release and OCP version match
     target_release = Bug.get_target_release(bugs)
     if version not in target_release:
-        LOGGER.error('Target release version for given bugs (%s) does not match the group (%s): aborting',
-                     target_release, version)
-        sys.exit(1)
+        raise ValueError('Target release version for given bugs (%s) does not match the group (%s): aborting',
+                         target_release, version)
 
     LOGGER.info(f"Found {len(bugs)} bugs: {', '.join(sorted(str(b.id) for b in bugs))}")
     if report:

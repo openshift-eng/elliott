@@ -4,7 +4,6 @@ import traceback
 from mock import patch
 from click.testing import CliRunner
 from elliottlib import errata
-from elliottlib.cli import common
 from elliottlib.cli.common import cli, Runtime
 import elliottlib.cli.remove_bugs_cli
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
@@ -30,7 +29,7 @@ class RemoveBugsTestCase(unittest.TestCase):
         self.assertIn("Found 2 bugs", result.output)
         self.assertIn("Removing bugs from advisory 99999", result.output)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
+    @patch.dict(os.environ, {"ONLYJIRA": "True"})
     def test_remove_jira_bug(self):
         runner = CliRunner()
 
