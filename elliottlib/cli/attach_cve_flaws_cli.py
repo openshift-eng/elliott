@@ -70,7 +70,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         flaw_bugs = sum(lists_of_flaw_bugs, [])
         if flaw_bugs:
             bug_tracker = runtime.bug_trackers['bugzilla']
-            _update(runtime, advisory, flaw_bugs, bug_tracker, noop)
+            _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop)
     except Exception as e:
         runtime.logger.error(traceback.format_exc())
         runtime.logger.error(f'Exception: {e}')
@@ -134,7 +134,7 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
     return first_fix_flaw_bugs
 
 
-def _update(runtime, advisory, first_fix_flaw_bugs, bug_tracker, noop):
+def _update_advisory(runtime, advisory, first_fix_flaw_bugs, bug_tracker, noop):
     advisory_id = advisory.errata_id
     errata_config = runtime.gitdata.load_data(key='erratatool').data
     cve_boilerplate = errata_config['boilerplates']['cve']
@@ -154,18 +154,18 @@ async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Errat
     for tracker in attached_tracker_bugs:
         component_name = tracker.whiteboard_component
         if not component_name:
-            raise ValueError(f"Bug {tracker.id} doesn't have a valid component name in its whiteboard field.")
+            raise ValueError(f"Bug {tracker.id} doesn't have a valid whiteboard component.")
         flaw_ids = tracker_flaws[tracker.id]
         for flaw_id in flaw_ids:
             if len(flaw_id_bugs[flaw_id].alias) != 1:
-                raise ValueError(f"Bug {flaw_id} should have exact 1 alias.")
+                raise ValueError(f"Bug {flaw_id} should have exactly 1 alias.")
             cve = flaw_id_bugs[flaw_id].alias[0]
             cve_components_mapping.setdefault(cve, set()).add(component_name)
 
     await AsyncErrataUtils.associate_builds_with_cves(errata_api, advisory.errata_id, attached_builds, cve_components_mapping, dry_run=dry_run)
 
 
-def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, flaw_bugs: list):
+def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, flaw_bugs: List[Bug]):
     """Given an advisory object, get updated advisory to RHSA
 
     :param logger: logger object from runtime
