@@ -2,15 +2,16 @@ from typing import Dict, List, Set
 import click
 import sys
 import traceback
+import asyncio
 from errata_tool import Erratum
 
-from elliottlib import bzutil, constants
+from elliottlib import constants
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.errata import is_security_advisory
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import Bug, get_corresponding_flaw_bugs, get_highest_security_impact, is_first_fix_any
+from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, JIRABugTracker
 
 
 @cli.command('attach-cve-flaws',
@@ -52,118 +53,129 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     runtime.logger.info("Getting advisory %s", advisory_id)
     advisory = Erratum(errata_id=advisory_id)
     exit_code = 0
-    for b in runtime.bug_trackers.values():
-        try:
-            await attach_cve_flaws(runtime, advisory_id, noop, advisory, b)
-        except Exception as e:
-            runtime.logger.error(traceback.format_exc())
-            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
-            exit_code = 1
+
+    # Flaw bugs associated with jira tracker bugs
+    # exist in bugzilla. so to work with jira trackers
+    # we need both bugzilla and jira instances initialized
+    if runtime.only_jira:
+        runtime.use_jira = True
+
+    tasks = []
+    for bug_tracker in runtime.bug_trackers.values():
+        flaw_bug_tracker = runtime.bug_trackers['bugzilla'] if bug_tracker.type == 'jira' else None
+        tasks.append(asyncio.create_task(get_flaws(runtime, advisory, bug_tracker,
+                                                   flaw_bug_tracker, noop)))
+    try:
+        lists_of_flaw_bugs = await asyncio.gather(*tasks)
+        flaw_bugs = list(set(sum(lists_of_flaw_bugs, [])))
+        if flaw_bugs:
+            bug_tracker = runtime.bug_trackers['bugzilla']
+            _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop)
+    except Exception as e:
+        runtime.logger.error(traceback.format_exc())
+        runtime.logger.error(f'Exception: {e}')
+        exit_code = 1
     sys.exit(exit_code)
 
 
-async def attach_cve_flaws(runtime, advisory_id, noop, advisory, bug_tracker):
+async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
     # get attached bugs from advisory
-    runtime.logger.info("Querying bugs for CVE trackers")
-    fields = ["target_release", "blocks", 'whiteboard', 'keywords']
     advisory_bug_ids = bug_tracker.advisory_bug_ids(advisory)
-    attached_tracker_bugs = [bug for bug in bug_tracker.get_bugs(advisory_bug_ids, include_fields=fields,
-                                                                 permissive=True) if bug.is_tracker_bug()]
-    runtime.logger.info(f'Found {len(attached_tracker_bugs)} {bug_tracker.type} tracker bugs attached to the advisory: '
-                        f'{sorted(bug.id for bug in attached_tracker_bugs)}')
+    if not advisory_bug_ids:
+        runtime.logger.info(f'Found 0 {bug_tracker.type} bugs attached')
+        return []
 
-    if len(attached_tracker_bugs) == 0:
-        return
+    attached_tracker_bugs: List[Bug] = bug_tracker.get_tracker_bugs(advisory_bug_ids, verbose=runtime.debug)
+    runtime.logger.info(f'Found {len(advisory_bug_ids)} {bug_tracker.type} tracker bugs attached: '
+                        f'{sorted(advisory_bug_ids)}')
+    if not attached_tracker_bugs:
+        return []
 
     # validate and get target_release
     current_target_release = Bug.get_target_release(attached_tracker_bugs)
-    runtime.logger.info(f'current_target_release: {current_target_release}')
-
-    tracker_flaws, flaw_id_bugs = get_corresponding_flaw_bugs(
-        bug_tracker,
+    tracker_flaws, flaw_id_bugs = bug_tracker.get_corresponding_flaw_bugs(
         attached_tracker_bugs,
-        fields=["depends_on", "alias", "severity", "summary"],
+        flaw_bug_tracker,
         strict=True
     )
-    runtime.logger.info(f'Found {len(flaw_id_bugs)} corresponding flaw bugs: {sorted(flaw_id_bugs.keys())}')
+    runtime.logger.info(f'Found {len(flaw_id_bugs)} {flaw_bug_tracker.type} corresponding flaw bugs:'
+                        f' {sorted(flaw_id_bugs.keys())}')
 
     # current_target_release is digit.digit.[z|0]
     # if current_target_release is GA then run first-fix bug filtering
     # for GA not every flaw bug is considered first-fix
     # for z-stream every flaw bug is considered first-fix
     if current_target_release[-1] == 'z':
-        runtime.logger.info("detected z-stream target release, every flaw bug is considered first-fix")
+        runtime.logger.info("Detected z-stream target release, every flaw bug is considered first-fix")
         first_fix_flaw_bugs = list(flaw_id_bugs.values())
     else:
-        runtime.logger.info("detected GA release, applying first-fix filtering..")
+        runtime.logger.info("Detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in flaw_id_bugs.values()
-            if is_first_fix_any(bug_tracker, flaw_bug, current_target_release)
+            if is_first_fix_any(flaw_bug_tracker, flaw_bug, current_target_release)
         ]
 
     runtime.logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_id_bugs)} flaw bugs considered "first-fix"')
-
     if not first_fix_flaw_bugs:
-        runtime.logger.info(f'No "first-fix" {bug_tracker.type} bugs found')
-        return
-
-    errata_config = runtime.gitdata.load_data(key='erratatool').data
-    cve_boilerplate = errata_config['boilerplates']['cve']
-    advisory = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, first_fix_flaw_bugs)
-    if not noop:
-        runtime.logger.info("Updating advisory details %s", advisory_id)
-        advisory.commit()
-
-    flaw_ids = [flaw_bug.id for flaw_bug in first_fix_flaw_bugs]
-    runtime.logger.info(f'Request to attach {len(flaw_ids)} bugs to the advisory')
-    existing_bug_ids = bug_tracker.advisory_bug_ids(advisory)
-    new_bugs = set(flaw_ids) - set(existing_bug_ids)
-    runtime.logger.info(f'Bugs already attached: {len(existing_bug_ids)}')
-    runtime.logger.info(f'New bugs ({len(new_bugs)}) : {sorted(new_bugs)}')
-
-    if new_bugs:
-        runtime.logger.info('Attaching bugs %s', flaw_ids)
-        bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
+        return []
 
     runtime.logger.info('Associating CVEs with builds')
+    errata_config = runtime.gitdata.load_data(key='erratatool').data
     errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
     try:
         await errata_api.login()
         await associate_builds_with_cves(errata_api, advisory, attached_tracker_bugs, tracker_flaws, flaw_id_bugs, noop)
     except ValueError as e:
-        click.echo(f"Error associating builds with cves: {e}")
+        runtime.logger.warn(f"Error associating builds with cves: {e}")
     finally:
         await errata_api.close()
+    return first_fix_flaw_bugs
 
 
-async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, attached_tracker_bugs: List[Bug], tracker_flaws: Dict[int, List[int]], flaw_id_bugs: Dict[int, Bug], dry_run: bool):
+def _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop):
+    advisory_id = advisory.errata_id
+    errata_config = runtime.gitdata.load_data(key='erratatool').data
+    cve_boilerplate = errata_config['boilerplates']['cve']
+    advisory, updated = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, flaw_bugs)
+    if not noop and updated:
+        runtime.logger.info("Updating advisory details %s", advisory_id)
+        advisory.commit()
+
+    flaw_ids = [flaw_bug.id for flaw_bug in flaw_bugs]
+    runtime.logger.info(f'Attaching {len(flaw_ids)} flaw bugs')
+    bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
+
+
+async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, attached_tracker_bugs: List[Bug], tracker_flaws, flaw_id_bugs: Dict[int, Bug], dry_run: bool):
     attached_builds = [b for pv in advisory.errata_builds.values() for b in pv]
     cve_components_mapping: Dict[str, Set[str]] = {}
     for tracker in attached_tracker_bugs:
-        component_name = bzutil.get_whiteboard_component(tracker)
+        component_name = tracker.whiteboard_component
         if not component_name:
-            raise ValueError(f"Bug {tracker.id} doesn't have a valid component name in its whiteboard field.")
+            raise ValueError(f"Bug {tracker.id} doesn't have a valid whiteboard component.")
         flaw_ids = tracker_flaws[tracker.id]
         for flaw_id in flaw_ids:
             if len(flaw_id_bugs[flaw_id].alias) != 1:
-                raise ValueError(f"Bug {flaw_id} should have exact 1 alias.")
+                raise ValueError(f"Bug {flaw_id} should have exactly 1 alias.")
             cve = flaw_id_bugs[flaw_id].alias[0]
             cve_components_mapping.setdefault(cve, set()).add(component_name)
 
     await AsyncErrataUtils.associate_builds_with_cves(errata_api, advisory.errata_id, attached_builds, cve_components_mapping, dry_run=dry_run)
 
 
-def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, flaw_bugs: list):
+def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, flaw_bugs):
     """Given an advisory object, get updated advisory to RHSA
 
     :param logger: logger object from runtime
     :param cve_boilerplate: cve template for rhsa
     :param advisory: advisory object to update
-    :param flaw_bugs: flaw bug objects determined to be attached to the advisory
-    :returns: updated advisory object, that can be committed i.e advisory.commit()
+    :param flaw_bugs: Collection of flaw bug objects to be attached to the advisory
+    :returns: updated advisory object and a boolean indicating if advisory was updated
     """
+    updated = False
     if not is_security_advisory(advisory):
         logger.info('Advisory type is {}, converting it to RHSA'.format(advisory.errata_type))
+        updated = True
         advisory.update(
             errata_type='RHSA',
             security_reviewer=cve_boilerplate['security_reviewer'],
@@ -177,28 +189,31 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
     if not advisory.cve_names:
         cve_str = ' '.join(cve_names)
         advisory.update(cve_names=cve_str)
+        updated = True
     else:
         cves_not_in_cve_names = [n for n in cve_names if n not in advisory.cve_names]
         if cves_not_in_cve_names:
             s = ' '.join(cves_not_in_cve_names)
             cve_str = f"{advisory.cve_names} {s}".strip()
             advisory.update(cve_names=cve_str)
+            updated = True
+
+    if updated:
+        formatted_cve_list = '\n'.join([
+            f'* {b.summary.replace(b.alias[0], "").strip()} ({b.alias[0]})' for b in flaw_bugs
+        ])
+        formatted_description = cve_boilerplate['description'].format(CVES=formatted_cve_list)
+        advisory.update(description=formatted_description)
 
     highest_impact = get_highest_security_impact(flaw_bugs)
-    logger.info('Adjusting advisory security impact from {} to {}'.format(
-        advisory.security_impact, highest_impact
-    ))
-    advisory.update(security_impact=highest_impact)
+    if highest_impact != advisory.security_impact:
+        logger.info(f'Adjusting advisory security impact from {advisory.security_impact} to {highest_impact}')
+        advisory.update(security_impact=highest_impact)
+        updated = True
 
     if highest_impact not in advisory.topic:
         topic = cve_boilerplate['topic'].format(IMPACT=highest_impact)
         logger.info('Topic updated to include impact of {}'.format(highest_impact))
         advisory.update(topic=topic)
 
-    formatted_cve_list = '\n'.join([
-        f'* {b.summary.replace(b.alias[0],"").strip()} ({b.alias[0]})' for b in flaw_bugs
-    ])
-    formatted_description = cve_boilerplate['description'].format(CVES=formatted_cve_list)
-    advisory.update(description=formatted_description)
-
-    return advisory
+    return advisory, updated

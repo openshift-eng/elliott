@@ -13,7 +13,7 @@ from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
 from elliottlib.util import (exit_unauthenticated, green_print,
                              minor_version_tuple, red_print)
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, get_corresponding_flaw_bugs
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
 
 
 @cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
@@ -118,7 +118,7 @@ class BugValidator:
     async def verify_attached_flaws(self, advisory_bugs: Dict[int, List[Bug]]):
         futures = []
         for advisory_id, attached_bugs in advisory_bugs.items():
-            attached_trackers = [b for b in attached_bugs if bzutil.is_cve_tracker(b)]
+            attached_trackers = [b for b in attached_bugs if b.is_tracker_bug()]
             attached_flaws = [b for b in attached_bugs if b.is_flaw_bug()]
             futures.append(self._verify_attached_flaws_for(advisory_id, attached_trackers, attached_flaws))
         await asyncio.gather(*futures)
@@ -129,11 +129,7 @@ class BugValidator:
 
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
         # Retrieve flaw bugs in Bugzilla for attached_tracker_bugs
-        tracker_flaws, flaw_id_bugs = get_corresponding_flaw_bugs(
-            self.bug_tracker,
-            attached_trackers,
-            fields=["depends_on", "alias", "severity", "summary"]
-        )
+        tracker_flaws, flaw_id_bugs = self.bug_tracker.get_corresponding_flaw_bugs(attached_trackers)
 
         # Find first-fix flaws
         first_fix_flaw_ids = set()
@@ -171,7 +167,7 @@ class BugValidator:
         # Check if flaw bugs are associated with specific builds
         cve_components_mapping: Dict[str, Set[str]] = {}
         for tracker in attached_trackers:
-            component_name = bzutil.get_whiteboard_component(tracker)
+            component_name = tracker.whiteboard_component
             if not component_name:
                 raise ValueError(f"Tracker bug {tracker.id} doesn't have a valid component name in its whiteboard field.")
             flaw_ids = tracker_flaws[tracker.id]
@@ -282,7 +278,7 @@ class BugValidator:
     def _verify_bug_status(self, bugs):
         # complain about bugs that are not yet VERIFIED or more.
         for bug in bugs:
-            if bzutil.is_flaw_bug(bug):
+            if bug.is_flaw_bug():
                 continue
             if bug.status in ["VERIFIED", "RELEASE_PENDING"]:
                 continue

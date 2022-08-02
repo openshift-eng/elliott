@@ -62,6 +62,9 @@ def create_placeholder(kind, advisory_id, bug_tracker, noop):
 
     click.echo(f"Created Bug: {newbug.id} {newbug.weburl}")
 
+    if not advisory_id:
+        return
+
     try:
         advisory = Erratum(errata_id=advisory_id)
     except GSSError:

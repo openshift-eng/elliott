@@ -1,22 +1,18 @@
 import click
 import datetime
 import elliottlib
+from elliottlib.bzutil import BugzillaBugTracker
 from elliottlib.cli.common import cli
 from elliottlib.cli.add_metadata_cli import add_metadata_cli
 from elliottlib.cli.create_placeholder_cli import create_placeholder_cli
 from elliottlib.exectools import cmd_assert
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import YMD, validate_release_date, \
-    validate_email_address, exit_unauthorized, green_prefix, yellow_print
-pass_runtime = click.make_pass_decorator(elliottlib.Runtime)
+    validate_email_address, exit_unauthorized, green_prefix
 
 LOGGER = elliottlib.logutil.getLogger(__name__)
 
 
-#
-# Create Advisory (RPM and image)
-# advisory:create
-#
 @cli.command("create", short_help="Create a new advisory")
 @click.option("--type", '-t', 'errata_type',
               type=click.Choice(['RHBA', 'RHEA']),
@@ -55,7 +51,7 @@ LOGGER = elliottlib.logutil.getLogger(__name__)
               help="Create the advisory (by default only a preview is displayed)")
 @click.option("--bug", "--bugs", "-b", 'bugs', type=int, multiple=True,
               help="Bug IDs for attaching to the advisory on creation. Required for creating a security advisory.")
-@pass_runtime
+@click.pass_obj
 @click.pass_context
 def create_cli(ctx, runtime, errata_type, kind, impetus, date, assigned_to, manager, package_owner, with_placeholder, with_liveid, yes, bugs):
     """Create a new advisory. The kind of advisory must be specified with
@@ -97,7 +93,6 @@ advisory.
     runtime.initialize()
 
     et_data = runtime.gitdata.load_data(key='erratatool').data
-    bz_data = runtime.gitdata.load_data(key='bug').data
 
     # User entered a valid value for --date, set the release date
     release_date = datetime.datetime.strptime(date, YMD)
@@ -107,10 +102,10 @@ advisory.
     unique_bugs = set(bugs)
 
     if bugs:
-        bzapi = elliottlib.bzutil.get_bzapi(bz_data)
+        bug_tracker = BugzillaBugTracker(BugzillaBugTracker.get_config(runtime))
         LOGGER.info("Fetching bugs {} from Bugzilla...".format(
             " ".join(map(str, bugs))))
-        bug_objects = bzapi.getbugs(bugs)
+        bug_objects = bug_tracker.get_bugs(bugs)
         # assert bugs are viable for a new advisory.
         _assert_bugs_are_viable(bugs, bug_objects)
 

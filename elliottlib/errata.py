@@ -15,6 +15,7 @@ import click
 import requests
 from elliottlib import exceptions, constants, brew, logutil
 from elliottlib.util import green_prefix, green_print, exit_unauthenticated, chunk
+from elliottlib import bzutil
 from requests_kerberos import HTTPKerberosAuth
 from spnego.exceptions import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
@@ -566,8 +567,7 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
     :param batch_size: perform operation in batches of given size
     :return:
     """
-    click.echo(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
-
+    logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
     try:
         advisory = Erratum(errata_id=advisory_id)
     except GSSError:
@@ -576,7 +576,7 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
     if not advisory:
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
-    existing_bugs = advisory.errata_bugs
+    existing_bugs = bzutil.BugzillaBugTracker.advisory_bug_ids(advisory)
     new_bugs = set(bugids) - set(existing_bugs)
     logger.info(f'Bugs already attached: {len(existing_bugs)}. New bugs: {len(new_bugs)}')
     if not new_bugs:
@@ -613,7 +613,20 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
     :param noop: do not modify anything
     :param batch_size: perform operation in batches of given size
     """
-    click.echo(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
+    logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
+    try:
+        advisory = Erratum(errata_id=advisory_id)
+    except GSSError:
+        exit_unauthenticated()
+
+    if not advisory:
+        raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
+
+    existing_bugs = bzutil.JIRABugTracker.advisory_bug_ids(advisory)
+    new_bugs = set(bugids) - set(existing_bugs)
+    logger.info(f'Bugs already attached: {len(existing_bugs)}. New bugs: {len(new_bugs)}')
+    if not new_bugs:
+        return
     for chunk_of_bugs in chunk(bugids, batch_size):
         if noop:
             logger.info('Dry run: Would have attached bugs')
@@ -624,7 +637,7 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
                 rt = add_jira_issue(advisory_id, chunk_of_bugs[i])
                 if rt.status_code != 201:
                     raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
-                                                       f"status={rt.status_code}")
+                                                       f"status={rt.status_code}: {rt.json()}")
         logger.info("All jira bugs attached")
 
 

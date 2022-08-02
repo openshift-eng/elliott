@@ -224,7 +224,7 @@ def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, m
     if int(major_version) < 4:
         bugs_by_type["rpm"] = set(bugs)
     else:  # for 4.x, sweep rpm cve trackers into rpm advisory
-        rpm_bugs = bzutil.get_valid_rpm_cves(bugs)
+        rpm_bugs = Bug.get_valid_rpm_cves(bugs)
         if rpm_bugs:
             green_prefix("RPM CVEs found: ")
             click.echo(sorted(b.id for b in rpm_bugs))
