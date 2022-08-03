@@ -98,7 +98,8 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
         flaw_bug_tracker,
         strict=True
     )
-    runtime.logger.info(f'Found {len(flaw_id_bugs)} {flaw_bug_tracker.type} corresponding flaw bugs:'
+    flaw_bug_tracker_type = flaw_bug_tracker.type if hasattr(flaw_bug_tracker, 'type') else ''
+    runtime.logger.info(f'Found {len(flaw_id_bugs)} {flaw_bug_tracker_type} corresponding flaw bugs:'
                         f' {sorted(flaw_id_bugs.keys())}')
 
     # current_target_release is digit.digit.[z|0]
