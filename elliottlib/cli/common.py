@@ -108,5 +108,5 @@ def click_coroutine(f):
     https://github.com/pallets/click/issues/85
     """
     def wrapper(*args, **kwargs):
-        return asyncio.run(f(*args, **kwargs))
+        return asyncio.get_event_loop().run_until_complete(f(*args, **kwargs))
     return update_wrapper(wrapper, f)
