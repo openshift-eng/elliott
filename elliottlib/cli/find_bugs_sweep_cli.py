@@ -243,11 +243,14 @@ def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, m
                         bugs_by_type["rpm"].add(bug)
 
                 if not_found:
-                    red_prefix("RPM CVE Tracker Warning: ")
+                    red_prefix("RPM CVE Tracker Error: ")
                     click.echo("The following (tracker bug, package) were found but not attached, because "
                                "no corresponding brew builds were found attached to the rpm advisory. "
-                               "First attach builds and then rerun to attach the bugs")
+                               "First attach builds and then rerun to attach the bugs, or exclude the "
+                               "bug ids in the assembly definition")
                     click.echo(not_found)
+                    raise ValueError(f'No builds found for CVE (bug, package): {not_found}. Either attach '
+                                     f'builds or exclude the bugs in the assembly definition: {[b for b, p in not_found]}')
             else:
                 click.echo("Skipping attaching RPM Tracker Bugs. Use --check-builds flag to validate with builds.")
 
