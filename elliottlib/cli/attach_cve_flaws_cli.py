@@ -62,7 +62,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
 
     tasks = []
     for bug_tracker in runtime.bug_trackers.values():
-        flaw_bug_tracker = runtime.bug_trackers['bugzilla'] if bug_tracker.type == 'jira' else None
+        flaw_bug_tracker = runtime.bug_trackers['bugzilla']
         tasks.append(asyncio.get_event_loop().create_task(get_flaws(runtime, advisory, bug_tracker,
                                                           flaw_bug_tracker, noop)))
     try:
@@ -86,8 +86,8 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
         return []
 
     attached_tracker_bugs: List[Bug] = bug_tracker.get_tracker_bugs(advisory_bug_ids, verbose=runtime.debug)
-    runtime.logger.info(f'Found {len(advisory_bug_ids)} {bug_tracker.type} tracker bugs attached: '
-                        f'{sorted(advisory_bug_ids)}')
+    runtime.logger.info(f'Found {len(attached_tracker_bugs)} {bug_tracker.type} tracker bugs attached: '
+                        f'{sorted(attached_tracker_bugs)}')
     if not attached_tracker_bugs:
         return []
 
@@ -98,8 +98,7 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
         flaw_bug_tracker,
         strict=True
     )
-    flaw_bug_tracker_type = flaw_bug_tracker.type if hasattr(flaw_bug_tracker, 'type') else ''
-    runtime.logger.info(f'Found {len(flaw_id_bugs)} {flaw_bug_tracker_type} corresponding flaw bugs:'
+    runtime.logger.info(f'Found {len(flaw_id_bugs)} {flaw_bug_tracker.type} corresponding flaw bugs:'
                         f' {sorted(flaw_id_bugs.keys())}')
 
     # current_target_release is digit.digit.[z|0]
