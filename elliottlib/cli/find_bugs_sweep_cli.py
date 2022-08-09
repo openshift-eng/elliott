@@ -223,10 +223,10 @@ def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, m
     # for 3.x, all bugs should go to the rpm advisory
     if int(major_version) < 4:
         bugs_by_type["rpm"] = set(bugs)
-    else:  # for 4.x, sweep rpm cve trackers into rpm advisory
+    else:  # for 4.x, sweep rpm tracker bugs into rpm advisory
         rpm_bugs = Bug.get_valid_rpm_cves(bugs)
         if rpm_bugs:
-            green_prefix("RPM CVEs found: ")
+            green_prefix("RPM Tracker Bugs found: ")
             click.echo(sorted(b.id for b in rpm_bugs))
             # if --check-builds flag is set
             # only attach bugs that have corresponding brew builds attached to rpm advisory
@@ -243,14 +243,16 @@ def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, m
                         bugs_by_type["rpm"].add(bug)
 
                 if not_found:
-                    red_prefix("RPM CVE Warning: ")
-                    click.echo("The following CVE (bug, package) were found but not attached, because "
+                    red_prefix("RPM CVE Tracker Error: ")
+                    click.echo("The following (tracker bug, package) were found but not attached, because "
                                "no corresponding brew builds were found attached to the rpm advisory. "
-                               "First attach builds and then rerun to attach the bugs")
+                               "First attach builds and then rerun to attach the bugs, or exclude the "
+                               "bug ids in the assembly definition")
                     click.echo(not_found)
-                    raise ValueError(f'No build found for CVE (bug, package) tuples: {not_found}')
+                    raise ValueError(f'No builds found for CVE (bug, package): {not_found}. Either attach '
+                                     f'builds or exclude the bugs in the assembly definition: {[b for b, p in not_found]}')
             else:
-                click.echo("Skipping attaching RPM CVEs. Use --check-builds flag to validate with builds.")
+                click.echo("Skipping attaching RPM Tracker Bugs. Use --check-builds flag to validate with builds.")
 
         bugs_by_type["extras"] = extras_bugs(bugs)
 
