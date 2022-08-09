@@ -74,6 +74,7 @@ class CVPInspector:
         return passed, failed, missing
 
     async def get_sanity_test_optional_results(self, test_results: Iterable[Dict]):
+        @limit_concurrency(limit=32)
         async def _fetch(url):
             r = await session.get(url)
             if r.status == 404:
