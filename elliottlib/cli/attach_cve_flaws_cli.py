@@ -24,9 +24,12 @@ from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any
               default=False, is_flag=True,
               help="Print what would change, but don't change anything")
 @use_default_advisory_option
+@click.option("--into-default-advisories",
+              is_flag=True,
+              help='Run for all advisories values defined in [group|releases].yml')
 @click.pass_obj
 @click_coroutine
-async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, default_advisory_type: str):
+async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, default_advisory_type: str, into_default_advisories: bool):
     """Attach corresponding flaw bugs for trackers in advisory (first-fix only).
 
     Also converts advisory to RHSA, if not already.
@@ -44,15 +47,15 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     1851422, 1866148, 1858981, 1852331, 1861044, 1857081, 1857977, 1848647,
     1849044, 1856529, 1843575, 1840253]
     """
-    if sum(map(bool, [advisory_id, default_advisory_type])) != 1:
-        raise click.BadParameter("Use one of --use-default-advisory or --advisory")
+    if sum(map(bool, [advisory_id, default_advisory_type, into_default_advisories])) != 1:
+        raise click.BadParameter("Use one of --use-default-advisory or --advisory or --into-default-advisories")
     runtime.initialize()
-    if not advisory_id and default_advisory_type is not None:
-        advisory_id = find_default_advisory(runtime, default_advisory_type)
-
-    runtime.logger.info("Getting advisory %s", advisory_id)
-    advisory = Erratum(errata_id=advisory_id)
-    exit_code = 0
+    if into_default_advisories:
+        advisories = runtime.group_config.advisories.values()
+    elif default_advisory_type:
+        advisories = [find_default_advisory(runtime, default_advisory_type)]
+    else:
+        advisories = [advisory_id]
 
     # Flaw bugs associated with jira tracker bugs
     # exist in bugzilla. so to work with jira trackers
@@ -60,21 +63,26 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     if runtime.only_jira:
         runtime.use_jira = True
 
-    tasks = []
-    for bug_tracker in runtime.bug_trackers.values():
-        flaw_bug_tracker = runtime.bug_trackers['bugzilla']
-        tasks.append(asyncio.get_event_loop().create_task(get_flaws(runtime, advisory, bug_tracker,
-                                                          flaw_bug_tracker, noop)))
-    try:
-        lists_of_flaw_bugs = await asyncio.gather(*tasks)
-        flaw_bugs = list(set(sum(lists_of_flaw_bugs, [])))
-        if flaw_bugs:
-            bug_tracker = runtime.bug_trackers['bugzilla']
-            _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop)
-    except Exception as e:
-        runtime.logger.error(traceback.format_exc())
-        runtime.logger.error(f'Exception: {e}')
-        exit_code = 1
+    exit_code = 0
+    for advisory_id in advisories:
+        runtime.logger.info("Getting advisory %s", advisory_id)
+        advisory = Erratum(errata_id=advisory_id)
+
+        tasks = []
+        for bug_tracker in runtime.bug_trackers.values():
+            flaw_bug_tracker = runtime.bug_trackers['bugzilla']
+            tasks.append(asyncio.get_event_loop().create_task(get_flaws(runtime, advisory, bug_tracker,
+                                                              flaw_bug_tracker, noop)))
+        try:
+            lists_of_flaw_bugs = await asyncio.gather(*tasks)
+            flaw_bugs = list(set(sum(lists_of_flaw_bugs, [])))
+            if flaw_bugs:
+                bug_tracker = runtime.bug_trackers['bugzilla']
+                _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop)
+        except Exception as e:
+            runtime.logger.error(traceback.format_exc())
+            runtime.logger.error(f'Exception: {e}')
+            exit_code = 1
     sys.exit(exit_code)
 
 

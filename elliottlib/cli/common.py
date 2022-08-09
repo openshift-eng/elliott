@@ -84,7 +84,7 @@ def find_default_advisory(runtime, default_advisory_type, quiet=False):
     default_advisory = runtime.group_config.advisories.get(default_advisory_type, None)
     if default_advisory is None:
         red_prefix('No value defined for default advisory:')
-        click.echo(' The key advisories.{} is not defined for group {} in group.yml'.format(
+        click.echo(' The key advisories.{} is not defined for group {} in [group|releases].yml'.format(
             default_advisory_type, runtime.group))
         exit(1)
     if not quiet:
@@ -97,7 +97,7 @@ use_default_advisory_option = click.option(
     '--use-default-advisory', 'default_advisory_type',
     metavar='ADVISORY_TYPE',
     type=click.Choice(constants.standard_advisory_types),
-    help='Use the default value from group.yml for ADVISORY_TYPE [{}]'.format(
+    help='Use the default value from [group|releases].yml for ADVISORY_TYPE [{}]'.format(
         ', '.join(constants.standard_advisory_types)))
 
 pass_runtime = click.make_pass_decorator(Runtime)
