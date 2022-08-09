@@ -1,7 +1,9 @@
 aiohttp[speedups] >= 3.6
 click == 8.0.4
 contextvars; python_version < '3.7'
-errata-tool >= 1.27.1
+# errata-tool >= 1.27.1
+# Instead use errata-tool commit with fix
+git+ssh://git@github.com/red-hat-storage/errata-tool.git@a24cf5228be8f32a2f937be183fa1caaeca3cd5b
 future
 koji >= 1.18
 semver
