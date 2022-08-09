@@ -7,6 +7,10 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple, cast
 from urllib.parse import urljoin
 
 import aiohttp
+from aiohttp.client_exceptions import (ClientResponseError,
+                                       ServerDisconnectedError)
+from tenacity import (before_sleep_log, retry, retry_if_exception_type,
+                      stop_after_attempt, wait_exponential)
 
 from elliottlib.exectools import limit_concurrency
 from elliottlib.imagecfg import ImageMetadata
@@ -74,6 +78,9 @@ class CVPInspector:
         return passed, failed, missing
 
     async def get_sanity_test_optional_results(self, test_results: Iterable[Dict]):
+        @retry(reraise=True, stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10),
+               retry=(retry_if_exception_type((ServerDisconnectedError, ClientResponseError))),
+               before_sleep=before_sleep_log(self._logger, logging.WARNING))
         @limit_concurrency(limit=32)
         async def _fetch(url):
             r = await session.get(url)
