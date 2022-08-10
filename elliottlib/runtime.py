@@ -51,7 +51,7 @@ class Runtime(object):
         self.verbose = False
         self.quiet = False
         self.data_path = None
-        self.use_jira = os.environ.get('USEJIRA')
+        self.use_jira = True
         self.only_jira = os.environ.get('ONLYJIRA')
         self._bug_trackers = {}
         self.brew_event: Optional[int] = None
