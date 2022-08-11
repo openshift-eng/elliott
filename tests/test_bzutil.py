@@ -5,7 +5,7 @@ import xmlrpc.client
 
 from flexmock import flexmock
 import mock
-from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker
+from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker, BugzillaBug, JIRABug
 from elliottlib import bzutil, constants
 
 hostname = "bugzilla.redhat.com"
@@ -42,57 +42,31 @@ class TestBZUtil(unittest.TestCase):
     def tearDown(self):
         logging.disable(logging.NOTSET)
 
-    def test_is_flaw_bug(self):
-        bug = mock.MagicMock(product="Security Response", component="vulnerability")
-        self.assertTrue(bzutil.is_flaw_bug(bug))
-        bug = mock.MagicMock(product="foo", component="bar")
-        self.assertFalse(bzutil.is_flaw_bug(bug))
+    def test_whiteboard_component_bz(self):
+        bug = BugzillaBug(mock.MagicMock(id=1, whiteboard="foo"))
+        self.assertIsNone(bug.whiteboard_component)
 
-    def test_get_whiteboard_component(self):
-        bug = mock.MagicMock(whiteboard="foo")
-        self.assertFalse(bzutil.get_whiteboard_component(bug))
-
-        bug = mock.MagicMock(whiteboard="component: ")
-        self.assertFalse(bzutil.get_whiteboard_component(bug))
+        bug = BugzillaBug(mock.MagicMock(id=2, whiteboard="component: "))
+        self.assertIsNone(bug.whiteboard_component)
 
         for expected in ["something", "openvswitch2.15", "trailing_blank 	"]:
-            bug = mock.MagicMock(whiteboard=f"component: {expected}")
+            bug = BugzillaBug(mock.MagicMock(whiteboard=f"component: {expected}"))
             expected = expected.strip()
-            actual = bzutil.get_whiteboard_component(bug)
+            actual = bug.whiteboard_component
             self.assertEqual(actual, expected.strip())
 
-    # def test_get_bugs(self):
-    #     bug_ids = [1, 2]
-    #     expected = {
-    #         1: mock.MagicMock(id=1),
-    #         2: mock.MagicMock(id=2),
-    #     }
-    #     bzapi = mock.MagicMock()
-    #     bzapi.getbugs.return_value = [expected[bug_id] for bug_id in bug_ids]
-    #     actual = bzutil.get_bugs(bzapi, bug_ids)
-    #     self.assertEqual(expected, actual)
+    def test_whiteboard_component_jira(self):
+        bug = JIRABug(mock.MagicMock(id=1, fields=mock.MagicMock(labels=["foo"])))
+        self.assertIsNone(bug.whiteboard_component)
 
-    @mock.patch.object(bzutil.BugzillaBugTracker, 'get_bugs_map', autospec=True)
-    @mock.patch.object(bzutil.BugzillaBugTracker, 'login', return_value=None, autospec=True)
-    def test_get_tracker_flaws_map(self, login_mock: mock.MagicMock, get_bugs_mock: mock.MagicMock):
-        trackers = {
-            1: mock.MagicMock(id=1, blocks=[11, 12]),
-            2: mock.MagicMock(id=2, blocks=[21, 22]),
-        }
-        flaws_ids = [11, 12, 21, 22]
-        flaws = {
-            flaw_id: mock.MagicMock(id=flaw_id, product="Security Response", component="vulnerability")
-            for flaw_id in flaws_ids
-        }
-        expected = {
-            1: [flaws[11], flaws[12]],
-            2: [flaws[21], flaws[22]],
-        }
+        bug = JIRABug(mock.MagicMock(id=1, fields=mock.MagicMock(labels=["component: "])))
+        self.assertIsNone(bug.whiteboard_component)
 
-        mock_bug_tracker = bzutil.BugzillaBugTracker({})
-        get_bugs_mock.return_value = flaws
-        actual = bzutil.get_tracker_flaws_map(mock_bug_tracker, trackers.values())
-        self.assertEqual(expected, actual)
+        for expected in ["something", "openvswitch2.15", "trailing_blank 	"]:
+            bug = JIRABug(mock.MagicMock(id=1, fields=mock.MagicMock(labels=[f"component: {expected}"])))
+            expected = expected.strip()
+            actual = bug.whiteboard_component
+            self.assertEqual(actual, expected.strip())
 
     def test_is_viable_bug(self):
         bug = mock.MagicMock()
@@ -100,14 +74,6 @@ class TestBZUtil(unittest.TestCase):
         self.assertTrue(bzutil.is_viable_bug(bug))
         bug.status = "ASSIGNED"
         self.assertFalse(bzutil.is_viable_bug(bug))
-
-    def test_is_cve_tracker(self):
-        bug = mock.MagicMock(keywords=[])
-        self.assertFalse(bzutil.is_cve_tracker(bug))
-        bug.keywords.append("Security")
-        self.assertFalse(bzutil.is_cve_tracker(bug))
-        bug.keywords.append("SecurityTracking")
-        self.assertTrue(bzutil.is_cve_tracker(bug))
 
     def test_to_timestamp(self):
         dt = xmlrpc.client.DateTime("20210615T18:23:22")
@@ -360,66 +326,6 @@ class TestGetHigestImpact(unittest.TestCase):
         }
         impact = bzutil.get_highest_impact(bugs, tracker_flaws_map)
         self.assertEqual(impact, "Low")
-
-
-class TestGetFlawBugs(unittest.TestCase):
-    def setUp(self):
-        logging.disable(logging.CRITICAL)
-
-    def tearDown(self):
-        logging.disable(logging.NOTSET)
-
-    def test_get_flaw_bugs(self):
-        t1 = flexmock(id='1', blocks=['b1', 'b2'])
-        t2 = flexmock(id='2', blocks=['b3'])
-        t3 = flexmock(id='3', blocks=[])
-        flaw_bugs = bzutil.get_flaw_bugs([t1, t2, t3])
-        for flaw in ['b1', 'b2', 'b3']:
-            self.assertTrue(flaw in flaw_bugs)
-
-
-class TestGetFlawAliases(unittest.TestCase):
-    def setUp(self):
-        logging.disable(logging.CRITICAL)
-
-    def tearDown(self):
-        logging.disable(logging.NOTSET)
-
-    def test_get_flaw_aliases(self):
-        CVE01 = flexmock(
-            id='1',
-            product='Security Response',
-            component='vulnerability',
-            alias=['CVE-0001-0001']
-        )
-        multiAlias = flexmock(
-            id='2',
-            product='Security Response',
-            component='vulnerability',
-            alias=['CVE-0001-0002', 'someOtherAlias']
-        )
-        multiAlias2 = flexmock(
-            id='3',
-            product='Security Response',
-            component='vulnerability',
-            alias=['someOtherAlias', 'CVE-0001-0003']
-        )
-        noAlias = flexmock(
-            id='4',
-            product='Security Response',
-            component='vulnerability',
-            alias=[]
-        )
-        nonFlaw = flexmock(
-            id='5',
-            product='Some Product',
-            component='security',
-            alias=['CVE-0001-0001', 'someOtherAlias']
-        )
-        flaws = [CVE01, multiAlias, multiAlias2, noAlias, nonFlaw]
-        flaw_cve_map = bzutil.get_flaw_aliases(flaws)
-        self.assertEqual(len(flaw_cve_map.keys()), 4)
-        self.assertEqual(flaw_cve_map['4'], "")
 
 
 if __name__ == "__main__":

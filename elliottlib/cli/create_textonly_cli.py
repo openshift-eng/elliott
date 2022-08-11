@@ -1,25 +1,15 @@
-import datetime
-
-from errata_tool import Erratum, ErrataException
-from spnego.exceptions import GSSError
+from errata_tool import Erratum
 import click
 
 from elliottlib.cli.common import cli
-from elliottlib import logutil, Runtime
+from elliottlib import logutil
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.bzutil import BugTracker
-from elliottlib.errata import add_jira_issue
 from elliottlib.util import exit_unauthorized, green_prefix, validate_release_date, \
-    YMD, validate_email_address
+    validate_email_address
 import elliottlib
 
 LOGGER = logutil.getLogger(__name__)
-
-pass_runtime = click.make_pass_decorator(Runtime)
-
-#
-# Create Text only advisory
-# advisory:create-textonly
 
 
 @cli.command('create-textonly',
@@ -58,9 +48,8 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option('--yes', '-y', is_flag=True,
               default=False, type=bool,
               help="Create the advisory (by default only a preview is displayed)")
-@pass_runtime
-@click.pass_context
-def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes):
+@click.pass_obj
+def create_textonly_cli(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description, solution, bugtitle, bugdescription, yes):
     """
     Create a text only advisory with all required input passed from args, need to manually decide the statement for each release.
     Also will create the notification bug along with the text only advisory, the bug also need some special comment and title.
@@ -80,21 +69,16 @@ def create_textonly_cli(ctx, runtime, errata_type, date, assigned_to, manager, p
     # we want to create only one advisory regardless of multiple bug trackers being used
     # we give priority to jira in case both are in use
     if runtime.use_jira or runtime.only_jira:
-        create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
+        create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
                         description, solution, bugtitle, bugdescription, yes, bug_trackers['jira'])
 
     else:
-        create_textonly(ctx, runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
+        create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
                         description, solution, bugtitle, bugdescription, yes, bug_trackers['bugzilla'])
 
 
 def create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description,
-                    solution, bugtitle, bugdescription, yes, bug_tracker: BugTracker):
-    # create textonly bug
-    newbug = bug_tracker.create_textonly(bugtitle, bugdescription)
-    click.echo("Created BZ: {} {}".format(newbug.id, newbug.weburl))
-
-    # create textonly advisory
+                    solution, bug_title, bug_description, yes, bug_tracker: BugTracker):
     et_data = runtime.gitdata.load_data(key='erratatool').data
     try:
         erratum = Erratum(
@@ -125,8 +109,10 @@ def create_textonly(runtime, errata_type, date, assigned_to, manager, package_ow
         erratum.commit()
         green_prefix("Created new text only advisory: ")
         click.echo(str(erratum))
+        bug = bug_tracker.create_textonly(bug_title, bug_description)
+        click.echo(f"Created placeholder bug: {bug.id} {bug.webur}")
         click.echo("Attaching placeholder bug...")
-        bug_tracker.attach_bugs(erratum.errata_id, [newbug.id])
+        bug_tracker.attach_bugs(erratum.errata_id, [bug.id])
     else:
         green_prefix("Would have created advisory: ")
         click.echo("")
