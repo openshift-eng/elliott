@@ -21,7 +21,7 @@ def async_test(f):
 class VerifyAttachedBugs(unittest.TestCase):
     def test_validator_target_release(self):
         runtime = MagicMock()
-        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z'], 'product': 'OpenShift Container Platform'})
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z'], 'project': 'OpenShift Container Platform'})
         flexmock(AsyncErrataAPI).should_receive("__init__").and_return(None)
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
         validator = BugValidator(runtime, True)
@@ -36,7 +36,7 @@ class TestGetAttachedBugs(unittest.TestCase):
             'bug-1': flexmock(id='bug-1'),
             'bug-2': flexmock(id='bug-2'),
         }
-        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z'], 'product': 'OpenShift Container Platform'})
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z'], 'project': 'OpenShift Container Platform'})
         flexmock(AsyncErrataAPI).should_receive("__init__").and_return(None)
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
         flexmock(JIRABugTracker).should_receive("get_bugs_map").with_args(['bug-1', 'bug-2']).and_return(bug_map)
