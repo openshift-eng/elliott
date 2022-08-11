@@ -145,12 +145,11 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .and_return(bug_a))
 
         expected = True
-        actual = bzutil.is_first_fix_any(bug_tracker, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_missing_whiteboard_component(self):
         tr = '4.8.0'
-        tracker_bug_ids = [1, 2]
         bug_a = BugzillaBug(flexmock(
             id=1,
             product=constants.BUGZILLA_PRODUCT_OCP,
@@ -179,7 +178,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
         (bzapi.should_receive("get_bug").with_args(2).and_return(bug_a))
 
         expected = False
-        actual = bzutil.is_first_fix_any(bug_tracker, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_is_first_fix_group(self):
@@ -217,7 +216,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
         (bzapi.should_receive("get_bug").with_args(2).and_return(bug_b))
 
         expected = True
-        actual = bzutil.is_first_fix_any(bug_tracker, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_already_fixed(self):
@@ -256,7 +255,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
             .and_return(bug_a))
 
         expected = False
-        actual = bzutil.is_first_fix_any(bug_tracker, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
     def test_is_first_fix_any_any(self):
@@ -305,7 +304,7 @@ class TestAttachCVEFlaws(unittest.TestCase):
         (bzapi.should_receive("get_bug").with_args(3).and_return(bug_c))
 
         expected = True
-        actual = bzutil.is_first_fix_any(bug_tracker, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)
 
 

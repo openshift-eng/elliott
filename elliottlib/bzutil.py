@@ -398,7 +398,7 @@ class BugTracker:
             if strict:
                 raise exceptions.ElliottFatalError(msg)
             else:
-                logger.warn(msg)
+                logger.warning(msg)
 
         tracker_flaws = {
             tracker.id: [b for b in tracker.corresponding_flaw_bug_ids if b in flaw_id_bugs]
