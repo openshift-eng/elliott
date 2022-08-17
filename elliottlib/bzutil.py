@@ -529,7 +529,8 @@ class JIRABugTracker(BugTracker):
         if exclude_labels:
             query += f" and labels not in ({','.join(exclude_labels)})"
         if exclude_components:
-            val = ','.join(f'"{c}"' for c in exclude_components)
+            # https://docs.adaptavist.com/sr4js/6.55.1/features/jql-functions/included-jql-functions/calculations
+            val = ','.join(f'componentMatch("{c}*")' for c in exclude_components)
             query += f" and component not in ({val})"
         if custom_query:
             query += custom_query
