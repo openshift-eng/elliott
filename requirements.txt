@@ -3,7 +3,7 @@ click == 8.0.4
 contextvars; python_version < '3.7'
 # errata-tool >= 1.27.1
 # Instead use errata-tool commit with fix
-errata-tool @ git+http://github.com/red-hat-storage/errata-tool.git@a24cf5228be8f32a2f937be183fa1caaeca3cd5b
+errata-tool @ git+http://github.com/thegreyd/errata-tool.git@bad2cb9c3321a1179f018cd9ddcf1d51d634290b
 future
 koji >= 1.18
 semver
