@@ -16,7 +16,7 @@ LOGGER = logutil.getLogger(__name__)
 @click.option('--kind', '-k', metavar='KIND',
               required=False, type=click.Choice(
                   elliottlib.constants.standard_advisory_types),
-              help='KIND [{}] of placeholder bug to create. Affects BZ title.'.format(
+              help='KIND [{}] of placeholder bug to create. Affects Bug title.'.format(
                   ', '.join(elliottlib.constants.standard_advisory_types)))
 @click.option('--attach', '-a', 'advisory_id',
               type=int, metavar='ADVISORY',
@@ -47,12 +47,8 @@ def create_placeholder_cli(runtime, kind, advisory_id, default_advisory_type, no
         raise click.BadParameter("--kind must be specified when not using --use-default-advisory")
 
     bug_trackers = runtime.bug_trackers
-    # we want to create one placeholder bug regardless of multiple bug trackers being used
-    # we give priority to jira in case both are in use
-    if runtime.use_jira or runtime.only_jira:
-        create_placeholder(kind, advisory_id, bug_trackers['jira'], noop)
-    else:
-        create_placeholder(kind, advisory_id, bug_trackers['bugzilla'], noop)
+    # Creating bug in bugzilla has been disabled
+    create_placeholder(kind, advisory_id, bug_trackers['jira'], noop)
 
 
 def create_placeholder(kind, advisory_id, bug_tracker, noop):
