@@ -1,10 +1,7 @@
-from elliottlib import logutil
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.util import green_prefix
 from errata_tool import Erratum, ErrataException
 import click
-
-LOGGER = logutil.getLogger(__name__)
 
 
 @cli.command("change-state", short_help="Change ADVISORY state")
@@ -33,16 +30,9 @@ unless Bugzilla Bugs or JIRA Issues have been attached.
     NOTE: The two advisory options are mutually exclusive and can not
     be used together.
 
-See the find-bugs help for additional information on adding
-Bugs.
-
     Move assembly release advisories to QE
 
     $ elliott -g openshift-4.10 --assembly 4.10.4 change-state -s QE
-
-    Move group release advisories to QE:
-
-    $ elliott -g openshift-4.5 change-state -s QE --default-advisories
 
     Move the advisory 123456 to QE:
 
@@ -52,8 +42,7 @@ Bugs.
 
     $ elliott change-state -s NEW_FILES -a 123456
 
-    Do not actually change state, just check that the command could
-    have ran (for example, when testing out pipelines)
+    Do not actually change state, just check the command could run
 
     $ elliott change-state -s NEW_FILES -a 123456 --noop
 """
