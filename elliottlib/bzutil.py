@@ -521,7 +521,8 @@ class JIRABugTracker(BugTracker):
         if bugids:
             query += f" and issue in ({','.join(bugids)})"
         if status:
-            query += f" and status in ({','.join(status)})"
+            val = ','.join(f'"{s}"' for s in status)
+            query += f" and status in ({val})"
         if target_release:
             tr = ','.join(target_release)
             query += f' and "Target Version" in ({tr})'
