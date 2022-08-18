@@ -1,21 +1,12 @@
-
-from elliottlib import logutil, Runtime
+from elliottlib import logutil
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
-from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import green_prefix, red_prefix
-
+from elliottlib.util import green_prefix
 from errata_tool import Erratum, ErrataException
 import click
 
 LOGGER = logutil.getLogger(__name__)
 
-pass_runtime = click.make_pass_decorator(Runtime)
 
-
-#
-# Set advisory state
-# change-state
-#
 @cli.command("change-state", short_help="Change ADVISORY state")
 @click.option("--state", '-s', required=True,
               type=click.Choice(['NEW_FILES', 'QE', 'REL_PREP']),
@@ -30,7 +21,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
               is_flag=True,
               default=False,
               help="Do not actually change anything")
-@pass_runtime
+@click.pass_obj
 def change_state_cli(runtime, state, advisory, default_advisories, default_advisory_type, noop):
     """Change the state of an ADVISORY. Additional permissions may be
 required to change an advisory to certain states.
@@ -91,18 +82,6 @@ Bugs.
             if e.errata_state == state:
                 green_prefix(f"No Change ({advisory}): ")
                 click.echo(f"Target state is same as current state: {state}")
-            # we have 5 different states we can only change the state if it's in NEW_FILES or QE
-            # "NEW_FILES",
-            # "QE",
-            # "REL_PREP",
-            # "PUSH_READY",
-            # "IN_PUSH"
-            elif e.errata_state != 'NEW_FILES' and e.errata_state != 'QE':
-                red_prefix(f"Error ({advisory}): ")
-                if default_advisory_type is not None:
-                    click.echo(f"Could not change '{e.errata_state}', group.yml is probably pointing at old one")
-                else:
-                    click.echo(f"Can only change the state if it's in NEW_FILES or QE, current state is {e.errata_state}")
             else:
                 if noop:
                     green_prefix(f"NOOP ({advisory}): ")
