@@ -64,6 +64,11 @@ context_settings = dict(help_option_names=['-h', '--help'])
     help='Show debug output on console.')
 @click.option("--brew-event", metavar='EVENT', type=click.INT, default=None,
               help="Lock koji clients from runtime to this brew event.")
+@click.option("--bug-mode", metavar="BUG_MODE", default='both',
+              type=click.Choice(['jira', 'bz', 'both']),
+              help="Bug mode to force a run in, choices: ['jira', 'bz', 'both']. "
+                   "Default is 'both'"
+                   "Commands may require specific modes")
 @click.pass_context
 def cli(ctx, **kwargs):
     cfg = dotconfig.Config(

@@ -25,12 +25,11 @@ class FindBugsQETestCase(unittest.TestCase):
             bug, 'ON_QA', comment=expected_comment, noop=True
         )
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:qe', '--noop'])
+        result = runner.invoke(cli, ['--bug-mode=bz', '-g', 'openshift-4.6', 'find-bugs:qe', '--noop'])
         search_string1 = 'Found 1 bugs: 123'
         self.assertIn(search_string1, result.output)
         self.assertEqual(result.exit_code, 0)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_find_bugs_qe_jira(self):
         runner = CliRunner()
         jira_bug = flexmock(id='OCPBUGS-123', status="MODIFIED")

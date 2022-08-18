@@ -2,7 +2,6 @@ import click
 
 from elliottlib import Runtime, logutil
 from elliottlib.bzutil import Bug
-from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, find_default_advisory, use_default_advisory_option
 from elliottlib.cli.find_bugs_sweep_cli import print_report
 
@@ -38,25 +37,26 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     Print bug report (no attach)
 
 \b
-    $ elliott -g openshift-4.10 attach-bugs 8675309 7001337 --report
+    $ elliott -g openshift-4.10 --bug-mode=bz attach-bugs 8675309 7001337 --report
 
 
     Print bug report for jira bugs (no attach)
 
 \b
-    $ USEJIRA=true elliott -g openshift-4.10 attach-bugs OCPBUGS-10 OCPBUGS-9 --report
+    $ elliott -g openshift-4.10 attach-bugs OCPBUGS-10 OCPBUGS-9 --report
 
 
     Attach bugs to the advisory 123456
 
 \b
-    $ elliott -g openshift-4.10 attach-bugs 8675309 7001337 --advisory 123456
+    $ elliott -g openshift-4.10 --bug-mode=bz attach-bugs 8675309 7001337 --advisory 123456
 
 
     Attach bugs to the 4.10.2 assembly defined image advisory
 
 \b
-    $ elliott -g openshift-4.10 --assembly 4.10.2 attach-bugs 8675309 7001337 --use-default-advisory image
+    $ elliott -g openshift-4.10 --bug-mode=bz--assembly 4.10.2 --bug-mode=bz attach-bugs 8675309 7001337
+    --use-default-advisory image
 
 """
     if advisory and default_advisory_type:
@@ -66,7 +66,9 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    if runtime.use_jira or runtime.only_jira:
+    if runtime.bug_mode == 'both':
+        runtime.bug_mode = 'jira'
+    if runtime.bug_mode in ['jira', 'both']:
         bug_tracker = runtime.bug_trackers['jira']
     else:
         bug_tracker = runtime.bug_trackers['bugzilla']

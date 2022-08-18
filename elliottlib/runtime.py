@@ -51,8 +51,7 @@ class Runtime(object):
         self.verbose = False
         self.quiet = False
         self.data_path = None
-        self.use_jira = os.environ.get('USEJIRA')
-        self.only_jira = os.environ.get('ONLYJIRA')
+        self.bug_mode: Optional[str] = 'both'
         self._bug_trackers = {}
         self.brew_event: Optional[int] = None
         self.assembly: Optional[str] = 'stream'
@@ -280,9 +279,9 @@ class Runtime(object):
     def bug_trackers(self):
         if self._bug_trackers:
             return self._bug_trackers
-        if not self.only_jira:
+        if self.bug_mode in ['bz', 'both']:
             self._bug_trackers['bugzilla'] = BugzillaBugTracker(BugzillaBugTracker.get_config(self))
-        if self.use_jira or self.only_jira:
+        if self.bug_mode in ['jira', 'both']:
             self._bug_trackers['jira'] = JIRABugTracker(JIRABugTracker.get_config(self))
         return self._bug_trackers
 

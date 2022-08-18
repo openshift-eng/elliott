@@ -48,7 +48,7 @@ def create_placeholder_cli(runtime, kind, advisory_id, default_advisory_type, no
 
     # Creating bug in bugzilla has been disabled
     # we should use jira only
-    runtime.only_jira = True
+    runtime.bug_mode = 'jira'
     bug_trackers = runtime.bug_trackers
     create_placeholder(kind, advisory_id, bug_trackers['jira'], noop)
 

@@ -29,7 +29,8 @@ class FindBugsBlockerTestCase(unittest.TestCase):
             .with_args({'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'RELEASE_PENDING'}, verbose=False)\
             .and_return(bugs)
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:blocker', '--exclude-status=ON_QA',
+        result = runner.invoke(cli, ['--bug-mode=bz', '-g', 'openshift-4.6', 'find-bugs:blocker',
+                                     '--exclude-status=ON_QA',
                                      '--include-status=RELEASE_PENDING'])
 
         expected_output = 'BZ1           OLM                       ON_DEV       score   33  days   summary'

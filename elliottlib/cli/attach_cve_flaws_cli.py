@@ -60,8 +60,9 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     # Flaw bugs associated with jira tracker bugs
     # exist in bugzilla. so to work with jira trackers
     # we need both bugzilla and jira instances initialized
-    if runtime.only_jira:
-        runtime.use_jira = True
+    if runtime.bug_mode == 'jira':
+        runtime.logger.warn("Cannot run in --bug-mode=jira. setting --bug-mode=both")
+        runtime.bug_mode = 'both'
 
     exit_code = 0
     for advisory_id in advisories:

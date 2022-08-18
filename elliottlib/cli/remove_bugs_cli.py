@@ -1,6 +1,5 @@
 import click
 from elliottlib import logutil, errata
-from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated
@@ -55,7 +54,7 @@ def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove
     if default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
-    if runtime.use_jira or runtime.only_jira:
+    if runtime.bug_mode in ['jira', 'both']:
         bug_tracker = runtime.bug_trackers['jira']
     else:
         bug_tracker = runtime.bug_trackers['bugzilla']

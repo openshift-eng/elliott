@@ -68,7 +68,7 @@ def create_textonly_cli(runtime, errata_type, date, assigned_to, manager, packag
     bug_trackers = runtime.bug_trackers
     # we want to create only one advisory regardless of multiple bug trackers being used
     # we give priority to jira in case both are in use
-    if runtime.use_jira or runtime.only_jira:
+    if runtime.bug_mode in ['jira', 'both']:
         create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
                         description, solution, bugtitle, bugdescription, yes, bug_trackers['jira'])
 

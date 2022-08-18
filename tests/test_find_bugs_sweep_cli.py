@@ -34,7 +34,6 @@ class TestFindBugsMode(unittest.TestCase):
 
 
 class FindBugsSweepTestCase(unittest.TestCase):
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_find_bugs_sweep_report(self):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize").and_return(None)
@@ -89,7 +88,6 @@ class FindBugsSweepTestCase(unittest.TestCase):
         self.assertIn(search_string1, result.output)
         self.assertIn(search_string2, result.output)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_find_bugs_sweep_brew_event(self):
         runner = CliRunner()
         bugs = [flexmock(id='BZ1', status='ON_QA')]
@@ -119,7 +117,6 @@ class FindBugsSweepTestCase(unittest.TestCase):
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.fail(t)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_find_bugs_sweep_advisory_jira(self):
         runner = CliRunner()
         bugs = [flexmock(id='BZ1')]
@@ -150,7 +147,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.fail(t)
 
-    def test_find_bugs_sweep_advisory_type(self):
+    def test_find_bugs_sweep_advisory_type_bz(self):
         runner = CliRunner()
         bugs = [flexmock(id='BZ1')]
 
@@ -167,13 +164,14 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("search").and_return(bugs)
         flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args(123, ['BZ1'], noop=False, verbose=False)
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--use-default-advisory', 'image'])
+        result = runner.invoke(cli, ['--bug-mode=bz', '-g', 'openshift-4.6', 'find-bugs:sweep',
+                                     '--use-default-advisory', 'image'])
         if result.exit_code != 0:
             exc_type, exc_value, exc_traceback = result.exc_info
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.fail(t)
 
-    def test_find_bugs_sweep_default_advisories(self):
+    def test_find_bugs_sweep_default_advisories_bz(self):
         runner = CliRunner()
         image_bugs = [flexmock(id=1), flexmock(id=2)]
         rpm_bugs = [flexmock(id=3), flexmock(id=4)]
@@ -196,7 +194,8 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("search").and_return(image_bugs + rpm_bugs + extras_bugs)
         flexmock(BugzillaBugTracker).should_receive("attach_bugs").times(3)
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--into-default-advisories'])
+        result = runner.invoke(cli, ['--bug-mode=bz', '-g', 'openshift-4.6', 'find-bugs:sweep',
+                                     '--into-default-advisories'])
         if result.exit_code != 0:
             exc_type, exc_value, exc_traceback = result.exc_info
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))

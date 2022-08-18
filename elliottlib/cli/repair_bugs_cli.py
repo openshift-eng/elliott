@@ -8,6 +8,12 @@ from elliottlib.bzutil import BugTracker
 from elliottlib.util import green_print, progress_func, pbar_header
 from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
+from elliottlib import logutil
+from elliottlib.bzutil import BugTracker
+from elliottlib.util import green_print, progress_func, pbar_header
+from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
+
+LOGGER = logutil.getLogger(__name__)
 
 
 @cli.command("repair-bugs", short_help="Move bugs attached to ADVISORY from one state to another")
@@ -99,9 +105,8 @@ providing an advisory with the -a/--advisory option.
         raise click.BadParameter("No input provided: Must use one of --id, --advisory, or --use-default-advisory")
 
     runtime.initialize()
-    if not auto and runtime.use_jira:
-        runtime.use_jira = False
-        runtime.only_jira = True
+    if not auto and runtime.bug_mode == 'both':
+        runtime.bug_mode = 'jira'
 
     for b in runtime.bug_trackers.values():
         repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop,

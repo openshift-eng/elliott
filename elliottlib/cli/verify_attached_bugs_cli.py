@@ -3,11 +3,10 @@ import re
 from typing import Any, Dict, Iterable, List, Set, Tuple
 
 import click
-from bugzilla.bug import Bug
 from spnego.exceptions import GSSError
 
 
-from elliottlib import bzutil, constants, util, errata
+from elliottlib import bzutil, constants, errata
 from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
@@ -37,9 +36,10 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
     if not advisories:
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
-    if runtime.use_jira:
+    if runtime.bug_mode in ['jira', 'both']:
         await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, True)
-    await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, False)
+    if runtime.bug_mode in ['bz', 'both']:
+        await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, False)
 
 
 async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool, use_jira: bool):
@@ -69,9 +69,10 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 @click_coroutine
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
-    if runtime.use_jira:
+    if runtime.bug_mode in ['jira', 'both']:
         await verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
-    await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
+    if runtime.bug_mode in ['bz', 'both']:
+        await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
 
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):

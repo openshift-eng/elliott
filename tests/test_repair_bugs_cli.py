@@ -1,6 +1,4 @@
 import unittest
-import os
-from mock import patch
 from click.testing import CliRunner
 from elliottlib.cli.common import cli, Runtime
 import elliottlib.cli.repair_bugs_cli
@@ -18,11 +16,11 @@ class RepairBugsTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("login")
         flexmock(BugzillaBugTracker).should_receive("get_bug").with_args(1).and_return(bug)
         flexmock(BugzillaBugTracker).should_receive("update_bug_status").once()
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'repair-bugs', '--id', '1', '--to', 'ON_QA', '-a', '99999'])
+        result = runner.invoke(cli, ['--bug-mode=bz', '-g', 'openshift-4.6', 'repair-bugs', '--id', '1', '--to',
+                                     'ON_QA', '-a', '99999'])
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_repair_jira_bug_id(self):
         runner = CliRunner()
         bug = flexmock(id=1, status="MODIFIED", summary="")
@@ -31,11 +29,11 @@ class RepairBugsTestCase(unittest.TestCase):
         flexmock(JIRABugTracker).should_receive("login")
         flexmock(JIRABugTracker).should_receive("get_bug").with_args("1").and_return(bug)
         flexmock(JIRABugTracker).should_receive("update_bug_status").once()
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'repair-bugs', '--id', '1', '--to', 'ON_QA', '-a', '99999'])
+        result = runner.invoke(cli, ['--bug-mode=jira', '-g', 'openshift-4.6', 'repair-bugs', '--id', '1', '--to',
+                                     'ON_QA', '-a', '99999'])
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_repair_placeholder_jira_bug(self):
         runner = CliRunner()
         bug = flexmock(id=1, status="MODIFIED", summary="Placeholder")
@@ -44,7 +42,8 @@ class RepairBugsTestCase(unittest.TestCase):
         flexmock(JIRABugTracker).should_receive("login")
         flexmock(JIRABugTracker).should_receive("get_bug").with_args("1").and_return(bug)
         flexmock(JIRABugTracker).should_receive("update_bug_status").once()
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'repair-bugs', '--close-placeholder', '--id', '1', '--to', 'ON_QA', '-a', '99999'])
+        result = runner.invoke(cli, ['--bug-mode=jira', '-g', 'openshift-4.6', 'repair-bugs', '--close-placeholder',
+                                     '--id', '1', '--to', 'ON_QA', '-a', '99999'])
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
 
@@ -57,11 +56,11 @@ class RepairBugsTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("get_bug").with_args(1).and_return(bug)
         flexmock(BugzillaBugTracker).should_receive("update_bug_status").once()
         flexmock(BugzillaBugTracker).should_receive("add_comment").once()
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'repair-bugs', '--id', '1', '--to', 'ON_QA', '--comment', 'close bug', '-a', '99999'])
+        result = runner.invoke(cli, ['--bug-mode=bz', '-g', 'openshift-4.6', 'repair-bugs', '--id', '1', '--to',
+                                     'ON_QA', '--comment', 'close bug', '-a', '99999'])
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_repair_auto(self):
         runner = CliRunner()
         bug = flexmock(id=1, status="MODIFIED", summary="")
