@@ -169,7 +169,7 @@ class JIRABug(Bug):
     @property
     def component(self):
         component0 = self.bug.fields.components[0].name
-        return component0.split(' / ')[0]
+        return component0.split('/')[0].strip()
 
     @property
     def status(self):
@@ -209,10 +209,10 @@ class JIRABug(Bug):
     @property
     def sub_component(self):
         component0 = self.bug.fields.components[0].name
-        split = component0.split(' / ')
+        split = component0.split('/')
         if len(split) < 2:
             return None
-        return split[1]
+        return split[1].strip()
 
     @property
     def resolution(self):

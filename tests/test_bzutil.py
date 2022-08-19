@@ -35,50 +35,59 @@ class TestBugzillaBugTracker(unittest.TestCase):
         self.assertEqual(actual, expected)
 
 
-class TestBZUtil(unittest.TestCase):
-    def setUp(self):
-        logging.disable(logging.CRITICAL)
+class TestJIRABug(unittest.TestCase):
+    def test_component_sub_component(self):
+        bug = JIRABug(flexmock(
+            key="OCPBUGS-43",
+            fields=flexmock(components=[flexmock(name="foo / bar")]))
+        )
+        actual = (bug.component, bug.sub_component)
+        expected = ("foo", "bar")
+        self.assertEqual(actual, expected)
 
-    def tearDown(self):
-        logging.disable(logging.NOTSET)
+    def test_component_sub_component_no_whitespace(self):
+        bug = JIRABug(flexmock(
+            key="OCPBUGS-43",
+            fields=flexmock(components=[flexmock(name="foo/bar")]))
+        )
+        actual = (bug.component, bug.sub_component)
+        expected = ("foo", "bar")
+        self.assertEqual(actual, expected)
 
-    def test_whiteboard_component_bz(self):
-        bug = BugzillaBug(mock.MagicMock(id=1, whiteboard="foo"))
+    def test_corresponding_flaw_bug_ids(self):
+        bug = JIRABug(flexmock(
+            key="OCPBUGS-43",
+            fields=flexmock(labels=["foo", "flaw:123", "flaw:bz#456"]))
+        )
+        actual = bug.corresponding_flaw_bug_ids
+        expected = [456]
+        self.assertEqual(actual, expected)
+
+    def test_whiteboard_component(self):
+        bug = JIRABug(flexmock(key=1, fields=flexmock(labels=["foo"])))
         self.assertIsNone(bug.whiteboard_component)
 
-        bug = BugzillaBug(mock.MagicMock(id=2, whiteboard="component: "))
+        bug = JIRABug(flexmock(key=1, fields=flexmock(labels=["component: "])))
         self.assertIsNone(bug.whiteboard_component)
 
         for expected in ["something", "openvswitch2.15", "trailing_blank 	"]:
-            bug = BugzillaBug(mock.MagicMock(whiteboard=f"component: {expected}"))
-            expected = expected.strip()
+            bug = JIRABug(flexmock(key=1, fields=flexmock(labels=[f"component: {expected}"])))
             actual = bug.whiteboard_component
             self.assertEqual(actual, expected.strip())
 
-    def test_whiteboard_component_jira(self):
-        bug = JIRABug(mock.MagicMock(id=1, fields=mock.MagicMock(labels=["foo"])))
+
+class TestBugzillaBug(unittest.TestCase):
+    def test_whiteboard_component(self):
+        bug = BugzillaBug(flexmock(id=1, whiteboard="foo"))
         self.assertIsNone(bug.whiteboard_component)
 
-        bug = JIRABug(mock.MagicMock(id=1, fields=mock.MagicMock(labels=["component: "])))
+        bug = BugzillaBug(flexmock(id=2, whiteboard="component: "))
         self.assertIsNone(bug.whiteboard_component)
 
         for expected in ["something", "openvswitch2.15", "trailing_blank 	"]:
-            bug = JIRABug(mock.MagicMock(id=1, fields=mock.MagicMock(labels=[f"component: {expected}"])))
-            expected = expected.strip()
+            bug = BugzillaBug(flexmock(id=2, whiteboard=f"component: {expected}"))
             actual = bug.whiteboard_component
             self.assertEqual(actual, expected.strip())
-
-    def test_is_viable_bug(self):
-        bug = mock.MagicMock()
-        bug.status = "MODIFIED"
-        self.assertTrue(bzutil.is_viable_bug(bug))
-        bug.status = "ASSIGNED"
-        self.assertFalse(bzutil.is_viable_bug(bug))
-
-    def test_to_timestamp(self):
-        dt = xmlrpc.client.DateTime("20210615T18:23:22")
-        actual = bzutil.to_timestamp(dt)
-        self.assertEqual(actual, 1623781402.0)
 
     def test_filter_bugs_by_cutoff_event(self):
         bzapi = mock.MagicMock()
@@ -253,6 +262,26 @@ class TestBZUtil(unittest.TestCase):
         actual = bug_tracker.filter_bugs_by_cutoff_event(bugs, desired_statuses, sweep_cutoff_timestamp)
         self.assertListEqual([1, 2, 4, 5, 7, 8], [bug.id for bug in actual])
 
+
+class TestBZUtil(unittest.TestCase):
+    def setUp(self):
+        logging.disable(logging.CRITICAL)
+
+    def tearDown(self):
+        logging.disable(logging.NOTSET)
+
+    def test_is_viable_bug(self):
+        bug = mock.MagicMock()
+        bug.status = "MODIFIED"
+        self.assertTrue(bzutil.is_viable_bug(bug))
+        bug.status = "ASSIGNED"
+        self.assertFalse(bzutil.is_viable_bug(bug))
+
+    def test_to_timestamp(self):
+        dt = xmlrpc.client.DateTime("20210615T18:23:22")
+        actual = bzutil.to_timestamp(dt)
+        self.assertEqual(actual, 1623781402.0)
+
     def test_approximate_cutoff_timestamp(self):
         koji_api = mock.MagicMock()
         koji_api.getEvent.return_value = {"ts": datetime(2021, 7, 3, 0, 0, 0, 0, tzinfo=timezone.utc).timestamp()}
@@ -277,7 +306,6 @@ class TestBZUtil(unittest.TestCase):
 
 
 class TestSearchFilter(unittest.TestCase):
-
     def test_search_filter(self):
         """Verify the bugzilla SearchFilter works as expected"""
         field_name = "component"
