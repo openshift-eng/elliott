@@ -149,7 +149,7 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
         qualified_bugs = []
         for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
             b = bug_tracker.filter_bugs_by_cutoff_event(chunk_of_bugs, find_bugs_obj.status,
-                                                        sweep_cutoff_timestamp)
+                                                        sweep_cutoff_timestamp, verbose=runtime.debug)
             qualified_bugs.extend(b)
         click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time "
                    f"{utc_ts}...")
@@ -181,7 +181,7 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
     # `--add ADVISORY_NUMBER` should respect the user's wish
     # and attach all available bugs to whatever advisory is specified.
     if advisory_id and not default_advisory_type:
-        bug_tracker.attach_bugs(advisory_id, [b.id for b in bugs], noop=noop)
+        bug_tracker.attach_bugs(advisory_id, [b.id for b in bugs], noop=noop, verbose=runtime.debug)
         return
 
     rpm_advisory_id = common.find_default_advisory(runtime, 'rpm') if check_builds else None
@@ -195,7 +195,7 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
         green_prefix(f'{advisory_type} advisory: ')
         if bugs:
             adv_id = common.find_default_advisory(runtime, advisory_type)
-            bug_tracker.attach_bugs(adv_id, [b.id for b in bugs], noop=noop)
+            bug_tracker.attach_bugs(adv_id, [b.id for b in bugs], noop=noop, verbose=runtime.debug)
         else:
             click.echo("0 bugs found")
 

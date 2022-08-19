@@ -570,13 +570,13 @@ class JIRABugTracker(BugTracker):
         return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
 
     def filter_bugs_by_cutoff_event(self, bugs: Iterable, desired_statuses: Iterable[str],
-                                    sweep_cutoff_timestamp: float) -> List:
+                                    sweep_cutoff_timestamp: float, verbose=False) -> List:
         dt = datetime.utcfromtimestamp(sweep_cutoff_timestamp).strftime("%Y/%m/%d %H:%M")
         val = ','.join(f'"{s}"' for s in desired_statuses)
         query = f"issue in ({','.join([b.id for b in bugs])}) " \
                 f"and status was in ({val}) " \
                 f'before("{dt}")'
-        return self._search(query, verbose=True)
+        return self._search(query, verbose=verbose)
 
     @staticmethod
     def advisory_bug_ids(advisory_obj):
