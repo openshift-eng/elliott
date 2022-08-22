@@ -21,7 +21,8 @@ from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any
               type=int,
               help='Find tracker bugs in given advisory')
 @click.option('--id', default=None, multiple=True,
-              help='For the given list of bugs, determine which flaw bugs would qualify to be attached (for testing)')
+              help='For the given list of bugs, determine which flaw bugs would qualify to be attached (for testing)'
+                   'This is a noop.')
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
