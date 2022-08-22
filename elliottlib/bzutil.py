@@ -84,7 +84,7 @@ class Bug:
         :param bugs: List[Bug] instance
         """
         invalid_bugs = []
-        target_releases = set()
+        target_releases_bugs_dict = {}
 
         if not bugs:
             raise ValueError("bugs should be a non empty list")
@@ -96,7 +96,10 @@ class Bug:
             if not valid_target_rel:
                 invalid_bugs.append(bug)
             else:
-                target_releases.add(bug.target_release[0])
+                tr = bug.target_release[0]
+                if tr not in target_releases_bugs_dict:
+                    target_releases_bugs_dict[tr] = []
+                target_releases_bugs_dict[tr].append(bug.id)
 
         if invalid_bugs:
             err = 'target_release should be a list with a string matching regex (digit+.digit+.[0|z])'
@@ -104,12 +107,14 @@ class Bug:
                 err += f'\n bug: {b.id}, target_release: {b.target_release} '
             raise ValueError(err)
 
-        if len(target_releases) != 1:
-            err = f'Found different target_release values for bugs: {target_releases}. ' \
-                'There should be only 1 target release for all bugs. Fix the offending bug(s) and try again.'
+        trs = list(target_releases_bugs_dict.keys())
+        if len(trs) != 1:
+            err = f'Found different target_release values for bugs: {trs}. ' \
+                  'There should be only 1 target release for all bugs. Fix the offending bug(s) and try again :' \
+                  f'{target_releases_bugs_dict}'
             raise ValueError(err)
 
-        return target_releases.pop()
+        return trs[0]
 
 
 class BugzillaBug(Bug):

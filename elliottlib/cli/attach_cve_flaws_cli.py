@@ -64,19 +64,23 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, id: str, noop
     elif advisory_id:
         advisories = [advisory_id]
 
+    if id:
+        if runtime.only_jira or runtime.use_jira:
+            bug_tracker = runtime.bug_trackers['jira']
+            bug_ids = cli_opts.id_convert_str(id)
+        else:
+            bug_tracker = runtime.bug_trackers['bugzilla']
+            bug_ids = cli_opts.id_convert(id)
+        flaw_bug_tracker = runtime.bug_trackers['bugzilla']
+        await get_flaws(runtime, None, bug_ids,
+                        bug_tracker, flaw_bug_tracker, noop)
+        return
+
     # Flaw bugs associated with jira tracker bugs
     # exist in bugzilla. so to work with jira trackers
     # we need both bugzilla and jira instances initialized
     if runtime.only_jira:
         runtime.use_jira = True
-
-    if id:
-        bug_tracker = runtime.bug_trackers['jira']
-        flaw_bug_tracker = runtime.bug_trackers['bugzilla']
-        bug_ids = cli_opts.id_convert_str(id)
-        await get_flaws(runtime, None, bug_ids,
-                        bug_tracker, flaw_bug_tracker, noop)
-        return
 
     exit_code = 0
     for advisory_id in advisories:
