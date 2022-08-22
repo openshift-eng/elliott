@@ -4,10 +4,6 @@ import elliottlib
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
 from elliottlib import errata
-from elliottlib.bzutil import BugTracker
-from elliottlib.util import green_print, progress_func, pbar_header
-from elliottlib.cli import cli_opts
-from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib import logutil
 from elliottlib.bzutil import BugTracker
 from elliottlib.util import green_print, progress_func, pbar_header
