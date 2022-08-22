@@ -18,7 +18,8 @@ import os
 from bugzilla.bug import Bug
 from koji import ClientSession
 
-from elliottlib import constants, exceptions, exectools, logutil, bzutil, errata, util
+from elliottlib import constants, exceptions, exectools, logutil, errata, util
+from elliottlib.cli import cli_opts
 from elliottlib.metadata import Metadata
 from elliottlib.util import isolate_timestamp_in_release
 
@@ -344,6 +345,10 @@ class BugTracker:
     def advisory_bug_ids(advisory_obj):
         raise NotImplementedError
 
+    @staticmethod
+    def id_convert(id_string):
+        raise NotImplementedError
+
     def create_placeholder(self, kind, noop=False):
         title = f"Placeholder bug for OCP {self.config.get('target_release')[0]} {kind} release"
         return self.create_bug(title, title, "VERIFIED", ["Automation"], noop)
@@ -582,6 +587,10 @@ class JIRABugTracker(BugTracker):
     def advisory_bug_ids(advisory_obj):
         return advisory_obj.jira_issues
 
+    @staticmethod
+    def id_convert(id_string):
+        return cli_opts.id_convert_str(id_string)
+
     def get_tracker_bugs(self, bug_ids: List, strict: bool = False, verbose: bool = False):
         return [b for b in self.get_bugs(bug_ids, permissive=not strict, verbose=verbose) if b.is_tracker_bug()]
 
@@ -785,6 +794,10 @@ class BugzillaBugTracker(BugTracker):
     @staticmethod
     def advisory_bug_ids(advisory_obj):
         return advisory_obj.errata_bugs
+
+    @staticmethod
+    def id_convert(id_string):
+        return cli_opts.id_convert(id_string)
 
     def get_tracker_bugs(self, bug_ids: List, strict: bool = False, verbose: bool = False):
         fields = ["target_release", "blocks", 'whiteboard', 'keywords']

@@ -3,13 +3,11 @@ import elliottlib
 
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
-from elliottlib import Runtime, errata
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
+from elliottlib import errata
+from elliottlib.bzutil import BugTracker
 from elliottlib.util import green_print, progress_func, pbar_header
 from elliottlib.cli import cli_opts
-from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory, click_coroutine
-
-pass_runtime = click.make_pass_decorator(Runtime)
+from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 
 
 @cli.command("repair-bugs", short_help="Move bugs attached to ADVISORY from one state to another")
@@ -44,7 +42,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
               default=False, is_flag=True,
               help="Check bugs attached, print what would change, but don't change anything")
 @use_default_advisory_option
-@pass_runtime
+@click.pass_obj
 def repair_bugs_cli(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop, default_advisory_type):
     """Move bugs attached to the advisory from one state to another
 state. This is useful if the bugs have changed states *after* they
@@ -100,14 +98,18 @@ providing an advisory with the -a/--advisory option.
         # error, no bugs, advisory, or default selected
         raise click.BadParameter("No input provided: Must use one of --id, --advisory, or --use-default-advisory")
 
-    # Load bugzilla information and get a reference to the api
     runtime.initialize()
-    if runtime.use_jira:
-        repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, True, noop, default_advisory_type, JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, False, noop, default_advisory_type, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
+    if not auto and runtime.use_jira:
+        runtime.use_jira = False
+        runtime.only_jira = True
+
+    for b in runtime.bug_trackers.values():
+        repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop,
+                    default_advisory_type, b)
 
 
-def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, use_jira, noop, default_advisory_type, bug_tracker):
+def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop,
+                default_advisory_type, bug_tracker: BugTracker):
     changed_bug_count = 0
 
     if default_advisory_type is not None:
@@ -115,28 +117,25 @@ def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment,
 
     if auto:
         click.echo("Fetching Advisory(errata_id={})".format(advisory))
-        if use_jira:
-            raw_bug_list = [issue["key"] for issue in errata.get_jira_issue_from_advisory(advisory)]
-        else:
-            e = elliottlib.errata.Advisory(errata_id=advisory)
-            raw_bug_list = e.errata_bugs
+        e = elliottlib.errata.Advisory(errata_id=advisory)
+        bug_list = bug_tracker.advisory_bug_ids(e)
     else:
-        click.echo("Bypassed fetching erratum, using provided BZs")
-        raw_bug_list = cli_opts.id_convert(id)
+        click.echo("Bypassed fetching erratum, using provided BugIDs")
+        bug_list = bug_tracker.id_convert(id)
 
     green_print("Getting bugs for advisory")
 
     # Fetch bugs in parallel because it can be really slow doing it
     # one-by-one when you have hundreds of bugs
-    pbar_header("Fetching data for {} bugs: ".format(len(raw_bug_list)),
+    pbar_header("Fetching data for {} bugs: ".format(len(bug_list)),
                 "Hold on a moment, we have to grab each one",
-                raw_bug_list)
+                bug_list)
     pool = ThreadPool(cpu_count())
     click.secho("[", nl=False)
 
     attached_bugs = pool.map(
-        lambda bug: progress_func(lambda: bug_tracker.get_bug(bug), '*'),
-        raw_bug_list)
+        lambda bug_id: progress_func(lambda: bug_tracker.get_bug(bug_id), '*'),
+        bug_list)
     # Wait for results
     pool.close()
     pool.join()
