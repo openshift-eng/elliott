@@ -55,15 +55,12 @@ def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove
     if default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
-    bug_trackers = runtime.bug_trackers
     if runtime.use_jira or runtime.only_jira:
-        bug_ids = cli_opts.id_convert_str(bug_ids)
-        remove_bugs(advisory_id, bug_ids, remove_all,
-                    bug_trackers['jira'], noop)
+        bug_tracker = runtime.bug_trackers['jira']
     else:
-        bug_ids = cli_opts.id_convert(bug_ids)
-        remove_bugs(advisory_id, bug_ids, remove_all,
-                    bug_trackers['bugzilla'], noop)
+        bug_tracker = runtime.bug_trackers['bugzilla']
+    bug_ids = bug_tracker.id_convert(bug_ids)
+    remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop)
 
 
 def remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop):
