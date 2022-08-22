@@ -9,6 +9,7 @@ from flexmock import flexmock
 
 
 class FindBugsQETestCase(unittest.TestCase):
+    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_find_bugs_qe_bz(self):
         runner = CliRunner()
         bug = flexmock(id=123, status="MODIFIED")
@@ -30,7 +31,6 @@ class FindBugsQETestCase(unittest.TestCase):
         self.assertIn(search_string1, result.output)
         self.assertEqual(result.exit_code, 0)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_find_bugs_qe_jira(self):
         runner = CliRunner()
         jira_bug = flexmock(id='OCPBUGS-123', status="MODIFIED")

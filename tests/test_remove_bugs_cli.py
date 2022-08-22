@@ -11,6 +11,7 @@ from flexmock import flexmock
 
 
 class RemoveBugsTestCase(unittest.TestCase):
+    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_remove_bugzilla_bug(self):
         runner = CliRunner()
 
@@ -29,7 +30,6 @@ class RemoveBugsTestCase(unittest.TestCase):
         self.assertIn("Found 2 bugs", result.output)
         self.assertIn("Removing bugs from advisory 99999", result.output)
 
-    @patch.dict(os.environ, {"ONLYJIRA": "True"})
     def test_remove_jira_bug(self):
         runner = CliRunner()
 
@@ -45,6 +45,7 @@ class RemoveBugsTestCase(unittest.TestCase):
         self.assertIn("Removing bugs from advisory 99999", result.output)
         self.assertEqual(result.exit_code, 0)
 
+    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_remove_all_bugzilla(self):
         runner = CliRunner()
 

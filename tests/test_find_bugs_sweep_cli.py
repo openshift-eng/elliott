@@ -34,7 +34,6 @@ class TestFindBugsMode(unittest.TestCase):
 
 
 class FindBugsSweepTestCase(unittest.TestCase):
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_find_bugs_sweep_report(self):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize").and_return(None)
@@ -89,7 +88,6 @@ class FindBugsSweepTestCase(unittest.TestCase):
         self.assertIn(search_string1, result.output)
         self.assertIn(search_string2, result.output)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_find_bugs_sweep_brew_event(self):
         runner = CliRunner()
         bugs = [flexmock(id='BZ1', status='ON_QA')]
@@ -119,7 +117,6 @@ class FindBugsSweepTestCase(unittest.TestCase):
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.fail(t)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_find_bugs_sweep_advisory_jira(self):
         runner = CliRunner()
         bugs = [flexmock(id='BZ1')]
@@ -150,6 +147,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.fail(t)
 
+    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_find_bugs_sweep_advisory_type(self):
         runner = CliRunner()
         bugs = [flexmock(id='BZ1')]
@@ -173,6 +171,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.fail(t)
 
+    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_find_bugs_sweep_default_advisories(self):
         runner = CliRunner()
         image_bugs = [flexmock(id=1), flexmock(id=2)]

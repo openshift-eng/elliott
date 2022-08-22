@@ -1,4 +1,6 @@
 import unittest
+import os
+from mock import patch
 from click.testing import CliRunner
 import elliottlib.cli.find_bugs_blocker_cli
 from elliottlib.cli.common import cli, Runtime
@@ -7,6 +9,7 @@ from flexmock import flexmock
 
 
 class FindBugsBlockerTestCase(unittest.TestCase):
+    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_find_bugs_blocker(self):
         # mock init
         runner = CliRunner()
