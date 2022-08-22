@@ -6,6 +6,7 @@ import asyncio
 from errata_tool import Erratum
 
 from elliottlib import constants
+from elliottlib.cli import cli_opts
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
@@ -19,6 +20,8 @@ from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any
 @click.option('--advisory', '-a', 'advisory_id',
               type=int,
               help='Find tracker bugs in given advisory')
+@click.option('--id', default=None, multiple=True,
+              help='For the given list of bugs, determine which flaw bugs would qualify to be attached (for testing)')
 @click.option("--noop", "--dry-run",
               required=False,
               default=False, is_flag=True,
@@ -29,7 +32,8 @@ from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any
               help='Run for all advisories values defined in [group|releases].yml')
 @click.pass_obj
 @click_coroutine
-async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, default_advisory_type: str, into_default_advisories: bool):
+async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, id: str, noop: bool,
+                               default_advisory_type: str, into_default_advisories: bool):
     """Attach corresponding flaw bugs for trackers in advisory (first-fix only).
 
     Also converts advisory to RHSA, if not already.
@@ -47,14 +51,16 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     1851422, 1866148, 1858981, 1852331, 1861044, 1857081, 1857977, 1848647,
     1849044, 1856529, 1843575, 1840253]
     """
-    if sum(map(bool, [advisory_id, default_advisory_type, into_default_advisories])) != 1:
-        raise click.BadParameter("Use one of --use-default-advisory or --advisory or --into-default-advisories")
+    if sum(map(bool, [advisory_id, default_advisory_type, into_default_advisories, id])) != 1:
+        raise click.BadParameter("Use one of --use-default-advisory / --advisory / --into-default-advisories / "
+                                 "--id")
     runtime.initialize()
+    advisories = []
     if into_default_advisories:
         advisories = runtime.group_config.advisories.values()
     elif default_advisory_type:
         advisories = [find_default_advisory(runtime, default_advisory_type)]
-    else:
+    elif advisory_id:
         advisories = [advisory_id]
 
     # Flaw bugs associated with jira tracker bugs
@@ -62,6 +68,14 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     # we need both bugzilla and jira instances initialized
     if runtime.only_jira:
         runtime.use_jira = True
+
+    if id:
+        bug_tracker = runtime.bug_trackers['jira']
+        flaw_bug_tracker = runtime.bug_trackers['bugzilla']
+        bug_ids = cli_opts.id_convert_str(id)
+        await get_flaws(runtime, None, bug_ids,
+                        bug_tracker, flaw_bug_tracker, noop)
+        return
 
     exit_code = 0
     for advisory_id in advisories:
@@ -71,8 +85,12 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         tasks = []
         for bug_tracker in runtime.bug_trackers.values():
             flaw_bug_tracker = runtime.bug_trackers['bugzilla']
-            tasks.append(asyncio.get_event_loop().create_task(get_flaws(runtime, advisory, bug_tracker,
-                                                              flaw_bug_tracker, noop)))
+            advisory_bug_ids = bug_tracker.advisory_bug_ids(advisory)
+            if not advisory_bug_ids:
+                runtime.logger.info(f'Found 0 {bug_tracker.type} bugs attached')
+                continue
+            tasks.append(asyncio.get_event_loop().create_task(get_flaws(runtime, advisory, advisory_bug_ids,
+                                                                        bug_tracker, flaw_bug_tracker, noop)))
         try:
             lists_of_flaw_bugs = await asyncio.gather(*tasks)
             flaw_bugs = list(set(sum(lists_of_flaw_bugs, [])))
@@ -86,13 +104,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     sys.exit(exit_code)
 
 
-async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
-    # get attached bugs from advisory
-    advisory_bug_ids = bug_tracker.advisory_bug_ids(advisory)
-    if not advisory_bug_ids:
-        runtime.logger.info(f'Found 0 {bug_tracker.type} bugs attached')
-        return []
-
+async def get_flaws(runtime, advisory, advisory_bug_ids, bug_tracker, flaw_bug_tracker, noop):
     attached_tracker_bugs: List[Bug] = bug_tracker.get_tracker_bugs(advisory_bug_ids, verbose=runtime.debug)
     runtime.logger.info(f'Found {len(attached_tracker_bugs)} {bug_tracker.type} tracker bugs attached: '
                         f'{sorted([b.id for b in attached_tracker_bugs])}')
@@ -101,6 +113,12 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
 
     # validate and get target_release
     current_target_release = Bug.get_target_release(attached_tracker_bugs)
+    major, minor = runtime.get_major_minor()
+    version = f'{major}.{minor}'
+    if version not in current_target_release:
+        raise ValueError(f'Target release version for given bugs ({current_target_release}) does not match the group '
+                         f'({version}): aborting')
+
     tracker_flaws, flaw_id_bugs = bug_tracker.get_corresponding_flaw_bugs(
         attached_tracker_bugs,
         flaw_bug_tracker,
@@ -124,8 +142,8 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
         ]
 
     runtime.logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_id_bugs)} flaw bugs considered "first-fix"')
-    if not first_fix_flaw_bugs:
-        return []
+    if not first_fix_flaw_bugs or not advisory:
+        return first_fix_flaw_bugs
 
     runtime.logger.info('Associating CVEs with builds')
     errata_config = runtime.gitdata.load_data(key='erratatool').data

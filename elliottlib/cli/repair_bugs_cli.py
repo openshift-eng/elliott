@@ -22,7 +22,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="AUTO mode, check all bugs attached to ADVISORY")
 @click.option("--id", default=None, metavar='BUGID',
               multiple=True, required=False,
-              help="Bugzilla IDs to modify, conflicts with --auto [MULTIPLE]")
+              help="Bug IDs to modify, conflicts with --auto [MULTIPLE]")
 @click.option("--from", "original_state",
               multiple=True,
               default=['MODIFIED'],
