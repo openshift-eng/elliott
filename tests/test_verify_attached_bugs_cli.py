@@ -1,9 +1,9 @@
 import unittest
 from click.testing import CliRunner
+from errata_tool import Erratum
 from elliottlib.cli.common import cli, Runtime
 from elliottlib.cli.verify_attached_bugs_cli import BugValidator, verify_bugs_cli
 from elliottlib.errata_async import AsyncErrataAPI
-from elliottlib import errata
 from elliottlib.bzutil import JIRABugTracker
 from flexmock import flexmock
 import asyncio
@@ -79,9 +79,7 @@ class VerifyAttachedBugs(unittest.TestCase):
             flexmock(id="OCPBUGS-4", product='OCPBUGS', target_release=['4.7.z'], status='Release Pending')
         ]
 
-        f = asyncio.Future()
-        f.set_result({advisory.errata_id: bugs})
-        flexmock(BugValidator).should_receive("get_attached_bugs").and_return(f)
+        flexmock(BugValidator).should_receive("get_attached_bugs").and_return({advisory.errata_id: bugs})
         flexmock(JIRABugTracker).should_receive("get_bugs").with_args(["OCPBUGS-3", "OCPBUGS-4"]).and_return(
             depend_on_bugs).ordered()
 
@@ -92,22 +90,31 @@ class VerifyAttachedBugs(unittest.TestCase):
 
 
 class TestGetAttachedBugs(unittest.TestCase):
-    @async_test
-    async def test_get_attached_bugs(self):
+    def test_get_attached_bugs_jira(self):
         runtime = Runtime()
         bug_map = {
             'bug-1': flexmock(id='bug-1'),
             'bug-2': flexmock(id='bug-2'),
+            'bug-3': flexmock(id='bug-3')
         }
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z'], 'project': 'OpenShift Container Platform'})
         flexmock(AsyncErrataAPI).should_receive("__init__").and_return(None)
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
-        flexmock(JIRABugTracker).should_receive("get_bugs_map").with_args(['bug-1', 'bug-2']).and_return(bug_map)
-        flexmock(errata).should_receive("get_jira_issue_from_advisory").with_args('12345').and_return([{'key': 'bug-1'}, {'key': 'bug-2'}])
+
+        advisory1 = flexmock(errata_id='123', jira_issues=['bug-1', 'bug-2'])
+        advisory2 = flexmock(errata_id='145', jira_issues=['bug-3'])
+        flexmock(Erratum).new_instances(advisory1, advisory2)
+        flexmock(JIRABugTracker).should_receive("get_bugs_map").with_args(list(bug_map.keys())).and_return(
+            bug_map)
+
         validator = BugValidator(runtime, True)
-        advisory_bugs = await validator.get_attached_bugs(['12345'])
-        self.assertEqual(advisory_bugs, {'12345': {bug_map['bug-1'], bug_map['bug-2']}})
+        actual = validator.get_attached_bugs(['123', '145'])
+        expected = {
+            '123': {bug_map['bug-1'], bug_map['bug-2']},
+            '145': {bug_map['bug-3']}
+        }
+        self.assertEqual(actual, expected)
 
 
 if __name__ == '__main__':

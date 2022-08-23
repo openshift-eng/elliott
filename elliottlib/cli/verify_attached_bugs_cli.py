@@ -3,6 +3,7 @@ import re
 from typing import Any, Dict, Iterable, List, Set, Tuple
 import click
 from spnego.exceptions import GSSError
+from errata_tool import Erratum
 
 
 from elliottlib import bzutil, constants, util, errata
@@ -45,7 +46,7 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
     validator = BugValidator(runtime, use_jira, output="text")
     try:
         await validator.errata_api.login()
-        advisory_bugs = await validator.get_attached_bugs(advisories)
+        advisory_bugs = validator.get_attached_bugs(advisories)
         non_flaw_bugs = validator.filter_bugs_by_product({b for bugs in advisory_bugs.values() for b in bugs})
         validator.validate(non_flaw_bugs, verify_bug_status)
         if verify_flaws:
@@ -197,21 +198,19 @@ class BugValidator:
         if missing_cves:
             self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in advisory's `CVE Names` field: {', '.join(sorted(missing_cves))}")
 
-    async def get_attached_bugs(self, advisory_ids: Iterable[str]) -> Dict[int, Set[Bug]]:
+    def get_attached_bugs(self, advisory_ids: Iterable[str]) -> Dict[int, Set[Bug]]:
         """ Get bugs attached to specified advisories
         :return: a dict with advisory id as key and set of bug objects as value
         """
-        green_print(f"Retrieving bugs for advisory {advisory_ids}")
-        if self.use_jira:
-            issue_keys = {advisory_id: [issue["key"] for issue in errata.get_jira_issue_from_advisory(advisory_id)] for advisory_id in advisory_ids}
-            bug_map = self.bug_tracker.get_bugs_map([key for keys in issue_keys.values() for key in keys])
-            result = {advisory_id: {bug_map[key] for key in issue_keys[advisory_id]} for advisory_id in advisory_ids}
-        else:
-            advisories = await asyncio.gather(*[self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids])
-            bug_map = self.bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"]["bugs"]}))
-            result = {ad["content"]["content"]["errata_id"]: {bug_map[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad
-                      in advisories}
-        return result
+        green_print(f"Retrieving bugs for advisories: {advisory_ids}")
+        advisories = [Erratum(errata_id=advisory_id) for advisory_id in advisory_ids]
+        advisory_bug_id_map = {advisory.errata_id: self.bug_tracker.advisory_bug_ids(advisory)
+                               for advisory in advisories}
+        bug_map = self.bug_tracker.get_bugs_map([bug_id for bug_list in advisory_bug_id_map.values()
+                                                 for bug_id in bug_list])
+        attached_bug_map = {advisory_id: {bug_map[bid] for bid in advisory_bug_id_map[advisory_id]}
+                            for advisory_id in advisory_ids}
+        return attached_bug_map
 
     def filter_bugs_by_product(self, bugs):
         # filter out bugs for different product (presumably security flaw bugs)
