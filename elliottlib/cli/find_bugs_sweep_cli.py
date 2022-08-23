@@ -168,7 +168,9 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
         yellow_print("The following bugs will be excluded because they are explicitly "
                      f"defined in the assembly config: {excluded_bug_ids}")
         bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
-
+    # exclude placeholder bug
+    click.echo("Filtering bugs that is Placeholder bug...")
+    bugs = [bug for bug in bugs if "Placeholder" not in bug.summary]
     if output == 'text':
         green_prefix(f"Found {len(bugs)} bugs: ")
         click.echo(", ".join(sorted(str(b.id) for b in bugs)))
