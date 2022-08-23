@@ -701,7 +701,7 @@ class BugzillaBugTracker(BugTracker):
         self._client.update_bugs([bugid], self._client.build_update(comment=comment, comment_private=private))
 
     def filter_bugs_by_cutoff_event(self, bugs: Iterable, desired_statuses: Iterable[str],
-                                    sweep_cutoff_timestamp: float) -> List:
+                                    sweep_cutoff_timestamp: float, verbose=False) -> List:
         """ Given a list of bugs, finds those that have changed to one of the desired statuses before the given timestamp.
 
         According to @jupierce:
