@@ -206,7 +206,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
 class TestGenAssemblyBugIDs(unittest.TestCase):
     @patch("elliottlib.cli.find_bugs_sweep_cli.assembly_issues_config")
     def test_gen_assembly_bug_ids_jira(self, assembly_issues_config: Mock):
-        assembly_issues_config.return_value = flexmock(include=[{"id": "1"}, {"id": 'OCPBUGS-2'}],
+        assembly_issues_config.return_value = flexmock(include=[{"id": 1}, {"id": 'OCPBUGS-2'}],
                                                        exclude=[{"id": "2"}, {"id": 'OCPBUGS-3'}])
         runtime = flexmock(get_releases_config=lambda: None, assembly='foo')
         expected = ({"OCPBUGS-2"}, {"OCPBUGS-3"})
@@ -215,10 +215,10 @@ class TestGenAssemblyBugIDs(unittest.TestCase):
 
     @patch("elliottlib.cli.find_bugs_sweep_cli.assembly_issues_config")
     def test_gen_assembly_bug_ids_bz(self, assembly_issues_config: Mock):
-        assembly_issues_config.return_value = flexmock(include=[{"id": "1"}, {"id": 'OCPBUGS-2'}],
+        assembly_issues_config.return_value = flexmock(include=[{"id": 1}, {"id": 'OCPBUGS-2'}],
                                                        exclude=[{"id": "2"}, {"id": 'OCPBUGS-3'}])
         runtime = flexmock(get_releases_config=lambda: None, assembly='foo')
-        expected = ({"1"}, {"2"})
+        expected = ({1}, {"2"})
         actual = get_assembly_bug_ids(runtime, 'bugzilla')
         self.assertEqual(actual, expected)
 

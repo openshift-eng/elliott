@@ -209,13 +209,16 @@ def get_assembly_bug_ids(runtime, bug_tracker_type):
     issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
     included_bug_ids = {i["id"] for i in issues_config.include}
     excluded_bug_ids = {i["id"] for i in issues_config.exclude}
-    is_a_jira_bug = re.compile(r'OCPBUGS-\d+')
+
+    def is_a_jira_bug(x):
+        pattern = re.compile(r'OCPBUGS-\d+')
+        return pattern.match(str(x))
     if bug_tracker_type == 'jira':
-        included_bug_ids = {i for i in included_bug_ids if is_a_jira_bug.match(i)}
-        excluded_bug_ids = {i for i in excluded_bug_ids if is_a_jira_bug.match(i)}
+        included_bug_ids = {i for i in included_bug_ids if is_a_jira_bug(i)}
+        excluded_bug_ids = {i for i in excluded_bug_ids if is_a_jira_bug(i)}
     elif bug_tracker_type == 'bugzilla':
-        included_bug_ids = {i for i in included_bug_ids if not is_a_jira_bug.match(i)}
-        excluded_bug_ids = {i for i in excluded_bug_ids if not is_a_jira_bug.match(i)}
+        included_bug_ids = {i for i in included_bug_ids if not is_a_jira_bug(i)}
+        excluded_bug_ids = {i for i in excluded_bug_ids if not is_a_jira_bug(i)}
     return included_bug_ids, excluded_bug_ids
 
 
