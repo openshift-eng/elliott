@@ -241,7 +241,10 @@ class BugValidator:
 
     def filter_bugs_by_product(self, bugs):
         # filter out bugs for different product (presumably security flaw bugs)
-        return [b for b in bugs if b.product == self.product]
+        if self.use_jira:
+            return [b for b in bugs if b.product == self.bz_product or b.product == self.jira_product]
+        else:
+            return [b for b in bugs if b.product == self.bz_product]
 
     def filter_bugs_by_release(self, bugs: Iterable[Bug], complain: bool = False) -> List[Bug]:
         # filter out bugs with an invalid target release
