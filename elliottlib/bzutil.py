@@ -461,14 +461,14 @@ class JIRABugTracker(BugTracker):
     def get_bugs(self, bugids: List[str], permissive=False, verbose=False, **kwargs) -> List[JIRABug]:
         invalid_bugs = [b for b in bugids if not self.looks_like_a_jira_project_bug(b)]
         if invalid_bugs:
-            print(f"Cannot fetch bugs from a different project (current project: {self._project}):"
-                  f" {invalid_bugs}")
+            logger.warn(f"Cannot fetch bugs from a different project (current project: {self._project}):"
+                        f" {invalid_bugs}")
         bugids = [b for b in bugids if self.looks_like_a_jira_project_bug(b)]
         if not bugids:
             return []
         query = self._query(bugids=bugids, with_target_release=False)
         if verbose:
-            click.echo(query)
+            logger.info(query)
         bugs = self._search(query)
         if len(bugs) < len(bugids):
             bugids_not_found = set(bugids) - {b.id for b in bugs}
@@ -476,7 +476,7 @@ class JIRABugTracker(BugTracker):
             if not permissive:
                 raise ValueError(msg)
             else:
-                print(msg)
+                logger.warn(msg)
         return bugs
 
     def get_bug_remote_links(self, bug: JIRABug):
