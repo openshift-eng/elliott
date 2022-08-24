@@ -1,6 +1,7 @@
 import json
 import click
 import sys
+import re
 import traceback
 from datetime import datetime
 from typing import List, Optional
@@ -155,17 +156,17 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
                    f"{utc_ts}...")
         bugs = qualified_bugs
 
-    included_bug_ids, excluded_bug_ids = get_assembly_bug_ids(runtime)
+    included_bug_ids, excluded_bug_ids = get_assembly_bug_ids(runtime, bug_tracker_type=bug_tracker.type)
     if included_bug_ids & excluded_bug_ids:
-        raise ValueError("The following bugs are defined in both 'include' and 'exclude': "
+        raise ValueError(f"The following {bug_tracker.type} bugs are defined in both 'include' and 'exclude': "
                          f"{included_bug_ids & excluded_bug_ids}")
     if included_bug_ids:
-        yellow_print("The following bugs will be additionally included because they are "
+        yellow_print(f"The following {bug_tracker.type} bugs will be additionally included because they are "
                      f"explicitly defined in the assembly config: {included_bug_ids}")
         included_bugs = bug_tracker.get_bugs(included_bug_ids)
         bugs.extend(included_bugs)
     if excluded_bug_ids:
-        yellow_print("The following bugs will be excluded because they are explicitly "
+        yellow_print(f"The following {bug_tracker.type} bugs will be excluded because they are explicitly "
                      f"defined in the assembly config: {excluded_bug_ids}")
         bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
@@ -203,11 +204,21 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
 type_bug_list = List[Bug]
 
 
-def get_assembly_bug_ids(runtime):
+def get_assembly_bug_ids(runtime, bug_tracker_type):
     # Loads included/excluded bugs from assembly config
     issues_config = assembly_issues_config(runtime.get_releases_config(), runtime.assembly)
     included_bug_ids = {i["id"] for i in issues_config.include}
     excluded_bug_ids = {i["id"] for i in issues_config.exclude}
+
+    def is_a_jira_bug(x):
+        pattern = re.compile(r'OCPBUGS-\d+')
+        return pattern.match(str(x))
+    if bug_tracker_type == 'jira':
+        included_bug_ids = {i for i in included_bug_ids if is_a_jira_bug(i)}
+        excluded_bug_ids = {i for i in excluded_bug_ids if is_a_jira_bug(i)}
+    elif bug_tracker_type == 'bugzilla':
+        included_bug_ids = {i for i in included_bug_ids if not is_a_jira_bug(i)}
+        excluded_bug_ids = {i for i in excluded_bug_ids if not is_a_jira_bug(i)}
     return included_bug_ids, excluded_bug_ids
 
 
