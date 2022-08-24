@@ -99,7 +99,6 @@ class BugValidator:
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
         self.output = output
-        self.is_rhsa = False
 
     async def close(self):
         await self.errata_api.close()
@@ -119,7 +118,6 @@ class BugValidator:
             exit(1)
         green_print("All bugs were verified. This check doesn't cover CVE flaw bugs.")
 
-
     async def verify_attached_flaws(self, bz_bugs: Dict[int, List[Bug]], jira_bugs: Dict[int, List[Bug]], use_jira: bool,):
         futures = []
         for advisory_id, attached_bugs in bz_bugs.items():
@@ -138,7 +136,7 @@ class BugValidator:
             exit(1)
         green_print("All CVE flaw bugs were verified.")
 
-    def check_attached_flaws_match_trackers(self, attached_flaws: Iterable[Bug], first_fix_flaw_ids: List[str]):
+    def _check_attached_flaws_match_trackers(self, attached_flaws: Iterable[Bug], first_fix_flaw_ids: List[str], advisory_id: str):
         # Check if attached flaws match attached trackers
         attached_flaw_ids = {b.id for b in attached_flaws}
         missing_flaw_ids = attached_flaw_ids - first_fix_flaw_ids
@@ -150,7 +148,7 @@ class BugValidator:
             self._complain(f"On advisory {advisory_id}, {len(extra_flaw_ids)} flaw bugs are attached but there are no tracker bugs referencing them: {', '.join(sorted(map(str, extra_flaw_ids)))}."
                            " You probably need to drop those flaw bugs or attach the corresponding tracker bugs.")
 
-    def get_first_fix_flaws_from_trackers(self, advisory_info: Dict, attached_trackers: Iterable[Bug], use_jira: bool):
+    async def _get_first_fix_flaws_from_trackers(self, advisory_id: str, advisory_info: Dict, attached_trackers: Iterable[Bug], use_jira: bool):
         # Retrieve flaw bugs in Bugzilla for attached_tracker_bugs
         tracker = self.jira_tracker if use_jira else self.bz_tracker
         tracker_flaws, flaw_id_bugs = tracker.get_corresponding_flaw_bugs(attached_trackers)
@@ -210,11 +208,11 @@ class BugValidator:
         advisory_info = await self.errata_api.get_advisory(advisory_id)
         advisory_type = next(iter(advisory_info["errata"].keys())).upper()  # should be one of [RHBA, RHSA, RHEA]
 
-        first_fix_flaws_bz = get_first_fix_flaws_from_trackers(attached_bz_trackers, advisory_info, False)
-        first_fix_flaws_jira = get_first_fix_flaws_from_trackers(attached_bz_trackers, advisory_info, use_jira)
+        first_fix_flaws_bz = self._get_first_fix_flaws_from_trackers(advisory_id, attached_bz_trackers, advisory_info, False)
+        first_fix_flaws_jira = self._get_first_fix_flaws_from_trackers(advisory_id, attached_bz_trackers, advisory_info, use_jira)
 
-        check_attached_flaws_match_trackers(attached_bz_flaws, first_fix_flaws_bz)
-        check_attached_flaws_match_trackers(attached_jira_flaws, first_fix_flaws_jira)
+        self._check_attached_flaws_match_trackers(attached_bz_flaws, first_fix_flaws_bz, advisory_id)
+        self._check_attached_flaws_match_trackers(attached_jira_flaws, first_fix_flaws_jira, advisory_id)
 
         # Check if advisory is of the expected type
         if not first_fix_flaws_bz and first_fix_flaws_jira:
@@ -222,20 +220,21 @@ class BugValidator:
                 self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has no first-fix flaw bugs. It should be converted to RHBA or RHEA.")
             return  # The remaining checks are not needed for a non-RHSA.
         if advisory_type != "RHSA":
-            self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has first-fix flaw bugs {first_fix_flaw_ids}. It should be converted to RHSA.")
+            self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has first-fix flaw bugs {first_fix_flaws_bz} {first_fix_flaws_jira}. It should be converted to RHSA.")
 
     async def get_attached_bugs(self, advisory_ids: Iterable[str]) -> Dict[int, Set[Bug]]:
         """ Get bugs attached to specified advisories
         :return: a dict with advisory id as key and set of bug objects as value {et_id:{bug_id:bug_obj,...},...}
         """
         green_print(f"Retrieving bugs for advisory {advisory_ids}")
-        advisories = await asyncio.gather(*[self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids])
-        bug_map = self.bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"]["bugs"]}))
+        tasks = [self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids]
+        advisories = await asyncio.gather(*tasks)
+        bug_map = self.bz_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"]["bugs"]}))
         result = {ad["content"]["content"]["errata_id"]: {bug_map[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad
                   in advisories}
         if self.use_jira:
             issue_keys = {advisory_id: [issue["key"] for issue in errata.get_jira_issue_from_advisory(advisory_id)] for advisory_id in advisory_ids}
-            bug_map = self.bug_tracker.get_bugs_map([key for keys in issue_keys.values() for key in keys])
+            bug_map = self.jira_tracker.get_bugs_map([key for keys in issue_keys.values() for key in keys])
             jira_result = {advisory_id: {bug_map[key] for key in issue_keys[advisory_id]} for advisory_id in advisory_ids}
             return result, jira_result
         return result, []
@@ -279,7 +278,7 @@ class BugValidator:
             and bug.product == self.jira_product
         }
 
-        return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bz_bugs] for bug in bz_bugs}, {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_jira_bugs] for bug in jira_bugs}
+        return {bug: [blocking_bz_bugs[b] for b in bug.depends_on if b in blocking_bz_bugs] for bug in bz_bugs}, {bug: [blocking_jira_bugs[b] for b in bug.depends_on if b in blocking_jira_bugs] for bug in jira_bugs}
 
     def _verify_blocking_bugs(self, blocking_bugs_for):
         # complain about blocker bugs that aren't verified or shipped
