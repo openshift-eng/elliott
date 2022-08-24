@@ -54,11 +54,6 @@ class Runtime(object):
         self.use_jira = True
         if str(os.environ.get('USEJIRA')).lower() in ["false", "0"]:
             self.use_jira = False
-        if str(os.environ.get('ONLYJIRA')).lower() in ["false", "0"]:
-            self.only_jira = False
-        else:
-            self.only_jira = bool(os.environ.get('ONLYJIRA'))
-
         self._bug_trackers = {}
         self.brew_event: Optional[int] = None
         self.assembly: Optional[str] = 'stream'

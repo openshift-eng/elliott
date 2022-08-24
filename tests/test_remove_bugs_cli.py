@@ -55,7 +55,7 @@ class RemoveBugsTestCase(unittest.TestCase):
         flexmock(JIRABugTracker).should_receive("login")
         bz_bug_ids = [1, 2, 3]
         jira_bug_ids = ["OCPBUGS-1", "OCPBUGS-2"]
-        advisory = flexmock(errata_id='99999',errata_bugs=bz_bug_ids, jira_issues=jira_bug_ids)
+        advisory = flexmock(errata_id='99999', errata_bugs=bz_bug_ids, jira_issues=jira_bug_ids)
         flexmock(errata).should_receive("Advisory").and_return(advisory)
         flexmock(BugzillaBugTracker).should_receive("remove_bugs").with_args(advisory, bz_bug_ids, False)
         flexmock(JIRABugTracker).should_receive("remove_bugs").with_args(advisory, jira_bug_ids, False)
@@ -69,6 +69,7 @@ class RemoveBugsTestCase(unittest.TestCase):
         self.assertIn(f"Found {len(bz_bug_ids)} bugzilla bugs", result.output)
         self.assertIn(f"Removing bugzilla bugs from advisory {advisory.errata_id}", result.output)
         self.assertIn(f"Removing jira bugs from advisory {advisory.errata_id}", result.output)
+
 
 if __name__ == '__main__':
     unittest.main()

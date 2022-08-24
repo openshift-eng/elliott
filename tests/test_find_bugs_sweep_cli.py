@@ -147,7 +147,6 @@ class FindBugsSweepTestCase(unittest.TestCase):
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.fail(t)
 
-    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_find_bugs_sweep_advisory_type(self):
         runner = CliRunner()
         bugs = [flexmock(id='BZ1')]
@@ -158,6 +157,11 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
         flexmock(sweep_cli).should_receive("categorize_bugs_by_type").and_return({"image": set(bugs)})
         flexmock(common).should_receive("find_default_advisory").and_return(123)
+
+        # jira mocks
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
+        flexmock(JIRABugTracker).should_receive("login")
+        flexmock(JIRABugTracker).should_receive("search").and_return([])
 
         # bz mocks
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
@@ -171,7 +175,6 @@ class FindBugsSweepTestCase(unittest.TestCase):
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.fail(t)
 
-    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_find_bugs_sweep_default_advisories(self):
         runner = CliRunner()
         image_bugs = [flexmock(id=1), flexmock(id=2)]
@@ -194,6 +197,11 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("login")
         flexmock(BugzillaBugTracker).should_receive("search").and_return(image_bugs + rpm_bugs + extras_bugs)
         flexmock(BugzillaBugTracker).should_receive("attach_bugs").times(3)
+
+        # jira mocks
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
+        flexmock(JIRABugTracker).should_receive("login")
+        flexmock(JIRABugTracker).should_receive("search").and_return([])
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--into-default-advisories'])
         if result.exit_code != 0:

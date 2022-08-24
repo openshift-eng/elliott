@@ -59,7 +59,7 @@ def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove
         for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
             remove_bugs(advisory_id, bug_ids, remove_all, b, noop)
     else:
-        if runtime.use_jira or runtime.only_jira:
+        if runtime.use_jira:
             bug_tracker = runtime.bug_trackers('jira')
         else:
             bug_tracker = runtime.bug_trackers('bugzilla')
