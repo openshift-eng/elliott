@@ -1,13 +1,12 @@
 import json
 import click
 import sys
-import re
 import traceback
 from datetime import datetime
 from typing import List, Optional
 
 from elliottlib.assembly import assembly_issues_config
-from elliottlib.bzutil import BugTracker, Bug
+from elliottlib.bzutil import BugTracker, Bug, JIRABug
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import common
 from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print, chunk
@@ -210,15 +209,12 @@ def get_assembly_bug_ids(runtime, bug_tracker_type):
     included_bug_ids = {i["id"] for i in issues_config.include}
     excluded_bug_ids = {i["id"] for i in issues_config.exclude}
 
-    def is_a_jira_bug(x):
-        pattern = re.compile(r'OCPBUGS-\d+')
-        return pattern.match(str(x))
     if bug_tracker_type == 'jira':
-        included_bug_ids = {i for i in included_bug_ids if is_a_jira_bug(i)}
-        excluded_bug_ids = {i for i in excluded_bug_ids if is_a_jira_bug(i)}
+        included_bug_ids = {i for i in included_bug_ids if JIRABug.looks_like_a_jira_bug(i)}
+        excluded_bug_ids = {i for i in excluded_bug_ids if JIRABug.looks_like_a_jira_bug(i)}
     elif bug_tracker_type == 'bugzilla':
-        included_bug_ids = {i for i in included_bug_ids if not is_a_jira_bug(i)}
-        excluded_bug_ids = {i for i in excluded_bug_ids if not is_a_jira_bug(i)}
+        included_bug_ids = {i for i in included_bug_ids if not JIRABug.looks_like_a_jira_bug(i)}
+        excluded_bug_ids = {i for i in excluded_bug_ids if not JIRABug.looks_like_a_jira_bug(i)}
     return included_bug_ids, excluded_bug_ids
 
 

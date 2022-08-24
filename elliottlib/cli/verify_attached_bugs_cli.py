@@ -64,7 +64,7 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
               type=click.Choice(['text', 'json', 'slack']),
               default='text',
               help='Applies chosen format to command output')
-@click.argument("bug_ids", nargs=-1, type=click.IntRange(1), required=False)
+@click.argument("bug_ids", nargs=-1, required=False)
 @pass_runtime
 @click_coroutine
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
@@ -247,8 +247,8 @@ class BugValidator:
             bug.id: bug
             for bug in self.bug_tracker.get_bugs(list(candidate_blockers))
             # b.target release is a list of size 0 or 1
-            if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
-            and bug.product == self.product
+            if any(minor_version_tuple(target) == next_version for target in bug.target_release
+                   if pattern.match(target) and bug.product == self.product)
         }
 
         return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
