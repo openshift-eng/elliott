@@ -259,7 +259,8 @@ class BugValidator:
         for bug, blockers in blocking_bugs_for.items():
             for blocker in blockers:
                 message = str()
-                if blocker.status not in ['VERIFIED', 'RELEASE_PENDING', 'CLOSED']:
+                if blocker.status not in ['VERIFIED', 'RELEASE_PENDING', 'CLOSED', 'Release Pending', 'Verified',
+                                          'Closed']:
                     if self.output == 'text':
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which has status {blocker.status}"
