@@ -64,7 +64,7 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
               type=click.Choice(['text', 'json', 'slack']),
               default='text',
               help='Applies chosen format to command output')
-@click.argument("bug_ids", nargs=-1, type=click.IntRange(1), required=False)
+@click.argument("bug_ids", nargs=-1, required=False)
 @pass_runtime
 @click_coroutine
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
