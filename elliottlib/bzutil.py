@@ -297,6 +297,11 @@ class JIRABug(Bug):
                 depends.append(link.inwardIssue.key)
         return depends
 
+    @staticmethod
+    def looks_like_a_jira_bug(bug_id):
+        pattern = re.compile(r'\w+-\d+')
+        return pattern.match(str(bug_id))
+
 
 class BugTracker:
     def __init__(self, config: dict, tracker_type: str):
@@ -446,10 +451,19 @@ class JIRABugTracker(BugTracker):
         self._project = self.config.get('project', '')
         self._client: JIRA = self.login()
 
+    def looks_like_a_jira_project_bug(self, bug_id) -> bool:
+        pattern = re.compile(fr'{self._project}-\d+')
+        return bool(pattern.match(str(bug_id)))
+
     def get_bug(self, bugid: str, **kwargs) -> JIRABug:
         return JIRABug(self._client.issue(bugid, **kwargs))
 
     def get_bugs(self, bugids: List[str], permissive=False, verbose=False, **kwargs) -> List[JIRABug]:
+        invalid_bugs = [b for b in bugids if not self.looks_like_a_jira_project_bug(b)]
+        if invalid_bugs:
+            raise ValueError(f"Cannot fetch bugs from a different project (current project: {self._project}):"
+                             f" {invalid_bugs}")
+
         if not bugids:
             return []
         query = self._query(bugids=bugids, with_target_release=False)
