@@ -11,7 +11,7 @@ from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.errata import is_security_advisory
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, JIRABugTracker
+from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, JIRABugTracker, compare_security_impact
 
 
 @cli.command('attach-cve-flaws',
