@@ -49,7 +49,7 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
         non_flaw_jira_bugs = validator.filter_bugs_by_product({b for bugs in jira_bugs.values() for b in bugs})
         validator.validate(non_flaw_bz_bugs, non_flaw_jira_bugs, verify_bug_status)
         if verify_flaws:
-            await validator.verify_attached_flaws(non_flaw_bz_bugs, non_flaw_jira_bugs, use_jira)
+            await validator.verify_attached_flaws(bz_bugs, jira_bugs, use_jira)
     except GSSError:
         exit_unauthenticated()
     finally:
@@ -107,10 +107,10 @@ class BugValidator:
         non_flaw_bz_bugs = self.filter_bugs_by_release(non_flaw_bz_bugs, complain=True)
         non_flaw_jira_bugs = self.filter_bugs_by_release(non_flaw_jira_bugs, complain=True)
         blocking_bugs_for_bz, blocking_bugs_for_jira = self._get_blocking_bugs_for(non_flaw_bz_bugs, non_flaw_jira_bugs)
-        self._verify_blocking_bugs(blocking_bugs_for_bz | blocking_bugs_for_jira)
+        self._verify_blocking_bugs({**blocking_bugs_for_bz, **blocking_bugs_for_jira})
 
         if verify_bug_status:
-            self._verify_bug_status(blocking_bugs_for_bz | blocking_bugs_for_jira)
+            self._verify_bug_status({**blocking_bugs_for_bz, **blocking_bugs_for_jira})
 
         if self.problems:
             if self.output != 'slack':
@@ -124,10 +124,9 @@ class BugValidator:
             attached_bz_trackers = [b for b in attached_bugs if b.is_tracker_bug()]
             attached_bz_flaws = [b for b in attached_bugs if b.is_flaw_bug()]
             if use_jira:
-                for advisory_id, attached_bugs in jira_bugs.items():
-                    attached_jira_trackers = [b for b in attached_bugs if b.is_tracker_bug()]
-                    attached_jira_flaws = [b for b in attached_bugs if b.is_flaw_bug()]
-                    futures.append(self._verify_attached_flaws_for(advisory_id, attached_bz_trackers, attached_bz_flaws, attached_jira_trackers, attached_jira_flaws, use_jira))
+                attached_jira_trackers = [b for b in jira_bugs[advisory_id] if b.is_tracker_bug()]
+                attached_jira_flaws = [b for b in jira_bugs[advisory_id] if b.is_flaw_bug()]
+                futures.append(self._verify_attached_flaws_for(advisory_id, attached_bz_trackers, attached_bz_flaws, attached_jira_trackers, attached_jira_flaws, use_jira))
             else:
                 futures.append(self._verify_attached_flaws_for(advisory_id, attached_bz_trackers, attached_bz_flaws, [], [], use_jira))
         await asyncio.gather(*futures)
@@ -208,14 +207,16 @@ class BugValidator:
         advisory_info = await self.errata_api.get_advisory(advisory_id)
         advisory_type = next(iter(advisory_info["errata"].keys())).upper()  # should be one of [RHBA, RHSA, RHEA]
 
-        first_fix_flaws_bz = self._get_first_fix_flaws_from_trackers(advisory_id, attached_bz_trackers, advisory_info, False)
-        first_fix_flaws_jira = self._get_first_fix_flaws_from_trackers(advisory_id, attached_bz_trackers, advisory_info, use_jira)
+        first_fix_flaws_bz = await self._get_first_fix_flaws_from_trackers(advisory_id, advisory_info, attached_bz_trackers, False)
+        first_fix_flaws_jira = set()
+        if use_jira:
+            first_fix_flaws_jira = await self._get_first_fix_flaws_from_trackers(advisory_id, advisory_info, attached_jira_trackers, use_jira)
+            self._check_attached_flaws_match_trackers(attached_jira_flaws, first_fix_flaws_jira, advisory_id)
 
         self._check_attached_flaws_match_trackers(attached_bz_flaws, first_fix_flaws_bz, advisory_id)
-        self._check_attached_flaws_match_trackers(attached_jira_flaws, first_fix_flaws_jira, advisory_id)
 
         # Check if advisory is of the expected type
-        if not first_fix_flaws_bz and first_fix_flaws_jira:
+        if not first_fix_flaws_bz and not first_fix_flaws_jira:
             if advisory_type == "RHSA":
                 self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has no first-fix flaw bugs. It should be converted to RHBA or RHEA.")
             return  # The remaining checks are not needed for a non-RHSA.
@@ -237,7 +238,7 @@ class BugValidator:
             bug_map = self.jira_tracker.get_bugs_map([key for keys in issue_keys.values() for key in keys])
             jira_result = {advisory_id: {bug_map[key] for key in issue_keys[advisory_id]} for advisory_id in advisory_ids}
             return result, jira_result
-        return result, []
+        return result, {}
 
     def filter_bugs_by_product(self, bugs):
         # filter out bugs for different product (presumably security flaw bugs)
@@ -274,12 +275,15 @@ class BugValidator:
             if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
             and bug.product == self.bz_product
         }
-        blocking_jira_bugs = {
-            bug.id: bug
-            for bug in self.jira_tracker.get_bugs(list({b for deps in [b.depends_on for b in jira_bugs if b.depends_on] for b in deps}))
-            if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
-            and bug.product == self.jira_product
-        }
+        if self.use_jira:
+            blocking_jira_bugs = {
+                bug.id: bug
+                for bug in self.jira_tracker.get_bugs(list({b for deps in [b.depends_on for b in jira_bugs if b.depends_on] for b in deps}))
+                if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
+                and bug.product == self.jira_product
+            }
+        else:
+            blocking_jira_bugs = {}
 
         return {bug: [blocking_bz_bugs[b] for b in bug.depends_on if b in blocking_bz_bugs] for bug in bz_bugs}, {bug: [blocking_jira_bugs[b] for b in bug.depends_on if b in blocking_jira_bugs] for bug in jira_bugs}
 
@@ -305,7 +309,7 @@ class BugValidator:
                             f"<{blocker.weburl}|{blocker.id}> which was CLOSED `{blocker.resolution}`"
                     self._complain(message)
                 else:
-                    green_print("Verify blocking bugs Passed")
+                    green_print(f"Verify blocking bugs for {bug.id} Passed")
 
     def _verify_bug_status(self, bugs):
         # complain about bugs that are not yet VERIFIED or more.
