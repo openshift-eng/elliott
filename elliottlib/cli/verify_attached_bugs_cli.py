@@ -69,9 +69,10 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 @click_coroutine
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
-    if runtime.use_jira:
+    if runtime.use_jira or runtime.only_jira:
         await verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
-    await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
+    else:
+        await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
 
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
