@@ -235,7 +235,7 @@ class BugValidator:
     def _get_blocking_bugs_for(self, bugs):
         # get blocker bugs in the next version for all bugs we are examining
         candidate_blockers = [b.depends_on for b in bugs if b.depends_on]
-        candidate_blockers = {b for deps in candidate_blockers for b in deps}
+        candidate_blockers = {b for deps in candidate_blockers for b in deps if b.product == self.product}
 
         v = minor_version_tuple(self.target_releases[0])
         next_version = (v[0], v[1] + 1)
@@ -248,7 +248,6 @@ class BugValidator:
             for bug in self.bug_tracker.get_bugs(list(candidate_blockers))
             # b.target release is a list of size 0 or 1
             if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
-            and bug.product == self.product
         }
 
         return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
