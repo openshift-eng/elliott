@@ -47,7 +47,7 @@ def _build_meta(build_id, version, arch="x86_64", private=False, meta_type="meta
     meta_type is "meta" for the build record or "commitmeta" for its ostree content.
 
     @return  a "meta" build record e.g.:
-     https://releases-rhcos-art.cloud.privileged.psi.redhat.com/storage/releases/rhcos-4.1/410.81.20200520.0/meta.json
+     https://releases-rhcos-art.apps.ocp-virt.prod.psi.redhat.com/storage/releases/rhcos-4.1/410.81.20200520.0/meta.json
      {
          "buildid": "410.81.20200520.0",
          ...
