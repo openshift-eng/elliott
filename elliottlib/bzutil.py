@@ -461,9 +461,9 @@ class JIRABugTracker(BugTracker):
     def get_bugs(self, bugids: List[str], permissive=False, verbose=False, **kwargs) -> List[JIRABug]:
         invalid_bugs = [b for b in bugids if not self.looks_like_a_jira_project_bug(b)]
         if invalid_bugs:
-            raise ValueError(f"Cannot fetch bugs from a different project (current project: {self._project}):"
-                             f" {invalid_bugs}")
-
+            print(f"Cannot fetch bugs from a different project (current project: {self._project}):"
+                  f" {invalid_bugs}")
+        bugids = [b for b in bugids if self.looks_like_a_jira_project_bug(b)]
         if not bugids:
             return []
         query = self._query(bugids=bugids, with_target_release=False)
