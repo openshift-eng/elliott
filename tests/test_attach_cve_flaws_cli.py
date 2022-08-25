@@ -3,7 +3,6 @@ from asyncio import get_event_loop
 
 from elliottlib.bzutil import BugzillaBug
 from mock import AsyncMock, Mock, patch
-
 from elliottlib.cli import attach_cve_flaws_cli
 from elliottlib.errata_async import AsyncErrataAPI
 
@@ -20,6 +19,7 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
         advisory = Mock(
             errata_type="RHBA",
             cve_names="something",
+            security_impact="Low",
             update=Mock(),
             topic='some topic'
         )

@@ -27,7 +27,7 @@ BUG_ATTACH_CHUNK_SIZE = 100
 # When severity isn't set on all tracking and flaw bugs, default to "Low"
 # https://jira.coreos.com/browse/ART-1192
 SECURITY_IMPACT = ["Low", "Low", "Moderate", "Important", "Critical"]
-
+security_impact_map = {'Critical': 4, 'Important': 3, 'Moderate': 2, 'Low': 1}
 errata_xmlrpc_url = 'http://errata.engineering.redhat.com/errata/xmlrpc.cgi'
 errata_url = "https://errata.devel.redhat.com"
 # errata_url = "https://errata.stage.engineering.redhat.com"
