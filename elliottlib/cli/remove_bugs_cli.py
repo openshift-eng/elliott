@@ -55,15 +55,19 @@ def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove
     if default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
-    if runtime.use_jira or runtime.only_jira:
-        bug_tracker = runtime.bug_trackers['jira']
+    if remove_all:
+        for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
+            remove_bugs(advisory_id, bug_ids, remove_all, b, noop)
     else:
-        bug_tracker = runtime.bug_trackers['bugzilla']
-    bug_ids = bug_tracker.id_convert(bug_ids)
-    remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop)
+        if runtime.use_jira:
+            bug_tracker = runtime.bug_trackers('jira')
+        else:
+            bug_tracker = runtime.bug_trackers('bugzilla')
+        remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop)
 
 
 def remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop):
+    bug_ids = bug_tracker.id_convert(bug_ids)
     try:
         advisory = errata.Advisory(errata_id=advisory_id)
     except GSSError:
@@ -78,13 +82,13 @@ def remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop):
             bug_ids = [b for b in bug_ids if b in attached_bug_ids]
         else:
             bug_ids = attached_bug_ids
-        green_prefix(f"Found {len(bug_ids)} bugs attached to advisory: ")
+        green_prefix(f"Found {len(bug_ids)} {bug_tracker.type} bugs attached to advisory: ")
         click.echo(f"{bug_ids}")
 
         if not bug_ids:
             return
 
-        green_prefix(f"Removing bugs from advisory {advisory_id}..")
+        green_prefix(f"Removing {bug_tracker.type} bugs from advisory {advisory_id}..")
         bug_tracker.remove_bugs(advisory, bug_ids, noop)
     except ErrataException as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))

@@ -121,7 +121,7 @@ advisory with the --add option.
     find_bugs_obj.exclude_status(exclude_status)
 
     exit_code = 0
-    for b in runtime.bug_trackers.values():
+    for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
         try:
             find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
                             report, output, brew_event, noop, count_advisory_attach_flags, b)
@@ -172,6 +172,9 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
     if output == 'text':
         green_prefix(f"Found {len(bugs)} bugs: ")
         click.echo(", ".join(sorted(str(b.id) for b in bugs)))
+
+    if not bugs:
+        return
 
     if report:
         print_report(bugs, output)

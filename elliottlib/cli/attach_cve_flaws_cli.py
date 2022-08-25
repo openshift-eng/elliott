@@ -57,28 +57,21 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     else:
         advisories = [advisory_id]
 
-    # Flaw bugs associated with jira tracker bugs
-    # exist in bugzilla. so to work with jira trackers
-    # we need both bugzilla and jira instances initialized
-    if runtime.only_jira:
-        runtime.use_jira = True
-
     exit_code = 0
+    flaw_bug_tracker = runtime.bug_trackers('bugzilla')
     for advisory_id in advisories:
         runtime.logger.info("Getting advisory %s", advisory_id)
         advisory = Erratum(errata_id=advisory_id)
 
         tasks = []
-        for bug_tracker in runtime.bug_trackers.values():
-            flaw_bug_tracker = runtime.bug_trackers['bugzilla']
+        for bug_tracker in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
             tasks.append(asyncio.get_event_loop().create_task(get_flaws(runtime, advisory, bug_tracker,
                                                               flaw_bug_tracker, noop)))
         try:
             lists_of_flaw_bugs = await asyncio.gather(*tasks)
             flaw_bugs = list(set(sum(lists_of_flaw_bugs, [])))
             if flaw_bugs:
-                bug_tracker = runtime.bug_trackers['bugzilla']
-                _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop)
+                _update_advisory(runtime, advisory, flaw_bugs, flaw_bug_tracker, noop)
         except Exception as e:
             runtime.logger.error(traceback.format_exc())
             runtime.logger.error(f'Exception: {e}')

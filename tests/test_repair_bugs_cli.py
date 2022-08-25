@@ -10,6 +10,7 @@ from flexmock import flexmock
 
 
 class RepairBugsTestCase(unittest.TestCase):
+    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_repair_bugzilla_bug_id(self):
         runner = CliRunner()
         bug = flexmock(id=1, status="MODIFIED", summary="")
@@ -22,7 +23,6 @@ class RepairBugsTestCase(unittest.TestCase):
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_repair_jira_bug_id(self):
         runner = CliRunner()
         bug = flexmock(id=1, status="MODIFIED", summary="")
@@ -35,7 +35,6 @@ class RepairBugsTestCase(unittest.TestCase):
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_repair_placeholder_jira_bug(self):
         runner = CliRunner()
         bug = flexmock(id=1, status="MODIFIED", summary="Placeholder")
@@ -48,6 +47,7 @@ class RepairBugsTestCase(unittest.TestCase):
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
 
+    @patch.dict(os.environ, {"USEJIRA": "False"})
     def test_repair_bugzilla_bug_with_comment(self):
         runner = CliRunner()
         bug = flexmock(id=1, status="MODIFIED", summary="")
@@ -61,7 +61,6 @@ class RepairBugsTestCase(unittest.TestCase):
         self.assertIn("1 bugs successfully modified", result.output)
         self.assertEqual(result.exit_code, 0)
 
-    @patch.dict(os.environ, {"USEJIRA": "True"})
     def test_repair_auto(self):
         runner = CliRunner()
         bug = flexmock(id=1, status="MODIFIED", summary="")

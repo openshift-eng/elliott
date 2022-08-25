@@ -46,11 +46,7 @@ def create_placeholder_cli(runtime, kind, advisory_id, default_advisory_type, no
     if not kind:
         raise click.BadParameter("--kind must be specified when not using --use-default-advisory")
 
-    # Creating bug in bugzilla has been disabled
-    # we should use jira only
-    runtime.only_jira = True
-    bug_trackers = runtime.bug_trackers
-    create_placeholder(kind, advisory_id, bug_trackers['jira'], noop)
+    create_placeholder(kind, advisory_id, runtime.bug_trackers('jira'), noop)
 
 
 def create_placeholder(kind, advisory_id, bug_tracker, noop):

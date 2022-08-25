@@ -51,8 +51,9 @@ class Runtime(object):
         self.verbose = False
         self.quiet = False
         self.data_path = None
-        self.use_jira = os.environ.get('USEJIRA')
-        self.only_jira = os.environ.get('ONLYJIRA')
+        self.use_jira = True
+        if str(os.environ.get('USEJIRA')).lower() in ["false", "0"]:
+            self.use_jira = False
         self._bug_trackers = {}
         self.brew_event: Optional[int] = None
         self.assembly: Optional[str] = 'stream'
@@ -276,15 +277,15 @@ class Runtime(object):
     def rpm_metas(self):
         return list(self.rpm_map.values())
 
-    @property
-    def bug_trackers(self):
-        if self._bug_trackers:
-            return self._bug_trackers
-        if not self.only_jira:
-            self._bug_trackers['bugzilla'] = BugzillaBugTracker(BugzillaBugTracker.get_config(self))
-        if self.use_jira or self.only_jira:
-            self._bug_trackers['jira'] = JIRABugTracker(JIRABugTracker.get_config(self))
-        return self._bug_trackers
+    def bug_trackers(self, bug_tracker_type):
+        if bug_tracker_type in self._bug_trackers:
+            return self._bug_trackers[bug_tracker_type]
+        if bug_tracker_type == 'bugzilla':
+            bug_tracker_cls = BugzillaBugTracker
+        elif bug_tracker_type == 'jira':
+            bug_tracker_cls = JIRABugTracker
+        self._bug_trackers[bug_tracker_type] = bug_tracker_cls(bug_tracker_cls.get_config(self))
+        return self._bug_trackers[bug_tracker_type]
 
     @property
     def remove_tmp_working_dir(self):
