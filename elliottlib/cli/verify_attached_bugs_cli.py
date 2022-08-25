@@ -69,9 +69,10 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 @click_coroutine
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
-    if runtime.use_jira:
+    if runtime.use_jira or runtime.only_jira:
         await verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
-    await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
+    else:
+        await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
 
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
@@ -258,7 +259,8 @@ class BugValidator:
         for bug, blockers in blocking_bugs_for.items():
             for blocker in blockers:
                 message = str()
-                if blocker.status not in ['VERIFIED', 'RELEASE_PENDING', 'CLOSED']:
+                if blocker.status not in ['VERIFIED', 'RELEASE_PENDING', 'CLOSED', 'Release Pending', 'Verified',
+                                          'Closed']:
                     if self.output == 'text':
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which has status {blocker.status}"
@@ -266,7 +268,9 @@ class BugValidator:
                         message = f"`{bug.status}` bug <{bug.weburl}|{bug.id}> is a backport of " \
                                   f"`{blocker.status}` bug <{blocker.weburl}|{blocker.id}>"
                     self._complain(message)
-                if blocker.status == 'CLOSED' and blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG', 'WONTFIX', 'Done', "Won't Do", 'Errata', 'Duplicate', 'Not a Bug']:
+                if blocker.status in ['CLOSED', 'Closed'] and \
+                    blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG',
+                                               'WONTFIX', 'Done', "Won't Do", 'Errata', 'Duplicate', 'Not a Bug']:
                     if self.output == 'text':
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which was CLOSED {blocker.resolution}"
@@ -280,12 +284,12 @@ class BugValidator:
         for bug in bugs:
             if bug.is_flaw_bug():
                 continue
-            if bug.status in ["VERIFIED", "RELEASE_PENDING"]:
+            if bug.status in ["VERIFIED", "RELEASE_PENDING", "Verified", "Release Pending"]:
                 continue
-            if bug.status == "CLOSED" and bug.resolution == "ERRATA":
+            if bug.status in ["CLOSED", "Closed"] and bug.resolution in ["ERRATA", 'Errata']:
                 continue
             status = f"{bug.status}"
-            if bug.status == 'CLOSED':
+            if bug.status in ['CLOSED', 'Closed']:
                 status = f"{bug.status}: {bug.resolution}"
             self._complain(f"Bug {bug.id} has status {status}")
 
