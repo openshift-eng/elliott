@@ -245,13 +245,11 @@ class BugValidator:
             return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
 
         # retrieve blockers and filter to those with correct product and target version
-        blockers = self.bug_tracker.get_bugs(sorted(list(candidate_blockers)))
+        blockers = [b for b in self.bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.product]
         blocking_bugs = {}
         for bug in blockers:
-            for target in bug.target_release:
-                if is_next_target(target) and bug.product == self.product:
-                    blocking_bugs[bug.id] = bug
-                    continue
+            if any(is_next_target(target) for target in bug.target_release):
+                blocking_bugs[bug.id] = bug
 
         return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
 
