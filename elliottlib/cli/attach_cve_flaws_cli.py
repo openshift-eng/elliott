@@ -121,7 +121,7 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
         return []
 
     runtime.logger.info('Associating CVEs with builds')
-    errata_config = runtime.gitdata.load_data(key='erratatool').data
+    errata_config = runtime.get_errata_config()
     errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
     try:
         await errata_api.login()
@@ -135,7 +135,7 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
 
 def _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop):
     advisory_id = advisory.errata_id
-    errata_config = runtime.gitdata.load_data(key='erratatool').data
+    errata_config = runtime.get_errata_config()
     cve_boilerplate = errata_config['boilerplates']['cve']
     advisory, updated = get_updated_advisory_rhsa(runtime.logger, cve_boilerplate, advisory, flaw_bugs)
     if not noop and updated:

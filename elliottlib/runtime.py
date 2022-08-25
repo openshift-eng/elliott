@@ -404,6 +404,9 @@ class Runtime(object):
 
         return self.releases_config
 
+    def get_errata_config(self, **kwargs):
+        return self.gitdata.load_data(key='erratatool', **kwargs).data
+
     def build_retrying_koji_client(self, caching: bool = False):
         """
         :return: Returns a new koji client instance that will automatically retry
