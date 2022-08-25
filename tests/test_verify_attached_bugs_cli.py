@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import MagicMock
 from click.testing import CliRunner
 from elliottlib.cli.common import cli, Runtime
 from elliottlib.cli.verify_attached_bugs_cli import BugValidator, verify_bugs_cli

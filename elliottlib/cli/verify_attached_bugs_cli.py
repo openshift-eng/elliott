@@ -77,8 +77,7 @@ async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
     validator = BugValidator(runtime, use_jira, output)
-    b = validator.bug_tracker.get_bugs(bug_ids)
-    bugs = validator.filter_bugs_by_product(b)
+    bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs(bug_ids))
     try:
         validator.validate(bugs, verify_bug_status)
     finally:
@@ -90,10 +89,8 @@ class BugValidator:
     def __init__(self, runtime: Runtime, use_jira: bool = False, output: str = 'text'):
         self.runtime = runtime
         self.use_jira = use_jira
-        if use_jira:
-            self.bug_tracker = runtime.bug_trackers('jira')
-        else:
-            self.bug_tracker = runtime.bug_trackers('bugzilla')
+        tracker_type = 'jira' if use_jira else 'bugzilla'
+        self.bug_tracker = runtime.bug_trackers(tracker_type)
         self.target_releases: List[str] = self.bug_tracker.config['target_release']
         self.product: str = self.bug_tracker.product
         self.et_data: Dict[str, Any] = runtime.get_errata_config()
