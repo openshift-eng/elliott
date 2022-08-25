@@ -1,9 +1,7 @@
 import asyncio
 import re
 from typing import Any, Dict, Iterable, List, Set, Tuple
-
 import click
-from bugzilla.bug import Bug
 from spnego.exceptions import GSSError
 
 

@@ -31,6 +31,13 @@ def datetime_now():
     return datetime.now(timezone.utc)
 
 
+def get_jira_bz_bug_ids(bug_ids):
+    ids = cli_opts.id_convert_str(bug_ids)
+    jira_ids = {b for b in ids if JIRABug.looks_like_a_jira_bug(b)}
+    bz_ids = {int(b) for b in ids if not JIRABug.looks_like_a_jira_bug(b)}
+    return jira_ids, bz_ids
+
+
 class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
