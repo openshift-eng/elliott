@@ -272,9 +272,9 @@ class BugValidator:
             bug.id: bug
             for bug in self.bz_tracker.get_bugs(list({b for deps in [b.depends_on for b in bz_bugs if b.depends_on] for b in deps}))
             # b.target release is a list of size 0 or 1
-            if any(minor_version_tuple(target) == next_version for target in bug.target_release 
-                if pattern.match(target) and bug.product == self.bz_product)
-        }
+            if any(minor_version_tuple(target) == next_version for target in bug.target_release
+            if pattern.match(target) and bug.product == self.bz_product)
+            }
         if self.use_jira:
             blocking_jira_bugs = {
                 bug.id: bug
