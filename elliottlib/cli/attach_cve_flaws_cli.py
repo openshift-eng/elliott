@@ -11,7 +11,7 @@ from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.errata import is_security_advisory
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, JIRABugTracker, compare_security_impact
+from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, JIRABugTracker
 
 
 @cli.command('attach-cve-flaws',
@@ -215,7 +215,7 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
 
     highest_impact = get_highest_security_impact(flaw_bugs)
     if highest_impact != advisory.security_impact:
-        if compare_security_impact(advisory.security_impact, highest_impact):
+        if constants.impact[advisory.security_impact] < constants.impact[highest_impact]:
             logger.info(f'Adjusting advisory security impact from {advisory.security_impact} to {highest_impact}')
             advisory.update(security_impact=highest_impact)
             updated = True

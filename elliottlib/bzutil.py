@@ -1016,11 +1016,6 @@ def get_highest_security_impact(bugs):
     return 'Low'
 
 
-def compare_security_impact(current_impact, target_impact):
-    impact = {'Critical': 4, 'Important': 3, 'Moderate': 2, 'Low': 1}
-    return impact[current_impact] < impact[target_impact]
-
-
 def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
     """
     Check if a flaw bug is considered a first-fix for a GA target release
