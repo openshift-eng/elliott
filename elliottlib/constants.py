@@ -4,7 +4,7 @@ This file contains constants that are used to manage OCP Image and RPM builds
 
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 BREW_DOWNLOAD_URL = "http://download.eng.bos.redhat.com/brewroot"
-RHCOS_RELEASES_BASE_URL = "https://releases-rhcos-art.cloud.privileged.psi.redhat.com/storage/releases"
+RHCOS_RELEASES_BASE_URL = "https://releases-rhcos-art.apps.ocp-virt.prod.psi.redhat.com/storage/releases"
 CINCINNATI_BASE_URL = "https://api.openshift.com/api/upgrades_info/v1/graph"
 BREW_DOWNLOAD_TEMPLATE = BREW_DOWNLOAD_URL + "/packages/{name}/{version}/{release}/files/{file_path}"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
@@ -27,7 +27,7 @@ BUG_ATTACH_CHUNK_SIZE = 100
 # When severity isn't set on all tracking and flaw bugs, default to "Low"
 # https://jira.coreos.com/browse/ART-1192
 SECURITY_IMPACT = ["Low", "Low", "Moderate", "Important", "Critical"]
-
+security_impact_map = {'Critical': 4, 'Important': 3, 'Moderate': 2, 'Low': 1}
 errata_xmlrpc_url = 'http://errata.engineering.redhat.com/errata/xmlrpc.cgi'
 errata_url = "https://errata.devel.redhat.com"
 # errata_url = "https://errata.stage.engineering.redhat.com"

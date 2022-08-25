@@ -1,12 +1,12 @@
 import unittest
 import os
 from flexmock import flexmock
-from mock import patch, MagicMock
+from mock import patch, MagicMock, Mock
 from datetime import datetime, timezone
 from click.testing import CliRunner
 from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
-from elliottlib.cli.find_bugs_sweep_cli import extras_bugs
+from elliottlib.cli.find_bugs_sweep_cli import extras_bugs, get_assembly_bug_ids
 from elliottlib.cli.common import cli, Runtime
 import xmlrpc.client
 import elliottlib.cli.find_bugs_sweep_cli as sweep_cli
@@ -201,6 +201,26 @@ class FindBugsSweepTestCase(unittest.TestCase):
             exc_type, exc_value, exc_traceback = result.exc_info
             t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
             self.fail(t)
+
+
+class TestGenAssemblyBugIDs(unittest.TestCase):
+    @patch("elliottlib.cli.find_bugs_sweep_cli.assembly_issues_config")
+    def test_gen_assembly_bug_ids_jira(self, assembly_issues_config: Mock):
+        assembly_issues_config.return_value = flexmock(include=[{"id": 1}, {"id": 'OCPBUGS-2'}],
+                                                       exclude=[{"id": "2"}, {"id": 'OCPBUGS-3'}])
+        runtime = flexmock(get_releases_config=lambda: None, assembly='foo')
+        expected = ({"OCPBUGS-2"}, {"OCPBUGS-3"})
+        actual = get_assembly_bug_ids(runtime, 'jira')
+        self.assertEqual(actual, expected)
+
+    @patch("elliottlib.cli.find_bugs_sweep_cli.assembly_issues_config")
+    def test_gen_assembly_bug_ids_bz(self, assembly_issues_config: Mock):
+        assembly_issues_config.return_value = flexmock(include=[{"id": 1}, {"id": 'OCPBUGS-2'}],
+                                                       exclude=[{"id": "2"}, {"id": 'OCPBUGS-3'}])
+        runtime = flexmock(get_releases_config=lambda: None, assembly='foo')
+        expected = ({1}, {"2"})
+        actual = get_assembly_bug_ids(runtime, 'bugzilla')
+        self.assertEqual(actual, expected)
 
 
 class TestExtrasBugs(unittest.TestCase):
