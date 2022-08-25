@@ -92,7 +92,7 @@ advisory.
 """
     runtime.initialize()
 
-    et_data = runtime.gitdata.load_data(key='erratatool').data
+    et_data = runtime.get_errata_config()
 
     # User entered a valid value for --date, set the release date
     release_date = datetime.datetime.strptime(date, YMD)

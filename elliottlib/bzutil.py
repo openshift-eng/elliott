@@ -451,6 +451,10 @@ class JIRABugTracker(BugTracker):
         self._project = self.config.get('project', '')
         self._client: JIRA = self.login()
 
+    @property
+    def product(self):
+        return self._project
+
     def looks_like_a_jira_project_bug(self, bug_id) -> bool:
         pattern = re.compile(fr'{self._project}-\d+')
         return bool(pattern.match(str(bug_id)))
@@ -637,6 +641,7 @@ class BugzillaBugTracker(BugTracker):
     def __init__(self, config):
         super().__init__(config, 'bugzilla')
         self._client = self.login()
+        self.product = self.config.get('product', '')
 
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
@@ -683,7 +688,7 @@ class BugzillaBugTracker(BugTracker):
 
     def create_bug(self, title, description, target_status, keywords: List, noop=False) -> BugzillaBug:
         create_info = self._client.build_createbug(
-            product=self.config.get('product'),
+            product=self.product,
             version=self.config.get('version')[0],
             target_release=self.config.get('target_release')[0],
             component="Release",

@@ -69,7 +69,7 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 @click_coroutine
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
-    if runtime.use_jira or runtime.only_jira:
+    if runtime.use_jira:
         await verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
     else:
         await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
@@ -89,12 +89,11 @@ class BugValidator:
     def __init__(self, runtime: Runtime, use_jira: bool = False, output: str = 'text'):
         self.runtime = runtime
         self.use_jira = use_jira
-        bug_tracker_cls = JIRABugTracker if use_jira else BugzillaBugTracker
-        self.config = bug_tracker_cls.get_config(runtime)
-        self.bug_tracker = bug_tracker_cls(self.config)
-        self.target_releases: List[str] = self.config['target_release']
-        self.product: str = self.config['project'] if use_jira else self.config['product']
-        self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
+        tracker_type = 'jira' if use_jira else 'bugzilla'
+        self.bug_tracker = runtime.bug_trackers(tracker_type)
+        self.target_releases: List[str] = self.bug_tracker.config['target_release']
+        self.product: str = self.bug_tracker.product
+        self.et_data: Dict[str, Any] = runtime.get_errata_config()
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
         self.output = output
@@ -241,16 +240,16 @@ class BugValidator:
         v = minor_version_tuple(self.target_releases[0])
         next_version = (v[0], v[1] + 1)
 
-        pattern = re.compile(r'^[0-9]+\.[0-9]+\.(0|z)$')
+        def is_next_target(target_v):
+            pattern = re.compile(r'^\d+\.\d+\.(0|z)$')
+            return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
 
         # retrieve blockers and filter to those with correct product and target version
-        blocking_bugs = {
-            bug.id: bug
-            for bug in self.bug_tracker.get_bugs(list(candidate_blockers))
-            # b.target release is a list of size 0 or 1
-            if any(minor_version_tuple(target) == next_version for target in bug.target_release
-                   if pattern.match(target) and bug.product == self.product)
-        }
+        blockers = [b for b in self.bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.product]
+        blocking_bugs = {}
+        for bug in blockers:
+            if any(is_next_target(target) for target in bug.target_release):
+                blocking_bugs[bug.id] = bug
 
         return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
 

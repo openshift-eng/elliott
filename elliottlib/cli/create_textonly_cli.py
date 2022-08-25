@@ -78,7 +78,7 @@ def create_textonly_cli(runtime, errata_type, date, assigned_to, manager, packag
 
 def create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description,
                     solution, bug_title, bug_description, yes, bug_tracker: BugTracker):
-    et_data = runtime.gitdata.load_data(key='erratatool').data
+    et_data = runtime.get_errata_config()
     try:
         erratum = Erratum(
             product=et_data['product'],
