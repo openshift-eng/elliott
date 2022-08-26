@@ -333,6 +333,8 @@ class BugTracker:
 
     def get_bugs_map(self, bugids: List, permissive: bool = False, **kwargs) -> Dict:
         id_bug_map = {}
+        if not bugids:
+            return id_bug_map
         bugs = self.get_bugs(bugids, permissive=permissive, **kwargs)
         for i, bug in enumerate(bugs):
             id_bug_map[bugids[i]] = bug
