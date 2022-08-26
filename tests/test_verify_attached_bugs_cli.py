@@ -52,11 +52,15 @@ class VerifyAttachedBugs(unittest.TestCase):
             .and_return(bugs)\
             .ordered()
         flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args(["OCPBUGS-3", "OCPBUGS-4"], ocp_only=True)\
+            .with_args({"OCPBUGS-3", "OCPBUGS-4"})\
             .and_return(depend_on_bugs)\
             .ordered()
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-bugs', 'OCPBUGS-1', 'OCPBUGS-2'])
+        # if result.exit_code != 0:
+        #     exc_type, exc_value, exc_traceback = result.exc_info
+        #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        #     self.fail(t)
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA', result.output)
 
@@ -93,11 +97,15 @@ class VerifyAttachedBugs(unittest.TestCase):
             .and_return(bugs)\
             .ordered()
         flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args(["OCPBUGS-3", "OCPBUGS-4"], ocp_only=True)\
+            .with_args({"OCPBUGS-3", "OCPBUGS-4"})\
             .and_return(depend_on_bugs)\
             .ordered()
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-attached-bugs', str(advisory.errata_id)])
+        # if result.exit_code != 0:
+        #     exc_type, exc_value, exc_traceback = result.exc_info
+        #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        #     self.fail(t)
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA',
                       result.output)
