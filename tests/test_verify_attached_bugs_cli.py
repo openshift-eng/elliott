@@ -1,7 +1,7 @@
 import unittest
 from click.testing import CliRunner
 from elliottlib.cli.common import cli, Runtime
-from elliottlib.cli.verify_attached_bugs_cli import BugValidator, verify_bugs_cli
+from elliottlib.cli.verify_attached_bugs_cli import BugValidator
 from elliottlib.errata_async import AsyncErrataAPI
 from elliottlib import errata
 from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker
@@ -37,6 +37,9 @@ class VerifyAttachedBugs(unittest.TestCase):
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'project': 'OCPBUGS', 'target_release': [
             '4.6.z']})
         flexmock(JIRABugTracker).should_receive("login")
+        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'product': 'OCPBUGS', 'target_release': [
+            '4.6.z']})
+        flexmock(BugzillaBugTracker).should_receive("login")
 
         bugs = [
             flexmock(id="OCPBUGS-1", product='OCPBUGS', target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
@@ -65,6 +68,7 @@ class TestGetAttachedBugs(unittest.TestCase):
             'bug-1': flexmock(id='bug-1'),
             'bug-2': flexmock(id='bug-2'),
         }
+
         async def get_ad():
             return {'bugs': {'bugs': []}, 'content': {'content': {'errata_id': '12345'}}}
 

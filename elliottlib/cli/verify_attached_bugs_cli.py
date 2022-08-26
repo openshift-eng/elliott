@@ -76,9 +76,14 @@ async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
     validator = BugValidator(runtime, use_jira, output)
-    bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs(bug_ids))
+    if use_jira:
+        jira_bugs = validator.filter_bugs_by_product(validator.jira_tracker.get_bugs(bug_ids))
+        bz_bugs = []
+    else:
+        bz_bugs = validator.filter_bugs_by_product(validator.bz_tracker.get_bugs(bug_ids))
+        jira_bugs = []
     try:
-        validator.validate(bugs, verify_bug_status)
+        validator.validate(bz_bugs, jira_bugs, verify_bug_status)
     finally:
         await validator.close()
 
@@ -107,8 +112,8 @@ class BugValidator:
     def validate(self, non_flaw_bz_bugs: Iterable[Bug], non_flaw_jira_bugs: Iterable[Bug], verify_bug_status: bool,):
         non_flaw_bz_bugs = self.filter_bugs_by_release(non_flaw_bz_bugs, complain=True)
         non_flaw_jira_bugs = self.filter_bugs_by_release(non_flaw_jira_bugs, complain=True)
-        blocking_bugs_for_bz = self._get_blocking_bugs_for(non_flaw_bz_bugs)
-        blocking_bugs_for_jira = self._get_blocking_bugs_for(non_flaw_jira_bugs)
+        blocking_bugs_for_bz = self._get_blocking_bugs_for(non_flaw_bz_bugs, False)
+        blocking_bugs_for_jira = self._get_blocking_bugs_for(non_flaw_jira_bugs, True)
         self._verify_blocking_bugs({**blocking_bugs_for_bz, **blocking_bugs_for_jira})
 
         if verify_bug_status:
@@ -263,7 +268,8 @@ class BugValidator:
                 )
         return filtered_bugs
 
-    def _get_blocking_bugs_for(self, bugs):
+    def _get_blocking_bugs_for(self, bugs, use_jira):
+        bug_tracker = self.jira_tracker if use_jira else self.bz_tracker
         # get blocker bugs in the next version for all bugs we are examining
         candidate_blockers = [b.depends_on for b in bugs if b.depends_on]
         candidate_blockers = {b for deps in candidate_blockers for b in deps}
@@ -276,23 +282,15 @@ class BugValidator:
             return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
 
         # retrieve blockers and filter to those with correct product and target version
-        blockers = [b for b in self.bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.product]
+        if use_jira:
+            blockers = [b for b in bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.jira_product]
+        else:
+            blockers = [b for b in bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.bz_product]
         blocking_bugs = {}
         for bug in blockers:
             if any(is_next_target(target) for target in bug.target_release):
                 blocking_bugs[bug.id] = bug
 
-        def is_next_target(target_v):
-            pattern = re.compile(r'^\d+\.\d+\.(0|z)$')
-            return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
-
-        # retrieve blockers and filter to those with correct product and target version
-        blockers = [b for b in self.bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.product]
-        blocking_bugs = {}
-        for bug in blockers:
-            if any(is_next_target(target) for target in bug.target_release):
-                blocking_bugs[bug.id] = bug
-                
         return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
 
     def _verify_blocking_bugs(self, blocking_bugs_for):
