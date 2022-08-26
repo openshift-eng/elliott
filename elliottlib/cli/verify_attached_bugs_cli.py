@@ -70,7 +70,8 @@ async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
     if runtime.use_jira:
         await verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
-    await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
+    else:
+        await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
 
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
@@ -95,7 +96,7 @@ class BugValidator:
         self.bz_tracker = BugzillaBugTracker(self.bz_config)
         self.bz_product = self.bz_config['product']
         self.target_releases: List[str] = self.bz_config['target_release']
-        self.et_data: Dict[str, Any] = runtime.gitdata.load_data(key='erratatool').data
+        self.et_data: Dict[str, Any] = runtime.get_errata_config()
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
         self.output = output
@@ -106,7 +107,8 @@ class BugValidator:
     def validate(self, non_flaw_bz_bugs: Iterable[Bug], non_flaw_jira_bugs: Iterable[Bug], verify_bug_status: bool,):
         non_flaw_bz_bugs = self.filter_bugs_by_release(non_flaw_bz_bugs, complain=True)
         non_flaw_jira_bugs = self.filter_bugs_by_release(non_flaw_jira_bugs, complain=True)
-        blocking_bugs_for_bz, blocking_bugs_for_jira = self._get_blocking_bugs_for(non_flaw_bz_bugs, non_flaw_jira_bugs)
+        blocking_bugs_for_bz = self._get_blocking_bugs_for(non_flaw_bz_bugs)
+        blocking_bugs_for_jira = self._get_blocking_bugs_for(non_flaw_jira_bugs)
         self._verify_blocking_bugs({**blocking_bugs_for_bz, **blocking_bugs_for_jira})
 
         if verify_bug_status:
@@ -261,37 +263,45 @@ class BugValidator:
                 )
         return filtered_bugs
 
-    def _get_blocking_bugs_for(self, bz_bugs, jira_bugs):
+    def _get_blocking_bugs_for(self, bugs):
         # get blocker bugs in the next version for all bugs we are examining
+        candidate_blockers = [b.depends_on for b in bugs if b.depends_on]
+        candidate_blockers = {b for deps in candidate_blockers for b in deps}
+
         v = minor_version_tuple(self.target_releases[0])
         next_version = (v[0], v[1] + 1)
-        pattern = re.compile(r'^[0-9]+\.[0-9]+\.(0|z)$')
+
+        def is_next_target(target_v):
+            pattern = re.compile(r'^\d+\.\d+\.(0|z)$')
+            return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
 
         # retrieve blockers and filter to those with correct product and target version
-        blocking_bz_bugs = {
-            bug.id: bug
-            for bug in self.bz_tracker.get_bugs(list({b for deps in [b.depends_on for b in bz_bugs if b.depends_on] for b in deps}))
-            # b.target release is a list of size 0 or 1
-            if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target) and bug.product == self.bz_product)
-        }
-        if self.use_jira:
-            blocking_jira_bugs = {
-                bug.id: bug
-                for bug in self.jira_tracker.get_bugs(list({b for deps in [b.depends_on for b in jira_bugs if b.depends_on] for b in deps}))
-                if any(minor_version_tuple(target) == next_version for target in bug.target_release if pattern.match(target))
-                and bug.product == self.jira_product
-            }
-        else:
-            blocking_jira_bugs = {}
+        blockers = [b for b in self.bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.product]
+        blocking_bugs = {}
+        for bug in blockers:
+            if any(is_next_target(target) for target in bug.target_release):
+                blocking_bugs[bug.id] = bug
 
-        return {bug: [blocking_bz_bugs[b] for b in bug.depends_on if b in blocking_bz_bugs] for bug in bz_bugs}, {bug: [blocking_jira_bugs[b] for b in bug.depends_on if b in blocking_jira_bugs] for bug in jira_bugs}
+        def is_next_target(target_v):
+            pattern = re.compile(r'^\d+\.\d+\.(0|z)$')
+            return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
+
+        # retrieve blockers and filter to those with correct product and target version
+        blockers = [b for b in self.bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.product]
+        blocking_bugs = {}
+        for bug in blockers:
+            if any(is_next_target(target) for target in bug.target_release):
+                blocking_bugs[bug.id] = bug
+                
+        return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
 
     def _verify_blocking_bugs(self, blocking_bugs_for):
         # complain about blocker bugs that aren't verified or shipped
         for bug, blockers in blocking_bugs_for.items():
             for blocker in blockers:
                 message = str()
-                if blocker.status not in ['VERIFIED', 'RELEASE_PENDING', 'CLOSED']:
+                if blocker.status not in ['VERIFIED', 'RELEASE_PENDING', 'CLOSED', 'Release Pending', 'Verified',
+                                          'Closed']:
                     if self.output == 'text':
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which has status {blocker.status}"
@@ -299,7 +309,9 @@ class BugValidator:
                         message = f"`{bug.status}` bug <{bug.weburl}|{bug.id}> is a backport of " \
                                   f"`{blocker.status}` bug <{blocker.weburl}|{blocker.id}>"
                     self._complain(message)
-                if blocker.status == 'CLOSED' and blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG', 'WONTFIX', 'Done', "Won't Do", 'Errata', 'Duplicate', 'Not a Bug']:
+                if blocker.status in ['CLOSED', 'Closed'] and \
+                    blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG',
+                                               'WONTFIX', 'Done', "Won't Do", 'Errata', 'Duplicate', 'Not a Bug']:
                     if self.output == 'text':
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which was CLOSED {blocker.resolution}"
@@ -315,12 +327,12 @@ class BugValidator:
         for bug in bugs:
             if bug.is_flaw_bug():
                 continue
-            if bug.status in ["VERIFIED", "RELEASE_PENDING"]:
+            if bug.status in ["VERIFIED", "RELEASE_PENDING", "Verified", "Release Pending"]:
                 continue
-            if bug.status == "CLOSED" and bug.resolution == "ERRATA":
+            if bug.status in ["CLOSED", "Closed"] and bug.resolution in ["ERRATA", 'Errata']:
                 continue
             status = f"{bug.status}"
-            if bug.status == 'CLOSED':
+            if bug.status in ['CLOSED', 'Closed']:
                 status = f"{bug.status}: {bug.resolution}"
             self._complain(f"Bug {bug.id} has status {status}")
 

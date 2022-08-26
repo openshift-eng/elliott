@@ -99,13 +99,17 @@ providing an advisory with the -a/--advisory option.
         raise click.BadParameter("No input provided: Must use one of --id, --advisory, or --use-default-advisory")
 
     runtime.initialize()
-    if not auto and runtime.use_jira:
-        runtime.use_jira = False
-        runtime.only_jira = True
-
-    for b in runtime.bug_trackers.values():
+    if auto:
+        for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
+            repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop,
+                        default_advisory_type, b)
+    else:
+        if runtime.use_jira:
+            bug_tracker = runtime.bug_trackers('jira')
+        else:
+            bug_tracker = runtime.bug_trackers('bugzilla')
         repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop,
-                    default_advisory_type, b)
+                    default_advisory_type, bug_tracker)
 
 
 def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop,

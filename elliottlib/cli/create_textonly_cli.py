@@ -65,21 +65,20 @@ def create_textonly_cli(runtime, errata_type, date, assigned_to, manager, packag
     """
 
     runtime.initialize()
-    bug_trackers = runtime.bug_trackers
     # we want to create only one advisory regardless of multiple bug trackers being used
     # we give priority to jira in case both are in use
-    if runtime.use_jira or runtime.only_jira:
+    if runtime.use_jira:
         create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
-                        description, solution, bugtitle, bugdescription, yes, bug_trackers['jira'])
+                        description, solution, bugtitle, bugdescription, yes, runtime.bug_trackers('jira'))
 
     else:
         create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
-                        description, solution, bugtitle, bugdescription, yes, bug_trackers['bugzilla'])
+                        description, solution, bugtitle, bugdescription, yes, runtime.bug_trackers('bugzilla'))
 
 
 def create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description,
                     solution, bug_title, bug_description, yes, bug_tracker: BugTracker):
-    et_data = runtime.gitdata.load_data(key='erratatool').data
+    et_data = runtime.get_errata_config()
     try:
         erratum = Erratum(
             product=et_data['product'],

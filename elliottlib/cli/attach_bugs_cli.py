@@ -66,10 +66,10 @@ For attaching use --advisory, --use-default-advisory <TYPE>
     if default_advisory_type is not None:
         advisory = find_default_advisory(runtime, default_advisory_type)
 
-    if runtime.use_jira or runtime.only_jira:
-        bug_tracker = runtime.bug_trackers['jira']
+    if runtime.use_jira:
+        bug_tracker = runtime.bug_trackers('jira')
     else:
-        bug_tracker = runtime.bug_trackers['bugzilla']
+        bug_tracker = runtime.bug_trackers('bugzilla')
     bug_ids = bug_tracker.id_convert(bug_ids)
     attach_bugs(runtime, advisory, bug_ids, report, output, noop, bug_tracker)
 
