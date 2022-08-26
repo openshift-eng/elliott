@@ -1,10 +1,10 @@
 import click
 from elliottlib import logutil, errata
-from elliottlib.cli import cli_opts
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated
 from elliottlib.util import green_prefix
+from elliottlib.bzutil import get_jira_bz_bug_ids, JIRABugTracker, BugzillaBugTracker
 
 from errata_tool import ErrataException
 from spnego.exceptions import GSSError
@@ -28,12 +28,12 @@ LOGGER = logutil.getLogger(__name__)
               help="Don't change anything")
 @click.pass_obj
 def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove_all, noop):
-    """Remove given BUGS from ADVISORY.
+    """Remove given BUGS (JIRA or Bugzilla) from ADVISORY.
 
     Remove bugs that have been attached an advisory:
 
 \b
-    $ elliott --group openshift-4.10 remove-bugs 123456 --advisory 1234123
+    $ elliott --group openshift-4.10 remove-bugs OCPBUGS-4 123456 --advisory 1234123
 
     Remove two bugs from default image advisory
 
@@ -55,40 +55,34 @@ def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove
     if default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
-    if remove_all:
-        for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
-            remove_bugs(advisory_id, bug_ids, remove_all, b, noop)
-    else:
-        if runtime.use_jira:
-            bug_tracker = runtime.bug_trackers('jira')
-        else:
-            bug_tracker = runtime.bug_trackers('bugzilla')
-        remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop)
-
-
-def remove_bugs(advisory_id, bug_ids, remove_all, bug_tracker, noop):
-    bug_ids = bug_tracker.id_convert(bug_ids)
     try:
         advisory = errata.Advisory(errata_id=advisory_id)
     except GSSError:
         exit_unauthenticated()
-
     if not advisory:
         raise ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
+    attached_jira_ids = JIRABugTracker.advisory_bug_ids(advisory)
+    attached_bz_ids = BugzillaBugTracker.advisory_bug_ids(advisory)
 
+    if remove_all:
+        jira_ids, bz_ids = attached_jira_ids, attached_bz_ids
+    else:
+        jira_ids, bz_ids = get_jira_bz_bug_ids(bug_ids)
+        jira_ids = set(jira_ids) & set(attached_jira_ids)
+        bz_ids = set(bz_ids) & set(attached_bz_ids)
+
+    if jira_ids:
+        remove_bugs(advisory, jira_ids, runtime.bug_trackers('jira'), noop)
+    if bz_ids:
+        remove_bugs(advisory, bz_ids, runtime.bug_trackers('bugzilla'), noop)
+
+
+def remove_bugs(advisory, bug_ids, bug_tracker, noop):
+    green_prefix(f"Found {len(bug_ids)} {bug_tracker.type} bugs attached to advisory: ")
+    click.echo(f"{bug_ids}")
+
+    green_prefix(f"Removing {bug_tracker.type} bugs from advisory {advisory.errata_id}..")
     try:
-        attached_bug_ids = bug_tracker.advisory_bug_ids(advisory)
-        if not remove_all:
-            bug_ids = [b for b in bug_ids if b in attached_bug_ids]
-        else:
-            bug_ids = attached_bug_ids
-        green_prefix(f"Found {len(bug_ids)} {bug_tracker.type} bugs attached to advisory: ")
-        click.echo(f"{bug_ids}")
-
-        if not bug_ids:
-            return
-
-        green_prefix(f"Removing {bug_tracker.type} bugs from advisory {advisory_id}..")
         bug_tracker.remove_bugs(advisory, bug_ids, noop)
     except ErrataException as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))
