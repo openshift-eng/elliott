@@ -7,6 +7,7 @@ from elliottlib import errata
 from elliottlib.bzutil import JIRABugTracker
 from flexmock import flexmock
 import asyncio
+import traceback
 
 
 def async_test(f):
@@ -53,6 +54,41 @@ class VerifyAttachedBugs(unittest.TestCase):
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-bugs', 'OCPBUGS-1', 'OCPBUGS-2'])
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA', result.output)
+
+    def test_verify_attached_bugs_cli(self):
+        runner = CliRunner()
+        advisory = flexmock(errata_id='123')
+        flexmock(Runtime).should_receive("initialize")
+        flexmock(Runtime).should_receive("get_errata_config").and_return({})
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'project': 'OCPBUGS', 'target_release': [
+            '4.6.z']})
+        flexmock(JIRABugTracker).should_receive("login")
+
+        f = asyncio.Future()
+        f.set_result(None)
+        flexmock(AsyncErrataAPI).should_receive("login").and_return(f)
+
+        bugs = [
+            flexmock(id="OCPBUGS-1", product='OCPBUGS', target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
+                     status='ON_QA'),
+            flexmock(id="OCPBUGS-2", product='OCPBUGS', target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
+                     status='ON_QA')
+        ]
+        depend_on_bugs = [
+            flexmock(id="OCPBUGS-3", product='OCPBUGS', target_release=['4.7.z'], status='ON_QA'),
+            flexmock(id="OCPBUGS-4", product='OCPBUGS', target_release=['4.7.z'], status='Release Pending')
+        ]
+
+        f = asyncio.Future()
+        f.set_result({advisory.errata_id: bugs})
+        flexmock(BugValidator).should_receive("get_attached_bugs").and_return(f)
+        flexmock(JIRABugTracker).should_receive("get_bugs").with_args(["OCPBUGS-3", "OCPBUGS-4"]).and_return(
+            depend_on_bugs).ordered()
+
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-attached-bugs', advisory.errata_id])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA',
+                      result.output)
 
 
 class TestGetAttachedBugs(unittest.TestCase):

@@ -37,7 +37,8 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
         exit(1)
     if runtime.use_jira:
         await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, True)
-    await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, False)
+    else:
+        await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, False)
 
 
 async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool, use_jira: bool):
@@ -99,7 +100,7 @@ class BugValidator:
     async def close(self):
         await self.errata_api.close()
 
-    def validate(self, non_flaw_bugs: Iterable[Bug], verify_bug_status: bool,):
+    def validate(self, non_flaw_bugs: Iterable[Bug], verify_bug_status: bool):
         non_flaw_bugs = self.filter_bugs_by_release(non_flaw_bugs, complain=True)
         blocking_bugs_for = self._get_blocking_bugs_for(non_flaw_bugs)
         self._verify_blocking_bugs(blocking_bugs_for)
