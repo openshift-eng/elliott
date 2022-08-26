@@ -11,7 +11,7 @@ from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.errata import is_security_advisory
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, JIRABugTracker
+from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, JIRABugTracker, BugTracker
 
 
 @cli.command('attach-cve-flaws',
@@ -94,7 +94,7 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
 
     # validate and get target_release
     current_target_release = Bug.get_target_release(attached_tracker_bugs)
-    tracker_flaws, flaw_id_bugs = bug_tracker.get_corresponding_flaw_bugs(
+    tracker_flaws, flaw_id_bugs = BugTracker.get_corresponding_flaw_bugs(
         attached_tracker_bugs,
         flaw_bug_tracker,
         strict=True

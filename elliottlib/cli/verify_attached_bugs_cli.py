@@ -47,10 +47,10 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
     try:
         await validator.errata_api.login()
         advisory_bug_map = validator.get_attached_bugs(advisories)
-        non_flaw_bugs = validator.filter_bugs_by_product({b for bugs in advisory_bug_map.values() for b in bugs})
-        validator.validate(non_flaw_bugs, verify_bug_status)
+        bugs = {b for bugs in advisory_bug_map.values() for b in bugs}
+        validator.validate(bugs, verify_bug_status)
         if verify_flaws:
-            await validator.verify_attached_flaws()
+            await validator.verify_attached_flaws(advisory_bug_map)
     except GSSError:
         exit_unauthenticated()
     finally:
@@ -77,7 +77,7 @@ async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
     validator = BugValidator(runtime, use_jira, output)
-    bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs(bug_ids))
+    bugs = validator.bug_tracker.get_bugs(bug_ids, ocp_only=True)
     try:
         validator.validate(bugs, verify_bug_status)
     finally:
@@ -128,7 +128,7 @@ class BugValidator:
         green_print("All CVE flaw bugs were verified.")
 
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
-        # Retrieve flaw bugs in Bugzilla for attached_tracker_bugs
+        # Retrieve flaw bugs for attached_tracker_bugs
         tracker_flaws, flaw_id_bugs = self.bug_tracker.get_corresponding_flaw_bugs(attached_trackers)
 
         # Find first-fix flaws
@@ -211,15 +211,11 @@ class BugValidator:
             advisory_bug_id_map = {advisory.errata_id: bug_tracker.advisory_bug_ids(advisory)
                                    for advisory in advisories}
             bug_map = bug_tracker.get_bugs_map([bug_id for bug_list in advisory_bug_id_map.values()
-                                                for bug_id in bug_list])
+                                                for bug_id in bug_list], ocp_only=True)
             for advisory_id in advisory_ids:
                 set_of_bugs = {bug_map[bid] for bid in advisory_bug_id_map[advisory_id]}
                 attached_bug_map[advisory_id] = attached_bug_map[advisory_id] | set_of_bugs
         return attached_bug_map
-
-    def filter_bugs_by_product(self, bugs):
-        # filter out bugs for different product (presumably security flaw bugs)
-        return [b for b in bugs if b.product == self.product]
 
     def filter_bugs_by_release(self, bugs: Iterable[Bug], complain: bool = False) -> List[Bug]:
         # filter out bugs with an invalid target release
@@ -239,6 +235,7 @@ class BugValidator:
         # get blocker bugs in the next version for all bugs we are examining
         candidate_blockers = [b.depends_on for b in bugs if b.depends_on]
         candidate_blockers = {b for deps in candidate_blockers for b in deps}
+        jira_ids, bz_ids = bzutil.get_jira_bz_bug_ids(candidate_blockers)
 
         v = minor_version_tuple(self.target_releases[0])
         next_version = (v[0], v[1] + 1)
@@ -248,13 +245,20 @@ class BugValidator:
             return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
 
         # retrieve blockers and filter to those with correct product and target version
-        blockers = [b for b in self.bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.product]
+        blockers = []
+        if jira_ids:
+            blockers.extend(self.runtime.bug_trackers('jira')
+                            .get_bugs(jira_ids))
+        if bz_ids:
+            blockers.extend(self.runtime.bug_trackers('bugzilla')
+                            .get_bugs(bz_ids, ocp_only=True))
         blocking_bugs = {}
         for bug in blockers:
             if any(is_next_target(target) for target in bug.target_release):
                 blocking_bugs[bug.id] = bug
 
-        return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
+        k = {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
+        return k
 
     def _verify_blocking_bugs(self, blocking_bugs_for):
         # complain about blocker bugs that aren't verified or shipped

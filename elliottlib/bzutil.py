@@ -391,15 +391,16 @@ class BugTracker:
         if comment_lines:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
 
-    def get_corresponding_flaw_bugs(self, tracker_bugs: List[Bug], flaw_bug_tracker=None,
+    @staticmethod
+    def get_corresponding_flaw_bugs(tracker_bugs: List[Bug], flaw_bug_tracker,
                                     strict: bool = False, verbose: bool = False):
         """Get corresponding flaw bug objects for given list of tracker bug objects.
-        Accepts a flaw_bug_tracker object to fetch flaw bugs from incase it's different from self
+        flaw_bug_tracker object to fetch flaw bugs from
 
         :return: (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw
         bug id as value, flaw_id_bugs is a dict with flaw bug id as key and flaw bug object as value
         """
-        bug_tracker = flaw_bug_tracker if flaw_bug_tracker else self
+        bug_tracker = flaw_bug_tracker
         flaw_bugs = bug_tracker.get_flaw_bugs(
             list(set(sum([t.corresponding_flaw_bug_ids for t in tracker_bugs], []))),
             verbose=verbose
@@ -655,7 +656,7 @@ class BugzillaBugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
-    def get_bugs(self, bugids, permissive=False, **kwargs):
+    def get_bugs(self, bugids, permissive=False, ocp_only=False, **kwargs):
         if not bugids:
             return []
         if 'verbose' in kwargs:
@@ -667,6 +668,9 @@ class BugzillaBugTracker(BugTracker):
             msg = f"Some bugs could not be fetched ({len(bugids)-len(bugs)}): {bugids_not_found}"
             if permissive:
                 print(msg)
+        # This will filter out flaw bugs and bugs from other products
+        if ocp_only:
+            bugs = [b for b in bugs if b.product == constants.BUGZILLA_PRODUCT_OCP]
         return bugs
 
     def client(self):
