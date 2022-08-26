@@ -97,7 +97,7 @@ class VerifyAttachedBugs(unittest.TestCase):
                       result.output)
 
 
-class TestGetAttachedBugs(unittest.TestCase):
+class TestBugValidator(unittest.TestCase):
     def test_get_attached_bugs_jira(self):
         runtime = Runtime()
         jira_bug_map = {
@@ -129,16 +129,34 @@ class TestGetAttachedBugs(unittest.TestCase):
         actual = validator.get_attached_bugs(['123', '145'])
         expected = (
             {
-                '123': {jira_bug_map['bug-1'], jira_bug_map['bug-2']},
-                '145': {jira_bug_map['bug-3']}
-            },
-            {
-                '123': {bz_bug_map[1]},
-                '145': {bz_bug_map[2], bz_bug_map[3]}
+                '123': {jira_bug_map['bug-1'], jira_bug_map['bug-2'], bz_bug_map[1]},
+                '145': {jira_bug_map['bug-3'], bz_bug_map[2], bz_bug_map[3]}
             }
         )
         self.assertEqual(actual, expected)
 
+    def test_get_blocking_bugs_for(self):
+        runtime = Runtime()
+        flexmock(Runtime).should_receive("get_errata_config").and_return({})
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z']})
+        flexmock(JIRABugTracker).should_receive("login").and_return(None)
+        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z']})
+        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
+
+        bugs = [
+            flexmock(id="OCPBUGS-1", product='OCPBUGS', target_release=['4.6.z'], depends_on=['OCPBUGS-4']),
+            flexmock(id="OCPBUGS-2", product='OCPBUGS', target_release=['4.6.z'], depends_on=['OCPBUGS-3']),
+            flexmock(id=3, product='OpenShift Container Platform', target_release=['4.6.z'], depends_on=['OCPBUGS-3'])
+        ]
+        depend_on_bugs = [
+            flexmock(id="OCPBUGS-3", product='OCPBUGS', target_release=['4.7.z']),
+            flexmock(id="OCPBUGS-4", product='OCPBUGS', target_release=['4.7.z'])
+        ]
+
+        validator = BugValidator(runtime, True)
+        actual = validator._get_blocking_bugs_for(bugs)
+        expected = None
+        self.assertEqual(actual, expected)
 
 if __name__ == '__main__':
     unittest.main()
