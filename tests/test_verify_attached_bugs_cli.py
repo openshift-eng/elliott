@@ -188,6 +188,9 @@ class TestBugValidator(unittest.TestCase):
         }
         self.assertEqual(actual, expected)
 
+    def test_verify_attached_flaws_for(self):
+        self.assertEqual(1, 0)
+
 
 if __name__ == '__main__':
     unittest.main()
