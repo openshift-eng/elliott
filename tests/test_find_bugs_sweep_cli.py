@@ -119,7 +119,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
 
     def test_find_bugs_sweep_advisory_jira(self):
         runner = CliRunner()
-        bugs = [flexmock(id='BZ1', summary='bug')]
+        bugs = [flexmock(id='BZ1')]
         advisory_id = 123
 
         # common mocks
@@ -149,7 +149,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
 
     def test_find_bugs_sweep_advisory_type(self):
         runner = CliRunner()
-        bugs = [flexmock(id='BZ1', summary='bug')]
+        bugs = [flexmock(id='BZ1')]
 
         # common mocks
         flexmock(Runtime).should_receive("initialize")
@@ -177,9 +177,9 @@ class FindBugsSweepTestCase(unittest.TestCase):
 
     def test_find_bugs_sweep_default_advisories(self):
         runner = CliRunner()
-        image_bugs = [flexmock(id=1, summary='bug'), flexmock(id=2, summary='bug')]
-        rpm_bugs = [flexmock(id=3, summary='bug'), flexmock(id=4, summary='bug')]
-        extras_bugs = [flexmock(id=5, summary='bug'), flexmock(id=6, summary='bug')]
+        image_bugs = [flexmock(id=1), flexmock(id=2)]
+        rpm_bugs = [flexmock(id=3), flexmock(id=4)]
+        extras_bugs = [flexmock(id=5), flexmock(id=6)]
 
         # common mocks
         flexmock(Runtime).should_receive("initialize").and_return(None)
