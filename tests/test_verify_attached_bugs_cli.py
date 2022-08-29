@@ -1,18 +1,20 @@
 import unittest
 from click.testing import CliRunner
 from elliottlib.cli.common import cli, Runtime
-from elliottlib.cli.verify_attached_bugs_cli import BugValidator
+from elliottlib.cli.verify_attached_bugs_cli import BugValidator, verify_bugs_cli
 from elliottlib.errata_async import AsyncErrataAPI
 from elliottlib import errata
-from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker
+from elliottlib.bzutil import JIRABugTracker
 from flexmock import flexmock
 import asyncio
 
 
 def async_test(f):
     def wrapper(*args, **kwargs):
+        coro = asyncio.coroutine(f)
+        future = coro(*args, **kwargs)
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(f(*args, **kwargs))
+        loop.run_until_complete(future)
     return wrapper
 
 
@@ -23,8 +25,6 @@ class VerifyAttachedBugs(unittest.TestCase):
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z'], 'project': 'OpenShift Container Platform'})
         flexmock(AsyncErrataAPI).should_receive("__init__").and_return(None)
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
-        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z'], 'product': 'OpenShift Container Platform'})
-        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
         validator = BugValidator(runtime, True)
         self.assertEqual(validator.target_releases, ['4.9.z'])
 
@@ -35,9 +35,6 @@ class VerifyAttachedBugs(unittest.TestCase):
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'project': 'OCPBUGS', 'target_release': [
             '4.6.z']})
         flexmock(JIRABugTracker).should_receive("login")
-        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'product': 'OCPBUGS', 'target_release': [
-            '4.6.z']})
-        flexmock(BugzillaBugTracker).should_receive("login")
 
         bugs = [
             flexmock(id="OCPBUGS-1", product='OCPBUGS', target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
@@ -66,22 +63,14 @@ class TestGetAttachedBugs(unittest.TestCase):
             'bug-1': flexmock(id='bug-1'),
             'bug-2': flexmock(id='bug-2'),
         }
-
-        async def get_ad():
-            return {'bugs': {'bugs': []}, 'content': {'content': {'errata_id': '12345'}}}
-
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z'], 'project': 'OpenShift Container Platform'})
         flexmock(AsyncErrataAPI).should_receive("__init__").and_return(None)
-        flexmock(AsyncErrataAPI).should_receive("get_advisory").with_args("12345").and_return(get_ad())
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
         flexmock(JIRABugTracker).should_receive("get_bugs_map").with_args(['bug-1', 'bug-2']).and_return(bug_map)
         flexmock(errata).should_receive("get_jira_issue_from_advisory").with_args('12345').and_return([{'key': 'bug-1'}, {'key': 'bug-2'}])
-        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z'], 'product': 'OpenShift Container Platform'})
-        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
-        flexmock(BugzillaBugTracker).should_receive("get_bugs_map").and_return({})
         validator = BugValidator(runtime, True)
-        bz_bugs, advisory_bugs = await validator.get_attached_bugs(['12345'])
+        advisory_bugs = await validator.get_attached_bugs(['12345'])
         self.assertEqual(advisory_bugs, {'12345': {bug_map['bug-1'], bug_map['bug-2']}})
 
 
