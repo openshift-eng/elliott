@@ -224,7 +224,7 @@ class JIRABug(Bug):
 
     @property
     def resolution(self):
-        return self.bug.fields.resolution
+        return str(self.bug.fields.resolution)
 
     @property
     def depends_on(self):
