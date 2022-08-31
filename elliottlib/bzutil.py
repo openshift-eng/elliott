@@ -79,7 +79,7 @@ class Bug:
             if b.is_tracker_bug():
                 component_name = b.whiteboard_component
                 # filter out non-rpm suffixes
-                if component_name and not re.search(r'-(apb|container)', component_name):
+                if component_name and not re.search(r'-(apb|container)(,|$)', component_name):
                     rpm_cves[b] = component_name
         return rpm_cves
 
