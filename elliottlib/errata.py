@@ -640,14 +640,21 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
             if result.status_code != 201:
                 rt = add_jira_issue(advisory_id, chunk_of_bugs[i])
                 if rt.status_code != 201:
-                    if "The issue is filed already in" in rt.json():
-                        continue
-                    else:
+                    errata_error = rt.json()
+                    if 'errors' not in errata_error or len(errata_error) != 1:
                         raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
                                                            f"status={rt.status_code} "
                                                            f"errmsg={rt.json()}")
-
-        logger.info("All jira bugs attached")
+                    if 'idsfixed' not in errata_error['errors'] or len(errata_error['errors']) != 1:
+                        raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
+                                                           f"status={rt.status_code} "
+                                                           f"errmsg={rt.json()}")
+                    for err in errata_error['errors']['idsfixed']:
+                        if 'The issue is filed already in' not in ' '.join(err):
+                            raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
+                                                               f"status={rt.status_code} "
+                                                               f"errmsg={rt.json()}")
+        logger.info("All not attached jira bugs attached")
 
 
 def get_rpmdiff_runs(advisory_id, status=None, session=None):
