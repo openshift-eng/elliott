@@ -47,13 +47,12 @@ RUN groupadd --gid "$USER_GID" "$USERNAME" \
     && echo "$USERNAME" ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/"$USERNAME" \
     && chmod 0440 /etc/sudoers.d/"$USERNAME"
 
-# Preinstall dependencies
-COPY ./ /tmp/elliott/
-RUN chown "$USERNAME" -R /tmp/elliott \
- && pushd /tmp/elliott \
- && sudo -u "$USERNAME" pip3 install --user -r ./requirements.txt -r requirements-dev.txt ./ \
- && popd && rm -rf /tmp/elliott
-USER "$USER_UID"
+# Install dependencies and elliott
 WORKDIR /workspaces/elliott
+COPY . .
+RUN chown "$USERNAME" -R . \
+ && sudo -u "$USERNAME" pip3 install --user -r ./requirements.txt -r requirements-dev.txt \
+ && sudo -u "$USERNAME" pip3 install --user --editable .
+USER "$USER_UID"
 ENV ELLIOTT_DATA_PATH=https://github.com/openshift/ocp-build-data \
     _ELLIOTT_DATA_PATH=/workspaces/ocp-build-data
