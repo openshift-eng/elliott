@@ -297,7 +297,7 @@ class JIRABug(Bug):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
 
     def is_ocp_bug(self):
-        return self.bug.project == "OCPBUGS"
+        return self.bug.fields.project.key == "OCPBUGS"
 
     def _get_blocks(self):
         blocks = []
