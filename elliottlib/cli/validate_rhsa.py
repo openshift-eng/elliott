@@ -43,7 +43,9 @@ def validate_rhsa_cli(runtime, advisory):
         print(f"HTTP {resp.status_code}: Could not validate rhsa {advisory} (is it an RHSA? without embargo?)")
         exit(1)
         return
-    alerts = resp.json()
+
+    ignores = ['ErratumValidator.check_spelling', 'ErratumValidator.check_multiple_builds']
+    alerts = [alert for alert in resp.json() if alert.get('rule_name') not in ignores]
 
     if alerts:
         for a in alerts:
