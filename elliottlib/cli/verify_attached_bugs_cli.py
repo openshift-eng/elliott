@@ -274,8 +274,8 @@ class BugValidator:
         for bug in blockers:
             if bug.is_ocp_bug() and any(is_next_target(target) for target in bug.target_release):
                 blocking_bugs[bug.id] = bug
-        self.runtime.logger.info(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
-                                 f"{list(blocking_bugs.keys())}")
+        print(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
+              f"{list(blocking_bugs.keys())}")
 
         k = {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
         return k
@@ -295,7 +295,7 @@ class BugValidator:
                                   f"`{blocker.status}` bug <{blocker.weburl}|{blocker.id}>"
                     self._complain(message)
                 else:
-                    self.runtime.logger.info(f'Blocking bug {blocker.id} is on {blocker.status}')
+                    print(f'Blocking bug {blocker.id} is on {blocker.status}')
                 if blocker.status in ['CLOSED', 'Closed'] and \
                     blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG',
                                                'WONTFIX', 'Done', "Won't Do", 'Errata', 'Duplicate', 'Not a Bug']:
