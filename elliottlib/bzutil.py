@@ -583,7 +583,8 @@ class JIRABugTracker(BugTracker):
     def _search(self, query, verbose=False) -> List[JIRABug]:
         if verbose:
             click.echo(query)
-        return [JIRABug(j) for j in self._client.search_issues(query, maxResults=False)]
+        results = self._client.search_issues(query, maxResults=0)
+        return [JIRABug(j) for j in results]
 
     def blocker_search(self, status, search_filter='default', verbose=False, **kwargs):
         query = self._query(

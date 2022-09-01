@@ -1,4 +1,4 @@
-FROM fedora:34
+FROM registry.fedoraproject.org/fedora:36
 LABEL name="elliott-dev" \
   description="Elliott development container image" \
   maintainer="OpenShift Automated Release Tooling (ART) Team <aos-team-art@redhat.com>"
@@ -13,7 +13,7 @@ RUN curl -o /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.crt --fail -L \
 RUN dnf install -y \
     # runtime dependencies
     krb5-workstation python-bugzilla-cli git \
-    python36 python3-certifi \
+    python38 python3-certifi \
     koji brewkoji \
     # development dependencies
     gcc krb5-devel \
@@ -26,8 +26,8 @@ RUN dnf install -y \
   && ln -sfn /usr/bin/python3 /usr/bin/python
 
 
-ARG OC_VERSION=latest
-RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"$OC_VERSION"/openshift-client-linux.tar.gz \
+ARG OC_VERSION=latest-4.12
+RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/"$OC_VERSION"/openshift-client-linux.tar.gz \
   && tar -C /usr/local/bin -xzf  /tmp/openshift-client-linux-"$OC_VERSION".tar.gz oc kubectl \
   && rm /tmp/openshift-client-linux-"$OC_VERSION".tar.gz
 
