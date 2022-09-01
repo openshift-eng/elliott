@@ -48,7 +48,7 @@ class VerifyAttachedBugs(unittest.TestCase):
             flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending')
         ]
         flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args(("OCPBUGS-1", "OCPBUGS-2"), ocp_only=True)\
+            .with_args(("OCPBUGS-1", "OCPBUGS-2"))\
             .and_return(bugs)\
             .ordered()
         flexmock(JIRABugTracker).should_receive("get_bugs")\
@@ -93,7 +93,7 @@ class VerifyAttachedBugs(unittest.TestCase):
         ]
 
         flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args(["OCPBUGS-1", "OCPBUGS-2"], ocp_only=True, permissive=False)\
+            .with_args(["OCPBUGS-1", "OCPBUGS-2"], permissive=False)\
             .and_return(bugs)\
             .ordered()
         flexmock(JIRABugTracker).should_receive("get_bugs")\
@@ -135,10 +135,10 @@ class TestBugValidator(unittest.TestCase):
         advisory2 = flexmock(errata_id='145', jira_issues=['bug-3'], errata_bugs=[2, 3])
         flexmock(Erratum).new_instances(advisory1, advisory2)
         flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args(list(jira_bug_map.keys()), ocp_only=True, permissive=False)\
+            .with_args(list(jira_bug_map.keys()), permissive=False)\
             .and_return(jira_bug_map.values())
         flexmock(BugzillaBugTracker).should_receive("get_bugs")\
-            .with_args(list(bz_bug_map.keys()), ocp_only=True, permissive=False)\
+            .with_args(list(bz_bug_map.keys()), permissive=False)\
             .and_return(bz_bug_map.values())
 
         validator = BugValidator(runtime, True)
@@ -176,7 +176,7 @@ class TestBugValidator(unittest.TestCase):
             .with_args({"OCPBUGS-3", "OCPBUGS-4"}) \
             .and_return(depend_on_jira_bugs)
         flexmock(BugzillaBugTracker).should_receive("get_bugs") \
-            .with_args({1}, ocp_only=True) \
+            .with_args({1}) \
             .and_return(depend_on_bz_bugs)
 
         validator = BugValidator(runtime, True)

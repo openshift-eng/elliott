@@ -48,7 +48,11 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
         await validator.errata_api.login()
         advisory_bug_map = validator.get_attached_bugs(advisories)
         bugs = {b for bugs in advisory_bug_map.values() for b in bugs}
-        validator.validate(bugs, verify_bug_status)
+
+        # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products
+        non_flaw_bugs = {b for b in bugs if b.is_ocp_bug()}
+
+        validator.validate(non_flaw_bugs, verify_bug_status)
         if verify_flaws:
             await validator.verify_attached_flaws(advisory_bug_map)
     except GSSError:
@@ -77,9 +81,15 @@ async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
 
 async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
     validator = BugValidator(runtime, use_jira, output)
-    bugs = validator.bug_tracker.get_bugs(bug_ids, ocp_only=True)
+    bugs = validator.bug_tracker.get_bugs(bug_ids)
+    non_ocp_bugs = {b for b in bugs if not b.is_ocp_bug()}
+    if non_ocp_bugs:
+        runtime.logger.info(f"Ignoring non-ocp bugs: {[b.id for b in non_ocp_bugs]}")
+
+    # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products
+    non_flaw_bugs = {b for b in bugs if b.is_ocp_bug()}
     try:
-        validator.validate(bugs, verify_bug_status)
+        validator.validate(non_flaw_bugs, verify_bug_status)
     finally:
         await validator.close()
 
@@ -120,6 +130,9 @@ class BugValidator:
         for advisory_id, attached_bugs in advisory_bugs.items():
             attached_trackers = [b for b in attached_bugs if b.is_tracker_bug()]
             attached_flaws = [b for b in attached_bugs if b.is_flaw_bug()]
+            self.runtime.logger.info(f"Verifying advisory {advisory_id}: attached-trackers: "
+                                     f"{[b.id for b in attached_trackers]} "
+                                     f"attached-flaws: {[b.id for b in attached_flaws]}")
             futures.append(self._verify_attached_flaws_for(advisory_id, attached_trackers, attached_flaws))
         await asyncio.gather(*futures)
         if self.problems:
@@ -146,14 +159,18 @@ class BugValidator:
 
         # Check if attached flaws match attached trackers
         attached_flaw_ids = {b.id for b in attached_flaws}
-        missing_flaw_ids = attached_flaw_ids - first_fix_flaw_ids
+        missing_flaw_ids = first_fix_flaw_ids - attached_flaw_ids
         if missing_flaw_ids:
-            self._complain(f"On advisory {advisory_id}, {len(missing_flaw_ids)} flaw bugs are not attached but they are referenced by attached tracker bugs: {', '.join(sorted(map(str, missing_flaw_ids)))}."
-                           " You probably need to attach those flaw bugs or drop the corresponding tracker bugs.")
-        extra_flaw_ids = first_fix_flaw_ids - attached_flaw_ids
+            self._complain(f"On advisory {advisory_id}, these flaw bugs are not attached: "
+                           f"{', '.join(sorted(map(str, missing_flaw_ids)))} but "
+                           "they are referenced by attached tracker bugs. "
+                           "You need to attach those flaw bugs or drop corresponding tracker bugs.")
+        extra_flaw_ids = attached_flaw_ids - first_fix_flaw_ids
         if extra_flaw_ids:
-            self._complain(f"On advisory {advisory_id}, {len(extra_flaw_ids)} flaw bugs are attached but there are no tracker bugs referencing them: {', '.join(sorted(map(str, extra_flaw_ids)))}."
-                           " You probably need to drop those flaw bugs or attach the corresponding tracker bugs.")
+            self._complain(f"On advisory {advisory_id}, these flaw bugs are attached: "
+                           f"{', '.join(sorted(map(str, extra_flaw_ids)))} but "
+                           f"there are no tracker bugs referencing them. "
+                           "You need to drop those flaw bugs or attach corresponding tracker bugs.")
 
         # Check if advisory is of the expected type
         advisory_info = await self.errata_api.get_advisory(advisory_id)
@@ -212,9 +229,9 @@ class BugValidator:
             advisory_bug_id_map = {advisory.errata_id: bug_tracker.advisory_bug_ids(advisory)
                                    for advisory in advisories}
             bug_map = bug_tracker.get_bugs_map([bug_id for bug_list in advisory_bug_id_map.values()
-                                                for bug_id in bug_list], ocp_only=True)
+                                                for bug_id in bug_list])
             for advisory_id in advisory_ids:
-                set_of_bugs = {bug_map[bid] for bid in advisory_bug_id_map[advisory_id]}
+                set_of_bugs = {bug_map[bid] for bid in advisory_bug_id_map[advisory_id] if bid in bug_map}
                 attached_bug_map[advisory_id] = attached_bug_map[advisory_id] | set_of_bugs
         return attached_bug_map
 
@@ -252,11 +269,13 @@ class BugValidator:
                             .get_bugs(jira_ids))
         if bz_ids:
             blockers.extend(self.runtime.bug_trackers('bugzilla')
-                            .get_bugs(bz_ids, ocp_only=True))
+                            .get_bugs(bz_ids))
         blocking_bugs = {}
         for bug in blockers:
-            if any(is_next_target(target) for target in bug.target_release):
+            if bug.is_ocp_bug() and any(is_next_target(target) for target in bug.target_release):
                 blocking_bugs[bug.id] = bug
+        self.runtime.logger.info(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
+                                 f"{list(blocking_bugs.keys())}")
 
         k = {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
         return k
@@ -275,6 +294,8 @@ class BugValidator:
                         message = f"`{bug.status}` bug <{bug.weburl}|{bug.id}> is a backport of " \
                                   f"`{blocker.status}` bug <{blocker.weburl}|{blocker.id}>"
                     self._complain(message)
+                else:
+                    self.runtime.logger.info(f'Blocking bug {blocker.id} is on {blocker.status}')
                 if blocker.status in ['CLOSED', 'Closed'] and \
                     blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG',
                                                'WONTFIX', 'Done', "Won't Do", 'Errata', 'Duplicate', 'Not a Bug']:

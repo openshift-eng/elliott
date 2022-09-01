@@ -63,6 +63,9 @@ class Bug:
     def is_flaw_bug(self):
         return self.product == "Security Response" and self.component == "vulnerability"
 
+    def is_ocp_bug(self):
+        raise NotImplementedError
+
     @staticmethod
     def get_valid_rpm_cves(bugs: List[Bug]) -> Dict[Bug, str]:
         """ Get valid rpm cve trackers with their component names
@@ -160,6 +163,9 @@ class BugzillaBug(Bug):
             component_name = tmp.groups()[0]
             return component_name
         return None
+
+    def is_ocp_bug(self):
+        return self.product == constants.BUGZILLA_PRODUCT_OCP
 
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
@@ -289,6 +295,9 @@ class JIRABug(Bug):
 
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
+
+    def is_ocp_bug(self):
+        return self.bug.project == "OCPBUGS"
 
     def _get_blocks(self):
         blocks = []
@@ -656,7 +665,7 @@ class BugzillaBugTracker(BugTracker):
     def get_bug(self, bugid, **kwargs):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
-    def get_bugs(self, bugids, permissive=False, ocp_only=False, **kwargs):
+    def get_bugs(self, bugids, permissive=False, **kwargs):
         if not bugids:
             return []
         if 'verbose' in kwargs:
@@ -668,9 +677,6 @@ class BugzillaBugTracker(BugTracker):
             msg = f"Some bugs could not be fetched ({len(bugids)-len(bugs)}): {bugids_not_found}"
             if permissive:
                 print(msg)
-        # This will filter out flaw bugs and bugs from other products
-        if ocp_only:
-            bugs = [b for b in bugs if b.product == constants.BUGZILLA_PRODUCT_OCP]
         return bugs
 
     def client(self):
