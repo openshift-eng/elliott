@@ -156,6 +156,7 @@ Fields for the short format: Release date, State, Synopsys, URL
     json_data = advisory.get_erratum_data()
 
     json_data['bugs'] = advisory.errata_bugs
+    json_data['jira_issues'] = advisory.jira_issues
     json_data['current_flags'] = advisory.current_flags
     json_data['errata_builds'] = advisory.errata_builds
     json_data['rpmdiffs'] = advisory.externalTests(test_type='rpmdiff')
