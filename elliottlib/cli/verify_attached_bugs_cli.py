@@ -151,6 +151,12 @@ class BugValidator:
             else:
                 first_fix_flaw_ids = {
                     flaw_bug.id for flaw_bug in flaw_id_bugs.values()
+                    # We are passing in bugzilla as a bug tracker since flaw bugs are
+                    # always bugzilla bugs their links ("depends_on"/"blocked") fields
+                    # which we use to find its trackers - will always link to other bz bugs
+                    # This is a gap in our first fix logic since we won't be able to get to
+                    # jira tracker bugs for bz flaws and determine first fix at GA time
+                    # TODO: https://issues.redhat.com/browse/ART-4347
                     if bzutil.is_first_fix_any(self.runtime.bug_trackers('bugzilla'), flaw_bug, current_target_release)
                 }
 
@@ -207,7 +213,7 @@ class BugValidator:
             if cve_package_exclusions:
                 self._complain(f"On advisory {advisory_id}, {cve} is associated with Brew components "
                                f"{', '.join(sorted(cve_package_exclusions))} without a tracker bug."
-                               " You may need to explictly exclude those Brew components from the CVE "
+                               " You may need to explicitly exclude those Brew components from the CVE "
                                "mapping or attach the corresponding tracker bugs.")
 
         # Check if flaw bugs match the CVE field of the advisory
@@ -301,8 +307,6 @@ class BugValidator:
                         message = f"`{bug.status}` bug <{bug.weburl}|{bug.id}> is a backport of " \
                                   f"`{blocker.status}` bug <{blocker.weburl}|{blocker.id}>"
                     self._complain(message)
-                else:
-                    print(f'Blocking bug {blocker.id} is on {blocker.status}')
                 if blocker.status in ['CLOSED', 'Closed'] and \
                     blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG',
                                                'WONTFIX', 'Done', "Won't Do", 'Errata', 'Duplicate', 'Not a Bug']:
