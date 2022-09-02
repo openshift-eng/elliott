@@ -186,11 +186,7 @@ class TestBugValidator(unittest.TestCase):
             bugs[1]: [depend_on_bz_bugs[0]],
             bugs[2]: [depend_on_bz_bugs[0]]
         }
-        for bug in expected.keys():
-            self.assertEqual([b.id for b in expected[bug]], [b.id for b in actual[bug]])
-
-    # def test_verify_attached_flaws_for(self):
-    #     self.assertEqual(1, 0)
+        self.assertEqual(actual, expected)
 
 
 if __name__ == '__main__':
