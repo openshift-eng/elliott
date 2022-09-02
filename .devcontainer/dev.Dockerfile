@@ -16,7 +16,7 @@ RUN dnf install -y \
     python38 python3-certifi \
     koji brewkoji \
     # development dependencies
-    gcc krb5-devel \
+    gcc gcc-c++ krb5-devel \
     python3-devel python3-pip python3-wheel python3-autopep8 \
     # other tools
     bash-completion vim tmux procps-ng psmisc wget curl net-tools iproute socat \
@@ -26,7 +26,7 @@ RUN dnf install -y \
   && ln -sfn /usr/bin/python3 /usr/bin/python
 
 
-ARG OC_VERSION=latest-4.12
+ARG OC_VERSION=latest
 RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/"$OC_VERSION"/openshift-client-linux.tar.gz \
   && tar -C /usr/local/bin -xzf  /tmp/openshift-client-linux-"$OC_VERSION".tar.gz oc kubectl \
   && rm /tmp/openshift-client-linux-"$OC_VERSION".tar.gz
