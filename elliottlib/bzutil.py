@@ -137,7 +137,7 @@ class BugzillaBug(Bug):
     @property
     def component(self):
         return self.bug.component
-    
+
     @property
     def sub_component(self):
         if hasattr(self.bug, 'sub_component'):
