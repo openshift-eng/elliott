@@ -135,6 +135,10 @@ class BugzillaBug(Bug):
         return self.bug.target_release
 
     @property
+    def component(self):
+        return self.bug.component
+    
+    @property
     def sub_component(self):
         if hasattr(self.bug, 'sub_component'):
             return self.bug.sub_component
