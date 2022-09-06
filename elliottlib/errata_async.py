@@ -8,6 +8,7 @@ import aiohttp
 import gssapi
 
 from elliottlib.rpm_utils import parse_nvr
+from elliottlib import constants
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ class AsyncErrataUtils:
         :return: a dict that key is CVE name, value is another dict with package name as key and 0 as value
         """
         brew_components = {parse_nvr(nvr)["name"] for nvr in attached_builds}
-        missing_brew_brew_components = {c for components in expected_cve_components.values() for c in components if c != 'openshift-golang-builder-container'} - brew_components
+        missing_brew_brew_components = {c for components in expected_cve_components.values() for c in components if c not in constants.SPECIAL_CVE_COMPONENTS} - brew_components
         if missing_brew_brew_components:
             raise ValueError(f"Missing builds for brew component(s): {missing_brew_brew_components}")
         cve_packages_exclusions = {
