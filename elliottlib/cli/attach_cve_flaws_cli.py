@@ -123,17 +123,14 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
     runtime.logger.info('Associating CVEs with builds')
     errata_config = runtime.get_errata_config()
     errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
-    association_errors = []
     try:
         await errata_api.login()
         await associate_builds_with_cves(errata_api, advisory, attached_tracker_bugs, tracker_flaws, flaw_id_bugs, noop)
     except ValueError as e:
         runtime.logger.warn(f"Error associating builds with cves: {e}")
-        association_errors.append(e)
+        raise ValueError(f'Error associating builds with CVEs: {e}')
     finally:
         await errata_api.close()
-    if association_errors:
-        raise ValueError(f'Error associating builds with CVEs: {association_errors}')
     return first_fix_flaw_bugs
 
 
