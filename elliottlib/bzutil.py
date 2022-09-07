@@ -889,7 +889,10 @@ def is_viable_bug(bug_obj):
 
 def _construct_query_url(config, status, search_filter='default', flag=None):
     query_url = SearchURL(config)
-    query_url.fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component', 'sub_component',
+    query_url.fields = ['id', 'status', 'summary', 'creation_time', 'cf_pm_score', 'component',
+                        # the api expects "sub_components" for the field "sub_component"
+                        # https://github.com/python-bugzilla/python-bugzilla/blob/main/bugzilla/base.py#L321
+                        'sub_components',
                         'external_bugs', 'whiteboard', 'keywords', 'target_release']
 
     filter_list = []
