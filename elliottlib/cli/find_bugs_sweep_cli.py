@@ -167,7 +167,7 @@ def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
 
 
 def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
-                     report, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
+                    report, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
     if output == 'text':
         statuses = sorted(find_bugs_obj.status)
         tr = bug_tracker.target_release()

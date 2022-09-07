@@ -304,7 +304,7 @@ class BugValidator:
             if bug.is_ocp_bug() and any(is_next_target(target) for target in bug.target_release):
                 blocking_bugs[bug.id] = bug
         logger.info(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
-              f"{list(blocking_bugs.keys())}")
+                    f"{list(blocking_bugs.keys())}")
 
         k = {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
         return k
