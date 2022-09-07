@@ -894,7 +894,7 @@ def _construct_query_url(config, status, search_filter='default', flag=None):
                         # the api expects "sub_components" for the field "sub_component"
                         # https://github.com/python-bugzilla/python-bugzilla/blob/main/bugzilla/base.py#L321
                         'sub_components',
-                        'external_bugs', 'whiteboard', 'keywords', 'target_release']
+                        'external_bugs', 'whiteboard', 'keywords', 'target_release', 'depends_on']
 
     filter_list = []
     if config.get('filter'):
