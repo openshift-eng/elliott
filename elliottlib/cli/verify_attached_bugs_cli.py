@@ -71,6 +71,8 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 @pass_runtime
 @click_coroutine
 async def verify_bugs_cli(runtime, with_sweep, verify_bug_status, output, bug_ids):
+    if with_sweep and bug_ids:
+        raise click.BadParameter("Cannot use both --with-sweep and [BUG_IDS]")
     runtime.initialize()
     await verify_bugs(runtime, with_sweep, verify_bug_status, output, bug_ids)
 
@@ -78,13 +80,12 @@ async def verify_bugs_cli(runtime, with_sweep, verify_bug_status, output, bug_id
 async def verify_bugs(runtime, with_sweep, verify_bug_status, output, bug_ids):
     validator = BugValidator(runtime, output)
     if with_sweep:
-        major_version, _ = runtime.get_major_minor()
         find_bugs_obj = FindBugsSweep()
         ocp_bugs = []
         for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
-            runtime.logger.info(f"Running sweep for {b.type} bugs")
+            click.echo(f"Running sweep for {b.type} bugs")
             bugs = get_bugs_sweep(runtime, find_bugs_obj, None, b)
-            runtime.logger.info(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
+            click.echo(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
             ocp_bugs.extend(bugs)
     else:
         jira_ids, bz_ids = bzutil.get_jira_bz_bug_ids(bug_ids)
@@ -99,7 +100,7 @@ async def verify_bugs(runtime, with_sweep, verify_bug_status, output, bug_ids):
         # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products
         non_ocp_bugs = {b for b in bugs if not b.is_ocp_bug()}
         if non_ocp_bugs:
-            runtime.logger.info(f"Ignoring non-ocp bugs: {[b.id for b in non_ocp_bugs]}")
+            click.echo(f"Ignoring non-ocp bugs: {[b.id for b in non_ocp_bugs]}")
         ocp_bugs = {b for b in bugs if b.is_ocp_bug()}
 
     try:
