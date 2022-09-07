@@ -5,7 +5,7 @@ import xmlrpc.client
 
 from flexmock import flexmock
 import mock
-from elliottlib.bzutil import Bug, JIRABugTracker, BugzillaBugTracker, BugzillaBug, JIRABug
+from elliottlib.bzutil import Bug, JIRABugTracker, BugzillaBugTracker, BugzillaBug, JIRABug, BugTracker
 from elliottlib import bzutil, constants, exceptions
 
 hostname = "bugzilla.redhat.com"
@@ -43,16 +43,13 @@ class TestJIRABugTracker(unittest.TestCase):
         ]
 
         flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
-        flexmock(JIRABugTracker).should_receive("login").and_return(None)
         flexmock(BugzillaBugTracker).should_receive("get_bugs").and_return(flaw_bugs)
-        bug_tracker = JIRABugTracker({})
         flaw_bug_tracker = BugzillaBugTracker({})
-
         expected = (
             {'OCPBUGS-1': [valid_flaw.id], 'OCPBUGS-2': [], 'OCPBUGS-3': [valid_flaw.id]},
             {valid_flaw.id: valid_flaw}
         )
-        actual = bug_tracker.get_corresponding_flaw_bugs(tracker_bugs, flaw_bug_tracker)
+        actual = BugTracker.get_corresponding_flaw_bugs(tracker_bugs, flaw_bug_tracker)
         self.assertEqual(expected, actual)
 
 
@@ -89,7 +86,7 @@ class TestBugzillaBugTracker(unittest.TestCase):
             {10: [valid_flaw_a.id, valid_flaw_b.id], 11: [valid_flaw_b.id]},
             {valid_flaw_a.id: valid_flaw_a, valid_flaw_b.id: valid_flaw_b}
         )
-        actual = bug_tracker.get_corresponding_flaw_bugs(tracker_bugs)
+        actual = BugTracker.get_corresponding_flaw_bugs(tracker_bugs, bug_tracker)
         self.assertEqual(expected, actual)
 
     def test_get_corresponding_flaw_bugs_bz_strict(self):
@@ -112,8 +109,8 @@ class TestBugzillaBugTracker(unittest.TestCase):
         self.assertRaisesRegex(
             exceptions.ElliottFatalError,
             r'^No flaw bugs could be found for these trackers: {10, 12}$',
-            bug_tracker.get_corresponding_flaw_bugs,
-            tracker_bugs, strict=True)
+            BugTracker.get_corresponding_flaw_bugs,
+            tracker_bugs, bug_tracker, strict=True)
 
 
 class TestJIRABug(unittest.TestCase):

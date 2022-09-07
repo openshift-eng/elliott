@@ -3,6 +3,7 @@ import re
 from typing import Any, Dict, Iterable, List, Set, Tuple
 import click
 from spnego.exceptions import GSSError
+from errata_tool import Erratum
 
 
 from elliottlib import bzutil, constants, util, errata
@@ -11,7 +12,7 @@ from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
 from elliottlib.util import (exit_unauthenticated, green_print,
                              minor_version_tuple, red_print)
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, BugTracker
 
 
 @cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
@@ -35,20 +36,22 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
     if not advisories:
         red_print("No advisories specified on command line or in group.yml")
         exit(1)
-    if runtime.use_jira:
-        await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, True)
-    await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, False)
+    await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws)
 
 
-async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool, use_jira: bool):
-    validator = BugValidator(runtime, use_jira, output="text")
+async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool):
+    validator = BugValidator(runtime, output="text")
     try:
         await validator.errata_api.login()
-        advisory_bugs = await validator.get_attached_bugs(advisories)
-        non_flaw_bugs = validator.filter_bugs_by_product({b for bugs in advisory_bugs.values() for b in bugs})
+        advisory_bug_map = validator.get_attached_bugs(advisories)
+        bugs = {b for bugs in advisory_bug_map.values() for b in bugs}
+
+        # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products
+        non_flaw_bugs = {b for b in bugs if b.is_ocp_bug()}
+
         validator.validate(non_flaw_bugs, verify_bug_status)
         if verify_flaws:
-            await validator.verify_attached_flaws(advisory_bugs)
+            await validator.verify_attached_flaws(advisory_bug_map)
     except GSSError:
         exit_unauthenticated()
     finally:
@@ -67,30 +70,36 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 @click_coroutine
 async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids):
     runtime.initialize()
-    if runtime.use_jira:
-        await verify_bugs(runtime, verify_bug_status, output, bug_ids, True)
-    else:
-        await verify_bugs(runtime, verify_bug_status, output, bug_ids, False)
+    await verify_bugs(runtime, verify_bug_status, output, bug_ids)
 
 
-async def verify_bugs(runtime, verify_bug_status, output, bug_ids, use_jira):
-    validator = BugValidator(runtime, use_jira, output)
-    bugs = validator.filter_bugs_by_product(validator.bug_tracker.get_bugs(bug_ids))
+async def verify_bugs(runtime, verify_bug_status, output, bug_ids):
+    validator = BugValidator(runtime, output)
+    jira_ids, bz_ids = bzutil.get_jira_bz_bug_ids(bug_ids)
+    bugs = []
+    if jira_ids:
+        bug_tracker = runtime.bug_trackers('jira')
+        bugs.extend(bug_tracker.get_bugs(jira_ids))
+    if bz_ids:
+        bug_tracker = runtime.bug_trackers('bugzilla')
+        bugs.extend(bug_tracker.get_bugs(bz_ids))
+    non_ocp_bugs = {b for b in bugs if not b.is_ocp_bug()}
+    if non_ocp_bugs:
+        runtime.logger.info(f"Ignoring non-ocp bugs: {[b.id for b in non_ocp_bugs]}")
+
+    # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products
+    non_flaw_bugs = {b for b in bugs if b.is_ocp_bug()}
     try:
-        validator.validate(bugs, verify_bug_status)
+        validator.validate(non_flaw_bugs, verify_bug_status)
     finally:
         await validator.close()
 
 
 class BugValidator:
 
-    def __init__(self, runtime: Runtime, use_jira: bool = False, output: str = 'text'):
+    def __init__(self, runtime: Runtime, output: str = 'text'):
         self.runtime = runtime
-        self.use_jira = use_jira
-        tracker_type = 'jira' if use_jira else 'bugzilla'
-        self.bug_tracker = runtime.bug_trackers(tracker_type)
-        self.target_releases: List[str] = self.bug_tracker.config['target_release']
-        self.product: str = self.bug_tracker.product
+        self.target_releases: List[str] = runtime.bug_trackers('jira').config['target_release']
         self.et_data: Dict[str, Any] = runtime.get_errata_config()
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
@@ -99,7 +108,7 @@ class BugValidator:
     async def close(self):
         await self.errata_api.close()
 
-    def validate(self, non_flaw_bugs: Iterable[Bug], verify_bug_status: bool,):
+    def validate(self, non_flaw_bugs: Iterable[Bug], verify_bug_status: bool):
         non_flaw_bugs = self.filter_bugs_by_release(non_flaw_bugs, complain=True)
         blocking_bugs_for = self._get_blocking_bugs_for(non_flaw_bugs)
         self._verify_blocking_bugs(blocking_bugs_for)
@@ -118,6 +127,9 @@ class BugValidator:
         for advisory_id, attached_bugs in advisory_bugs.items():
             attached_trackers = [b for b in attached_bugs if b.is_tracker_bug()]
             attached_flaws = [b for b in attached_bugs if b.is_flaw_bug()]
+            self.runtime.logger.info(f"Verifying advisory {advisory_id}: attached-trackers: "
+                                     f"{[b.id for b in attached_trackers]} "
+                                     f"attached-flaws: {[b.id for b in attached_flaws]}")
             futures.append(self._verify_attached_flaws_for(advisory_id, attached_trackers, attached_flaws))
         await asyncio.gather(*futures)
         if self.problems:
@@ -126,8 +138,9 @@ class BugValidator:
         green_print("All CVE flaw bugs were verified.")
 
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
-        # Retrieve flaw bugs in Bugzilla for attached_tracker_bugs
-        tracker_flaws, flaw_id_bugs = self.bug_tracker.get_corresponding_flaw_bugs(attached_trackers)
+        # Retrieve flaw bugs for attached_tracker_bugs
+        tracker_flaws, flaw_id_bugs = BugTracker.get_corresponding_flaw_bugs(attached_trackers,
+                                                                             self.runtime.bug_trackers('bugzilla'))
 
         # Find first-fix flaws
         first_fix_flaw_ids = set()
@@ -138,29 +151,41 @@ class BugValidator:
             else:
                 first_fix_flaw_ids = {
                     flaw_bug.id for flaw_bug in flaw_id_bugs.values()
-                    if bzutil.is_first_fix_any(self.bug_tracker.client(), flaw_bug, current_target_release)
+                    # We are passing in bugzilla as a bug tracker since flaw bugs are
+                    # always bugzilla bugs their links ("depends_on"/"blocked") fields
+                    # which we use to find its trackers - will always link to other bz bugs
+                    # This is a gap in our first fix logic since we won't be able to get to
+                    # jira tracker bugs for bz flaws and determine first fix at GA time
+                    # TODO: https://issues.redhat.com/browse/ART-4347
+                    if bzutil.is_first_fix_any(self.runtime.bug_trackers('bugzilla'), flaw_bug, current_target_release)
                 }
 
         # Check if attached flaws match attached trackers
         attached_flaw_ids = {b.id for b in attached_flaws}
-        missing_flaw_ids = attached_flaw_ids - first_fix_flaw_ids
+        missing_flaw_ids = first_fix_flaw_ids - attached_flaw_ids
         if missing_flaw_ids:
-            self._complain(f"On advisory {advisory_id}, {len(missing_flaw_ids)} flaw bugs are not attached but they are referenced by attached tracker bugs: {', '.join(sorted(map(str, missing_flaw_ids)))}."
-                           " You probably need to attach those flaw bugs or drop the corresponding tracker bugs.")
-        extra_flaw_ids = first_fix_flaw_ids - attached_flaw_ids
+            self._complain(f"On advisory {advisory_id}, these flaw bugs are not attached: "
+                           f"{', '.join(sorted(map(str, missing_flaw_ids)))} but "
+                           "they are referenced by attached tracker bugs. "
+                           "You need to attach those flaw bugs or drop corresponding tracker bugs.")
+        extra_flaw_ids = attached_flaw_ids - first_fix_flaw_ids
         if extra_flaw_ids:
-            self._complain(f"On advisory {advisory_id}, {len(extra_flaw_ids)} flaw bugs are attached but there are no tracker bugs referencing them: {', '.join(sorted(map(str, extra_flaw_ids)))}."
-                           " You probably need to drop those flaw bugs or attach the corresponding tracker bugs.")
+            self._complain(f"On advisory {advisory_id}, these flaw bugs are attached: "
+                           f"{', '.join(sorted(map(str, extra_flaw_ids)))} but "
+                           f"there are no tracker bugs referencing them. "
+                           "You need to drop those flaw bugs or attach corresponding tracker bugs.")
 
         # Check if advisory is of the expected type
         advisory_info = await self.errata_api.get_advisory(advisory_id)
         advisory_type = next(iter(advisory_info["errata"].keys())).upper()  # should be one of [RHBA, RHSA, RHEA]
         if not first_fix_flaw_ids:
             if advisory_type == "RHSA":
-                self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has no first-fix flaw bugs. It should be converted to RHBA or RHEA.")
+                self._complain(f"Advisory {advisory_id} is of type {advisory_type} "
+                               f"but has no first-fix flaw bugs. It should be converted to RHBA or RHEA.")
             return  # The remaining checks are not needed for a non-RHSA.
         if advisory_type != "RHSA":
-            self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has first-fix flaw bugs {first_fix_flaw_ids}. It should be converted to RHSA.")
+            self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has first-fix flaw bugs "
+                           f"{first_fix_flaw_ids}. It should be converted to RHSA.")
 
         # Check if flaw bugs are associated with specific builds
         cve_components_mapping: Dict[str, Set[str]] = {}
@@ -180,41 +205,46 @@ class BugValidator:
         extra_cve_package_exclusions, missing_cve_package_exclusions = AsyncErrataUtils.diff_cve_package_exclusions(current_cve_package_exclusions, expected_cve_packages_exclusions)
         for cve, cve_package_exclusions in extra_cve_package_exclusions.items():
             if cve_package_exclusions:
-                self._complain(f"On advisory {advisory_id}, {cve} is not associated with Brew components {', '.join(sorted(cve_package_exclusions))}."
-                               " You may need to associate the CVE with the components in the CVE mapping or drop the tracker bugs.")
+                self._complain(f"On advisory {advisory_id}, {cve} is not associated with Brew components "
+                               f"{', '.join(sorted(cve_package_exclusions))}."
+                               " You may need to associate the CVE with the components "
+                               "in the CVE mapping or drop the tracker bugs.")
         for cve, cve_package_exclusions in missing_cve_package_exclusions.items():
             if cve_package_exclusions:
-                self._complain(f"On advisory {advisory_id}, {cve} is associated with Brew components {', '.join(sorted(cve_package_exclusions))} without a tracker bug."
-                               " You may need to explictly exclude those Brew components from the CVE mapping or attach the corresponding tracker bugs.")
+                self._complain(f"On advisory {advisory_id}, {cve} is associated with Brew components "
+                               f"{', '.join(sorted(cve_package_exclusions))} without a tracker bug."
+                               " You may need to explicitly exclude those Brew components from the CVE "
+                               "mapping or attach the corresponding tracker bugs.")
 
         # Check if flaw bugs match the CVE field of the advisory
         advisory_cves = advisory_info["content"]["content"]["cve"].split()
         extra_cves = cve_components_mapping.keys() - advisory_cves
         if extra_cves:
-            self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are already attached but they are not listed in advisory's `CVE Names` field: {', '.join(sorted(extra_cves))}")
+            self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are already attached "
+                           f"but they are not listed in advisory's `CVE Names` field: {', '.join(sorted(extra_cves))}")
         missing_cves = advisory_cves - cve_components_mapping.keys()
         if missing_cves:
-            self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in advisory's `CVE Names` field: {', '.join(sorted(missing_cves))}")
+            self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in "
+                           f"advisory's `CVE Names` field: {', '.join(sorted(missing_cves))}")
 
-    async def get_attached_bugs(self, advisory_ids: Iterable[str]) -> Dict[int, Set[Bug]]:
+    def get_attached_bugs(self, advisory_ids: Iterable[str]) -> (Dict[int, Set[Bug]], Dict[int, Set[Bug]]):
         """ Get bugs attached to specified advisories
-        :return: a dict with advisory id as key and set of bug objects as value
+        :return: 2 dicts (one for jira bugs, one for bz bugs) with advisory id as key and set of bug objects as value
         """
-        green_print(f"Retrieving bugs for advisory {advisory_ids}")
-        if self.use_jira:
-            issue_keys = {advisory_id: [issue["key"] for issue in errata.get_jira_issue_from_advisory(advisory_id)] for advisory_id in advisory_ids}
-            bug_map = self.bug_tracker.get_bugs_map([key for keys in issue_keys.values() for key in keys])
-            result = {advisory_id: {bug_map[key] for key in issue_keys[advisory_id]} for advisory_id in advisory_ids}
-        else:
-            advisories = await asyncio.gather(*[self.errata_api.get_advisory(advisory_id) for advisory_id in advisory_ids])
-            bug_map = self.bug_tracker.get_bugs_map(list({b["bug"]["id"] for ad in advisories for b in ad["bugs"]["bugs"]}))
-            result = {ad["content"]["content"]["errata_id"]: {bug_map[b["bug"]["id"]] for b in ad["bugs"]["bugs"]} for ad
-                      in advisories}
-        return result
+        green_print(f"Retrieving bugs for advisories: {advisory_ids}")
+        advisories = [Erratum(errata_id=advisory_id) for advisory_id in advisory_ids]
 
-    def filter_bugs_by_product(self, bugs):
-        # filter out bugs for different product (presumably security flaw bugs)
-        return [b for b in bugs if b.product == self.product]
+        attached_bug_map = {advisory_id: set() for advisory_id in advisory_ids}
+        for bug_tracker_type in ['jira', 'bugzilla']:
+            bug_tracker = self.runtime.bug_trackers(bug_tracker_type)
+            advisory_bug_id_map = {advisory.errata_id: bug_tracker.advisory_bug_ids(advisory)
+                                   for advisory in advisories}
+            bug_map = bug_tracker.get_bugs_map([bug_id for bug_list in advisory_bug_id_map.values()
+                                                for bug_id in bug_list])
+            for advisory_id in advisory_ids:
+                set_of_bugs = {bug_map[bid] for bid in advisory_bug_id_map[advisory_id] if bid in bug_map}
+                attached_bug_map[advisory_id] = attached_bug_map[advisory_id] | set_of_bugs
+        return attached_bug_map
 
     def filter_bugs_by_release(self, bugs: Iterable[Bug], complain: bool = False) -> List[Bug]:
         # filter out bugs with an invalid target release
@@ -232,8 +262,11 @@ class BugValidator:
 
     def _get_blocking_bugs_for(self, bugs):
         # get blocker bugs in the next version for all bugs we are examining
-        candidate_blockers = [b.depends_on for b in bugs if b.depends_on]
-        candidate_blockers = {b for deps in candidate_blockers for b in deps}
+        candidate_blockers = []
+        for b in bugs:
+            if b.depends_on:
+                candidate_blockers.extend(b.depends_on)
+        jira_ids, bz_ids = bzutil.get_jira_bz_bug_ids(set(candidate_blockers))
 
         v = minor_version_tuple(self.target_releases[0])
         next_version = (v[0], v[1] + 1)
@@ -243,13 +276,22 @@ class BugValidator:
             return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
 
         # retrieve blockers and filter to those with correct product and target version
-        blockers = [b for b in self.bug_tracker.get_bugs(sorted(list(candidate_blockers))) if b.product == self.product]
+        blockers = []
+        if jira_ids:
+            blockers.extend(self.runtime.bug_trackers('jira')
+                            .get_bugs(jira_ids))
+        if bz_ids:
+            blockers.extend(self.runtime.bug_trackers('bugzilla')
+                            .get_bugs(bz_ids))
         blocking_bugs = {}
         for bug in blockers:
-            if any(is_next_target(target) for target in bug.target_release):
+            if bug.is_ocp_bug() and any(is_next_target(target) for target in bug.target_release):
                 blocking_bugs[bug.id] = bug
+        print(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
+              f"{list(blocking_bugs.keys())}")
 
-        return {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
+        k = {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
+        return k
 
     def _verify_blocking_bugs(self, blocking_bugs_for):
         # complain about blocker bugs that aren't verified or shipped

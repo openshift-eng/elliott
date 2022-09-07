@@ -63,6 +63,9 @@ class Bug:
     def is_flaw_bug(self):
         return self.product == "Security Response" and self.component == "vulnerability"
 
+    def is_ocp_bug(self):
+        raise NotImplementedError
+
     @staticmethod
     def get_valid_rpm_cves(bugs: List[Bug]) -> Dict[Bug, str]:
         """ Get valid rpm cve trackers with their component names
@@ -160,6 +163,9 @@ class BugzillaBug(Bug):
             component_name = tmp.groups()[0]
             return component_name
         return None
+
+    def is_ocp_bug(self):
+        return self.product == constants.BUGZILLA_PRODUCT_OCP
 
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.creation_time), '%Y%m%dT%H:%M:%S').replace(tzinfo=timezone.utc)
@@ -290,6 +296,9 @@ class JIRABug(Bug):
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
 
+    def is_ocp_bug(self):
+        return self.bug.fields.project.key == "OCPBUGS"
+
     def _get_blocks(self):
         blocks = []
         for link in self.bug.fields.issuelinks:
@@ -333,6 +342,8 @@ class BugTracker:
 
     def get_bugs_map(self, bugids: List, permissive: bool = False, **kwargs) -> Dict:
         id_bug_map = {}
+        if not bugids:
+            return id_bug_map
         bugs = self.get_bugs(bugids, permissive=permissive, **kwargs)
         for i, bug in enumerate(bugs):
             id_bug_map[bugids[i]] = bug
@@ -389,15 +400,16 @@ class BugTracker:
         if comment_lines:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
 
-    def get_corresponding_flaw_bugs(self, tracker_bugs: List[Bug], flaw_bug_tracker=None,
+    @staticmethod
+    def get_corresponding_flaw_bugs(tracker_bugs: List[Bug], flaw_bug_tracker,
                                     strict: bool = False, verbose: bool = False):
         """Get corresponding flaw bug objects for given list of tracker bug objects.
-        Accepts a flaw_bug_tracker object to fetch flaw bugs from incase it's different from self
+        flaw_bug_tracker object to fetch flaw bugs from
 
         :return: (tracker_flaws, flaw_id_bugs): tracker_flaws is a dict with tracker bug id as key and list of flaw
         bug id as value, flaw_id_bugs is a dict with flaw bug id as key and flaw bug object as value
         """
-        bug_tracker = flaw_bug_tracker if flaw_bug_tracker else self
+        bug_tracker = flaw_bug_tracker
         flaw_bugs = bug_tracker.get_flaw_bugs(
             list(set(sum([t.corresponding_flaw_bug_ids for t in tracker_bugs], []))),
             verbose=verbose
