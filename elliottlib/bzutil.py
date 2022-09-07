@@ -906,12 +906,12 @@ def _perform_query(bzapi, query_url):
     bzapi.bug_autorefresh = True
 
 
-    def iterate_query(query):
+    def _iterate_query(query):
         results = bzapi.query(query)
 
         if len(results) == BZ_PAGE_SIZE:
             query['offset'] += BZ_PAGE_SIZE
-            results += iterate_query(query)
+            results += _iterate_query(query)
         return results
 
     include_fields = query_url.fields
@@ -923,7 +923,7 @@ def _perform_query(bzapi, query_url):
     query["limit"] = BZ_PAGE_SIZE
     query["offset"] = 0
 
-    return iterate_query(query)
+    return _iterate_query(query)
 
 
 class SearchFilter(object):
