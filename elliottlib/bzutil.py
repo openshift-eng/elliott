@@ -904,6 +904,7 @@ def _construct_query_url(config, status, search_filter='default', flag=None):
 def _perform_query(bzapi, query_url):
     BZ_PAGE_SIZE = 1000
 
+
     bzapi.bug_autorefresh = True
     def iterate_query(query):
         results = bzapi.query(query)
