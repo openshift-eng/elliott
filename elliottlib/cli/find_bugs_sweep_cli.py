@@ -132,13 +132,7 @@ advisory with the --add option.
     sys.exit(exit_code)
 
 
-def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
-                    report, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
-    if output == 'text':
-        statuses = sorted(find_bugs_obj.status)
-        tr = bug_tracker.target_release()
-        green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
-
+def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
@@ -168,6 +162,18 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
         yellow_print(f"The following {bug_tracker.type} bugs will be excluded because they are explicitly "
                      f"defined in the assembly config: {excluded_bug_ids}")
         bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
+
+    return bugs
+
+
+def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
+                     report, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
+    if output == 'text':
+        statuses = sorted(find_bugs_obj.status)
+        tr = bug_tracker.target_release()
+        green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
+
+    bugs = get_bugs_sweep(runtime, find_bugs_obj, brew_event, bug_tracker)
 
     if output == 'text':
         green_prefix(f"Found {len(bugs)} bugs: ")
