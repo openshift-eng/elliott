@@ -905,7 +905,6 @@ def _perform_query(bzapi, query_url):
     BZ_PAGE_SIZE = 1000
     bzapi.bug_autorefresh = True
 
-
     def _iterate_query(query):
         results = bzapi.query(query)
 
