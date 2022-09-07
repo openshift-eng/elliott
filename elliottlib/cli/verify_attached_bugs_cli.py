@@ -324,8 +324,12 @@ class BugValidator:
                                   f"`{blocker.status}` bug <{blocker.weburl}|{blocker.id}>"
                     self._complain(message)
                 if blocker.status in ['CLOSED', 'Closed'] and \
-                    blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG',
-                                               'WONTFIX', 'Done', "Won't Do", 'Errata', 'Duplicate', 'Not a Bug']:
+                    blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG', 'WONTFIX',
+                                               'Done', 'Fixed',
+                                               'Current Release', 'Errata', 'Next Release',
+                                               "Won't Do", "Won't Fix",
+                                               'Duplicate', 'Duplicate Issue',
+                                               'Not a Bug']:
                     if self.output == 'text':
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which was CLOSED {blocker.resolution}"
