@@ -158,11 +158,13 @@ class TestAsyncErrataUtils(TestCase):
         cve_components = {
             "CVE-2099-1": {"a", "b"},
             "CVE-2099-2": {"c"},
+            "CVE-2099-3": {"openshift-golang-builder-container"},
         }
         attached_builds = ["a-1.0.0-1.el8", "a-1.0.0-1.el7", "b-1.0.0-1.el8", "c-1.0.0-1.el8", "d-1.0.0-1.el8"]
         expected = {
             "CVE-2099-1": {"c": 0, "d": 0},
             "CVE-2099-2": {"a": 0, "b": 0, "d": 0},
+            "CVE-2099-3": {'a': 0, 'a': 0, 'b': 0, 'c': 0, 'd': 0},
         }
         actual = AsyncErrataUtils.compute_cve_package_exclusions(attached_builds, cve_components)
         self.assertEqual(actual, expected)

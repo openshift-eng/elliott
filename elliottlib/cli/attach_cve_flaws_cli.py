@@ -128,6 +128,7 @@ async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
         await associate_builds_with_cves(errata_api, advisory, attached_tracker_bugs, tracker_flaws, flaw_id_bugs, noop)
     except ValueError as e:
         runtime.logger.warn(f"Error associating builds with cves: {e}")
+        raise ValueError(f'Error associating builds with CVEs: {e}')
     finally:
         await errata_api.close()
     return first_fix_flaw_bugs
