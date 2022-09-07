@@ -6,7 +6,7 @@ from spnego.exceptions import GSSError
 from errata_tool import Erratum
 
 
-from elliottlib import bzutil, constants
+from elliottlib import bzutil, constants, logutil
 from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
@@ -14,6 +14,8 @@ from elliottlib.util import (exit_unauthenticated, green_print,
                              minor_version_tuple, red_print)
 from elliottlib.bzutil import Bug, BugTracker
 from elliottlib.cli.find_bugs_sweep_cli import get_bugs_sweep, FindBugsSweep
+
+logger = logutil.getLogger(__name__)
 
 
 @cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
@@ -83,9 +85,9 @@ async def verify_bugs(runtime, with_sweep, verify_bug_status, output, bug_ids):
         find_bugs_obj = FindBugsSweep()
         ocp_bugs = []
         for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
-            click.echo(f"Running sweep for {b.type} bugs")
+            logger.info(f"Running sweep for {b.type} bugs")
             bugs = get_bugs_sweep(runtime, find_bugs_obj, None, b)
-            click.echo(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
+            logger.info(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
             ocp_bugs.extend(bugs)
     else:
         jira_ids, bz_ids = bzutil.get_jira_bz_bug_ids(bug_ids)
@@ -100,7 +102,7 @@ async def verify_bugs(runtime, with_sweep, verify_bug_status, output, bug_ids):
         # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products
         non_ocp_bugs = {b for b in bugs if not b.is_ocp_bug()}
         if non_ocp_bugs:
-            click.echo(f"Ignoring non-ocp bugs: {[b.id for b in non_ocp_bugs]}")
+            logger.info(f"Ignoring non-ocp bugs: {[b.id for b in non_ocp_bugs]}")
         ocp_bugs = {b for b in bugs if b.is_ocp_bug()}
 
     try:
@@ -301,7 +303,7 @@ class BugValidator:
         for bug in blockers:
             if bug.is_ocp_bug() and any(is_next_target(target) for target in bug.target_release):
                 blocking_bugs[bug.id] = bug
-        print(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
+        logger.info(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
               f"{list(blocking_bugs.keys())}")
 
         k = {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
