@@ -42,9 +42,9 @@ def verify_attached_operators_cli(runtime, exclude_shipped, advisories):
 
     referenced_specs = _extract_operator_manifest_image_references(image_builds)
     if not referenced_specs:
-        # you are probably using this because you expect attached operator bundles or metadata
         adv_str = ", ".join(str(a) for a in advisories)
-        raise ElliottFatalError(f"No bundle or appregistry builds found in advisories ({adv_str}).")
+        green_print(f"No bundle or appregistry builds found in advisories ({adv_str}).")
+        return
 
     if not exclude_shipped:
         image_builds.extend(_get_shipped_images(runtime, brew_session))
