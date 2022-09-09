@@ -12,7 +12,7 @@ from errata_tool import Erratum
 
 from elliottlib import brew, constants, exectools
 from elliottlib.cli.common import cli, pass_runtime
-from elliottlib.exceptions import ElliottFatalError
+from elliottlib.exceptions import ElliottFatalError, BrewBuildException
 from elliottlib.util import (exit_unauthenticated, red_print, green_print)
 
 
@@ -42,9 +42,9 @@ def verify_attached_operators_cli(runtime, exclude_shipped, advisories):
 
     referenced_specs = _extract_operator_manifest_image_references(image_builds)
     if not referenced_specs:
-        # you are probably using this because you expect attached operator bundles or metadata
         adv_str = ", ".join(str(a) for a in advisories)
-        raise ElliottFatalError(f"No bundle or appregistry builds found in advisories ({adv_str}).")
+        green_print(f"No bundle or appregistry builds found in advisories ({adv_str}).")
+        return
 
     if not exclude_shipped:
         image_builds.extend(_get_shipped_images(runtime, brew_session))
@@ -160,16 +160,19 @@ def _missing_references(runtime, references, available):
     missing = set()
     for image_pullspec, metadata in references.items():
         digest = image_pullspec.split("@")[1]  # just the shasum
-        if digest not in available:
-            ref = image_pullspec.rsplit('/', 1)[1]  # cut off the registry/namespace, just need the name:shasum
-            try:
-                ref = _nvr_for_operand_pullspec(runtime, ref)
-            except RuntimeError:
-                pass  # just leave it as-is if something goes wrong with looking it up
-
-            missing.add(ref)
-            red_print(f"{metadata} has a reference to {ref} not present in the advisories nor shipped images.")
-
+        if digest in available:
+            continue
+        ref = image_pullspec.rsplit('/', 1)[1]  # cut off the registry/namespace, just need the name:shasum
+        try:
+            nvr = _nvr_for_operand_pullspec(runtime, ref)
+            build = brew.get_brew_build(nvr=nvr)
+            if [ad for ad in build.all_errata if ad["status"] != "DROPPED_NO_SHIP"]:
+                continue
+        except BrewBuildException:
+            # Fall through to missing.add
+            pass
+        missing.add(ref)
+        red_print(f"{metadata} has a reference to {ref} not present in the advisories nor shipped images.")
     return missing
 
 
