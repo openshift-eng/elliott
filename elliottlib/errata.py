@@ -578,6 +578,7 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
 
     existing_bugs = bzutil.BugzillaBugTracker.advisory_bug_ids(advisory)
     new_bugs = set(bugids) - set(existing_bugs)
+    new_bugs = bzutil.BugzillaBugTracker.filter_attached_bugs(new_bugs)
     logger.info(f'New bugs (not already attached to advisory): {len(new_bugs)}')
     logger.debug(f'New bugs: {sorted(new_bugs)}')
     logger.debug(f'Bugs already attached: {sorted(set(bugids) & set(existing_bugs))}')
@@ -626,6 +627,7 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
 
     existing_bugs = bzutil.JIRABugTracker.advisory_bug_ids(advisory)
     new_bugs = set(bugids) - set(existing_bugs)
+    new_bugs = bzutil.JIRABugTracker.filter_attached_bugs(new_bugs)
     logger.info(f'New bugs (not already attached to advisory): {len(new_bugs)}')
     logger.debug(f'New bugs: {sorted(new_bugs)}')
     logger.debug(f'Bugs already attached: {sorted(set(bugids) & set(existing_bugs))}')
@@ -635,25 +637,8 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
         if noop:
             logger.info('Dry run: Would have attached bugs')
             continue
-        results = add_multi_jira_issues(advisory_id, chunk_of_bugs)
-        for i, result in enumerate(results):
-            if result.status_code != 201:
-                rt = add_jira_issue(advisory_id, chunk_of_bugs[i])
-                if rt.status_code != 201:
-                    errata_error = rt.json()
-                    if 'errors' not in errata_error or len(errata_error) != 1:
-                        raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
-                                                           f"status={rt.status_code} "
-                                                           f"errmsg={rt.json()}")
-                    if 'idsfixed' not in errata_error['errors'] or len(errata_error['errors']) != 1:
-                        raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
-                                                           f"status={rt.status_code} "
-                                                           f"errmsg={rt.json()}")
-                    for err in errata_error['errors']['idsfixed']:
-                        if 'The issue is filed already in' not in ' '.join(err):
-                            raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
-                                                               f"status={rt.status_code} "
-                                                               f"errmsg={rt.json()}")
+        advisory.addJiraIssues(chunk_of_bugs)
+        advisory.commit()
         logger.info("All not attached jira bugs attached")
 
 
