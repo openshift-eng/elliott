@@ -40,7 +40,7 @@ class TestGetAttachedBugs(unittest.TestCase):
         flexmock(AsyncErrataAPI).should_receive("__init__").and_return(None)
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
         flexmock(JIRABugTracker).should_receive("get_bugs_map").with_args(['bug-1', 'bug-2']).and_return(bug_map)
-        flexmock(errata).should_receive("get_jira_issue_from_advisory").with_args('12345').and_return([{'key': 'bug-1'}, {'key': 'bug-2'}])
+        flexmock(errata).should_receive("get_jira_issue_from_advisory").with_args('12345').and_return(['bug-1', 'bug-2'])
         validator = BugValidator(runtime, True)
         advisory_bugs = await validator.get_attached_bugs(['12345'])
         self.assertEqual(advisory_bugs, {'12345': {bug_map['bug-1'], bug_map['bug-2']}})

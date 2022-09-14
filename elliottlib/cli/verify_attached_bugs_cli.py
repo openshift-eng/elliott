@@ -204,7 +204,7 @@ class BugValidator:
         """
         green_print(f"Retrieving bugs for advisory {advisory_ids}")
         if self.use_jira:
-            issue_keys = {advisory_id: [issue["key"] for issue in errata.get_jira_issue_from_advisory(advisory_id)] for advisory_id in advisory_ids}
+            issue_keys = {advisory_id: errata.get_jira_issue_from_advisory(advisory_id) for advisory_id in advisory_ids}
             bug_map = self.bug_tracker.get_bugs_map([key for keys in issue_keys.values() for key in keys])
             result = {advisory_id: {bug_map[key] for key in issue_keys[advisory_id]} for advisory_id in advisory_ids}
         else:
