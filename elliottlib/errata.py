@@ -102,34 +102,6 @@ def get_raw_erratum(advisory_id):
     return ErrataConnector()._get(f"/api/v1/erratum/{advisory_id}")
 
 
-def add_jira_issue(advisory_id, jira_issue_id):
-    """
-    Attach a jira issue to advisory
-    Response code will return
-    """
-    return ErrataConnector()._post(f"/api/v1/erratum/{advisory_id}/add_jira_issue", data={'jira_issue': jira_issue_id})
-
-
-def remove_jira_issue(advisory_id, jira_issue_id):
-    """
-    Remove a jira issue from advisory
-    Response code will return
-    """
-    return ErrataConnector()._post(f"/api/v1/erratum/{advisory_id}/remove_jira_issue", data={'jira_issue': jira_issue_id})
-
-
-def remove_multi_jira_issues(advisory_id, jira_list: List):
-    """
-    Remove multi jira issues from advisory
-    Return a list of response code
-    """
-    ec = ErrataConnector()
-    res = []
-    for jira_id in jira_list:
-        res.append(ec._post(f"/api/v1/erratum/{advisory_id}/remove_jira_issue", data={'jira_issue': jira_id}))
-    return res
-
-
 def remove_bug(advisory_id, bug_id):
     """
     Remove a bug from advisory
@@ -150,24 +122,15 @@ def remove_multi_bugs(advisory_id, bug_list: List):
     return res
 
 
-def add_multi_jira_issues(advisory_id, jira_list: List):
-    """
-    Add multi jira issues to advisory
-    Return a list of response code
-    """
-    ec = ErrataConnector()
-    res = []
-    for jira_id in jira_list:
-        res.append(ec._post(f"/api/v1/erratum/{advisory_id}/add_jira_issue", data={'jira_issue': jira_id}))
-    return res
-
-
 def get_jira_issue_from_advisory(advisory_id):
-    """
-    Get a list of jira issues from a advisory
-    Will return a list of dict contains jira issue data
-    """
-    return ErrataConnector()._get(f"/advisory/{advisory_id}/jira_issues.json")
+    try:
+        advisory = Erratum(errata_id=advisory_id)
+    except GSSError:
+        exit_unauthenticated()
+
+    if not advisory:
+        raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
+    return advisory.jira_issues
 
 
 def get_jira_issue(jira_issue_id):
@@ -635,15 +598,17 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
         if noop:
             logger.info('Dry run: Would have attached bugs')
             continue
-        results = add_multi_jira_issues(advisory_id, chunk_of_bugs)
-        for i, result in enumerate(results):
-            if result.status_code != 201:
-                rt = add_jira_issue(advisory_id, chunk_of_bugs[i])
-                if rt.status_code != 201:
-                    raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
-                                                       f"status={rt.status_code} "
-                                                       f"errmsg={rt.json()}")
-
+        try:
+            advisory.addJiraIssues(chunk_of_bugs)
+            advisory.commit()
+        except ErrataException as e:
+            logger.info(f"ErrataException Message: {e}\nRetrying...")
+            try:
+                advisory = Erratum(errata_id=advisory_id)
+                advisory.addJiraIssues(chunk_of_bugs)
+                advisory.commit()
+            except ErrataException as e:
+                raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
         logger.info("All jira bugs attached")
 
 
