@@ -97,7 +97,8 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
             102: BugzillaBug(Mock(id=102, keywords=["Security"], alias=["CVE-2099-2"])),
             103: BugzillaBug(Mock(id=103, keywords=["Security"], alias=["CVE-2099-3"])),
         }
-        actual = get_event_loop().run_until_complete(attach_cve_flaws_cli.associate_builds_with_cves(errata_api, advisory, attached_tracker_bugs, tracker_flaws, flaw_id_bugs, dry_run=False))
+        flaw_bugs = list(flaw_id_bugs.values())
+        actual = get_event_loop().run_until_complete(attach_cve_flaws_cli.associate_builds_with_cves(errata_api, advisory, flaw_bugs, attached_tracker_bugs, tracker_flaws, dry_run=False))
         fake_urils_associate_builds_with_cves.assert_awaited_once_with(errata_api, 12345, ['a-1.0.0-1.el8', 'b-1.0.0-1.el8', 'c-1.0.0-1.el8', 'd-1.0.0-1.el8', 'a-1.0.0-1.el7', 'e-1.0.0-1.el7', 'f-1.0.0-1.el7'], {'CVE-2099-1': {'a', 'd', 'b'}, 'CVE-2099-3': {'a', 'd', 'b', 'c'}, 'CVE-2099-2': {'c', 'e'}}, dry_run=False)
         self.assertEqual(actual, None)
 
