@@ -1,17 +1,20 @@
-from typing import Dict, List, Set
-import click
+import asyncio
 import sys
 import traceback
-import asyncio
+from logging import Logger
+from typing import Dict, Iterable, List, Set
+
+import click
 from errata_tool import Erratum
 
 from elliottlib import constants
+from elliottlib.bzutil import (Bug, BugTracker, get_highest_security_impact,
+                               is_first_fix_any)
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
-from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.errata import is_security_advisory
+from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, JIRABugTracker, BugTracker
 
 
 @cli.command('attach-cve-flaws',
@@ -56,82 +59,77 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         advisories = [find_default_advisory(runtime, default_advisory_type)]
     else:
         advisories = [advisory_id]
-
     exit_code = 0
     flaw_bug_tracker = runtime.bug_trackers('bugzilla')
+    errata_config = runtime.get_errata_config()
+    errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
     for advisory_id in advisories:
         runtime.logger.info("Getting advisory %s", advisory_id)
         advisory = Erratum(errata_id=advisory_id)
 
-        tasks = []
+        attached_trackers = []
         for bug_tracker in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
-            tasks.append(asyncio.get_event_loop().create_task(get_flaws(runtime, advisory, bug_tracker,
-                                                              flaw_bug_tracker, noop)))
+            attached_trackers.extend(get_attached_trackers(advisory, bug_tracker, runtime.logger))
+
+        tracker_flaws, _, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, runtime.logger)
         try:
-            lists_of_flaw_bugs = await asyncio.gather(*tasks)
-            flaw_bugs = list(set(sum(lists_of_flaw_bugs, [])))
-            if flaw_bugs:
-                _update_advisory(runtime, advisory, flaw_bugs, flaw_bug_tracker, noop)
+            if first_fix_flaw_bugs:
+                _update_advisory(runtime, advisory, first_fix_flaw_bugs, flaw_bug_tracker, noop)
+            else:
+                pass  # TODO: convert RHSA back to RHBA
+            # Associate builds with CVEs
+            runtime.logger.info('Associating CVEs with builds')
+            await errata_api.login()
+            await associate_builds_with_cves(errata_api, advisory, first_fix_flaw_bugs, attached_trackers, tracker_flaws, noop)
         except Exception as e:
             runtime.logger.error(traceback.format_exc())
             runtime.logger.error(f'Exception: {e}')
             exit_code = 1
+        finally:
+            await errata_api.close()
     sys.exit(exit_code)
 
 
-async def get_flaws(runtime, advisory, bug_tracker, flaw_bug_tracker, noop):
+def get_attached_trackers(advisory: Erratum, bug_tracker: BugTracker, logger: Logger):
     # get attached bugs from advisory
     advisory_bug_ids = bug_tracker.advisory_bug_ids(advisory)
     if not advisory_bug_ids:
-        runtime.logger.info(f'Found 0 {bug_tracker.type} bugs attached')
+        logger.info(f'Found 0 {bug_tracker.type} bugs attached')
         return []
 
-    attached_tracker_bugs: List[Bug] = bug_tracker.get_tracker_bugs(advisory_bug_ids, verbose=runtime.debug)
-    runtime.logger.info(f'Found {len(attached_tracker_bugs)} {bug_tracker.type} tracker bugs attached: '
-                        f'{sorted([b.id for b in attached_tracker_bugs])}')
-    if not attached_tracker_bugs:
-        return []
+    attached_tracker_bugs: List[Bug] = bug_tracker.get_tracker_bugs(advisory_bug_ids)
+    logger.info(f'Found {len(attached_tracker_bugs)} {bug_tracker.type} tracker bugs attached: '
+                f'{sorted([b.id for b in attached_tracker_bugs])}')
+    return attached_tracker_bugs
 
+
+def get_flaws(flaw_bug_tracker: BugTracker, tracker_bugs: Iterable[Bug], logger: Logger):
     # validate and get target_release
-    current_target_release = Bug.get_target_release(attached_tracker_bugs)
+    current_target_release = Bug.get_target_release(tracker_bugs)
     tracker_flaws, flaw_id_bugs = BugTracker.get_corresponding_flaw_bugs(
-        attached_tracker_bugs,
+        tracker_bugs,
         flaw_bug_tracker,
         strict=True
     )
-    runtime.logger.info(f'Found {len(flaw_id_bugs)} {flaw_bug_tracker.type} corresponding flaw bugs:'
-                        f' {sorted(flaw_id_bugs.keys())}')
+    logger.info(f'Found {len(flaw_id_bugs)} {flaw_bug_tracker.type} corresponding flaw bugs:'
+                f' {sorted(flaw_id_bugs.keys())}')
 
     # current_target_release is digit.digit.[z|0]
     # if current_target_release is GA then run first-fix bug filtering
     # for GA not every flaw bug is considered first-fix
     # for z-stream every flaw bug is considered first-fix
     if current_target_release[-1] == 'z':
-        runtime.logger.info("Detected z-stream target release, every flaw bug is considered first-fix")
+        logger.info("Detected z-stream target release, every flaw bug is considered first-fix")
         first_fix_flaw_bugs = list(flaw_id_bugs.values())
     else:
-        runtime.logger.info("Detected GA release, applying first-fix filtering..")
+        logger.info("Detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug for flaw_bug in flaw_id_bugs.values()
             if is_first_fix_any(flaw_bug_tracker, flaw_bug, current_target_release)
         ]
 
-    runtime.logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_id_bugs)} flaw bugs considered "first-fix"')
-    if not first_fix_flaw_bugs:
-        return []
-
-    runtime.logger.info('Associating CVEs with builds')
-    errata_config = runtime.get_errata_config()
-    errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
-    try:
-        await errata_api.login()
-        await associate_builds_with_cves(errata_api, advisory, attached_tracker_bugs, tracker_flaws, flaw_id_bugs, noop)
-    except ValueError as e:
-        runtime.logger.warn(f"Error associating builds with cves: {e}")
-        raise ValueError(f'Error associating builds with CVEs: {e}')
-    finally:
-        await errata_api.close()
-    return first_fix_flaw_bugs
+    logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_id_bugs)} flaw bugs considered "first-fix"')
+    return tracker_flaws, flaw_id_bugs, first_fix_flaw_bugs
 
 
 def _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop):
@@ -148,15 +146,17 @@ def _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop):
     bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
 
 
-async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, attached_tracker_bugs: List[Bug], tracker_flaws, flaw_id_bugs: Dict[int, Bug], dry_run: bool):
+async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, flaw_bugs: Iterable[Bug], attached_tracker_bugs: List[Bug], tracker_flaws: Dict[int, Iterable], dry_run: bool):
     attached_builds = [b for pv in advisory.errata_builds.values() for b in pv]
     cve_components_mapping: Dict[str, Set[str]] = {}
     for tracker in attached_tracker_bugs:
         component_name = tracker.whiteboard_component
         if not component_name:
             raise ValueError(f"Bug {tracker.id} doesn't have a valid whiteboard component.")
-        flaw_ids = tracker_flaws[tracker.id]
-        for flaw_id in flaw_ids:
+        flaw_id_bugs = {flaw_bug.id: flaw_bug for flaw_bug in flaw_bugs}
+        for flaw_id in tracker_flaws[tracker.id]:
+            if flaw_id not in flaw_id_bugs:
+                continue  # non-first-fix
             if len(flaw_id_bugs[flaw_id].alias) != 1:
                 raise ValueError(f"Bug {flaw_id} should have exactly 1 alias.")
             cve = flaw_id_bugs[flaw_id].alias[0]
