@@ -345,8 +345,8 @@ class BugTracker:
         if not bugids:
             return id_bug_map
         bugs = self.get_bugs(bugids, permissive=permissive, **kwargs)
-        for i, bug in enumerate(bugs):
-            id_bug_map[bugids[i]] = bug
+        for bug in bugs:
+            id_bug_map[bug.id] = bug
         return id_bug_map
 
     def remove_bugs(self, advisory_obj, bugids: List, noop=False):
