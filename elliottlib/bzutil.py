@@ -1058,6 +1058,14 @@ def get_highest_security_impact(bugs):
     return 'Low'
 
 
+def sort_cve_bugs(bugs):
+    def cve_sort_key(bug):
+        impact = constants.security_impact_map[get_highest_security_impact([bug])]
+        year, num = bug.alias[0].split("-")[1:]
+        return impact, -int(year), int(num)
+    return sorted(bugs, key=cve_sort_key, reverse=True)
+
+
 def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
     """
     Check if a flaw bug is considered a first-fix for a GA target release
