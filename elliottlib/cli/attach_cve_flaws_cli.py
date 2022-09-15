@@ -62,7 +62,6 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     exit_code = 0
     flaw_bug_tracker = runtime.bug_trackers('bugzilla')
     errata_config = runtime.get_errata_config()
-    errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
     for advisory_id in advisories:
         runtime.logger.info("Getting advisory %s", advisory_id)
         advisory = Erratum(errata_id=advisory_id)
@@ -72,6 +71,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
             attached_trackers.extend(get_attached_trackers(advisory, bug_tracker, runtime.logger))
 
         tracker_flaws, _, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, runtime.logger)
+        errata_api = None
         try:
             if first_fix_flaw_bugs:
                 _update_advisory(runtime, advisory, first_fix_flaw_bugs, flaw_bug_tracker, noop)
@@ -79,6 +79,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
                 pass  # TODO: convert RHSA back to RHBA
             # Associate builds with CVEs
             runtime.logger.info('Associating CVEs with builds')
+            errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
             await errata_api.login()
             await associate_builds_with_cves(errata_api, advisory, first_fix_flaw_bugs, attached_trackers, tracker_flaws, noop)
         except Exception as e:
@@ -86,7 +87,8 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
             runtime.logger.error(f'Exception: {e}')
             exit_code = 1
         finally:
-            await errata_api.close()
+            if errata_api:
+                await errata_api.close()
     sys.exit(exit_code)
 
 
@@ -105,6 +107,8 @@ def get_attached_trackers(advisory: Erratum, bug_tracker: BugTracker, logger: Lo
 
 def get_flaws(flaw_bug_tracker: BugTracker, tracker_bugs: Iterable[Bug], logger: Logger):
     # validate and get target_release
+    if not tracker_bugs:
+        return {}, {}, []  # Bug.get_target_release will panic on empty array
     current_target_release = Bug.get_target_release(tracker_bugs)
     tracker_flaws, flaw_id_bugs = BugTracker.get_corresponding_flaw_bugs(
         tracker_bugs,
