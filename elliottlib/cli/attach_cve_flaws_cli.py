@@ -192,17 +192,10 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
         )
 
     cve_names = [b.alias[0] for b in flaw_bugs]
-    if not advisory.cve_names:
-        cve_str = ' '.join(cve_names)
+    cve_str = ' '.join(cve_names)
+    if advisory.cve_names != cve_str:
         advisory.update(cve_names=cve_str)
         updated = True
-    else:
-        cves_not_in_cve_names = [n for n in cve_names if n not in advisory.cve_names]
-        if cves_not_in_cve_names:
-            s = ' '.join(cves_not_in_cve_names)
-            cve_str = f"{advisory.cve_names} {s}".strip()
-            advisory.update(cve_names=cve_str)
-            updated = True
 
     if updated:
         formatted_cve_list = '\n'.join([
