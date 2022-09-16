@@ -50,7 +50,7 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
             topic=boilerplate['topic'].format(IMPACT=impact)
         )
         advisory.update.assert_any_call(
-            cve_names='something CVE-123 CVE-456'
+            cve_names='CVE-123 CVE-456'
         )
         advisory.update.assert_any_call(
             security_impact=impact
