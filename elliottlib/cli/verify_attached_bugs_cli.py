@@ -62,52 +62,38 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
         await validator.close()
 
 
-@cli.command("verify-bugs", short_help="Same as verify-attached-bugs, but for bugs that are not (yet) attached to advisories")
-@click.option("--stream", is_flag=True, help="Find bugs for stream assembly (similar to find-bugs:sweep) and verify "
-                                             "bugs that qualify")
-@click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
-@click.option("--no-verify-blocking-bugs", is_flag=True, help="Don't check if there are open bugs for the next minor version blocking bugs for this minor version", type=bool, default=False)
+@cli.command("verify-bugs", short_help="Verify bugs included in an assembly (default --assembly=stream)")
+@click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more",
+              type=bool, default=False)
+@click.option("--no-verify-blocking-bugs", is_flag=True,
+              help="Don't check if there are open bugs for the next minor version blocking bugs for this minor version",
+              type=bool, default=False)
 @click.option('--output', '-o',
               required=False,
               type=click.Choice(['text', 'json', 'slack']),
               default='text',
               help='Applies chosen format to command output')
-@click.argument("bug_ids", nargs=-1, required=False)
 @pass_runtime
 @click_coroutine
-async def verify_bugs_cli(runtime, stream, verify_bug_status, output, bug_ids, no_verify_blocking_bugs: bool):
-    if stream and bug_ids:
-        raise click.BadParameter("Cannot use both --with-sweep and [BUG_IDS]")
+async def verify_bugs_cli(runtime, verify_bug_status, output, no_verify_blocking_bugs: bool):
+    """
+    Verify the bugs that qualify as being part of an assembly (specified as --assembly)
+    By default --assembly=stream
+    Checks are similar to verify-attached-bugs
+    """
     runtime.initialize()
-    await verify_bugs(runtime, stream, verify_bug_status, output, bug_ids, no_verify_blocking_bugs)
+    await verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bugs)
 
 
-async def verify_bugs(runtime, stream, verify_bug_status, output, bug_ids, no_verify_blocking_bugs):
+async def verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bugs):
     validator = BugValidator(runtime, output)
-    if stream:
-        find_bugs_obj = FindBugsSweep()
-        ocp_bugs = []
-        for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
-            logger.info(f"Running sweep for {b.type} bugs")
-            bugs = get_bugs_sweep(runtime, find_bugs_obj, None, b)
-            logger.info(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
-            ocp_bugs.extend(bugs)
-    else:
-        jira_ids, bz_ids = bzutil.get_jira_bz_bug_ids(bug_ids)
-        bugs = []
-        if jira_ids:
-            bug_tracker = runtime.bug_trackers('jira')
-            bugs.extend(bug_tracker.get_bugs(jira_ids))
-        if bz_ids:
-            bug_tracker = runtime.bug_trackers('bugzilla')
-            bugs.extend(bug_tracker.get_bugs(bz_ids))
-
-        # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products
-        non_ocp_bugs = {b for b in bugs if not b.is_ocp_bug()}
-        if non_ocp_bugs:
-            logger.info(f"Ignoring non-ocp bugs: {[b.id for b in non_ocp_bugs]}")
-        ocp_bugs = {b for b in bugs if b.is_ocp_bug()}
-
+    find_bugs_obj = FindBugsSweep()
+    ocp_bugs = []
+    logger.info(f'Using {runtime.assembly} assembly to search bugs')
+    for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
+        bugs = get_bugs_sweep(runtime, find_bugs_obj, None, b)
+        logger.info(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
+        ocp_bugs.extend(bugs)
     try:
         validator.validate(ocp_bugs, verify_bug_status, no_verify_blocking_bugs)
     finally:

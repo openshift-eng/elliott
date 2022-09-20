@@ -30,40 +30,6 @@ class VerifyAttachedBugs(unittest.TestCase):
         validator = BugValidator(runtime, True)
         self.assertEqual(validator.target_releases, ['4.9.z'])
 
-    def test_verify_bugs_cli(self):
-        runner = CliRunner()
-        flexmock(Runtime).should_receive("initialize")
-        flexmock(Runtime).should_receive("get_errata_config").and_return({})
-        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
-        flexmock(JIRABugTracker).should_receive("login")
-
-        bugs = [
-            flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
-                     status='ON_QA', is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
-                     status='ON_QA', is_ocp_bug=lambda: True)
-        ]
-        depend_on_bugs = [
-            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA', is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending', is_ocp_bug=lambda: True)
-        ]
-        flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args({"OCPBUGS-1", "OCPBUGS-2"})\
-            .and_return(bugs)\
-            .ordered()
-        flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args({"OCPBUGS-3", "OCPBUGS-4"})\
-            .and_return(depend_on_bugs)\
-            .ordered()
-
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-bugs', 'OCPBUGS-1', 'OCPBUGS-2'])
-        # if result.exit_code != 0:
-        #     exc_type, exc_value, exc_traceback = result.exc_info
-        #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-        #     self.fail(t)
-        self.assertEqual(result.exit_code, 1)
-        self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA', result.output)
-
     def test_verify_bugs_with_sweep_cli(self):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
@@ -92,7 +58,7 @@ class VerifyAttachedBugs(unittest.TestCase):
             .with_args({"OCPBUGS-3", "OCPBUGS-4"})\
             .and_return(depend_on_bugs)
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-bugs', '--stream'])
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=stream', 'verify-bugs'])
         # if result.exit_code != 0:
         #     exc_type, exc_value, exc_traceback = result.exc_info
         #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
