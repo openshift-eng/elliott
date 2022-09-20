@@ -423,17 +423,17 @@ class TestBZUtil(unittest.TestCase):
 
     def test_sort_cve_bugs(self):
         flaw_bugs = [
-            flexmock(alias=['CVE-2022-123'], severity='midium'),
+            flexmock(alias=['CVE-2022-123'], severity='Low'),
             flexmock(alias=['CVE-2022-456'], severity='urgent'),
-            flexmock(alias=['CVE-2021-789'], severity='midium'),
-            flexmock(alias=['CVE-2021-100'], severity='midium')
+            flexmock(alias=['CVE-2021-789'], severity='medium'),
+            flexmock(alias=['CVE-2021-100'], severity='medium')
         ]
         sort_list = bzutil.sort_cve_bugs(flaw_bugs)
         expected = [
             flexmock(alias=['CVE-2022-456'], severity='urgent'),
-            flexmock(alias=['CVE-2021-789'], severity='midium'),
-            flexmock(alias=['CVE-2021-100'], severity='midium'),
-            flexmock(alias=['CVE-2022-123'], severity='midium')
+            flexmock(alias=['CVE-2021-789'], severity='medium'),
+            flexmock(alias=['CVE-2021-100'], severity='medium'),
+            flexmock(alias=['CVE-2022-123'], severity='Low')
         ]
         self.assertEqual(expected[0].alias, sort_list[0].alias)
         self.assertEqual(expected[1].alias, sort_list[1].alias)
