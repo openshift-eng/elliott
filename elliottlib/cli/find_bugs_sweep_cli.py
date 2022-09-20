@@ -12,7 +12,8 @@ from elliottlib.cli import common
 from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print, chunk
 
 
-LOGGER = logutil.getLogger(__name__)
+logger = logutil.getLogger(__name__)
+type_bug_list = List[Bug]
 
 
 class FindBugsMode:
@@ -121,14 +122,26 @@ advisory with the --add option.
     find_bugs_obj.exclude_status(exclude_status)
 
     exit_code = 0
+    bugs: type_bug_list = []
     for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
         try:
-            find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
-                            report, output, brew_event, noop, count_advisory_attach_flags, b)
+            bugs.extend(find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
+                        report, output, brew_event, noop, count_advisory_attach_flags, b))
         except Exception as e:
-            runtime.logger.error(traceback.format_exc())
-            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
+            logger.error(traceback.format_exc())
+            logger.error(f'exception with {b.type} bug tracker: {e}')
             exit_code = 1
+    if not bugs:
+        logger.info('No bugs found')
+        sys.exit(0)
+
+    if output == 'text':
+        click.echo(f"Found {len(bugs)} bugs")
+        click.echo(", ".join(sorted(str(b.id) for b in bugs)))
+
+    if report:
+        print_report(bugs, output)
+
     sys.exit(exit_code)
 
 
@@ -137,14 +150,14 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
     if output == 'text':
         statuses = sorted(find_bugs_obj.status)
         tr = bug_tracker.target_release()
-        green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
+        logger.info(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
     if sweep_cutoff_timestamp:
         utc_ts = datetime.utcfromtimestamp(sweep_cutoff_timestamp)
-        green_print(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
+        logger.info(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
                     f"cutoff time {utc_ts}...")
         qualified_bugs = []
         for chunk_of_bugs in chunk(bugs, constants.BUG_LOOKUP_CHUNK_SIZE):
@@ -160,32 +173,22 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
         raise ValueError(f"The following {bug_tracker.type} bugs are defined in both 'include' and 'exclude': "
                          f"{included_bug_ids & excluded_bug_ids}")
     if included_bug_ids:
-        yellow_print(f"The following {bug_tracker.type} bugs will be additionally included because they are "
-                     f"explicitly defined in the assembly config: {included_bug_ids}")
+        logger.warn(f"The following {bug_tracker.type} bugs will be additionally included because they are "
+                    f"explicitly defined in the assembly config: {included_bug_ids}")
         included_bugs = bug_tracker.get_bugs(included_bug_ids)
         bugs.extend(included_bugs)
     if excluded_bug_ids:
-        yellow_print(f"The following {bug_tracker.type} bugs will be excluded because they are explicitly "
-                     f"defined in the assembly config: {excluded_bug_ids}")
+        logger.warn(f"The following {bug_tracker.type} bugs will be excluded because they are explicitly "
+                    f"defined in the assembly config: {excluded_bug_ids}")
         bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
-    if output == 'text':
-        green_prefix(f"Found {len(bugs)} bugs: ")
-        click.echo(", ".join(sorted(str(b.id) for b in bugs)))
-
-    if not bugs:
-        return
-
-    if report:
-        print_report(bugs, output)
-
     if count_advisory_attach_flags < 1:
-        return
+        return bugs
     # `--add ADVISORY_NUMBER` should respect the user's wish
     # and attach all available bugs to whatever advisory is specified.
     if advisory_id and not default_advisory_type:
         bug_tracker.attach_bugs(advisory_id, [b.id for b in bugs], noop=noop, verbose=runtime.debug)
-        return
+        return bugs
 
     rpm_advisory_id = common.find_default_advisory(runtime, 'rpm') if check_builds else None
     bugs_by_type = categorize_bugs_by_type(bugs, rpm_advisory_id=rpm_advisory_id,
@@ -195,15 +198,13 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
     advisory_types_to_attach = [default_advisory_type] if default_advisory_type else bugs_by_type.keys()
     for advisory_type in sorted(advisory_types_to_attach):
         bugs = bugs_by_type.get(advisory_type)
-        green_prefix(f'{advisory_type} advisory: ')
+        green_prefix(f'{advisory_type} advisory: {[bug.id for bug in bugs]}')
         if bugs:
             adv_id = common.find_default_advisory(runtime, advisory_type)
             bug_tracker.attach_bugs(adv_id, [b.id for b in bugs], noop=noop, verbose=runtime.debug)
         else:
             click.echo("0 bugs found")
-
-
-type_bug_list = List[Bug]
+    return bugs
 
 
 def get_assembly_bug_ids(runtime, bug_tracker_type):
@@ -338,10 +339,10 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
 def get_sweep_cutoff_timestamp(runtime, cli_brew_event):
     sweep_cutoff_timestamp = 0
     if cli_brew_event:
-        green_print(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
+        logger.info(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
         sweep_cutoff_timestamp = runtime.build_retrying_koji_client().getEvent(cli_brew_event)["ts"]
     elif runtime.assembly_basis_event:
-        green_print(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
+        logger.info(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
         brew_api = runtime.build_retrying_koji_client()
         sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api,
                                                                      runtime.rpm_metas() + runtime.image_metas())
