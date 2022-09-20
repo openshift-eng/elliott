@@ -63,7 +63,8 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 
 
 @cli.command("verify-bugs", short_help="Same as verify-attached-bugs, but for bugs that are not (yet) attached to advisories")
-@click.option("--with-sweep", is_flag=True, help="Run find-bugs:sweep and verify bugs that qualify")
+@click.option("--stream", is_flag=True, help="Find bugs for stream assembly (similar to find-bugs:sweep) and verify "
+                                             "bugs that qualify")
 @click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
 @click.option("--no-verify-blocking-bugs", is_flag=True, help="Don't check if there are open bugs for the next minor version blocking bugs for this minor version", type=bool, default=False)
 @click.option('--output', '-o',
@@ -74,16 +75,16 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 @click.argument("bug_ids", nargs=-1, required=False)
 @pass_runtime
 @click_coroutine
-async def verify_bugs_cli(runtime, with_sweep, verify_bug_status, output, bug_ids, no_verify_blocking_bugs: bool):
-    if with_sweep and bug_ids:
+async def verify_bugs_cli(runtime, stream, verify_bug_status, output, bug_ids, no_verify_blocking_bugs: bool):
+    if stream and bug_ids:
         raise click.BadParameter("Cannot use both --with-sweep and [BUG_IDS]")
     runtime.initialize()
-    await verify_bugs(runtime, with_sweep, verify_bug_status, output, bug_ids, no_verify_blocking_bugs)
+    await verify_bugs(runtime, stream, verify_bug_status, output, bug_ids, no_verify_blocking_bugs)
 
 
-async def verify_bugs(runtime, with_sweep, verify_bug_status, output, bug_ids, no_verify_blocking_bugs):
+async def verify_bugs(runtime, stream, verify_bug_status, output, bug_ids, no_verify_blocking_bugs):
     validator = BugValidator(runtime, output)
-    if with_sweep:
+    if stream:
         find_bugs_obj = FindBugsSweep()
         ocp_bugs = []
         for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:

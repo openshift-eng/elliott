@@ -92,7 +92,7 @@ class VerifyAttachedBugs(unittest.TestCase):
             .with_args({"OCPBUGS-3", "OCPBUGS-4"})\
             .and_return(depend_on_bugs)
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-bugs', '--with-sweep'])
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-bugs', '--stream'])
         # if result.exit_code != 0:
         #     exc_type, exc_value, exc_traceback = result.exc_info
         #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
