@@ -125,8 +125,8 @@ advisory with the --add option.
     bugs: type_bug_list = []
     for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
         try:
-            bugs.extend(find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, major_version,
-                                        find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, b))
+            bugs.extend(find_and_attach_bugs(runtime, advisory_id, default_advisory_type, check_builds, major_version,
+                        find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, b))
         except Exception as e:
             logger.error(traceback.format_exc())
             logger.error(f'exception with {b.type} bug tracker: {e}')
@@ -159,7 +159,7 @@ def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
             b = bug_tracker.filter_bugs_by_cutoff_event(chunk_of_bugs, find_bugs_obj.status,
                                                         sweep_cutoff_timestamp, verbose=runtime.debug)
             qualified_bugs.extend(b)
-        click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {utc_ts}...")
+        logger.info(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {utc_ts}...")
         bugs = qualified_bugs
 
     included_bug_ids, excluded_bug_ids = get_assembly_bug_ids(runtime, bug_tracker_type=bug_tracker.type)
@@ -179,8 +179,8 @@ def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
     return bugs
 
 
-def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
-                    output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
+def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version,
+                         find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
     if output == 'text':
         statuses = sorted(find_bugs_obj.status)
         tr = bug_tracker.target_release()
