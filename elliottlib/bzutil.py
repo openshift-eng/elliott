@@ -22,7 +22,6 @@ from elliottlib import constants, exceptions, exectools, logutil, errata, util
 from elliottlib.cli import cli_opts
 from elliottlib.metadata import Metadata
 from elliottlib.util import isolate_timestamp_in_release
-from errata_tool import ErrataException
 
 logger = logutil.getLogger(__name__)
 
@@ -608,7 +607,7 @@ class JIRABugTracker(BugTracker):
             print(f"Would've removed bugs: {bugids}")
             return
         try:
-            advisory_obj.removeJIRAIssues(bugids)
+            advisory_obj.removeJIRAIssues(jira_list)
             advisory_obj.commit()
         except ErrataException as e:
             raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
