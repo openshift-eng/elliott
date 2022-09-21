@@ -611,7 +611,7 @@ class JIRABugTracker(BugTracker):
             advisory_obj.removeJIRAIssues(bugids)
             advisory_obj.commit()
         except ErrataException as e:
-            raise e
+            raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
 
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
