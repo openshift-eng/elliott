@@ -645,11 +645,7 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
                 advisory.addJiraIssues(chunk_of_bugs)
                 advisory.commit()
             except ErrataException as e:
-                if 'idsfixed' not in e:
-                    raise exceptions.ElliottFatalError(f"attach jira bug failed with errmsg={e}")
-                for err in e['idsfixed']:
-                    if 'The issue is filed already in' not in ' '.join(err):
-                        raise exceptions.ElliottFatalError(f"attach jira bug failed with errmsg={e}")
+                raise exceptions.ElliottFatalError(getattr(e, 'message', repr(e)))
         logger.info("All not attached jira bugs attached")
 
 
