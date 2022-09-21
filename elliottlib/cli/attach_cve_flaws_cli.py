@@ -9,7 +9,7 @@ from errata_tool import Erratum
 
 from elliottlib import constants
 from elliottlib.bzutil import (Bug, BugTracker, get_highest_security_impact,
-                               is_first_fix_any)
+                               is_first_fix_any, sort_cve_bugs)
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.errata import is_security_advisory
@@ -191,6 +191,7 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
             security_impact='Low',
         )
 
+    flaw_bugs = sort_cve_bugs(flaw_bugs)
     cve_names = [b.alias[0] for b in flaw_bugs]
     cve_str = ' '.join(cve_names)
     if advisory.cve_names != cve_str:

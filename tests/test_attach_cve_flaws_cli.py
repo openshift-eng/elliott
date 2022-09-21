@@ -25,8 +25,8 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
         )
 
         flaw_bugs = [
-            Mock(alias=['CVE-123'], severity='urgent', summary='CVE-123 foo'),
-            Mock(alias=['CVE-456'], severity='high', summary='CVE-456 bar')
+            Mock(alias=['CVE-2022-123'], severity='urgent', summary='CVE-2022-123 foo'),
+            Mock(alias=['CVE-2022-456'], severity='high', summary='CVE-2022-456 bar')
         ]
 
         attach_cve_flaws_cli.get_updated_advisory_rhsa(
@@ -50,13 +50,13 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
             topic=boilerplate['topic'].format(IMPACT=impact)
         )
         advisory.update.assert_any_call(
-            cve_names='CVE-123 CVE-456'
+            cve_names='CVE-2022-123 CVE-2022-456'
         )
         advisory.update.assert_any_call(
             security_impact=impact
         )
         advisory.update.assert_any_call(
-            description='some description with * foo (CVE-123)\n* bar (CVE-456)'
+            description='some description with * foo (CVE-2022-123)\n* bar (CVE-2022-456)'
         )
 
     @patch("elliottlib.errata_async.AsyncErrataUtils.associate_builds_with_cves", autospec=True)

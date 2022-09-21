@@ -421,6 +421,25 @@ class TestBZUtil(unittest.TestCase):
         actual = bzutil.is_first_fix_any(bzapi, bug, tr)
         self.assertEqual(expected, actual)
 
+    def test_sort_cve_bugs(self):
+        flaw_bugs = [
+            flexmock(alias=['CVE-2022-123'], severity='Low'),
+            flexmock(alias=['CVE-2022-456'], severity='urgent'),
+            flexmock(alias=['CVE-2021-789'], severity='medium'),
+            flexmock(alias=['CVE-2021-100'], severity='medium')
+        ]
+        sort_list = bzutil.sort_cve_bugs(flaw_bugs)
+        expected = [
+            flexmock(alias=['CVE-2022-456'], severity='urgent'),
+            flexmock(alias=['CVE-2021-789'], severity='medium'),
+            flexmock(alias=['CVE-2021-100'], severity='medium'),
+            flexmock(alias=['CVE-2022-123'], severity='Low')
+        ]
+        self.assertEqual(expected[0].alias, sort_list[0].alias)
+        self.assertEqual(expected[1].alias, sort_list[1].alias)
+        self.assertEqual(expected[2].alias, sort_list[2].alias)
+        self.assertEqual(expected[3].alias, sort_list[3].alias)
+
     def test_is_first_fix_any_no_valid_trackers(self):
         tr = '4.8.0'
         tracker_bug_ids = [1, 2]
