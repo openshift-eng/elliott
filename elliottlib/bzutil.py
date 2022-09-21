@@ -607,8 +607,11 @@ class JIRABugTracker(BugTracker):
         if noop:
             print(f"Would've removed bugs: {bugids}")
             return
-        advisory_obj.removeJIRAIssues(bugids)
-        advisory_obj.commit()
+        try:
+            advisory_obj.removeJIRAIssues(bugids)
+            advisory_obj.commit()
+        except ErrataException as e:
+            raise e
 
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)

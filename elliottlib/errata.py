@@ -635,8 +635,11 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
         if noop:
             logger.info('Dry run: Would have attached bugs')
             continue
-        advisory.addJiraIssues(chunk_of_bugs)
-        advisory.commit()
+        try:
+            advisory.addJiraIssues(chunk_of_bugs)
+            advisory.commit()
+        except ErrataException as e:
+            raise e
         logger.info("All not attached jira bugs attached")
 
 
