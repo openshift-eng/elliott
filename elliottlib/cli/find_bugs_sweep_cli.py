@@ -9,7 +9,7 @@ from elliottlib.assembly import assembly_issues_config
 from elliottlib.bzutil import BugTracker, Bug, JIRABug
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import common
-from elliottlib.util import green_prefix, green_print, red_prefix, yellow_print, chunk
+from elliottlib.util import green_prefix, green_print, red_prefix, chunk
 
 
 logger = logutil.getLogger(__name__)
@@ -125,12 +125,13 @@ advisory with the --add option.
     bugs: type_bug_list = []
     for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
         try:
-            bugs.extend(find_bugs_sweep(runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
-                        report, output, brew_event, noop, count_advisory_attach_flags, b))
+            bugs.extend(find_and_attach_bugs(runtime, advisory_id, default_advisory_type, check_builds, major_version,
+                        find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, b))
         except Exception as e:
             logger.error(traceback.format_exc())
             logger.error(f'exception with {b.type} bug tracker: {e}')
             exit_code = 1
+
     if not bugs:
         logger.info('No bugs found')
         sys.exit(0)
@@ -145,13 +146,7 @@ advisory with the --add option.
     sys.exit(exit_code)
 
 
-def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version, find_bugs_obj,
-                    report, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
-    if output == 'text':
-        statuses = sorted(find_bugs_obj.status)
-        tr = bug_tracker.target_release()
-        logger.info(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
-
+def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
@@ -164,8 +159,7 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
             b = bug_tracker.filter_bugs_by_cutoff_event(chunk_of_bugs, find_bugs_obj.status,
                                                         sweep_cutoff_timestamp, verbose=runtime.debug)
             qualified_bugs.extend(b)
-        click.echo(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time "
-                   f"{utc_ts}...")
+        logger.info(f"{len(qualified_bugs)} of {len(bugs)} bugs are qualified for the cutoff time {utc_ts}...")
         bugs = qualified_bugs
 
     included_bug_ids, excluded_bug_ids = get_assembly_bug_ids(runtime, bug_tracker_type=bug_tracker.type)
@@ -181,6 +175,18 @@ def find_bugs_sweep(runtime: Runtime, advisory_id, default_advisory_type, check_
         logger.warn(f"The following {bug_tracker.type} bugs will be excluded because they are explicitly "
                     f"defined in the assembly config: {excluded_bug_ids}")
         bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
+
+    return bugs
+
+
+def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version,
+                         find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
+    if output == 'text':
+        statuses = sorted(find_bugs_obj.status)
+        tr = bug_tracker.target_release()
+        green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
+
+    bugs = get_bugs_sweep(runtime, find_bugs_obj, brew_event, bug_tracker)
 
     if count_advisory_attach_flags < 1:
         return bugs

@@ -6,13 +6,16 @@ from spnego.exceptions import GSSError
 from errata_tool import Erratum
 
 
-from elliottlib import bzutil, constants, util, errata
+from elliottlib import bzutil, constants, logutil
 from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
 from elliottlib.util import (exit_unauthenticated, green_print,
                              minor_version_tuple, red_print)
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker, Bug, BugTracker
+from elliottlib.bzutil import Bug, BugTracker
+from elliottlib.cli.find_bugs_sweep_cli import get_bugs_sweep, FindBugsSweep
+
+logger = logutil.getLogger(__name__)
 
 
 @cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
@@ -59,40 +62,40 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
         await validator.close()
 
 
-@cli.command("verify-bugs", short_help="Same as verify-attached-bugs, but for bugs that are not (yet) attached to advisories")
-@click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
-@click.option("--no-verify-blocking-bugs", is_flag=True, help="Don't check if there are open bugs for the next minor version blocking bugs for this minor version", type=bool, default=False)
+@cli.command("verify-bugs", short_help="Verify bugs included in an assembly (default --assembly=stream)")
+@click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more",
+              type=bool, default=False)
+@click.option("--no-verify-blocking-bugs", is_flag=True,
+              help="Don't check if there are open bugs for the next minor version blocking bugs for this minor version",
+              type=bool, default=False)
 @click.option('--output', '-o',
               required=False,
               type=click.Choice(['text', 'json', 'slack']),
               default='text',
               help='Applies chosen format to command output')
-@click.argument("bug_ids", nargs=-1, required=False)
 @pass_runtime
 @click_coroutine
-async def verify_bugs_cli(runtime, verify_bug_status, output, bug_ids, no_verify_blocking_bugs: bool):
+async def verify_bugs_cli(runtime, verify_bug_status, output, no_verify_blocking_bugs: bool):
+    """
+    Verify the bugs that qualify as being part of an assembly (specified as --assembly)
+    By default --assembly=stream
+    Checks are similar to verify-attached-bugs
+    """
     runtime.initialize()
-    await verify_bugs(runtime, verify_bug_status, output, bug_ids, no_verify_blocking_bugs)
+    await verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bugs)
 
 
-async def verify_bugs(runtime, verify_bug_status, output, bug_ids, no_verify_blocking_bugs: bool):
+async def verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bugs):
     validator = BugValidator(runtime, output)
-    jira_ids, bz_ids = bzutil.get_jira_bz_bug_ids(bug_ids)
-    bugs = []
-    if jira_ids:
-        bug_tracker = runtime.bug_trackers('jira')
-        bugs.extend(bug_tracker.get_bugs(jira_ids))
-    if bz_ids:
-        bug_tracker = runtime.bug_trackers('bugzilla')
-        bugs.extend(bug_tracker.get_bugs(bz_ids))
-    non_ocp_bugs = {b for b in bugs if not b.is_ocp_bug()}
-    if non_ocp_bugs:
-        runtime.logger.info(f"Ignoring non-ocp bugs: {[b.id for b in non_ocp_bugs]}")
-
-    # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products
-    non_flaw_bugs = {b for b in bugs if b.is_ocp_bug()}
+    find_bugs_obj = FindBugsSweep()
+    ocp_bugs = []
+    logger.info(f'Using {runtime.assembly} assembly to search bugs')
+    for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
+        bugs = get_bugs_sweep(runtime, find_bugs_obj, None, b)
+        logger.info(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
+        ocp_bugs.extend(bugs)
     try:
-        validator.validate(non_flaw_bugs, verify_bug_status, no_verify_blocking_bugs)
+        validator.validate(ocp_bugs, verify_bug_status, no_verify_blocking_bugs)
     finally:
         await validator.close()
 
@@ -291,8 +294,8 @@ class BugValidator:
         for bug in blockers:
             if bug.is_ocp_bug() and any(is_next_target(target) for target in bug.target_release):
                 blocking_bugs[bug.id] = bug
-        print(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
-              f"{list(blocking_bugs.keys())}")
+        logger.info(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
+                    f"{list(blocking_bugs.keys())}")
 
         k = {bug: [blocking_bugs[b] for b in bug.depends_on if b in blocking_bugs] for bug in bugs}
         return k
@@ -312,9 +315,12 @@ class BugValidator:
                                   f"`{blocker.status}` bug <{blocker.weburl}|{blocker.id}>"
                     self._complain(message)
                 if blocker.status in ['CLOSED', 'Closed'] and \
-                    blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG',
-                                               'WONTFIX', 'Done', "Won't Do", 'Errata', 'Duplicate', 'Not a Bug',
-                                               'Done-Errata']:
+                    blocker.resolution not in ['CURRENTRELEASE', 'NEXTRELEASE', 'ERRATA', 'DUPLICATE', 'NOTABUG', 'WONTFIX',
+                                               'Done', 'Fixed', 'Done-Errata'
+                                               'Current Release', 'Errata', 'Next Release',
+                                               "Won't Do", "Won't Fix",
+                                               'Duplicate', 'Duplicate Issue',
+                                               'Not a Bug']:
                     if self.output == 'text':
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which was CLOSED {blocker.resolution}"
