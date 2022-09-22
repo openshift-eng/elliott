@@ -251,12 +251,12 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
     bugs_by_type["image"] = set(non_tracker_bugs) - bugs_by_type["extras"]
 
     tracker_bugs = [b for b in bugs if b.is_tracker_bug() and b.whiteboard_component]
+    logger.info(f"Tracker Bugs found: {len(tracker_bugs)}")
     if not tracker_bugs:
         return bugs_by_type
 
-    green_prefix(f"Tracker Bugs found ({len(tracker_bugs)}): \n")
     for b in tracker_bugs:
-        click.echo((b.id, b.whiteboard_component))
+        logger.info((b.id, b.whiteboard_component))
 
     if not advisory_id_map:
         logger.info("Skipping sorting/attaching Tracker Bugs. Advisories with attached builds must be given to "
@@ -275,7 +275,7 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
             package_name = bug.whiteboard_component
             if package_name in packages:
                 found.add(bug)
-                click.echo(f"{kind} build found for #{bug.id}, {package_name} ")
+                logger.info(f"{kind} build found for #{bug.id}, {package_name} ")
                 bugs_by_type[kind].add(bug)
 
     not_found = set(tracker_bugs) - found
