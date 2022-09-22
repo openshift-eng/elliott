@@ -191,7 +191,7 @@ def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, m
 
     bugs = get_bugs_sweep(runtime, find_bugs_obj, brew_event, bug_tracker)
 
-    advisory_ids = common.get_default_advisories(runtime)
+    advisory_ids = runtime.get_default_advisories()
     bugs_by_type = categorize_bugs_by_type(bugs, advisory_ids,
                                            major_version=major_version)
     for kind, kind_bugs in bugs_by_type.items():
@@ -213,8 +213,7 @@ def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, m
     for advisory_type in sorted(advisory_types_to_attach):
         kind_bugs = bugs_by_type.get(advisory_type)
         if kind_bugs:
-            advisory_id = advisory_ids[advisory_type]
-            bug_tracker.attach_bugs(advisory_id, [b.id for b in kind_bugs], noop=noop, verbose=runtime.debug)
+            bug_tracker.attach_bugs(advisory_ids[advisory_type], [b.id for b in kind_bugs], noop=noop, verbose=runtime.debug)
     return bugs
 
 

@@ -84,6 +84,9 @@ class Runtime(object):
     def get_major_minor(self):
         return self.group_config.vars.MAJOR, self.group_config.vars.MINOR
 
+    def get_default_advisories(self):
+        return self.group_config.get('advisories', {})
+
     def get_group_config(self):
         # group.yml can contain a `vars` section which should be a
         # single level dict containing keys to str.format(**dict) replace

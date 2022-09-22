@@ -41,7 +41,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(Runtime).should_receive("initialize").and_return(None)
         flexmock(Runtime).should_receive("get_major_minor").and_return(4, 6)
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
-        flexmock(common).should_receive("get_default_advisories").and_return({})
+        flexmock(Runtime).should_receive("get_default_advisories").and_return({})
         flexmock(sweep_cli).should_receive("categorize_bugs_by_type").and_return({})
 
         # jira mocks
@@ -94,7 +94,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         ts = datetime(2021, 6, 30, 12, 30, 00, 0, tzinfo=timezone.utc).timestamp()
         flexmock(sweep_cli).should_receive("get_sweep_cutoff_timestamp").and_return(ts)
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
-        flexmock(common).should_receive("get_default_advisories").and_return({})
+        flexmock(Runtime).should_receive("get_default_advisories").and_return({})
 
         # bz mocks
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
@@ -117,7 +117,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_major_minor").and_return(4, 6)
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
-        flexmock(common).should_receive("get_default_advisories").and_return({})
+        flexmock(Runtime).should_receive("get_default_advisories").and_return({})
 
         # jira mocks
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
@@ -147,7 +147,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_major_minor").and_return(4, 6)
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
-        flexmock(common).should_receive("get_default_advisories").and_return({'image': 123})
+        flexmock(Runtime).should_receive("get_default_advisories").and_return({'image': 123})
         flexmock(sweep_cli).should_receive("categorize_bugs_by_type").and_return({"image": set(bugs)})
 
         # jira mocks
@@ -184,7 +184,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
             "rpm": set(rpm_bugs),
             "extras": set(extras_bugs)
         })
-        flexmock(common).should_receive("get_default_advisories").and_return({'image': 123, 'rpm': 123, 'extras': 123,
+        flexmock(Runtime).should_receive("get_default_advisories").and_return({'image': 123, 'rpm': 123, 'extras': 123,
                                                                               'metadata': 123})
 
         # bz mocks

@@ -123,7 +123,7 @@ class VerifyAttachedBugs(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'project': 'OCPBUGS', 'target_release': [
             '4.6.z']})
         flexmock(BugzillaBugTracker).should_receive("login")
-        flexmock(verify_attached_bugs_cli).should_receive("get_default_advisories")\
+        flexmock(Runtime).should_receive("get_default_advisories")\
             .and_return({'image': 1, 'rpm': 2, 'extras': 3, 'metadata': 4})
 
         f = asyncio.Future()

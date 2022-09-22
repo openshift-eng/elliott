@@ -7,7 +7,7 @@ from errata_tool import Erratum
 
 
 from elliottlib import bzutil, constants, logutil
-from elliottlib.cli.common import cli, click_coroutine, pass_runtime, get_default_advisories
+from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
 from elliottlib.util import (exit_unauthenticated, green_print,
@@ -41,7 +41,7 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
                    "correct release advisories, run with --assembly=<release>")
         advisory_id_map = {'?': a for a in advisories}
     else:
-        advisory_id_map = get_default_advisories(runtime)
+        advisory_id_map = runtime.get_default_advisories()
     if not advisory_id_map:
         red_print("No advisories specified on command line or in [group.yml|releases.yml]")
         exit(1)
