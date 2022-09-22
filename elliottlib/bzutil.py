@@ -66,25 +66,32 @@ class Bug:
     def is_ocp_bug(self):
         raise NotImplementedError
 
-    @staticmethod
-    def get_valid_rpm_cves(bugs: List[Bug]) -> Dict[Bug, str]:
-        """ Get valid rpm cve trackers with their component names
+    def is_rpm_tracker(self):
+        if not self.is_tracker_bug():
+            return False
+        component_name = self.whiteboard_component
+        if not component_name:
+            return False
+        # if component name does not have image suffixes, then assume it is a rpm
+        return not re.search(r'-(apb|container)(,|$)', component_name)
 
-        An OCP rpm cve tracker has a whiteboard value "component:<component_name>"
-        excluding suffixes (apb|container)
+    @staticmethod
+    def get_valid_tracker_bugs(bugs: List[Bug]) -> Dict[Bug, str]:
+        """ Get valid cve tracker bugs with their component names
+
+        An OCP cve tracker has a whiteboard value "component:<component_name>"
 
         :param bugs: list of bug objects
-        :returns: A dict of bug object as key and component name as value
+        :returns: A dict of bug id as key and (bug object, component name) as value
         """
 
-        rpm_cves: Dict[Bug, str] = {}
+        tracker_bugs = {}
         for b in bugs:
             if b.is_tracker_bug():
                 component_name = b.whiteboard_component
-                # filter out non-rpm suffixes
-                if component_name and not re.search(r'-(apb|container)(,|$)', component_name):
-                    rpm_cves[b] = component_name
-        return rpm_cves
+                if component_name:
+                    tracker_bugs[b.id] = (b, component_name)
+        return tracker_bugs
 
     @staticmethod
     def get_target_release(bugs: List[Bug]) -> str:
@@ -297,7 +304,7 @@ class JIRABug(Bug):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
 
     def is_ocp_bug(self):
-        return self.bug.fields.project.key == "OCPBUGS"
+        return self.bug.fields.project.key == "OCPBUGS" and 'Placeholder' not in self.summary
 
     def _get_blocks(self):
         blocks = []

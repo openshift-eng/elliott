@@ -730,8 +730,6 @@ def get_advisory_nvrs(advisory):
     :return: dict, with keys as package names and values as strs in the form: '{version}-{release}'
     """
     try:
-        green_prefix("Fetching advisory builds: ")
-        click.echo("Advisory - {}".format(advisory))
         builds = get_builds(advisory)
     except GSSError:
         exit_unauthenticated()
@@ -740,12 +738,8 @@ def get_advisory_nvrs(advisory):
 
     all_advisory_nvrs = {}
     # Results come back with top level keys which are brew tags
-    green_prefix("Looping over tags: ")
-    click.echo("{} tags to check".format(len(builds)))
     for tag in builds.keys():
         # Each top level has a key 'builds' which is a list of dicts
-        green_prefix("Looping over builds in tag: ")
-        click.echo("{} with {} builds".format(tag, len(builds[tag]['builds'])))
         for build in builds[tag]['builds']:
             # Each dict has a top level key which might be the actual
             # 'nvr' but I don't have enough data to know for sure

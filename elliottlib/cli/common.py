@@ -93,6 +93,10 @@ def find_default_advisory(runtime, default_advisory_type, quiet=False):
     return default_advisory
 
 
+def get_default_advisories(runtime):
+    return runtime.group_config.get('advisories', {})
+
+
 use_default_advisory_option = click.option(
     '--use-default-advisory', 'default_advisory_type',
     metavar='ADVISORY_TYPE',
