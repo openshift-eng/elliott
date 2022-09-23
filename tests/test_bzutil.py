@@ -174,7 +174,7 @@ class TestBugzillaBug(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_is_tracker_bug_fail(self):
-        bug = flexmock(id='1', keywords=['SomeOtherKeyword'])
+        bug = flexmock(id='1', keywords=['SomeOtherKeyword'], summary="abc")
         expected = False
         actual = BugzillaBug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
