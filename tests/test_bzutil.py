@@ -121,7 +121,7 @@ class TestJIRABug(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_is_tracker_bug_fail(self):
-        bug = flexmock(key='OCPBUGS1', fields=flexmock(labels=['somethingelse']))
+        bug = flexmock(key='OCPBUGS1', fields=flexmock(labels=['somethingelse'], summary="abc"))
         expected = False
         actual = JIRABug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
@@ -445,6 +445,7 @@ class TestBZUtil(unittest.TestCase):
         tracker_bug_ids = [1, 2]
         bug_a = BugzillaBug(flexmock(
             id=1,
+            summary="abc",
             product=constants.BUGZILLA_PRODUCT_OCP,
             keywords=['foo'])
         )
