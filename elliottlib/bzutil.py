@@ -58,6 +58,8 @@ class Bug:
         raise NotImplementedError
 
     def is_tracker_bug(self):
+        if not set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords)) and re.search(r'^CVE-(\d+)-(\d+)', self.summary):
+            raise exceptions.ElliottFatalError(f"Bug {self.id} don't have tracker keywords while have CVE number in summary, need manual check again")
         return set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
 
     def is_flaw_bug(self):
