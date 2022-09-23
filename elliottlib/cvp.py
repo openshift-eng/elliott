@@ -222,8 +222,8 @@ class CVPInspector:
                 self._logger.info("Processing build log...")
                 # looking for lines in brew logs like
                 # `2020-07-18 10:52:00,888 - atomic_reactor.plugins.imagebuilder - INFO -  java-11-openjdk      i686   1:11.0.8.10-0.el7_8 rhel-server-rpms-x86_64  215 k`
-                pattern = re.compile(r"atomic_reactor\.plugins\.imagebuilder - INFO -\s+([\w-]+)\s+\w+\s+([\w.:-]+)\s+([\w.-]+)\s+[\d.]+\s+\w")
-                self._build_log_cache[(nvr, arch)] = build_log = [line for line in orig_build_log.splitlines() if "- atomic_reactor.plugins.imagebuilder - INFO -" in line and pattern.search(line)]
+                pattern = re.compile(r"atomic_reactor\.(?:plugins\.imagebuilder|tasks\.binary_container_build) - INFO -\s+(?P<name>[\w.-]+)\s+(?P<arch>\w+)\s+(?P<VRE>[\w.:-]+)\s+(?P<repo>[\w.-]+)\s+(?P<size>\d+\s+\w)")
+                self._build_log_cache[(nvr, arch)] = build_log = [line for line in orig_build_log.splitlines() if line and pattern.search(line)]
             return build_log
 
         for test_name, value in report.items():
