@@ -308,6 +308,9 @@ class BugTracker:
         self._server = self.config.get('server', '')
         self.type = tracker_type
 
+    def component_filter(self, filter_name='default') -> List:
+        return self.config.get('filters', {}).get(filter_name)
+
     def target_release(self) -> List:
         return self.config.get('target_release')
 
@@ -540,7 +543,7 @@ class JIRABugTracker(BugTracker):
 
         exclude_components = []
         if search_filter:
-            exclude_components = self.config.get('filters', {}).get(search_filter)
+            exclude_components = self.component_filter(search_filter)
 
         query = f"project={self._project}"
         if bugids:
