@@ -150,10 +150,11 @@ class BugValidator:
                 bugs_not_found = expected - actual
                 extra_bugs = actual - expected
                 if bugs_not_found:
-                    self._complain(f'Bugs not found in {kind} advisory ({advisory_id}):'
+                    self._complain(f'Expected Bugs not found in {kind} advisory ({advisory_id}):'
                                    f' {[b.id for b in bugs_not_found]}')
                 if extra_bugs:
-                    self._complain(f'Extra bugs in {kind} advisory ({advisory_id}): {[b.id for b in extra_bugs]}')
+                    self._complain(f'Unexpected Bugs found in {kind} advisory ({advisory_id}):'
+                                   f' {[b.id for b in extra_bugs]}')
 
     async def verify_attached_flaws(self, advisory_bugs: Dict[int, List[Bug]]):
         futures = []
