@@ -10,8 +10,7 @@ from elliottlib import bzutil, constants, logutil
 from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
-from elliottlib.util import (exit_unauthenticated, green_print,
-                             minor_version_tuple, red_print)
+from elliottlib.util import (exit_unauthenticated, minor_version_tuple, red_print)
 from elliottlib.bzutil import Bug, BugTracker
 from elliottlib.cli.find_bugs_sweep_cli import get_bugs_sweep, FindBugsSweep, categorize_bugs_by_type
 
@@ -161,9 +160,9 @@ class BugValidator:
         for advisory_id, attached_bugs in advisory_bugs.items():
             attached_trackers = [b for b in attached_bugs if b.is_tracker_bug()]
             attached_flaws = [b for b in attached_bugs if b.is_flaw_bug()]
-            self.runtime.logger.info(f"Verifying advisory {advisory_id}: attached-trackers: "
-                                     f"{[b.id for b in attached_trackers]} "
-                                     f"attached-flaws: {[b.id for b in attached_flaws]}")
+            logger.info(f"Verifying advisory {advisory_id}: attached-trackers: "
+                        f"{[b.id for b in attached_trackers]} "
+                        f"attached-flaws: {[b.id for b in attached_flaws]}")
             futures.append(self._verify_attached_flaws_for(advisory_id, attached_trackers, attached_flaws))
         await asyncio.gather(*futures)
 
@@ -261,7 +260,7 @@ class BugValidator:
         """ Get bugs attached to specified advisories
         :return: a dict with advisory id as key and set of bug objects as value
         """
-        green_print(f"Retrieving bugs for advisories: {advisory_ids}")
+        logger.info(f"Retrieving bugs for advisories: {advisory_ids}")
         advisories = [Erratum(errata_id=advisory_id) for advisory_id in advisory_ids]
 
         attached_bug_map = {advisory_id: set() for advisory_id in advisory_ids}

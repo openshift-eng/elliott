@@ -114,6 +114,33 @@ class TestBugzillaBugTracker(unittest.TestCase):
 
 
 class TestJIRABug(unittest.TestCase):
+    def test_is_placeholder_bug(self):
+        bug1 = flexmock(key='OCPBUGS-1',
+                        fields=flexmock(
+                            summary='Placeholder',
+                            components=[flexmock(name='Release')],
+                            labels=['Automation']))
+        self.assertEqual(JIRABug(bug1).is_placeholder_bug(), True)
+
+        bug2 = flexmock(key='OCPBUGS-2',
+                        fields=flexmock(
+                            summary='Placeholder',
+                            components=[flexmock(name='Foo')],
+                            labels=['Bar']))
+        self.assertEqual(JIRABug(bug2).is_placeholder_bug(), False)
+
+    def test_is_ocp_bug(self):
+        bug1 = flexmock(key='OCPBUGS-1', fields=flexmock(project=flexmock(key='foo')))
+        self.assertEqual(JIRABug(bug1).is_ocp_bug(), False)
+
+        bug2 = flexmock(key='OCPBUGS-1', fields=flexmock(project=flexmock(key='OCPBUGS')))
+        flexmock(JIRABug).should_receive("is_placeholder_bug").and_return(True)
+        self.assertEqual(JIRABug(bug2).is_ocp_bug(), False)
+
+        bug2 = flexmock(key='OCPBUGS-1', fields=flexmock(project=flexmock(key='OCPBUGS')))
+        flexmock(JIRABug).should_receive("is_placeholder_bug").and_return(False)
+        self.assertEqual(JIRABug(bug2).is_ocp_bug(), True)
+
     def test_is_tracker_bug(self):
         bug = flexmock(key='OCPBUGS1', fields=flexmock(labels=constants.TRACKER_BUG_KEYWORDS + ['somethingelse']))
         expected = True

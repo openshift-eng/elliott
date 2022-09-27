@@ -149,13 +149,13 @@ class VerifyAttachedBugs(unittest.TestCase):
         #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
         #     self.fail(t)
         self.assertEqual(result.exit_code, 1)
-        self.assertIn("Bugs not found in image advisory (1): ['OCPBUGS-3']",
+        self.assertIn("Expected Bugs not found in image advisory (1): ['OCPBUGS-3']",
                       result.output)
-        self.assertIn("Extra bugs in image advisory (1): ['OCPBUGS-1']",
+        self.assertIn("Unexpected Bugs found in image advisory (1): ['OCPBUGS-1']",
                       result.output)
-        self.assertIn("Bugs not found in extras advisory (3): ['OCPBUGS-1']",
+        self.assertIn("Expected Bugs not found in extras advisory (3): ['OCPBUGS-1']",
                       result.output)
-        self.assertIn("Extra bugs in extras advisory (3): ['OCPBUGS-3']",
+        self.assertIn("Unexpected Bugs found in extras advisory (3): ['OCPBUGS-3']",
                       result.output)
 
 

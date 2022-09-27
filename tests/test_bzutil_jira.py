@@ -1,7 +1,6 @@
 import unittest
 from elliottlib.bzutil import JIRABugTracker
 from flexmock import flexmock
-from datetime import datetime
 
 
 class TestJIRABugTracker(unittest.TestCase):

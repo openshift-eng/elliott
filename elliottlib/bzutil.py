@@ -277,7 +277,10 @@ class JIRABug(Bug):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
 
     def is_ocp_bug(self):
-        return self.bug.fields.project.key == "OCPBUGS" and 'Placeholder' not in self.summary
+        return self.bug.fields.project.key == "OCPBUGS" and not self.is_placeholder_bug()
+
+    def is_placeholder_bug(self):
+        return ('Placeholder' in self.summary) and (self.component == 'Release') and ('Automation' in self.keywords)
 
     def _get_blocks(self):
         blocks = []
