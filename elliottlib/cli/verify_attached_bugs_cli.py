@@ -10,10 +10,9 @@ from elliottlib import bzutil, constants, logutil
 from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
-from elliottlib.util import (exit_unauthenticated, green_print,
-                             minor_version_tuple, red_print)
+from elliottlib.util import (exit_unauthenticated, minor_version_tuple, red_print)
 from elliottlib.bzutil import Bug, BugTracker
-from elliottlib.cli.find_bugs_sweep_cli import get_bugs_sweep, FindBugsSweep
+from elliottlib.cli.find_bugs_sweep_cli import get_bugs_sweep, FindBugsSweep, categorize_bugs_by_type
 
 logger = logutil.getLogger(__name__)
 
@@ -36,26 +35,38 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
     Otherwise, prints the number of bugs in the advisories and exits with success.
     """
     runtime.initialize()
-    advisories = advisories or [a for a in runtime.group_config.get('advisories', {}).values()]
-    if not advisories:
-        red_print("No advisories specified on command line or in group.yml")
+    if advisories:
+        click.echo("WARNING: Cannot verify advisory bug sorting. To verify that bugs are attached to the "
+                   "correct release advisories, run with --assembly=<release>")
+        advisory_id_map = {'?': a for a in advisories}
+    else:
+        advisory_id_map = runtime.get_default_advisories()
+    if not advisory_id_map:
+        red_print("No advisories specified on command line or in [group.yml|releases.yml]")
         exit(1)
-    await verify_attached_bugs(runtime, verify_bug_status, advisories, verify_flaws, no_verify_blocking_bugs)
+    await verify_attached_bugs(runtime, verify_bug_status, advisory_id_map, verify_flaws, no_verify_blocking_bugs)
 
 
-async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool, no_verify_blocking_bugs: bool):
+async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisory_id_map: Dict[str, int], verify_flaws:
+                               bool, no_verify_blocking_bugs: bool):
     validator = BugValidator(runtime, output="text")
     try:
         await validator.errata_api.login()
-        advisory_bug_map = validator.get_attached_bugs(advisories)
+        advisory_bug_map = validator.get_attached_bugs(list(advisory_id_map.values()))
         bugs = {b for bugs in advisory_bug_map.values() for b in bugs}
 
-        # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products
+        # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products or
+        # placeholder
         non_flaw_bugs = {b for b in bugs if b.is_ocp_bug()}
 
         validator.validate(non_flaw_bugs, verify_bug_status, no_verify_blocking_bugs)
+        validator.verify_bugs_advisory_type(non_flaw_bugs, advisory_id_map, advisory_bug_map)
         if verify_flaws:
             await validator.verify_attached_flaws(advisory_bug_map)
+        if validator.problems:
+            if validator.output != 'slack':
+                red_print("Some bug problems were listed above. Please investigate.")
+            exit(1)
     except GSSError:
         exit_unauthenticated()
     finally:
@@ -96,6 +107,10 @@ async def verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bug
         ocp_bugs.extend(bugs)
     try:
         validator.validate(ocp_bugs, verify_bug_status, no_verify_blocking_bugs)
+        if validator.problems:
+            if validator.output != 'slack':
+                red_print("Some bug problems were listed above. Please investigate.")
+            exit(1)
     finally:
         await validator.close()
 
@@ -123,26 +138,33 @@ class BugValidator:
         if verify_bug_status:
             self._verify_bug_status(non_flaw_bugs)
 
-        if self.problems:
-            if self.output != 'slack':
-                red_print("Some bug problems were listed above. Please investigate.")
-            exit(1)
-        green_print("All bugs were verified. This check doesn't cover CVE flaw bugs.")
+    def verify_bugs_advisory_type(self, non_flaw_bugs, advisory_id_map, advisory_bug_map):
+        bugs_by_type = categorize_bugs_by_type(non_flaw_bugs, advisory_id_map)
+        for kind, advisory_id in advisory_id_map.items():
+            if kind in ['metadata', '?']:
+                continue
+            actual = {b for b in advisory_bug_map[advisory_id] if b.is_ocp_bug()}
+            expected = bugs_by_type[kind]
+            if actual != expected:
+                bugs_not_found = expected - actual
+                extra_bugs = actual - expected
+                if bugs_not_found:
+                    self._complain(f'Expected Bugs not found in {kind} advisory ({advisory_id}):'
+                                   f' {[b.id for b in bugs_not_found]}')
+                if extra_bugs:
+                    self._complain(f'Unexpected Bugs found in {kind} advisory ({advisory_id}):'
+                                   f' {[b.id for b in extra_bugs]}')
 
     async def verify_attached_flaws(self, advisory_bugs: Dict[int, List[Bug]]):
         futures = []
         for advisory_id, attached_bugs in advisory_bugs.items():
             attached_trackers = [b for b in attached_bugs if b.is_tracker_bug()]
             attached_flaws = [b for b in attached_bugs if b.is_flaw_bug()]
-            self.runtime.logger.info(f"Verifying advisory {advisory_id}: attached-trackers: "
-                                     f"{[b.id for b in attached_trackers]} "
-                                     f"attached-flaws: {[b.id for b in attached_flaws]}")
+            logger.info(f"Verifying advisory {advisory_id}: attached-trackers: "
+                        f"{[b.id for b in attached_trackers]} "
+                        f"attached-flaws: {[b.id for b in attached_flaws]}")
             futures.append(self._verify_attached_flaws_for(advisory_id, attached_trackers, attached_flaws))
         await asyncio.gather(*futures)
-        if self.problems:
-            red_print("Some bug problems were listed above. Please investigate.")
-            exit(1)
-        green_print("All CVE flaw bugs were verified.")
 
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
         # Retrieve flaw bugs for attached_tracker_bugs
@@ -234,11 +256,11 @@ class BugValidator:
             self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in "
                            f"advisory's `CVE Names` field: {', '.join(sorted(missing_cves))}")
 
-    def get_attached_bugs(self, advisory_ids: Iterable[str]) -> (Dict[int, Set[Bug]], Dict[int, Set[Bug]]):
+    def get_attached_bugs(self, advisory_ids: Iterable[str]) -> Dict[int, Set[Bug]]:
         """ Get bugs attached to specified advisories
-        :return: 2 dicts (one for jira bugs, one for bz bugs) with advisory id as key and set of bug objects as value
+        :return: a dict with advisory id as key and set of bug objects as value
         """
-        green_print(f"Retrieving bugs for advisories: {advisory_ids}")
+        logger.info(f"Retrieving bugs for advisories: {advisory_ids}")
         advisories = [Erratum(errata_id=advisory_id) for advisory_id in advisory_ids]
 
         attached_bug_map = {advisory_id: set() for advisory_id in advisory_ids}

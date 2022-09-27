@@ -67,26 +67,6 @@ class Bug:
         raise NotImplementedError
 
     @staticmethod
-    def get_valid_rpm_cves(bugs: List[Bug]) -> Dict[Bug, str]:
-        """ Get valid rpm cve trackers with their component names
-
-        An OCP rpm cve tracker has a whiteboard value "component:<component_name>"
-        excluding suffixes (apb|container)
-
-        :param bugs: list of bug objects
-        :returns: A dict of bug object as key and component name as value
-        """
-
-        rpm_cves: Dict[Bug, str] = {}
-        for b in bugs:
-            if b.is_tracker_bug():
-                component_name = b.whiteboard_component
-                # filter out non-rpm suffixes
-                if component_name and not re.search(r'-(apb|container)(,|$)', component_name):
-                    rpm_cves[b] = component_name
-        return rpm_cves
-
-    @staticmethod
     def get_target_release(bugs: List[Bug]) -> str:
         """
         Pass in a list of bugs and get their target release version back.
@@ -297,7 +277,10 @@ class JIRABug(Bug):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
 
     def is_ocp_bug(self):
-        return self.bug.fields.project.key == "OCPBUGS"
+        return self.bug.fields.project.key == "OCPBUGS" and not self.is_placeholder_bug()
+
+    def is_placeholder_bug(self):
+        return ('Placeholder' in self.summary) and (self.component == 'Release') and ('Automation' in self.keywords)
 
     def _get_blocks(self):
         blocks = []

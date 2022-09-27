@@ -3,7 +3,7 @@ import click
 import sys
 import traceback
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Dict
 
 from elliottlib.assembly import assembly_issues_config
 from elliottlib.bzutil import BugTracker, Bug, JIRABug
@@ -47,7 +47,7 @@ class FindBugsSweep(FindBugsMode):
               default=None,
               required=False,
               is_flag=True,
-              help='When attaching, add bugs only if corresponding builds are attached to advisory')
+              help='Attach tracker bugs only if corresponding builds are attached to advisory')
 @click.option("--include-status", 'include_status',
               multiple=True,
               default=None,
@@ -86,8 +86,8 @@ def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, ch
 
  The --group automatically determines the correct target-releases to search
 for bugs claimed to be fixed, but not yet attached to advisories.
---check-builds flag forces bug validation with attached builds to rpm advisory.
-It assumes builds have been attached and only attaches bugs with matching builds.
+Security Tracker Bugs are validated with attached builds to advisories.
+If expected builds are not found then tracker bugs are not attached.
 default statuses: ['MODIFIED', 'ON_QA', 'VERIFIED']
 
 Using --use-default-advisory without a value set for the matching key
@@ -121,12 +121,15 @@ advisory with the --add option.
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
 
+    if check_builds:
+        logger.warn("--check-builds is ON by default, it will be deprecated in the future")
+
     exit_code = 0
     bugs: type_bug_list = []
     for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
         try:
-            bugs.extend(find_and_attach_bugs(runtime, advisory_id, default_advisory_type, check_builds, major_version,
-                        find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, b))
+            bugs.extend(find_and_attach_bugs(runtime, advisory_id, default_advisory_type, major_version, find_bugs_obj,
+                        output, brew_event, noop, count_advisory_attach_flags, b))
         except Exception as e:
             logger.error(traceback.format_exc())
             logger.error(f'exception with {b.type} bug tracker: {e}')
@@ -179,7 +182,7 @@ def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
     return bugs
 
 
-def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, check_builds, major_version,
+def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, major_version,
                          find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
     if output == 'text':
         statuses = sorted(find_bugs_obj.status)
@@ -187,6 +190,12 @@ def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, c
         green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
 
     bugs = get_bugs_sweep(runtime, find_bugs_obj, brew_event, bug_tracker)
+
+    advisory_ids = runtime.get_default_advisories()
+    bugs_by_type = categorize_bugs_by_type(bugs, advisory_ids,
+                                           major_version=major_version)
+    for kind, kind_bugs in bugs_by_type.items():
+        logger.info(f'{kind} bugs: {[b.id for b in kind_bugs]}')
 
     if count_advisory_attach_flags < 1:
         return bugs
@@ -196,20 +205,15 @@ def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, c
         bug_tracker.attach_bugs(advisory_id, [b.id for b in bugs], noop=noop, verbose=runtime.debug)
         return bugs
 
-    rpm_advisory_id = common.find_default_advisory(runtime, 'rpm') if check_builds else None
-    bugs_by_type = categorize_bugs_by_type(bugs, rpm_advisory_id=rpm_advisory_id,
-                                           major_version=major_version,
-                                           check_builds=check_builds)
+    if not advisory_ids:
+        logger.info("No advisories to attach to")
+        return bugs
 
     advisory_types_to_attach = [default_advisory_type] if default_advisory_type else bugs_by_type.keys()
     for advisory_type in sorted(advisory_types_to_attach):
-        bugs = bugs_by_type.get(advisory_type)
-        green_prefix(f'{advisory_type} advisory: {[bug.id for bug in bugs]}')
-        if bugs:
-            adv_id = common.find_default_advisory(runtime, advisory_type)
-            bug_tracker.attach_bugs(adv_id, [b.id for b in bugs], noop=noop, verbose=runtime.debug)
-        else:
-            click.echo("0 bugs found")
+        kind_bugs = bugs_by_type.get(advisory_type)
+        if kind_bugs:
+            bug_tracker.attach_bugs(advisory_ids[advisory_type], [b.id for b in kind_bugs], noop=noop, verbose=runtime.debug)
     return bugs
 
 
@@ -228,8 +232,7 @@ def get_assembly_bug_ids(runtime, bug_tracker_type):
     return included_bug_ids, excluded_bug_ids
 
 
-def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, major_version: int = 4, check_builds:
-                            bool = True):
+def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], major_version: int = 4):
     # key is type ("rpm", "image", "extras"), value is a set of bug IDs.
     bugs_by_type = {
         "rpm": set(),
@@ -240,41 +243,53 @@ def categorize_bugs_by_type(bugs: List, rpm_advisory_id: Optional[int] = None, m
     # for 3.x, all bugs should go to the rpm advisory
     if int(major_version) < 4:
         bugs_by_type["rpm"] = set(bugs)
-    else:  # for 4.x, sweep rpm tracker bugs into rpm advisory
-        rpm_bugs = Bug.get_valid_rpm_cves(bugs)
-        if rpm_bugs:
-            green_prefix("RPM Tracker Bugs found: ")
-            click.echo(sorted(b.id for b in rpm_bugs))
-            # if --check-builds flag is set
-            # only attach bugs that have corresponding brew builds attached to rpm advisory
-            if check_builds and rpm_advisory_id:
-                click.echo("Validating bugs with builds attached to the rpm advisory")
-                attached_builds = errata.get_advisory_nvrs(rpm_advisory_id)
-                packages = attached_builds.keys()
-                not_found = []
-                for bug, package_name in rpm_bugs.items():
-                    if package_name not in packages:
-                        not_found.append((bug.id, package_name))
-                    else:
-                        click.echo(f"Build found for #{bug.id}, {package_name}")
-                        bugs_by_type["rpm"].add(bug)
+        return bugs_by_type
 
-                if not_found:
-                    red_prefix("RPM CVE Tracker Error: ")
-                    click.echo("The following (tracker bug, package) were found but not attached, because "
-                               "no corresponding brew builds were found attached to the rpm advisory. "
-                               "First attach builds and then rerun to attach the bugs, or exclude the "
-                               "bug ids in the assembly definition")
-                    click.echo(not_found)
-                    raise ValueError(f'No builds found for CVE (bug, package): {not_found}. Either attach '
-                                     f'builds or exclude the bugs in the assembly definition: {[b for b, p in not_found]}')
-            else:
-                click.echo("Skipping attaching RPM Tracker Bugs. Use --check-builds flag to validate with builds.")
+    # for 4.x, first sort all non_tracker_bugs
+    non_tracker_bugs = [b for b in bugs if not b.is_tracker_bug()]
+    bugs_by_type["extras"] = extras_bugs(non_tracker_bugs)
+    bugs_by_type["image"] = set(non_tracker_bugs) - bugs_by_type["extras"]
 
-        bugs_by_type["extras"] = extras_bugs(bugs)
+    tracker_bugs = [b for b in bugs if b.is_tracker_bug() and b.whiteboard_component]
+    logger.info(f"Tracker Bugs found: {len(tracker_bugs)}")
+    if not tracker_bugs:
+        return bugs_by_type
 
-        # all other bugs should go into "image" advisory
-        bugs_by_type["image"] = set(bugs) - bugs_by_type["extras"] - rpm_bugs.keys()
+    for b in tracker_bugs:
+        logger.info((b.id, b.whiteboard_component))
+
+    if not advisory_id_map:
+        logger.info("Skipping sorting/attaching Tracker Bugs. Advisories with attached builds must be given to "
+                    "validate trackers.")
+        return bugs_by_type
+
+    found = set()
+    logger.info("Validating tracker bugs with builds in advisories..")
+    for kind in bugs_by_type.keys():
+        if len(found) == len(tracker_bugs):
+            break
+        attached_builds = errata.get_advisory_nvrs(advisory_id_map[kind])
+        packages = attached_builds.keys()
+
+        for bug in tracker_bugs:
+            package_name = bug.whiteboard_component
+            if package_name in packages:
+                found.add(bug)
+                logger.info(f"{kind} build found for #{bug.id}, {package_name} ")
+                bugs_by_type[kind].add(bug)
+
+    not_found = set(tracker_bugs) - found
+    if not_found:
+        not_found_with_component = [(b.id, b.whiteboard_component) for b in not_found]
+        red_prefix("Tracker Bugs Warning: ")
+        click.echo("The following (tracker bug, package) were found BUT not attached,"
+                   " since no corresponding brew build was found attached to any advisory. "
+                   "First attach builds to the correct advisory and rerun to attach the bugs, "
+                   "or exclude the bug ids in the assembly definition")
+        click.echo(not_found_with_component)
+        raise ValueError(f'No builds found for CVE (bug, package): {not_found_with_component}. Either attach '
+                         f'builds or exclude the bugs in the assembly definition')
+
     return bugs_by_type
 
 

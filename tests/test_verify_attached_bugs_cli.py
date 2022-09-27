@@ -2,13 +2,14 @@ import unittest
 from click.testing import CliRunner
 from errata_tool import Erratum
 from elliottlib.cli.common import cli, Runtime
-from elliottlib.cli.verify_attached_bugs_cli import BugValidator, verify_bugs_cli
+from elliottlib.cli.verify_attached_bugs_cli import verify_bugs_cli
 import elliottlib.cli.find_bugs_sweep_cli as sweep_cli
+from elliottlib.cli.verify_attached_bugs_cli import BugValidator
+import elliottlib.cli.verify_attached_bugs_cli as verify_attached_bugs_cli
 from elliottlib.errata_async import AsyncErrataAPI
 from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker
 from flexmock import flexmock
 import asyncio
-import traceback
 
 
 def async_test(f):
@@ -66,7 +67,7 @@ class VerifyAttachedBugs(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA', result.output)
 
-    def test_verify_attached_bugs_cli(self):
+    def test_verify_attached_bugs_cli_fail(self):
         runner = CliRunner()
         advisory = flexmock(errata_id=123, jira_issues=["OCPBUGS-1", "OCPBUGS-2"], errata_bugs=[])
         flexmock(Runtime).should_receive("initialize")
@@ -110,6 +111,51 @@ class VerifyAttachedBugs(unittest.TestCase):
         #     self.fail(t)
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA',
+                      result.output)
+
+    def test_verify_attached_bugs_cli_fail_on_type(self):
+        runner = CliRunner()
+        flexmock(Runtime).should_receive("initialize")
+        flexmock(Runtime).should_receive("get_errata_config").and_return({})
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'project': 'OCPBUGS', 'target_release': [
+            '4.6.z']})
+        flexmock(JIRABugTracker).should_receive("login")
+        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'project': 'OCPBUGS', 'target_release': [
+            '4.6.z']})
+        flexmock(BugzillaBugTracker).should_receive("login")
+        flexmock(Runtime).should_receive("get_default_advisories")\
+            .and_return({'image': 1, 'rpm': 2, 'extras': 3, 'metadata': 4})
+
+        f = asyncio.Future()
+        f.set_result(None)
+        flexmock(AsyncErrataAPI).should_receive("login").and_return(f)
+
+        bugs = [
+            flexmock(id="OCPBUGS-1", is_ocp_bug=lambda: True),
+            flexmock(id="OCPBUGS-2", is_ocp_bug=lambda: True),
+            flexmock(id="OCPBUGS-3", is_ocp_bug=lambda: True)
+        ]
+        flexmock(BugValidator).should_receive("get_attached_bugs").and_return(
+            {1: {bugs[0]}, 2: {bugs[1]}, 3: {bugs[2]}}
+        )
+        flexmock(BugValidator).should_receive("validate").and_return()
+        flexmock(verify_attached_bugs_cli).should_receive("categorize_bugs_by_type").and_return(
+            {'image': {bugs[2]}, 'rpm': {bugs[1]}, 'extras': {bugs[0]}}
+        )
+
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly', '4.6.50', 'verify-attached-bugs'])
+        # if result.exit_code != 0:
+        #     exc_type, exc_value, exc_traceback = result.exc_info
+        #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        #     self.fail(t)
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("Expected Bugs not found in image advisory (1): ['OCPBUGS-3']",
+                      result.output)
+        self.assertIn("Unexpected Bugs found in image advisory (1): ['OCPBUGS-1']",
+                      result.output)
+        self.assertIn("Expected Bugs not found in extras advisory (3): ['OCPBUGS-1']",
+                      result.output)
+        self.assertIn("Unexpected Bugs found in extras advisory (3): ['OCPBUGS-3']",
                       result.output)
 
 
