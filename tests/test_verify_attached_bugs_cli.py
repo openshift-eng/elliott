@@ -39,25 +39,25 @@ class VerifyAttachedBugs(unittest.TestCase):
         flexmock(JIRABugTracker).should_receive("login")
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
         flexmock(BugzillaBugTracker).should_receive("login")
-        flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
 
         bugs = [
-            flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
-                     status='ON_QA', is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
-                     status='ON_QA', is_ocp_bug=lambda: True)
+            flexmock(id="OCPBUGS-1", target_release=['4.6.z'], status='ON_QA'),  # blocked by ocpbugs-4
+            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], status='ON_QA')   # blocked by ocpbugs-3
         ]
         depend_on_bugs = [
-            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA', is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending', is_ocp_bug=lambda: True)
+            flexmock(id="OCPBUGS-3", status='ON_QA'),
+            flexmock(id="OCPBUGS-4", status='Release Pending')
         ]
-        flexmock(JIRABugTracker).should_receive("search")\
-            .and_return(bugs)
-        flexmock(BugzillaBugTracker).should_receive("search") \
-            .and_return([])
-        flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args({"OCPBUGS-3", "OCPBUGS-4"})\
-            .and_return(depend_on_bugs)
+        blocking_bugs_map = {
+            bugs[0]: [depend_on_bugs[1]],
+            bugs[1]: [depend_on_bugs[0]],
+        }
+
+        flexmock(verify_attached_bugs_cli).should_receive("get_bugs_sweep").and_return(bugs).ordered()
+        flexmock(verify_attached_bugs_cli).should_receive("get_bugs_sweep").and_return([]).ordered()
+        flexmock(BugValidator).should_receive("_get_blocking_bugs_for")\
+            .with_args(bugs)\
+            .and_return(blocking_bugs_map)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=stream', 'verify-bugs'])
         # if result.exit_code != 0:
@@ -69,7 +69,6 @@ class VerifyAttachedBugs(unittest.TestCase):
 
     def test_verify_attached_bugs_cli_fail(self):
         runner = CliRunner()
-        advisory = flexmock(errata_id=123, jira_issues=["OCPBUGS-1", "OCPBUGS-2"], errata_bugs=[])
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'project': 'OCPBUGS', 'target_release': [
@@ -82,29 +81,30 @@ class VerifyAttachedBugs(unittest.TestCase):
         f = asyncio.Future()
         f.set_result(None)
         flexmock(AsyncErrataAPI).should_receive("login").and_return(f)
-        flexmock(Erratum).new_instances(advisory).once()
 
         bugs = [
-            flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
-                     status='ON_QA', is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
-                     status='ON_QA', is_ocp_bug=lambda: True)
+            flexmock(id="OCPBUGS-1", target_release=['4.6.z'], status='ON_QA', is_ocp_bug=lambda: True),
+            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], status='ON_QA', is_ocp_bug=lambda: True)
         ]
         depend_on_bugs = [
-            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA', is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending', is_ocp_bug=lambda: True)
+            flexmock(id="OCPBUGS-3", status='ON_QA'),
+            flexmock(id="OCPBUGS-4", status='Release Pending')
         ]
+        blocking_bugs_map = {
+            bugs[0]: [depend_on_bugs[1]],
+            bugs[1]: [depend_on_bugs[0]],
+        }
 
-        flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args(["OCPBUGS-1", "OCPBUGS-2"], permissive=False)\
-            .and_return(bugs)\
-            .ordered()
-        flexmock(JIRABugTracker).should_receive("get_bugs")\
-            .with_args({"OCPBUGS-3", "OCPBUGS-4"})\
-            .and_return(depend_on_bugs)\
-            .ordered()
+        advisory_id = 123
+        flexmock(BugValidator).should_receive("get_attached_bugs")\
+            .with_args([advisory_id])\
+            .and_return({123: {bugs[0], bugs[1]}})
+        flexmock(BugValidator).should_receive("_get_blocking_bugs_for") \
+            .with_args(bugs) \
+            .and_return(blocking_bugs_map)
+        flexmock(BugValidator).should_receive("verify_bugs_advisory_type")
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-attached-bugs', str(advisory.errata_id)])
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-attached-bugs', str(advisory_id)])
         # if result.exit_code != 0:
         #     exc_type, exc_value, exc_traceback = result.exc_info
         #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -210,21 +210,23 @@ class TestBugValidator(unittest.TestCase):
         bugs = [
             flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4']),
             flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3', 1]),
-            flexmock(id=2, target_release=['4.6.z'], depends_on=[1])
+            flexmock(id=2, target_release=['4.6.z'], depends_on=[1, 3])
         ]
         depend_on_jira_bugs = [
-            flexmock(id="OCPBUGS-3", target_release=['4.6.z'], is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], is_ocp_bug=lambda: True)
+            flexmock(id="OCPBUGS-3", target_release=['4.6.z'], component='foo', is_ocp_bug=lambda: True),
+            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], component='foo', is_ocp_bug=lambda: True)
         ]
         depend_on_bz_bugs = [
-            flexmock(id=1, target_release=['4.7.z'], is_ocp_bug=lambda: True)
+            flexmock(id=1, target_release=['4.7.z'], component='foo', is_ocp_bug=lambda: True),
+            flexmock(id=3, target_release=['4.7.z'], component='not_managed_by_art', is_ocp_bug=lambda: True)
         ]
 
         flexmock(JIRABugTracker).should_receive("get_bugs") \
-            .with_args({"OCPBUGS-3", "OCPBUGS-4"}) \
+            .with_args({b.id for b in depend_on_jira_bugs}) \
             .and_return(depend_on_jira_bugs)
+        flexmock(JIRABugTracker).should_receive("component_filter").and_return(['not_managed_by_art'])
         flexmock(BugzillaBugTracker).should_receive("get_bugs") \
-            .with_args({1}) \
+            .with_args({b.id for b in depend_on_bz_bugs}) \
             .and_return(depend_on_bz_bugs)
 
         validator = BugValidator(runtime, True)

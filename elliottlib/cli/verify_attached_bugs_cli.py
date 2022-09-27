@@ -57,7 +57,7 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 
         # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products or
         # placeholder
-        non_flaw_bugs = {b for b in bugs if b.is_ocp_bug()}
+        non_flaw_bugs = [b for b in bugs if b.is_ocp_bug()]
 
         validator.validate(non_flaw_bugs, verify_bug_status, no_verify_blocking_bugs)
         validator.verify_bugs_advisory_type(non_flaw_bugs, advisory_id_map, advisory_bug_map)
