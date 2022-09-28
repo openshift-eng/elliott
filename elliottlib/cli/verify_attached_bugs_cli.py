@@ -57,7 +57,7 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 
         # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products or
         # placeholder
-        non_flaw_bugs = {b for b in bugs if b.is_ocp_bug()}
+        non_flaw_bugs = [b for b in bugs if b.is_ocp_bug()]
 
         validator.validate(non_flaw_bugs, verify_bug_status, no_verify_blocking_bugs)
         validator.verify_bugs_advisory_type(non_flaw_bugs, advisory_id_map, advisory_bug_map)
@@ -304,6 +304,10 @@ class BugValidator:
             pattern = re.compile(r'^\d+\.\d+\.(0|z)$')
             return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
 
+        def managed_by_art(b: Bug):
+            components_not_managed_by_art = self.runtime.bug_trackers('jira').component_filter()
+            return b.component not in components_not_managed_by_art
+
         # retrieve blockers and filter to those with correct product and target version
         blockers = []
         if jira_ids:
@@ -314,7 +318,8 @@ class BugValidator:
                             .get_bugs(bz_ids))
         blocking_bugs = {}
         for bug in blockers:
-            if bug.is_ocp_bug() and any(is_next_target(target) for target in bug.target_release):
+            next_target = any(is_next_target(target) for target in bug.target_release)
+            if bug.is_ocp_bug() and next_target and managed_by_art(bug):
                 blocking_bugs[bug.id] = bug
         logger.info(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
                     f"{list(blocking_bugs.keys())}")
