@@ -44,7 +44,7 @@ class TestAssert(unittest.TestCase):
         """
         Verify both positive and negative results for file test
         """
-        file_exists = "/etc/motd"
+        file_exists = "/etc/hosts"
         file_missing = "/tmp/doesnotexist"
         not_file = "/usr"
 
