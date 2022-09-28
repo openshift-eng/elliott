@@ -43,13 +43,15 @@ class VerifyAttachedBugs(unittest.TestCase):
 
         bugs = [
             flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
-                     status='ON_QA', is_ocp_bug=lambda: True),
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
             flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
-                     status='ON_QA', is_ocp_bug=lambda: True)
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
         depend_on_bugs = [
-            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA', is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending', is_ocp_bug=lambda: True)
+            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA',
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
+            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending',
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
         flexmock(JIRABugTracker).should_receive("search")\
             .and_return(bugs)
@@ -59,7 +61,7 @@ class VerifyAttachedBugs(unittest.TestCase):
             .with_args({"OCPBUGS-3", "OCPBUGS-4"})\
             .and_return(depend_on_bugs)
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=stream', 'verify-bugs'])
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=stream', '--debug', 'verify-bugs'])
         # if result.exit_code != 0:
         #     exc_type, exc_value, exc_traceback = result.exc_info
         #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -86,13 +88,15 @@ class VerifyAttachedBugs(unittest.TestCase):
 
         bugs = [
             flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
-                     status='ON_QA', is_ocp_bug=lambda: True),
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
             flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
-                     status='ON_QA', is_ocp_bug=lambda: True)
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
         depend_on_bugs = [
-            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA', is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending', is_ocp_bug=lambda: True)
+            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA',
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
+            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending',
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
 
         flexmock(JIRABugTracker).should_receive("get_bugs")\
