@@ -12,15 +12,6 @@ from flexmock import flexmock
 import asyncio
 
 
-def async_test(f):
-    def wrapper(*args, **kwargs):
-        coro = asyncio.coroutine(f)
-        future = coro(*args, **kwargs)
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(future)
-    return wrapper
-
-
 class VerifyAttachedBugs(unittest.TestCase):
     def test_validator_target_release(self):
         runtime = Runtime()
@@ -96,12 +87,9 @@ class VerifyAttachedBugs(unittest.TestCase):
         }
 
         advisory_id = 123
-        flexmock(BugValidator).should_receive("get_attached_bugs")\
-            .with_args([advisory_id])\
-            .and_return({123: {bugs[0], bugs[1]}})
-        flexmock(BugValidator).should_receive("_get_blocking_bugs_for") \
-            .with_args(bugs) \
-            .and_return(blocking_bugs_map)
+        flexmock(BugValidator).should_receive("get_attached_bugs").with_args([advisory_id])\
+            .and_return({123: {bugs[0], bugs[1]}}).ordered()
+        flexmock(BugValidator).should_receive("_get_blocking_bugs_for").and_return(blocking_bugs_map).ordered()
         flexmock(BugValidator).should_receive("verify_bugs_advisory_type")
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'verify-attached-bugs', str(advisory_id)])
