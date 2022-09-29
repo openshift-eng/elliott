@@ -577,7 +577,7 @@ class JIRABugTracker(BugTracker):
             status=status,
             with_target_release=True,
             search_filter=search_filter,
-            custom_query='and "Release Blocker" = "Approved" and "Release Blocker" = "Proposed"'
+            custom_query='and "Release Blocker" = "Approved"'
         )
         return self._search(query, verbose=verbose, **kwargs)
 
