@@ -1048,7 +1048,7 @@ def sort_cve_bugs(bugs):
     def cve_sort_key(bug):
         impact = constants.security_impact_map[get_highest_security_impact([bug])]
         year, num = bug.alias[0].split("-")[1:]
-        return impact, -int(year), int(num)
+        return impact, -int(year), -int(num)
     return sorted(bugs, key=cve_sort_key, reverse=True)
 
 
