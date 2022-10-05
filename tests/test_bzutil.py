@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import logging
 import unittest
+from unittest.mock import Mock
 import xmlrpc.client
 
 from flexmock import flexmock
@@ -451,21 +452,18 @@ class TestBZUtil(unittest.TestCase):
     def test_sort_cve_bugs(self):
         flaw_bugs = [
             flexmock(alias=['CVE-2022-123'], severity='Low'),
-            flexmock(alias=['CVE-2022-456'], severity='urgent'),
+            flexmock(alias=['CVE-2022-9'], severity='urgent'),
+            flexmock(alias=['CVE-2022-10'], severity='urgent'),
             flexmock(alias=['CVE-2021-789'], severity='medium'),
             flexmock(alias=['CVE-2021-100'], severity='medium')
         ]
-        sort_list = bzutil.sort_cve_bugs(flaw_bugs)
-        expected = [
-            flexmock(alias=['CVE-2022-456'], severity='urgent'),
-            flexmock(alias=['CVE-2021-789'], severity='medium'),
-            flexmock(alias=['CVE-2021-100'], severity='medium'),
-            flexmock(alias=['CVE-2022-123'], severity='Low')
-        ]
-        self.assertEqual(expected[0].alias, sort_list[0].alias)
-        self.assertEqual(expected[1].alias, sort_list[1].alias)
-        self.assertEqual(expected[2].alias, sort_list[2].alias)
-        self.assertEqual(expected[3].alias, sort_list[3].alias)
+        sort_list = [b.alias[0] for b in bzutil.sort_cve_bugs(flaw_bugs)]
+
+        self.assertEqual('CVE-2022-9', sort_list[0])
+        self.assertEqual('CVE-2022-10', sort_list[1])
+        self.assertEqual('CVE-2021-100', sort_list[2])
+        self.assertEqual('CVE-2021-789', sort_list[3])
+        self.assertEqual('CVE-2022-123', sort_list[4])
 
     def test_is_first_fix_any_no_valid_trackers(self):
         tr = '4.8.0'
