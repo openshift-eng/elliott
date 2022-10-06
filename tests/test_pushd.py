@@ -60,6 +60,7 @@ class DirTestCase(unittest.TestCase):
             pool.apply_async(lambda: self.test_getcwd(concurrent=True))
             for _ in range(thread_count)
         ]
+        pool.close()
         for result in results:
             result.get()
 

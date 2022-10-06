@@ -69,8 +69,6 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
             exit(1)
     except GSSError:
         exit_unauthenticated()
-    finally:
-        await validator.close()
 
 
 @cli.command("verify-bugs", short_help="Verify bugs included in an assembly (default --assembly=stream)")
@@ -105,14 +103,12 @@ async def verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bug
         bugs = get_bugs_sweep(runtime, find_bugs_obj, None, b)
         logger.info(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
         ocp_bugs.extend(bugs)
-    try:
-        validator.validate(ocp_bugs, verify_bug_status, no_verify_blocking_bugs)
-        if validator.problems:
-            if validator.output != 'slack':
-                red_print("Some bug problems were listed above. Please investigate.")
-            exit(1)
-    finally:
-        await validator.close()
+
+    validator.validate(ocp_bugs, verify_bug_status, no_verify_blocking_bugs)
+    if validator.problems:
+        if validator.output != 'slack':
+            red_print("Some bug problems were listed above. Please investigate.")
+        exit(1)
 
 
 class BugValidator:
@@ -125,10 +121,7 @@ class BugValidator:
         self.problems: List[str] = []
         self.output = output
 
-    async def close(self):
-        await self.errata_api.close()
-
-    def validate(self, non_flaw_bugs: Iterable[Bug], verify_bug_status: bool, no_verify_blocking_bugs: bool):
+    def validate(self, non_flaw_bugs: List[Bug], verify_bug_status: bool, no_verify_blocking_bugs: bool):
         non_flaw_bugs = self.filter_bugs_by_release(non_flaw_bugs, complain=True)
 
         if not no_verify_blocking_bugs:
@@ -256,7 +249,7 @@ class BugValidator:
             self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in "
                            f"advisory's `CVE Names` field: {', '.join(sorted(missing_cves))}")
 
-    def get_attached_bugs(self, advisory_ids: Iterable[str]) -> Dict[int, Set[Bug]]:
+    def get_attached_bugs(self, advisory_ids: List[str]) -> Dict[int, Set[Bug]]:
         """ Get bugs attached to specified advisories
         :return: a dict with advisory id as key and set of bug objects as value
         """
@@ -275,7 +268,7 @@ class BugValidator:
                 attached_bug_map[advisory_id] = attached_bug_map[advisory_id] | set_of_bugs
         return attached_bug_map
 
-    def filter_bugs_by_release(self, bugs: Iterable[Bug], complain: bool = False) -> List[Bug]:
+    def filter_bugs_by_release(self, bugs: List[Bug], complain: bool = False) -> List[Bug]:
         # filter out bugs with an invalid target release
         filtered_bugs = []
         for b in bugs:

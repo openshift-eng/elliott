@@ -16,7 +16,6 @@ _LOGGER = logging.getLogger(__name__)
 class AsyncErrataAPI:
     def __init__(self, url: str):
         self._errata_url = urlparse(url).geturl()
-        self._session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True))
         self._gssapi_client_ctx = None
         self._headers = {
             "Content-Type": "application/json",
@@ -32,15 +31,13 @@ class AsyncErrataAPI:
         self._gssapi_client_ctx = client_ctx
         self._headers["Authorization"] = 'Negotiate ' + base64.b64encode(out_token).decode()
 
-    async def close(self):
-        await self._session.close()
-
     async def _make_request(self, method: str, path: str, parse_json: bool = True, **kwargs) -> Union[Dict, bytes]:
         if "headers" not in kwargs:
             kwargs["headers"] = self._headers
-        async with self._session.request(method, self._errata_url + path, **kwargs) as resp:
-            resp.raise_for_status()
-            result = await (resp.json() if parse_json else resp.read())
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True)) as session:
+            async with session.request(method, self._errata_url + path, **kwargs) as resp:
+                await resp.raise_for_status()
+                result = await (resp.json() if parse_json else resp.read())
         return result
 
     async def get_advisory(self, advisory: Union[int, str]) -> Dict:

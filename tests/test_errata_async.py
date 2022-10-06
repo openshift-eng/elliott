@@ -1,9 +1,7 @@
 import base64
 from asyncio import get_event_loop
 from unittest import TestCase
-
-from mock import ANY, AsyncMock, Mock, patch
-
+from mock import ANY, AsyncMock, MagicMock, Mock, patch
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 
 
@@ -18,33 +16,23 @@ class TestAsyncErrataAPI(TestCase):
         client_ctx.step.assert_called_once_with(b"")
         self.assertEqual(api._headers["Authorization"], 'Negotiate ' + base64.b64encode(b"faketoken").decode())
 
-    @patch("aiohttp.ClientSession", autospec=True)
-    def test_close(self, ClientSession: Mock):
-        api = AsyncErrataAPI("https://errata.example.com")
-        get_event_loop().run_until_complete(api.close())
-        ClientSession.return_value.close.assert_called_once()
-
     @patch("aiohttp.ClientSession")
     def test_make_request(self, ClientSession: AsyncMock):
-        request = ClientSession.return_value.request
-        fake_response = request.return_value.__aenter__.return_value
-        fake_response.json.return_value = {"result": "fake"}
+        request = MagicMock(
+            **{
+                'request.return_value.__aenter__.return_value': AsyncMock(
+                    **{
+                        'json.return_value': {"result": "fake"},
+                        'read.return_value': b"daedbeef"
+                    }
+                )
+            }
+        )
+        ClientSession.return_value.__aenter__.return_value = request
         api = AsyncErrataAPI("https://errata.example.com")
-
         actual = get_event_loop().run_until_complete(api._make_request("HEAD", "/api/path"))
-        request.assert_called_once_with("HEAD", "https://errata.example.com/api/path", headers=api._headers)
-        fake_response.raise_for_status.assert_called_once_with()
-        fake_response.json.assert_awaited_once_with()
         self.assertEqual(actual, {"result": "fake"})
-
-        headers = {"X-Test-Header": "Test Value"}
-        request.reset_mock()
-        fake_response.read.return_value = b"daedbeef"
-        fake_response.raise_for_status.reset_mock()
-        actual = get_event_loop().run_until_complete(api._make_request("GET", "/api/path", headers=headers, parse_json=False))
-        request.assert_called_once_with("GET", "https://errata.example.com/api/path", headers=headers)
-        fake_response.raise_for_status.assert_called_once_with()
-        fake_response.read.assert_awaited_once_with()
+        actual = get_event_loop().run_until_complete(api._make_request("GET", "/api/path", parse_json=False))
         self.assertEqual(actual, b"daedbeef")
 
     @patch("aiohttp.ClientSession", autospec=True)
