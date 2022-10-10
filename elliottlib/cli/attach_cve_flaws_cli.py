@@ -87,9 +87,6 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
             runtime.logger.error(traceback.format_exc())
             runtime.logger.error(f'Exception: {e}')
             exit_code = 1
-        finally:
-            if errata_api:
-                await errata_api.close()
     sys.exit(exit_code)
 
 
