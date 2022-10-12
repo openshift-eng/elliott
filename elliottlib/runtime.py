@@ -185,6 +185,9 @@ class Runtime(object):
         replace_vars = self.group_config.vars.primitive() if self.group_config.vars else {}
         if self.assembly:
             replace_vars['runtime_assembly'] = self.assembly
+        # release_name variable is currently only used in microshift rpm config to allow Doozer to pass release name to a modification script.
+        # Elliott doesn't need to care about it. Set an arbitrary value until it becomes necessary.
+        replace_vars['release_name'] = '(irrelevant)'
 
         image_data = {}
         if mode in ['images', 'both']:
