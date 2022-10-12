@@ -429,7 +429,8 @@ class BugTracker:
     def get_flaw_bugs(self, bug_ids: List, strict: bool = True, verbose: bool = False):
         raise NotImplementedError
 
-    def filter_attached_bugs(self, bug_ids: List):
+    @staticmethod
+    def filter_attached_bugs(bug_ids: List):
         raise NotImplementedError
 
 
@@ -626,7 +627,8 @@ class JIRABugTracker(BugTracker):
     def get_flaw_bugs(self, bug_ids: List, strict: bool = True, verbose: bool = False):
         return [b for b in self.get_bugs(bug_ids, permissive=not strict, verbose=verbose) if b.is_flaw_bug()]
 
-    def filter_attached_bugs(self, bug_ids: List):
+    @staticmethod
+    def filter_attached_bugs(bug_ids: List):
         return [b for b in bug_ids if not ErrataJira(b).all_advisory_ids]
 
 
@@ -842,7 +844,8 @@ class BugzillaBugTracker(BugTracker):
         return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields, verbose=verbose) if
                 b.is_flaw_bug()]
 
-    def filter_attached_bugs(self, bug_ids: List):
+    @staticmethod
+    def filter_attached_bugs(bug_ids: List):
         return [b for b in bug_ids if not ErrataBug(b).all_advisory_ids]
 
 
