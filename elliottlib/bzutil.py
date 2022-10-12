@@ -22,8 +22,6 @@ from elliottlib import constants, exceptions, exectools, logutil, errata, util
 from elliottlib.cli import cli_opts
 from elliottlib.metadata import Metadata
 from elliottlib.util import isolate_timestamp_in_release
-from errata_tool.jira_issue import JiraIssue as ErrataJira
-from errata_tool.bug import Bug as ErrataBug
 
 logger = logutil.getLogger(__name__)
 
@@ -429,9 +427,6 @@ class BugTracker:
     def get_flaw_bugs(self, bug_ids: List, strict: bool = True, verbose: bool = False):
         raise NotImplementedError
 
-    def filter_attached_bugs(self, bug_ids: List):
-        raise NotImplementedError
-
 
 class JIRABugTracker(BugTracker):
     @staticmethod
@@ -597,8 +592,8 @@ class JIRABugTracker(BugTracker):
         if noop:
             print(f"Would've removed bugs: {bugids}")
             return
-        advisory_obj.removeJIRAIssues(bugids)
-        advisory_obj.commit()
+        advisory_id = advisory_obj.errata_id
+        return errata.remove_multi_jira_issues(advisory_id, bugids)
 
     def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
@@ -625,9 +620,6 @@ class JIRABugTracker(BugTracker):
 
     def get_flaw_bugs(self, bug_ids: List, strict: bool = True, verbose: bool = False):
         return [b for b in self.get_bugs(bug_ids, permissive=not strict, verbose=verbose) if b.is_flaw_bug()]
-
-    def filter_attached_bugs(self, bug_ids: List):
-        return [b for b in bug_ids if not ErrataJira(b).all_advisory_ids]
 
 
 class BugzillaBugTracker(BugTracker):
@@ -841,9 +833,6 @@ class BugzillaBugTracker(BugTracker):
         fields = ["product", "component", "depends_on", "alias", "severity", "summary"]
         return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields, verbose=verbose) if
                 b.is_flaw_bug()]
-
-    def filter_attached_bugs(self, bug_ids: List):
-        return [b for b in bug_ids if not ErrataBug(b).all_advisory_ids]
 
 
 def get_highest_impact(trackers, tracker_flaws_map):
