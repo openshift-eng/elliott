@@ -63,7 +63,7 @@ class VerifyAttachedBugs(unittest.TestCase):
             .with_args(bugs)\
             .and_return(blocking_bugs_map)
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=stream', '--debug', 'verify-bugs'])
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=4.6.6', 'verify-bugs'])
         # if result.exit_code != 0:
         #     exc_type, exc_value, exc_traceback = result.exc_info
         #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))

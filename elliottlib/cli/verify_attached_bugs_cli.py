@@ -374,7 +374,7 @@ class BugValidator:
         # complain about bugs that should be CVE
         for bug in bugs:
             if bug.is_cve_in_summary() and not bug.is_tracker_bug():
-                self._complain(f"Bug {bug.id} have CVE number in summary but don't have tracker keywords")
+                self._complain(f"Bug {bug.id} has CVE number in summary but does not have tracker keywords")
 
     def _complain(self, problem: str):
         red_print(problem)
