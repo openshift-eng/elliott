@@ -115,6 +115,18 @@ class TestBugzillaBugTracker(unittest.TestCase):
 
 
 class TestJIRABug(unittest.TestCase):
+    def test_blocked_by_bz(self):
+        bug_id = 123456
+        bug = flexmock(key='OCPBUGS-1',
+                       fields=flexmock(customfield_12322152=f'bugzilla.com/id={bug_id}'))
+        self.assertEqual(JIRABug(bug).blocked_by_bz, bug_id)
+
+    def test_depends_on(self):
+        bug = flexmock(key='OCPBUGS-1')
+        flexmock(JIRABug).should_receive("_get_depends").and_return(['foo'])
+        flexmock(JIRABug).should_receive("blocked_by_bz").and_return('bar')
+        self.assertEqual(JIRABug(bug).depends_on, ['foo', 'bar'])
+
     def test_is_placeholder_bug(self):
         bug1 = flexmock(key='OCPBUGS-1',
                         fields=flexmock(

@@ -226,7 +226,7 @@ class JIRABug(Bug):
     @property
     def depends_on(self):
         depends_on = self._get_depends()
-        depends_on_bz = self.blocked_by_bz()
+        depends_on_bz = self.blocked_by_bz
         if depends_on_bz:
             depends_on.append(depends_on_bz)
         return depends_on

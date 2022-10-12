@@ -197,7 +197,7 @@ class TestBugValidator(unittest.TestCase):
 
         bugs = [
             flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4']),
-            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3', 1]),
+            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3', 4]),
             flexmock(id=2, target_release=['4.6.z'], depends_on=[1, 3])
         ]
         depend_on_jira_bugs = [
@@ -206,7 +206,8 @@ class TestBugValidator(unittest.TestCase):
         ]
         depend_on_bz_bugs = [
             flexmock(id=1, target_release=['4.7.z'], component='foo', is_ocp_bug=lambda: True),
-            flexmock(id=3, target_release=['4.7.z'], component='not_managed_by_art', is_ocp_bug=lambda: True)
+            flexmock(id=3, target_release=['4.7.z'], component='not_managed_by_art', is_ocp_bug=lambda: True),
+            flexmock(id=4, target_release=['4.7.z'], component='foo', is_ocp_bug=lambda: True),
         ]
 
         flexmock(JIRABugTracker).should_receive("get_bugs") \
@@ -221,7 +222,7 @@ class TestBugValidator(unittest.TestCase):
         actual = validator._get_blocking_bugs_for(bugs)
         expected = {
             bugs[0]: [depend_on_jira_bugs[1]],
-            bugs[1]: [depend_on_bz_bugs[0]],
+            bugs[1]: [depend_on_bz_bugs[2]],
             bugs[2]: [depend_on_bz_bugs[0]]
         }
         self.assertEqual(actual, expected)
