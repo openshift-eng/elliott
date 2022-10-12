@@ -309,6 +309,7 @@ class BugValidator:
         if bz_ids:
             blockers.extend(self.runtime.bug_trackers('bugzilla')
                             .get_bugs(bz_ids))
+        logger.debug(f"Candidate Blocker bugs found: {[b.id for b in blockers]}")
         blocking_bugs = {}
         for bug in blockers:
             next_target = any(is_next_target(target) for target in bug.target_release)
