@@ -578,6 +578,8 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
 
     existing_bugs = bzutil.BugzillaBugTracker.advisory_bug_ids(advisory)
     new_bugs = set(bugids) - set(existing_bugs)
+    # check 150 bugs will take around 5 mins, skip check if there are too many bugs
+    new_bugs = bzutil.BugzillaBugTracker.filter_attached_bugs(new_bugs) if len(new_bugs) > 150 else new_bugs
     logger.info(f'New bugs (not already attached to advisory): {len(new_bugs)}')
     logger.debug(f'New bugs: {sorted(new_bugs)}')
     logger.debug(f'Bugs already attached: {sorted(set(bugids) & set(existing_bugs))}')
@@ -626,6 +628,8 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
 
     existing_bugs = bzutil.JIRABugTracker.advisory_bug_ids(advisory)
     new_bugs = set(bugids) - set(existing_bugs)
+    # check 150 bugs will take around 5 mins, skip check if there are too many bugs
+    new_bugs = bzutil.JIRABugTracker.filter_attached_bugs(new_bugs) if len(new_bugs) > 150 else new_bugs
     logger.info(f'New bugs (not already attached to advisory): {len(new_bugs)}')
     logger.debug(f'New bugs: {sorted(new_bugs)}')
     logger.debug(f'Bugs already attached: {sorted(set(bugids) & set(existing_bugs))}')
