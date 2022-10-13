@@ -196,6 +196,17 @@ class JIRABug(Bug):
         return [x.name for x in self.bug.fields.versions]
 
     @property
+    def blocked_by_bz(self):
+        # field "Blocked by Bugzilla Bug"
+        url = self.bug.fields.customfield_12322152
+        if not url:
+            return None
+        bug_id = re.search(r"id=(\d+)", url)
+        if not bug_id:
+            return None
+        return int(bug_id.groups()[0])
+
+    @property
     def target_release(self):
         # field "Target Version"
         return [x.name for x in self.bug.fields.customfield_12319940]
@@ -214,7 +225,11 @@ class JIRABug(Bug):
 
     @property
     def depends_on(self):
-        return self._get_depends()
+        depends_on = self._get_depends()
+        depends_on_bz = self.blocked_by_bz
+        if depends_on_bz:
+            depends_on.append(depends_on_bz)
+        return depends_on
 
     @property
     def release_blocker(self):
@@ -283,6 +298,7 @@ class JIRABug(Bug):
         return ('Placeholder' in self.summary) and (self.component == 'Release') and ('Automation' in self.keywords)
 
     def _get_blocks(self):
+        # link "blocks"
         blocks = []
         for link in self.bug.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "outwardIssue"):
@@ -290,6 +306,7 @@ class JIRABug(Bug):
         return blocks
 
     def _get_depends(self):
+        # link "is blocked by"
         depends = []
         for link in self.bug.fields.issuelinks:
             if link.type.name == "Blocks" and hasattr(link, "inwardIssue"):
