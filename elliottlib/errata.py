@@ -635,8 +635,17 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
         if noop:
             logger.info('Dry run: Would have attached bugs')
             continue
-        advisory.addJiraIssues(chunk_of_bugs)
-        advisory.commit()
+        try:
+            advisory.addJiraIssues(chunk_of_bugs)
+            advisory.commit()
+        except ErrataException as e:
+            attached_bugs = re.findall("Issue (.*) The issue is filed already in", str(e))
+            if attached_bugs:
+                chunk_of_bugs = chunk_of_bugs - [b.upper() for b in attached_bugs]
+                advisory.addJiraIssues(chunk_of_bugs)
+                advisory.commit()
+            else:
+                raise e
 
 
 def get_rpmdiff_runs(advisory_id, status=None, session=None):
