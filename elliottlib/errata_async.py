@@ -62,7 +62,7 @@ class AsyncErrataAPI:
     async def get_cve_package_exclusions(self, advisory_id: int):
         path = "/api/v1/cve_package_exclusion"
         # This is a paginated API, we need to increment page[number] until an empty array is returned.
-        params = {"filter[errata_id]": str(int(advisory_id)), "page[number]": 1, "page[size]": 300}
+        params = {"filter[errata_id]": str(int(advisory_id)), "page[number]": 1, "page[size]": 1000}
         while True:
             result = await self._make_request(aiohttp.hdrs.METH_GET, path, params=params)
             data: List[Dict] = result.get('data', [])
