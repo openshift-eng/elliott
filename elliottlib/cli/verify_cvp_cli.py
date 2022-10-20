@@ -70,7 +70,10 @@ async def verify_cvp_cli(runtime: Runtime, all_images, nvrs, include_content_set
         runtime.logger.info(f"Finding {len(builds)} builds from Brew...")
         builds = brew.get_build_objects(nvrs, brew_session)
     for b in builds:
-        del b["_tags"]  # b["_tags"] is of type set, which cannot be dumped into json or yaml
+        try:
+            del b["_tags"]  # b["_tags"] is of type set, which cannot be dumped into json or yaml
+        except KeyError:
+            pass
     nvr_builds = {build["nvr"]: build for build in builds}  # a dict mapping NVRs to build dicts
     runtime.logger.info(f"Found {len(builds)} image builds.")
 
