@@ -163,16 +163,19 @@ def _missing_references(runtime, references, available):
         if digest in available:
             continue
         ref = image_pullspec.rsplit('/', 1)[1]  # cut off the registry/namespace, just need the name:shasum
+        res = ref
         try:
             nvr = _nvr_for_operand_pullspec(runtime, ref)
             build = brew.get_brew_build(nvr=nvr)
             if [ad for ad in build.all_errata if ad["status"] != "DROPPED_NO_SHIP"]:
                 continue
+            else:
+                res = nvr
         except BrewBuildException:
             # Fall through to missing.add
             pass
-        missing.add(ref)
-        red_print(f"{metadata} has a reference to {ref} not present in the advisories nor shipped images.")
+        missing.add(res)
+        red_print(f"{metadata} has a reference to {res} not present in the advisories nor shipped images.")
     return missing
 
 
