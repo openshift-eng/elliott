@@ -17,6 +17,10 @@ class TestBug(unittest.TestCase):
         bug_obj = flexmock(id=2)
         self.assertEqual(Bug(bug_obj).bug.id, bug_obj.id)
 
+    def test_is_cve_in_summary(self):
+        bug_true = flexmock(id=1, summary="CVE-2022-0001")
+        self.assertEqual(BugzillaBug(bug_true).is_cve_in_summary(), True)
+
 
 class TestJIRABugTracker(unittest.TestCase):
     def test_get_config(self):

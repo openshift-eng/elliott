@@ -210,11 +210,11 @@ class TestCategorizeBugsByType(unittest.TestCase):
     def test_categorize_bugs_by_type(self):
         advisory_id_map = {'image': 1, 'rpm': 2, 'extras': 3}
         bugs = [
-            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, whiteboard_component='foo'),
-            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, whiteboard_component='bar'),
-            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: True, whiteboard_component='buzz'),
-            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False),
-            flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False)
+            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='foo'),
+            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='bar'),
+            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='buzz'),
+            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True),
+            flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True)
         ]
         builds_map = {
             'image': {bugs[2].whiteboard_component: None},

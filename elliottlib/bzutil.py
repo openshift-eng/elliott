@@ -60,6 +60,9 @@ class Bug:
     def is_tracker_bug(self):
         return set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
 
+    def is_cve_in_summary(self):
+        return True if re.search(r'^CVE-\d+-\d+', self.summary) else False
+
     def is_flaw_bug(self):
         return self.product == "Security Response" and self.component == "vulnerability"
 

@@ -32,12 +32,16 @@ class VerifyAttachedBugs(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("login")
 
         bugs = [
-            flexmock(id="OCPBUGS-1", target_release=['4.6.z'], status='ON_QA'),  # blocked by ocpbugs-4
-            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], status='ON_QA')   # blocked by ocpbugs-3
+            flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
+            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
         depend_on_bugs = [
-            flexmock(id="OCPBUGS-3", status='ON_QA'),
-            flexmock(id="OCPBUGS-4", status='Release Pending')
+            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA',
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
+            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending',
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
         blocking_bugs_map = {
             bugs[0]: [depend_on_bugs[1]],
@@ -50,7 +54,7 @@ class VerifyAttachedBugs(unittest.TestCase):
             .with_args(bugs)\
             .and_return(blocking_bugs_map)
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=stream', 'verify-bugs'])
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=4.6.6', 'verify-bugs'])
         # if result.exit_code != 0:
         #     exc_type, exc_value, exc_traceback = result.exc_info
         #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -74,12 +78,16 @@ class VerifyAttachedBugs(unittest.TestCase):
         flexmock(AsyncErrataAPI).should_receive("login").and_return(f)
 
         bugs = [
-            flexmock(id="OCPBUGS-1", target_release=['4.6.z'], status='ON_QA', is_ocp_bug=lambda: True),
-            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], status='ON_QA', is_ocp_bug=lambda: True)
+            flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
+            flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
         depend_on_bugs = [
-            flexmock(id="OCPBUGS-3", status='ON_QA'),
-            flexmock(id="OCPBUGS-4", status='Release Pending')
+            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA',
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
+            flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending',
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
         blocking_bugs_map = {
             bugs[0]: [depend_on_bugs[1]],
