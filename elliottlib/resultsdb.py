@@ -23,7 +23,7 @@ class ResultsDBAPI:
         https://resultsdb20.docs.apiary.io/#reference/0/results/get-a-list-of-latest-results-for-a-specified-filter
 
         # an example CVP test result for ose-insights-operator-container-v4.5.0-202007240519.p0:
-        # https://resultsdb-api.engineering.redhat.com/api/v2.0/results/latest?testcases=rhproduct.default.sanity&item=ose-insights-operator-container-v4.5.0-202007240519.p0
+        # https://resultsdb-api.engineering.redhat.com/api/v2.0/results/latest?testcases=cvp.rhproduct.default.sanity&item=ose-insights-operator-container-v4.5.0-202007240519.p0
         """
         params = {
             "ci_name": "Container Verification Pipeline",

@@ -20,7 +20,7 @@ from elliottlib.util import all_same, brew_arch_for_go_arch, parse_nvr
 
 class CVPInspector:
 
-    CVP_TEST_CASE_SANITY = "rhproduct.default.sanity"
+    CVP_TEST_CASE_SANITY = "cvp.rhproduct.default.sanity"
 
     def __init__(self, group_config: Dict, image_metas: Iterable[ImageMetadata],
                  logger: Optional[logging.Logger] = None) -> None:
