@@ -13,8 +13,8 @@ from elliottlib.model import Missing, Model
 from elliottlib.util import isolate_el_version_in_brew_tag
 
 CONFIG_MODES = [
-    'enable',  # business as usual
-    'disable',  # manually disabled from automatically building
+    'enabled',  # business as usual
+    'disabled',  # manually disabled from automatically building
     'wip',  # Work in Progress, do not build
 ]
 
