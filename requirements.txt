@@ -6,7 +6,7 @@ errata-tool @ git+http://github.com/thegreyd/errata-tool.git@bad2cb9c3321a1179f0
 future
 koji >= 1.18
 semver
-pygit2
+pygit2 == 1.10.1  # https://github.com/libgit2/pygit2/issues/1176
 python-bugzilla >= 3.2
 pyyaml
 requests
