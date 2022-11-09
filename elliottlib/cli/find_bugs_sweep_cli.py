@@ -274,7 +274,7 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
             break
         attached_builds = errata.get_advisory_nvrs(advisory_id_map[kind])
         packages = list(attached_builds.keys())
-        if type == 'image':
+        if kind == 'image':
             packages.extend(constants.SPECIAL_CVE_COMPONENTS)
 
         for bug in tracker_bugs:
