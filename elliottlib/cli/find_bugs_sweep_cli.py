@@ -273,7 +273,9 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
         if len(found) == len(tracker_bugs):
             break
         attached_builds = errata.get_advisory_nvrs(advisory_id_map[kind])
-        packages = attached_builds.keys()
+        packages = list(attached_builds.keys())
+        if type == 'image':
+            packages.extend(constants.SPECIAL_CVE_COMPONENTS)
 
         for bug in tracker_bugs:
             package_name = bug.whiteboard_component
