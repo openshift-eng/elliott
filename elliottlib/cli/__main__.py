@@ -248,21 +248,20 @@ written out to summary_results.json.
         # The machine-os-content image doesn't follow the standard
         # pattern. We need to skip that image when we find it, it is
         # not attached to advisories.
-        if 'com.coreos.ostree-commit' in labels:
-            yellow_prefix("Skipping machine-os-content image: ")
+        if 'com.coreos.ostree-commit' in labels or 'rhel-coreos' in image_name:
+            yellow_prefix(f"Skipping rhcos image {image_name}: ")
             click.echo("Not required for checks")
             continue
 
+        if not labels or any(i not in labels for i in ['version', 'release', 'com.redhat.component']):
+            red_print(f"For image {image_name} expected labels don't exist")
+            exit(1)
         component = labels['com.redhat.component']
-        n = image_name
-        click.echo("Payload name: {}".format(n))
-        click.echo("Brew name: {}".format(component))
-        if labels:
-            v = labels['version']
-            r = labels['release']
-            all_payload_nvrs[component] = "{}-{}".format(v, r)
-        else:
-            print("For image {} Labels doesn't exist, image_info: {}".format(image_name, image_info))
+        click.echo(f"Payload name: {image_name}")
+        click.echo(f"Brew name: {component}")
+        v = labels['version']
+        r = labels['release']
+        all_payload_nvrs[component] = f"{v}-{r}"
 
     missing_in_errata = {}
     payload_doesnt_match_errata = {}
@@ -279,14 +278,14 @@ written out to summary_results.json.
     click.echo("{} images to consider from payload".format(len(all_payload_nvrs)))
 
     for image, vr in all_payload_nvrs.items():
+        imagevr = f"{image}-{vr}"
         yellow_prefix("Cross-checking from payload: ")
-        click.echo("{}-{}".format(image, vr))
+        click.echo(imagevr)
         if image not in all_advisory_nvrs:
-            missing_in_errata[image] = "{}-{}".format(image, vr)
-            click.echo("{} in payload not found in advisory".format("{}-{}".format(image, vr)))
+            missing_in_errata[image] = imagevr
+            click.echo(f"{imagevr} in payload not found in advisory")
         elif image in all_advisory_nvrs and vr != all_advisory_nvrs[image]:
-            click.echo("{} from payload has version {} which does not match {} from advisory".format(
-                image, vr, all_advisory_nvrs[image]))
+            click.echo(f"{image} from payload has version {vr} which does not match {all_advisory_nvrs[image]} from advisory")
             payload_doesnt_match_errata[image] = {
                 'payload': vr,
                 'errata': all_advisory_nvrs[image]
