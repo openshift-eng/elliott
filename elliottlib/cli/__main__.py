@@ -203,7 +203,7 @@ written out to summary_results.json.
      advisory 41567
 
  \b
-    $ elliott verify-payload quay.io/openshift-release-dev/ocp-release:4.1.0-rc.6 41567
+    $ elliott -g openshift-1 verify-payload quay.io/openshift-release-dev/ocp-release:4.1.0-rc.6 41567
 
     """
     runtime.initialize()
