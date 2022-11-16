@@ -21,20 +21,19 @@ from typing import Dict, List
 # ours
 from elliottlib import exectools
 from elliottlib import Runtime
+from elliottlib import rhcos
 import elliottlib.constants
 import elliottlib.bzutil
 import elliottlib.brew
 import elliottlib.errata
 import elliottlib.exceptions
 
-from elliottlib.cli import cli_opts
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated, green_prefix
 from elliottlib.util import red_print
 from elliottlib.util import green_print, red_prefix
 from elliottlib.util import yellow_print, yellow_prefix
 from elliottlib.util import progress_func, pbar_header
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory, click_coroutine
 
 # cli commands
@@ -178,9 +177,9 @@ Fields for the short format: Release date, State, Synopsys, URL
 @cli.command("verify-payload", short_help="Verify payload contents match advisory builds")
 @click.argument("payload")
 @click.argument('advisory', type=int)
-@click.pass_context
+@click.pass_obj
 @click_coroutine
-async def verify_payload(ctx, payload, advisory):
+async def verify_payload(runtime, payload, advisory):
     """Cross-check that the builds present in PAYLOAD match the builds
 attached to ADVISORY. The payload is treated as the source of
 truth. If something is absent or different in the advisory it is
@@ -207,6 +206,7 @@ written out to summary_results.json.
     $ elliott verify-payload quay.io/openshift-release-dev/ocp-release:4.1.0-rc.6 41567
 
     """
+    runtime.initialize()
     all_advisory_nvrs = elliottlib.errata.get_advisory_nvrs(advisory)
 
     click.echo("Found {} builds".format(len(all_advisory_nvrs)))
@@ -248,7 +248,8 @@ written out to summary_results.json.
         # The machine-os-content image doesn't follow the standard
         # pattern. We need to skip that image when we find it, it is
         # not attached to advisories.
-        if 'com.coreos.ostree-commit' in labels or 'rhel-coreos' in image_name:
+        rhcos_images = [c['name'] for c in rhcos.get_container_configs(runtime)]
+        if image_name in rhcos_images:
             yellow_prefix(f"Skipping rhcos image {image_name}: ")
             click.echo("Not required for checks")
             continue
