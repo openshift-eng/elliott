@@ -3,17 +3,14 @@ import elliottlib
 
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
-from elliottlib import Runtime, errata
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
+from elliottlib import errata
+from elliottlib.bzutil import BugTracker, JIRABugTracker, BugzillaBugTracker, get_jira_bz_bug_ids
 from elliottlib.util import green_print, progress_func, pbar_header
-from elliottlib.cli import cli_opts
-from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory, click_coroutine
-
-pass_runtime = click.make_pass_decorator(Runtime)
+from elliottlib.cli.common import cli, use_default_advisory_option, find_default_advisory
 
 
 @cli.command("repair-bugs", short_help="Move bugs attached to ADVISORY from one state to another")
-@click.option("--advisory", "-a",
+@click.option("--advisory", "-a", 'advisory_id',
               type=int, metavar='ADVISORY',
               help="Repair bugs attached to ADVISORY.")
 @click.option("--auto",
@@ -22,7 +19,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
               help="AUTO mode, check all bugs attached to ADVISORY")
 @click.option("--id", default=None, metavar='BUGID',
               multiple=True, required=False,
-              help="Bugzilla IDs to modify, conflicts with --auto [MULTIPLE]")
+              help="Bug IDs to modify, conflicts with --auto [MULTIPLE]")
 @click.option("--from", "original_state",
               multiple=True,
               default=['MODIFIED'],
@@ -44,13 +41,14 @@ pass_runtime = click.make_pass_decorator(Runtime)
               default=False, is_flag=True,
               help="Check bugs attached, print what would change, but don't change anything")
 @use_default_advisory_option
-@pass_runtime
-def repair_bugs_cli(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, noop, default_advisory_type):
+@click.pass_obj
+def repair_bugs_cli(runtime, advisory_id, auto, id, original_state, new_state, comment, close_placeholder, noop,
+                    default_advisory_type):
     """Move bugs attached to the advisory from one state to another
 state. This is useful if the bugs have changed states *after* they
 were attached. Similar to `find-bugs` but in reverse. `repair-bugs`
 begins by reading bugs from an advisory, whereas `find-bugs` reads
-from bugzilla.
+from a bug tracker (jira/bugzilla).
 
 This looks at attached bugs in the provided --from state and moves
 them to the provided --to state.
@@ -76,7 +74,7 @@ providing an advisory with the -a/--advisory option.
 \b
     $ elliott --group=openshift-4.1 repair-bugs --auto --use-default-advisory rpm --from MODIFIED --to ON_QA
 
-    The previous examples could also be ran like this (MODIFIED and ON_QA are both defaults):
+    The previous examples could also be run like this (MODIFIED and ON_QA are both defaults):
 
 \b
     $ elliott --group=openshift-4.1 repair-bugs --auto --use-default-advisory rpm
@@ -84,7 +82,7 @@ providing an advisory with the -a/--advisory option.
     Bug ids may be given manually instead of using --auto:
 
 \b
-    $ elliott --group=openshift-4.1 repair-bugs --id 170899 --id 8675309 --use-default-advisory rpm
+    $ elliott --group=openshift-4.1 repair-bugs --id OCPBUGS-1 170899 8675309 --use-default-advisory rpm
 """
     if auto and len(id) > 0:
         raise click.BadParameter("Combining the automatic and manual bug modification options is not supported")
@@ -93,56 +91,54 @@ providing an advisory with the -a/--advisory option.
         # No bugs were provided
         raise click.BadParameter("If not using --auto then one or more --id's must be provided")
 
-    if advisory and default_advisory_type:
+    if advisory_id and default_advisory_type:
         raise click.BadParameter("Use only one of --use-default-advisory or --advisory")
 
-    if len(id) == 0 and advisory is None and default_advisory_type is None:
+    if len(id) == 0 and advisory_id is None and default_advisory_type is None:
         # error, no bugs, advisory, or default selected
         raise click.BadParameter("No input provided: Must use one of --id, --advisory, or --use-default-advisory")
 
-    # Load bugzilla information and get a reference to the api
     runtime.initialize()
-    if runtime.use_jira:
-        repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, True, noop, default_advisory_type, JIRABugTracker(JIRABugTracker.get_config(runtime)))
-    repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, False, noop, default_advisory_type, BugzillaBugTracker(BugzillaBugTracker.get_config(runtime)))
-
-
-def repair_bugs(runtime, advisory, auto, id, original_state, new_state, comment, close_placeholder, use_jira, noop, default_advisory_type, bug_tracker):
-    changed_bug_count = 0
 
     if default_advisory_type is not None:
-        advisory = find_default_advisory(runtime, default_advisory_type)
+        advisory_id = find_default_advisory(runtime, default_advisory_type)
 
     if auto:
-        click.echo("Fetching Advisory(errata_id={})".format(advisory))
-        if use_jira:
-            raw_bug_list = [issue["key"] for issue in errata.get_jira_issue_from_advisory(advisory)]
-        else:
-            e = elliottlib.errata.Advisory(errata_id=advisory)
-            raw_bug_list = e.errata_bugs
+        click.echo("Fetching Advisory(errata_id={})".format(advisory_id))
+        advisory = elliottlib.errata.Advisory(errata_id=advisory_id)
+        jira_ids = JIRABugTracker.advisory_bug_ids(advisory)
+        bz_ids = BugzillaBugTracker.advisory_bug_ids(advisory)
     else:
-        click.echo("Bypassed fetching erratum, using provided BZs")
-        raw_bug_list = cli_opts.id_convert(id)
+        click.echo("Bypassed fetching erratum, using provided BugIDs")
+        jira_ids, bz_ids = get_jira_bz_bug_ids(id)
 
-    green_print("Getting bugs for advisory")
+    if jira_ids:
+        repair_bugs(jira_ids, original_state, new_state, comment, close_placeholder, noop,
+                    runtime.bug_trackers('jira'))
+    if bz_ids:
+        repair_bugs(bz_ids, original_state, new_state, comment, close_placeholder, noop,
+                    runtime.bug_trackers('bugzilla'))
+
+
+def repair_bugs(bug_ids, original_state, new_state, comment, close_placeholder, noop, bug_tracker: BugTracker):
+    changed_bug_count = 0
 
     # Fetch bugs in parallel because it can be really slow doing it
     # one-by-one when you have hundreds of bugs
-    pbar_header("Fetching data for {} bugs: ".format(len(raw_bug_list)),
+    pbar_header("Fetching data for {} bugs: ".format(len(bug_ids)),
                 "Hold on a moment, we have to grab each one",
-                raw_bug_list)
+                bug_ids)
     pool = ThreadPool(cpu_count())
     click.secho("[", nl=False)
 
     attached_bugs = pool.map(
-        lambda bug: progress_func(lambda: bug_tracker.get_bug(bug), '*'),
-        raw_bug_list)
+        lambda bug_id: progress_func(lambda: bug_tracker.get_bug(bug_id), '*'),
+        bug_ids)
     # Wait for results
     pool.close()
     pool.join()
     click.echo(']')
 
-    green_print("Got bugs for advisory")
     for bug in attached_bugs:
         if close_placeholder and "Placeholder" in bug.summary:
             # if set close placeholder, ignore bug state

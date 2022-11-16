@@ -1,4 +1,4 @@
-FROM fedora:34
+FROM registry.fedoraproject.org/fedora:36
 LABEL name="elliott-dev" \
   description="Elliott development container image" \
   maintainer="OpenShift Automated Release Tooling (ART) Team <aos-team-art@redhat.com>"
@@ -13,11 +13,11 @@ RUN curl -o /etc/pki/ca-trust/source/anchors/RH-IT-Root-CA.crt --fail -L \
 RUN dnf install -y \
     # runtime dependencies
     krb5-workstation python-bugzilla-cli git \
-    python36 python3-certifi python3-rpm \
+    python38 python3-certifi \
     koji brewkoji \
     # development dependencies
-    gcc krb5-devel \
-    python3-devel python3-pip python3-wheel \
+    gcc gcc-c++ krb5-devel \
+    python3-devel python3-pip python3-wheel python3-autopep8 \
     # other tools
     bash-completion vim tmux procps-ng psmisc wget curl net-tools iproute socat \
   # clean up
@@ -27,7 +27,7 @@ RUN dnf install -y \
 
 
 ARG OC_VERSION=latest
-RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/"$OC_VERSION"/openshift-client-linux.tar.gz \
+RUN wget -O /tmp/openshift-client-linux-"$OC_VERSION".tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/"$OC_VERSION"/openshift-client-linux.tar.gz \
   && tar -C /usr/local/bin -xzf  /tmp/openshift-client-linux-"$OC_VERSION".tar.gz oc kubectl \
   && rm /tmp/openshift-client-linux-"$OC_VERSION".tar.gz
 
@@ -47,13 +47,12 @@ RUN groupadd --gid "$USER_GID" "$USERNAME" \
     && echo "$USERNAME" ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/"$USERNAME" \
     && chmod 0440 /etc/sudoers.d/"$USERNAME"
 
-# Preinstall dependencies
-COPY ./ /tmp/elliott/
-RUN chown "$USERNAME" -R /tmp/elliott \
- && pushd /tmp/elliott \
- && sudo -u "$USERNAME" pip3 install --user -r ./requirements.txt -r requirements-dev.txt ./ \
- && popd && rm -rf /tmp/elliott
-USER "$USER_UID"
+# Install dependencies and elliott
 WORKDIR /workspaces/elliott
+COPY . .
+RUN chown "$USERNAME" -R . \
+ && sudo -u "$USERNAME" pip3 install --user -r ./requirements.txt -r requirements-dev.txt \
+ && sudo -u "$USERNAME" pip3 install --user --editable .
+USER "$USER_UID"
 ENV ELLIOTT_DATA_PATH=https://github.com/openshift/ocp-build-data \
     _ELLIOTT_DATA_PATH=/workspaces/ocp-build-data

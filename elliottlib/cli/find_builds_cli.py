@@ -136,7 +136,7 @@ PRESENT advisory. Here are some examples:
 
     runtime.initialize(mode='images' if kind == 'image' else 'rpms')
     replace_vars = runtime.group_config.vars.primitive() if runtime.group_config.vars else {}
-    et_data = runtime.gitdata.load_data(key='erratatool', replace_vars=replace_vars).data
+    et_data = runtime.get_errata_config(replace_vars=replace_vars)
     tag_pv_map = et_data.get('brew_tag_product_version_mapping')
 
     if default_advisory_type is not None:

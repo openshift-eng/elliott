@@ -15,6 +15,7 @@ import click
 import requests
 from elliottlib import exceptions, constants, brew, logutil
 from elliottlib.util import green_prefix, green_print, exit_unauthenticated, chunk
+from elliottlib import bzutil
 from requests_kerberos import HTTPKerberosAuth
 from spnego.exceptions import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
@@ -566,8 +567,7 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
     :param batch_size: perform operation in batches of given size
     :return:
     """
-    click.echo(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
-
+    logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
     try:
         advisory = Erratum(errata_id=advisory_id)
     except GSSError:
@@ -576,9 +576,11 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
     if not advisory:
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
-    existing_bugs = advisory.errata_bugs
+    existing_bugs = bzutil.BugzillaBugTracker.advisory_bug_ids(advisory)
     new_bugs = set(bugids) - set(existing_bugs)
-    logger.info(f'Bugs already attached: {len(existing_bugs)}. New bugs: {len(new_bugs)}')
+    logger.info(f'New bugs (not already attached to advisory): {len(new_bugs)}')
+    logger.debug(f'New bugs: {sorted(new_bugs)}')
+    logger.debug(f'Bugs already attached: {sorted(set(bugids) & set(existing_bugs))}')
     if not new_bugs:
         return
 
@@ -613,7 +615,22 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
     :param noop: do not modify anything
     :param batch_size: perform operation in batches of given size
     """
-    click.echo(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
+    logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
+    try:
+        advisory = Erratum(errata_id=advisory_id)
+    except GSSError:
+        exit_unauthenticated()
+
+    if not advisory:
+        raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
+
+    existing_bugs = bzutil.JIRABugTracker.advisory_bug_ids(advisory)
+    new_bugs = set(bugids) - set(existing_bugs)
+    logger.info(f'New bugs (not already attached to advisory): {len(new_bugs)}')
+    logger.debug(f'New bugs: {sorted(new_bugs)}')
+    logger.debug(f'Bugs already attached: {sorted(set(bugids) & set(existing_bugs))}')
+    if not new_bugs:
+        return
     for chunk_of_bugs in chunk(bugids, batch_size):
         if noop:
             logger.info('Dry run: Would have attached bugs')
@@ -623,9 +640,21 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
             if result.status_code != 201:
                 rt = add_jira_issue(advisory_id, chunk_of_bugs[i])
                 if rt.status_code != 201:
-                    raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
-                                                       f"status={rt.status_code}")
-        logger.info("All jira bugs attached")
+                    errata_error = rt.json()
+                    if 'errors' not in errata_error or len(errata_error) != 1:
+                        raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
+                                                           f"status={rt.status_code} "
+                                                           f"errmsg={rt.json()}")
+                    if 'idsfixed' not in errata_error['errors'] or len(errata_error['errors']) != 1:
+                        raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
+                                                           f"status={rt.status_code} "
+                                                           f"errmsg={rt.json()}")
+                    for err in errata_error['errors']['idsfixed']:
+                        if 'The issue is filed already in' not in ' '.join(err):
+                            raise exceptions.ElliottFatalError(f"attach jira bug {chunk_of_bugs[i]} failed with "
+                                                               f"status={rt.status_code} "
+                                                               f"errmsg={rt.json()}")
+        logger.info("All not attached jira bugs attached")
 
 
 def get_rpmdiff_runs(advisory_id, status=None, session=None):
@@ -701,8 +730,6 @@ def get_advisory_nvrs(advisory):
     :return: dict, with keys as package names and values as strs in the form: '{version}-{release}'
     """
     try:
-        green_prefix("Fetching advisory builds: ")
-        click.echo("Advisory - {}".format(advisory))
         builds = get_builds(advisory)
     except GSSError:
         exit_unauthenticated()
@@ -711,12 +738,8 @@ def get_advisory_nvrs(advisory):
 
     all_advisory_nvrs = {}
     # Results come back with top level keys which are brew tags
-    green_prefix("Looping over tags: ")
-    click.echo("{} tags to check".format(len(builds)))
     for tag in builds.keys():
         # Each top level has a key 'builds' which is a list of dicts
-        green_prefix("Looping over builds in tag: ")
-        click.echo("{} with {} builds".format(tag, len(builds[tag]['builds'])))
         for build in builds[tag]['builds']:
             # Each dict has a top level key which might be the actual
             # 'nvr' but I don't have enough data to know for sure

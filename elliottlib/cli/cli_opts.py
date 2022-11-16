@@ -24,7 +24,9 @@ def id_convert_str(ids):
     id_str = []
     for id in ids:
         # id = "1234,42345,1234,"
-        if ',' in id:
+        if isinstance(id, int):
+            id_str.append(id)
+        elif ',' in id:
             for k in [c.strip() for c in id.split(',')]:
                 id_str.append(k)
         # id = 123  no ','

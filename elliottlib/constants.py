@@ -4,11 +4,11 @@ This file contains constants that are used to manage OCP Image and RPM builds
 
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
 BREW_DOWNLOAD_URL = "http://download.eng.bos.redhat.com/brewroot"
-RHCOS_RELEASES_BASE_URL = "https://releases-rhcos-art.cloud.privileged.psi.redhat.com/storage/releases"
+RHCOS_RELEASES_BASE_URL = "https://releases-rhcos-art.apps.ocp-virt.prod.psi.redhat.com/storage/releases"
 CINCINNATI_BASE_URL = "https://api.openshift.com/api/upgrades_info/v1/graph"
 BREW_DOWNLOAD_TEMPLATE = BREW_DOWNLOAD_URL + "/packages/{name}/{version}/{release}/files/{file_path}"
 CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
-RESULTSDB_API_URL = "https://resultsdb-api.engineering.redhat.com/api/v2.0"
+RESULTSDB_API_URL = "https://resultsdb-api.engineering.redhat.com"
 
 VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
 TRACKER_BUG_KEYWORDS = ['Security', 'SecurityTracking']
@@ -21,13 +21,16 @@ BUG_SEVERITY_NUMBER_MAP = {
     "urgent": 4,
 }
 
+# These components need special treatment when associating security tracking bugs with builds:
+SPECIAL_CVE_COMPONENTS = ['openshift-golang-builder-container']
+
 BUG_LOOKUP_CHUNK_SIZE = 100
 BUG_ATTACH_CHUNK_SIZE = 100
 
 # When severity isn't set on all tracking and flaw bugs, default to "Low"
 # https://jira.coreos.com/browse/ART-1192
 SECURITY_IMPACT = ["Low", "Low", "Moderate", "Important", "Critical"]
-
+security_impact_map = {'Critical': 4, 'Important': 3, 'Moderate': 2, 'Low': 1}
 errata_xmlrpc_url = 'http://errata.engineering.redhat.com/errata/xmlrpc.cgi'
 errata_url = "https://errata.devel.redhat.com"
 # errata_url = "https://errata.stage.engineering.redhat.com"

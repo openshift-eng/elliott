@@ -8,6 +8,7 @@ import aiohttp
 import gssapi
 
 from elliottlib.rpm_utils import parse_nvr
+from elliottlib import constants
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,7 +16,6 @@ _LOGGER = logging.getLogger(__name__)
 class AsyncErrataAPI:
     def __init__(self, url: str):
         self._errata_url = urlparse(url).geturl()
-        self._session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True))
         self._gssapi_client_ctx = None
         self._headers = {
             "Content-Type": "application/json",
@@ -31,15 +31,13 @@ class AsyncErrataAPI:
         self._gssapi_client_ctx = client_ctx
         self._headers["Authorization"] = 'Negotiate ' + base64.b64encode(out_token).decode()
 
-    async def close(self):
-        await self._session.close()
-
     async def _make_request(self, method: str, path: str, parse_json: bool = True, **kwargs) -> Union[Dict, bytes]:
         if "headers" not in kwargs:
             kwargs["headers"] = self._headers
-        async with self._session.request(method, self._errata_url + path, **kwargs) as resp:
-            resp.raise_for_status()
-            result = await (resp.json() if parse_json else resp.read())
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True)) as session:
+            async with session.request(method, self._errata_url + path, **kwargs) as resp:
+                resp.raise_for_status()
+                result = await (resp.json() if parse_json else resp.read())
         return result
 
     async def get_advisory(self, advisory: Union[int, str]) -> Dict:
@@ -64,7 +62,7 @@ class AsyncErrataAPI:
     async def get_cve_package_exclusions(self, advisory_id: int):
         path = "/api/v1/cve_package_exclusion"
         # This is a paginated API, we need to increment page[number] until an empty array is returned.
-        params = {"filter[errata_id]": str(int(advisory_id)), "page[number]": 1, "page[size]": 300}
+        params = {"filter[errata_id]": str(int(advisory_id)), "page[number]": 1, "page[size]": 1000}
         while True:
             result = await self._make_request(aiohttp.hdrs.METH_GET, path, params=params)
             data: List[Dict] = result.get('data', [])
@@ -109,7 +107,7 @@ class AsyncErrataUtils:
         :return: a dict that key is CVE name, value is another dict with package name as key and 0 as value
         """
         brew_components = {parse_nvr(nvr)["name"] for nvr in attached_builds}
-        missing_brew_brew_components = {c for components in expected_cve_components.values() for c in components} - brew_components
+        missing_brew_brew_components = {c for components in expected_cve_components.values() for c in components if c not in constants.SPECIAL_CVE_COMPONENTS} - brew_components
         if missing_brew_brew_components:
             raise ValueError(f"Missing builds for brew component(s): {missing_brew_brew_components}")
         cve_packages_exclusions = {

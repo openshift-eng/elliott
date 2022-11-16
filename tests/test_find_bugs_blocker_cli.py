@@ -1,8 +1,9 @@
 import unittest
+import traceback
 from click.testing import CliRunner
 import elliottlib.cli.find_bugs_blocker_cli
 from elliottlib.cli.common import cli, Runtime
-from elliottlib.bzutil import BugzillaBugTracker
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from flexmock import flexmock
 
 
@@ -13,28 +14,34 @@ class FindBugsBlockerTestCase(unittest.TestCase):
         flexmock(Runtime).should_receive("initialize").and_return(None)
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
         flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
+        flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
+        flexmock(JIRABugTracker).should_receive("login").and_return(None)
 
-        bugs = [
-            flexmock(
-                id='BZ1',
-                created_days_ago=lambda: 33,
-                cf_pm_score='score',
-                component='OLM',
-                status='ON_DEV',
-                summary='summary'
-            )
-        ]
+        bz_bug = flexmock(
+            id=1, created_days_ago=lambda: 33,
+            cf_pm_score='score', component='OLM',
+            status='ON_DEV', summary='summary'
+        )
 
-        flexmock(BugzillaBugTracker).should_receive("blocker_search")\
-            .with_args({'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'RELEASE_PENDING'}, verbose=False)\
-            .and_return(bugs)
+        jira_bug = flexmock(
+            id='OCPBUGS-1', created_days_ago=lambda: 34,
+            cf_pm_score='score', component='OLM',
+            status='ON_QA', summary='summary'
+        )
 
-        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:blocker', '--exclude-status=ON_QA',
-                                     '--include-status=RELEASE_PENDING'])
+        flexmock(JIRABugTracker).should_receive("blocker_search").and_return([jira_bug])
+        flexmock(BugzillaBugTracker).should_receive("blocker_search").and_return([bz_bug])
+        result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:blocker'])
 
-        expected_output = 'BZ1           OLM                       ON_DEV       score   33  days   summary'
+        bz_output = '1             OLM                       ON_DEV       score   33  days   summary'
+        jira_output = 'OCPBUGS-1     OLM                       ON_QA        score   34  days   summary'
+        if result.exit_code != 0:
+            exc_type, exc_value, exc_traceback = result.exc_info
+            t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.fail(t)
         self.assertEqual(result.exit_code, 0)
-        self.assertIn(expected_output, result.output)
+        self.assertIn(bz_output, result.output)
+        self.assertIn(jira_output, result.output)
 
 
 if __name__ == '__main__':

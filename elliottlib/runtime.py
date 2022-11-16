@@ -51,8 +51,9 @@ class Runtime(object):
         self.verbose = False
         self.quiet = False
         self.data_path = None
-        self.use_jira = os.environ.get('USEJIRA')
-        self.only_jira = os.environ.get('ONLYJIRA')
+        self.use_jira = True
+        if str(os.environ.get('USEJIRA')).lower() in ["false", "0"]:
+            self.use_jira = False
         self._bug_trackers = {}
         self.brew_event: Optional[int] = None
         self.assembly: Optional[str] = 'stream'
@@ -82,6 +83,9 @@ class Runtime(object):
 
     def get_major_minor(self):
         return self.group_config.vars.MAJOR, self.group_config.vars.MINOR
+
+    def get_default_advisories(self):
+        return self.group_config.get('advisories', {})
 
     def get_group_config(self):
         # group.yml can contain a `vars` section which should be a
@@ -181,6 +185,9 @@ class Runtime(object):
         replace_vars = self.group_config.vars.primitive() if self.group_config.vars else {}
         if self.assembly:
             replace_vars['runtime_assembly'] = self.assembly
+        # release_name variable is currently only used in microshift rpm config to allow Doozer to pass release name to a modification script.
+        # Elliott doesn't need to care about it. Set an arbitrary value until it becomes necessary.
+        replace_vars['release_name'] = '(irrelevant)'
 
         image_data = {}
         if mode in ['images', 'both']:
@@ -276,15 +283,15 @@ class Runtime(object):
     def rpm_metas(self):
         return list(self.rpm_map.values())
 
-    @property
-    def bug_trackers(self):
-        if self._bug_trackers:
-            return self._bug_trackers
-        if not self.only_jira:
-            self._bug_trackers['bugzilla'] = BugzillaBugTracker(BugzillaBugTracker.get_config(self))
-        if self.use_jira or self.only_jira:
-            self._bug_trackers['jira'] = JIRABugTracker(JIRABugTracker.get_config(self))
-        return self._bug_trackers
+    def bug_trackers(self, bug_tracker_type):
+        if bug_tracker_type in self._bug_trackers:
+            return self._bug_trackers[bug_tracker_type]
+        if bug_tracker_type == 'bugzilla':
+            bug_tracker_cls = BugzillaBugTracker
+        elif bug_tracker_type == 'jira':
+            bug_tracker_cls = JIRABugTracker
+        self._bug_trackers[bug_tracker_type] = bug_tracker_cls(bug_tracker_cls.get_config(self))
+        return self._bug_trackers[bug_tracker_type]
 
     @property
     def remove_tmp_working_dir(self):
@@ -402,6 +409,9 @@ class Runtime(object):
             self.releases_config = Model()
 
         return self.releases_config
+
+    def get_errata_config(self, **kwargs):
+        return self.gitdata.load_data(key='erratatool', **kwargs).data
 
     def build_retrying_koji_client(self, caching: bool = False):
         """
