@@ -1,7 +1,9 @@
 import base64
 from unittest import IsolatedAsyncioTestCase
 from mock import ANY, AsyncMock, Mock, patch
+from elliottlib.rpm_utils import parse_nvr
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
+from elliottlib import constants
 
 
 class TestAsyncErrataAPI(IsolatedAsyncioTestCase):
@@ -129,7 +131,7 @@ class TestAsyncErrataAPI(IsolatedAsyncioTestCase):
 
 class TestAsyncErrataUtils(IsolatedAsyncioTestCase):
     @patch("elliottlib.errata_async.AsyncErrataAPI", autospec=True)
-    async def test_get_advisory_cve_package_exclusions(self, FakeAsyncErrataAPI: AsyncMock):
+    async def test_get_advisory_cve_exclusions(self, FakeAsyncErrataAPI: AsyncMock):
         api = FakeAsyncErrataAPI.return_value
         api.get_cve_package_exclusions.return_value.__aiter__.return_value = [
             {"id": 1, "relationships": {"cve": {"name": "CVE-2099-1"}, "package": {"name": "a"}}},
@@ -140,31 +142,61 @@ class TestAsyncErrataUtils(IsolatedAsyncioTestCase):
             "CVE-2099-1": {"a": 1, "b": 2},
             "CVE-2099-2": {"c": 3},
         }
-        actual = await AsyncErrataUtils.get_advisory_cve_package_exclusions(api, 1)
+        actual = await AsyncErrataUtils.get_advisory_cve_exclusions(api, 1)
         self.assertEqual(actual, expected)
 
-    def test_compute_cve_package_exclusions(self):
+    @patch("elliottlib.util.get_golang_container_nvrs", autospec=True)
+    def test_populate_golang_cve_components(self, get_go_container_nvrs: Mock):
+        golang_cve_names = {"CVE-2099-3"}
+        expected_cve_components = {
+            "CVE-2099-1": {"a", "b"},
+            "CVE-2099-2": {"c"},
+            "CVE-2099-3": {constants.GOLANG_BUILDER_CVE_COMPONENT},
+        }
+        attached_builds = ["a-1.0.0-1.el8", "a-1.0.0-1.el7", "b-1.0.0-1.el8", "c-1.0.0-1.el8", "d-1.0.0-1.el8"]
+        builder_nvr_string = 'openshift-golang-builder-container-v1.18.0-202204191948.sha1patch.el8.g4d4caca'
+        get_go_container_nvrs.return_value = {
+            builder_nvr_string: {(n['name'], n['version'], n['release'])
+                                 for n in [parse_nvr(n) for n in attached_builds[2:]]}
+        }
+        expected = {
+            "CVE-2099-1": {"a", "b"},
+            "CVE-2099-2": {"c"},
+            "CVE-2099-3": {"b", "c", "d"},
+        }
+        actual = AsyncErrataUtils.populate_golang_cve_components(golang_cve_names,
+                                                                 expected_cve_components,
+                                                                 attached_builds)
+        self.assertEqual(expected, actual)
+
+    @patch("elliottlib.errata_async.AsyncErrataUtils.populate_golang_cve_components", autospec=True)
+    def test_compute_cve_exclusions(self, populate_golang_cve: Mock):
         cve_components = {
             "CVE-2099-1": {"a", "b"},
             "CVE-2099-2": {"c"},
-            "CVE-2099-3": {"openshift-golang-builder-container"},
+            "CVE-2099-3": {constants.GOLANG_BUILDER_CVE_COMPONENT},
         }
         attached_builds = ["a-1.0.0-1.el8", "a-1.0.0-1.el7", "b-1.0.0-1.el8", "c-1.0.0-1.el8", "d-1.0.0-1.el8"]
+        populate_golang_cve.return_value = {
+            "CVE-2099-1": {"a", "b"},
+            "CVE-2099-2": {"c"},
+            "CVE-2099-3": {"b", "c", "d"},
+        }
         expected = {
             "CVE-2099-1": {"c": 0, "d": 0},
             "CVE-2099-2": {"a": 0, "b": 0, "d": 0},
-            "CVE-2099-3": {'a': 0, 'a': 0, 'b': 0, 'c': 0, 'd': 0},
+            "CVE-2099-3": {'a': 0},
         }
-        actual = AsyncErrataUtils.compute_cve_package_exclusions(attached_builds, cve_components)
+        actual = AsyncErrataUtils.compute_cve_exclusions(attached_builds, cve_components)
         self.assertEqual(actual, expected)
 
-    def test_diff_cve_package_exclusions(self):
-        current_cve_package_exclusions = {
+    def test_diff_cve_exclusions(self):
+        current_exclusions = {
             "CVE-2099-1": {"c": 1, "d": 2},
             "CVE-2099-2": {"a": 3, "b": 4, "d": 5},
             "CVE-2099-3": {}
         }
-        expected_cve_packages_exclusions = {
+        expected_exclusions = {
             "CVE-2099-1": {"c": 0, "e": 0},
             "CVE-2099-2": {"a": 0, "b": 0, "d": 0},
             "CVE-2099-3": {"e": 0}
@@ -179,26 +211,27 @@ class TestAsyncErrataUtils(IsolatedAsyncioTestCase):
             "CVE-2099-2": {},
             "CVE-2099-3": {"e": 0},
         }
-        actual_extra, actual_missing = AsyncErrataUtils.diff_cve_package_exclusions(current_cve_package_exclusions, expected_cve_packages_exclusions)
+        actual_extra, actual_missing = AsyncErrataUtils.diff_cve_exclusions(current_exclusions, expected_exclusions)
         self.assertEqual((actual_extra, actual_missing), (expected_extra, expected_misisng))
 
-    @patch("elliottlib.errata_async.AsyncErrataUtils.get_advisory_cve_package_exclusions", autospec=True)
+    @patch("elliottlib.errata_async.AsyncErrataUtils.get_advisory_cve_exclusions", autospec=True)
     @patch("elliottlib.errata_async.AsyncErrataAPI", autospec=True)
-    async def test_associate_builds_with_cves(self, FakeAsyncErrataAPI: AsyncMock, fake_get_advisory_cve_package_exclusions: AsyncMock):
+    async def test_associate_builds_with_cves(self, FakeAsyncErrataAPI: AsyncMock, fake_get_advisory_cve_exclusions: AsyncMock):
         api = FakeAsyncErrataAPI.return_value
         api.get_cves.return_value = ["CVE-2099-1", "CVE-2099-2", "CVE-2099-3"]
         attached_builds = ["a-1.0.0-1.el8", "a-1.0.0-1.el7", "b-1.0.0-1.el8", "c-1.0.0-1.el8", "d-1.0.0-1.el8", "e-1.0.0-1.el7"]
-        cve_components = {
+        cve_components_mapping = {
             "CVE-2099-1": {"a", "b", "d"},
             "CVE-2099-2": {"c", "e"},
             "CVE-2099-3": {"a", "b", "c", "d"},
         }
-        fake_get_advisory_cve_package_exclusions.return_value = {
+        fake_get_advisory_cve_exclusions.return_value = {
             "CVE-2099-1": {"c": 1, "d": 2},
             "CVE-2099-2": {"a": 3, "b": 4, "d": 5},
             "CVE-2099-3": {}
         }
-        actual = await AsyncErrataUtils.associate_builds_with_cves(api, 1, attached_builds, cve_components, dry_run=False)
+        actual = await AsyncErrataUtils.associate_builds_with_cves(api, 1, attached_builds, cve_components_mapping,
+                                                                   dry_run=False)
         api.delete_cve_package_exclusion.assert_any_await(2)
         api.create_cve_package_exclusion.assert_any_await(1, "CVE-2099-1", "e")
         api.create_cve_package_exclusion.assert_any_await(1, "CVE-2099-3", "e")

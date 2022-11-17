@@ -82,4 +82,4 @@ def attach_bugs(runtime, advisory, bug_ids, report, output, noop, bug_tracker):
         print_report(bugs, output=output)
 
     if advisory:
-        bug_tracker.attach_bugs(advisory, [b.id for b in bugs], noop=noop)
+        bug_tracker.attach_bugs([b.id for b in bugs], advisory_id=advisory, noop=noop)

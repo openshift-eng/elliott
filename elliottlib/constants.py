@@ -21,8 +21,8 @@ BUG_SEVERITY_NUMBER_MAP = {
     "urgent": 4,
 }
 
-# These components need special treatment when associating security tracking bugs with builds:
-SPECIAL_CVE_COMPONENTS = ['openshift-golang-builder-container']
+# Golang builder needs special treatment when associating security tracking bugs with builds:
+GOLANG_BUILDER_CVE_COMPONENT = 'openshift-golang-builder-container'
 
 BUG_LOOKUP_CHUNK_SIZE = 100
 BUG_ATTACH_CHUNK_SIZE = 100

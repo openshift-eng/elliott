@@ -3,25 +3,19 @@ from flexmock import flexmock
 from elliottlib.cli import get_golang_versions_cli
 from elliottlib import errata as erratalib
 from elliottlib import util as utillib
+from elliottlib.cli.common import cli, Runtime
+from click.testing import CliRunner
 
 
 class TestGetGolangVersionsCli(unittest.TestCase):
-    def test_get_advisory_golang_rpm(self):
-        advisory_id = 123
-        content_type = "rpm"
-        nvrs = [
-            ('openshift', 'v1.15', 'el8'),
-            ('podman', 'v1.4', 'el7')
-        ]
-        nvrs_with_go = {
-            'openshift': {
-                'nvr': ('openshift', 'v1.15', 'el8'), 'go': '1.16'
-            },
-            'podman': {
-                'nvr': ('podman', 'v1.4', 'el7'), 'go': '1.15'
-            }
-        }
-        logger = get_golang_versions_cli.logger
+    def test_get_golang_versions_advisory(self):
+        runner = CliRunner()
+        advisory_id = '123'
+        content_type = 'not docker'
+        flexmock(Runtime).should_receive("initialize").and_return(None)
+        nvrs = [('foo', 'v1', 'r'), ('bar', 'v1', 'r'), ('runc', 'v1', 'r'), ('podman', 'v1', 'r')]
+        go_nvr_map = 'foobar'
+        logger = get_golang_versions_cli._LOGGER
         flexmock(erratalib). \
             should_receive("get_all_advisory_nvrs"). \
             with_args(advisory_id). \
@@ -32,36 +26,29 @@ class TestGetGolangVersionsCli(unittest.TestCase):
             and_return(content_type)
         flexmock(utillib). \
             should_receive("get_golang_rpm_nvrs"). \
-            with_args(nvrs, logger).and_return(nvrs_with_go)
+            with_args([('runc', 'v1', 'r'), ('podman', 'v1', 'r')], logger).and_return(go_nvr_map)
         flexmock(utillib). \
-            should_receive("pretty_print_nvrs_go")
+            should_receive("pretty_print_nvrs_go").with_args(go_nvr_map)
 
-        get_golang_versions_cli.get_advisory_golang(advisory_id, "", logger)
+        result = runner.invoke(cli, ['go', '--advisory', advisory_id, '--components', 'runc,podman'])
+        self.assertEqual(result.exit_code, 0)
 
-    def test_get_nvr_golang(self):
-        openshift = {'nvr': ('openshift', 'v1.15', 'el8'), 'go': '1.16'}
-        podman = {'nvr': ('podman-container', 'v1.4', 'el7'), 'go': '1.15'}
-        nvrs_list = ['-'.join(x['nvr']) for x in [openshift, podman]]
-        rpm_nvrs = [openshift['nvr']]
-        container_nvrs = [podman['nvr']]
-        rpm_nvrs_go = {'openshift': openshift}
-        container_nvrs_go = {'podman-container': podman}
-        rpm_container_nvrs_go = {
-            'openshift': openshift,
-            'podman-container': podman
-        }
-        logger = get_golang_versions_cli.logger
+    def test_get_golang_versions_nvrs(self):
+        runner = CliRunner()
+        flexmock(Runtime).should_receive("initialize").and_return(None)
+        go_nvr_map = 'foobar'
+        logger = get_golang_versions_cli._LOGGER
         flexmock(utillib). \
             should_receive("get_golang_rpm_nvrs"). \
-            with_args(rpm_nvrs, logger).and_return(rpm_nvrs_go)
+            with_args([('podman', '1.9.3', '3.rhaos4.6.el8')], logger).and_return(go_nvr_map)
         flexmock(utillib). \
             should_receive("get_golang_container_nvrs"). \
-            with_args(container_nvrs, logger).and_return(container_nvrs_go)
+            with_args([('podman-container', '3.0.1', '6.el8')], logger).and_return(go_nvr_map)
         flexmock(utillib). \
-            should_receive("pretty_print_nvrs_go"). \
-            with_args(rpm_container_nvrs_go)
+            should_receive("pretty_print_nvrs_go").twice()
 
-        get_golang_versions_cli.get_nvrs_golang(nvrs_list, logger)
+        result = runner.invoke(cli, ['go', '--nvrs', 'podman-container-3.0.1-6.el8,podman-1.9.3-3.rhaos4.6.el8'])
+        self.assertEqual(result.exit_code, 0)
 
 
 if __name__ == '__main__':

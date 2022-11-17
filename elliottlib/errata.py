@@ -553,24 +553,22 @@ def remove_bugzilla_bugs(advisory_obj, bugids: List):
     advisory_obj.commit()
 
 
-def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = False,
+def add_bugzilla_bugs_with_retry(advisory: Erratum, bugids: List, noop: bool = False,
                                  batch_size: int = constants.BUG_ATTACH_CHUNK_SIZE):
     """
     adding specified bugs into advisory, retry 2 times: first time
     parse the exception message to get failed bug id list, remove from original
     list then add bug to advisory again, if still has failures raise exceptions
 
-    :param advisory_id: advisory id
+    :param advisory: advisory object
     :param bugids: iterable of bugzilla bug ids to attach to advisory
     :param noop: do not modify anything
     :param batch_size: perform operation in batches of given size
     :return:
     """
-    logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
-    advisory = Erratum(errata_id=advisory_id)
-
+    logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory.errata_id}')
     if not advisory:
-        raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
+        raise exceptions.ElliottFatalError("Error: advisory object cannot be empty")
 
     existing_bugs = bzutil.BugzillaBugTracker.advisory_bug_ids(advisory)
     new_bugs = set(bugids) - set(existing_bugs)
@@ -594,7 +592,7 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
             if len(retry_list) == 0:
                 continue
             try:
-                advisory = Erratum(errata_id=advisory_id)
+                advisory = Erratum(errata_id=advisory.errata_id)
                 advisory.addBugs(retry_list)
                 advisory.commit()
             except ErrataException as e:
@@ -603,19 +601,17 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
         logger.info("All bugzilla bugs attached")
 
 
-def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = False,
+def add_jira_bugs_with_retry(advisory: Erratum, bugids: List[str], noop: bool = False,
                              batch_size: int = constants.BUG_ATTACH_CHUNK_SIZE):
     """
-    :param advisory_id: advisory id
+    :param advisory: advisory object
     :param bugids: iterable of jira bug ids to attach to advisory
     :param noop: do not modify anything
     :param batch_size: perform operation in batches of given size
     """
-    logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
-    advisory = Erratum(errata_id=advisory_id)
-
+    logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory.errata_id}')
     if not advisory:
-        raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
+        raise exceptions.ElliottFatalError("Error: advisory object cannot be empty")
 
     existing_bugs = bzutil.JIRABugTracker.advisory_bug_ids(advisory)
     new_bugs = set(bugids) - set(existing_bugs)
@@ -635,7 +631,7 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
             attached_bugs = re.findall("Issue (.*) The issue is filed already in", str(e))
             if attached_bugs:
                 chunk_of_bugs = [b for b in chunk_of_bugs if b not in [b.upper() for b in attached_bugs]]
-                advisory = Erratum(errata_id=advisory_id)
+                advisory = Erratum(errata_id=advisory.errata_id)
                 advisory.addJiraIssues(chunk_of_bugs)
                 advisory.commit()
             else:
