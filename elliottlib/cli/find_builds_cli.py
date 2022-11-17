@@ -75,11 +75,11 @@ pass_runtime = click.make_pass_decorator(Runtime)
     '--non-payload', required=False, is_flag=True,
     help='Only attach non-payload images')
 @click.option(
-    '--allbuilds', required=False, is_flag=True,
+    '--include-shipped', required=False, is_flag=True,
     help='Do not filter out shipped builds')
 @pass_runtime
 def find_builds_cli(runtime: Runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached,
-                    remove, clean, no_cdn_repos, payload, non_payload, allbuilds):
+                    remove, clean, no_cdn_repos, payload, non_payload, include_shipped):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -163,9 +163,9 @@ PRESENT advisory. Here are some examples:
     else:
         if kind == 'image':
             unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, payload,
-                                                          non_payload, allbuilds)
+                                                          non_payload, include_shipped)
         elif kind == 'rpm':
-            unshipped_nvrps = _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_session, allbuilds)
+            unshipped_nvrps = _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_session, include_shipped)
 
     pbar_header(
         'Fetching builds from Errata: ',
@@ -300,7 +300,7 @@ def _find_shipped_builds(build_ids: List[Union[str, int]], brew_session: koji.Cl
 
 
 def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
-                                brew_session: koji.ClientSession, payload_only: bool, non_payload_only: bool, allbuilds: bool):
+                                brew_session: koji.ClientSession, payload_only: bool, non_payload_only: bool, include_shipped: bool):
     image_metas: List[ImageMetadata] = []
     for image in runtime.image_metas():
         if image.base_only or not image.is_release:
@@ -316,8 +316,8 @@ def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
     brew_latest_builds: List[Dict] = asyncio.get_event_loop().run_until_complete(asyncio.gather(*[exectools.to_thread(progress_func, image.get_latest_build) for image in image_metas]))
 
     _ensure_accepted_tags(brew_latest_builds, brew_session, tag_pv_map)
-    shipped = []
-    if allbuilds:
+    shipped = set()
+    if include_shipped:
         click.echo("Do not filter out shipped builds, all builds will be attached")
     else:
         click.echo("Filtering out shipped builds...")
@@ -352,7 +352,7 @@ def _ensure_accepted_tags(builds: List[Dict], brew_session: koji.ClientSession, 
         build["tag_name"] = accepted_tag
 
 
-def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew_session: koji.ClientSession, allbuilds: bool):
+def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew_session: koji.ClientSession, include_shipped: bool):
     assembly = runtime.assembly
     if runtime.assembly_basis_event:
         LOGGER.warning(f'Constraining rpm search to stream assembly due to assembly basis event {runtime.assembly_basis_event}')
@@ -412,8 +412,8 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
         for nvr in not_attachable_nvrs:
             yellow_print(f"\t{nvr}")
 
-    shipped = []
-    if allbuilds:
+    shipped = set()
+    if include_shipped:
         click.echo("Do not filter out shipped builds, all builds will be attached")
     else:
         click.echo("Filtering out shipped builds...")
