@@ -207,6 +207,7 @@ written out to summary_results.json.
 
     """
     runtime.initialize()
+    rhcos_images = {c['name'] for c in rhcos.get_container_configs(runtime)}
     all_advisory_nvrs = elliottlib.errata.get_advisory_nvrs(advisory)
 
     click.echo("Found {} builds".format(len(all_advisory_nvrs)))
@@ -248,7 +249,6 @@ written out to summary_results.json.
         # The machine-os-content image doesn't follow the standard
         # pattern. We need to skip that image when we find it, it is
         # not attached to advisories.
-        rhcos_images = [c['name'] for c in rhcos.get_container_configs(runtime)]
         if image_name in rhcos_images:
             yellow_prefix(f"Skipping rhcos image {image_name}: ")
             click.echo("Not required for checks")
