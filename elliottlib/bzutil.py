@@ -56,11 +56,10 @@ class Bug:
         raise NotImplementedError
 
     @property
-    def all_advisory_ids(self):
+    def whiteboard_component(self):
         raise NotImplementedError
 
-    @property
-    def whiteboard_component(self):
+    def all_advisory_ids(self):
         raise NotImplementedError
 
     def is_tracker_bug(self):
@@ -134,10 +133,6 @@ class BugzillaBug(Bug):
             return None
 
     @property
-    def all_advisory_ids(self):
-        return ErrataBug(self.id).all_advisory_ids
-
-    @property
     def corresponding_flaw_bug_ids(self):
         return self.bug.blocks
 
@@ -156,6 +151,9 @@ class BugzillaBug(Bug):
             component_name = tmp.groups()[0]
             return component_name
         return None
+
+    def all_advisory_ids(self):
+        return ErrataBug(self.id).all_advisory_ids
 
     def is_ocp_bug(self):
         return self.product == constants.BUGZILLA_PRODUCT_OCP
@@ -203,10 +201,6 @@ class JIRABug(Bug):
                 if match:
                     flaw_bug_ids.append(match[1])
         return [int(f) for f in flaw_bug_ids]
-
-    @property
-    def all_advisory_ids(self):
-        return ErrataJira(self.id).all_advisory_ids
 
     @property
     def version(self):
@@ -304,6 +298,9 @@ class JIRABug(Bug):
             if "Low" in self.bug.fields.customfield_12316142.value:
                 return "Low"
         return None
+
+    def all_advisory_ids(self):
+        return ErrataJira(self.id).all_advisory_ids
 
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')

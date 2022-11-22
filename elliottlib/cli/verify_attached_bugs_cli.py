@@ -156,7 +156,7 @@ class BugValidator:
     def verify_bugs_multiple_advisories(self, non_flaw_bugs: List[Bug]):
         logger.info('Making sure bugs are not attached to multiple advisories..')
         for bug in non_flaw_bugs:
-            all_advisories_id = bug.all_advisory_ids
+            all_advisories_id = bug.all_advisory_ids()
             if len(all_advisories_id) > 1:
                 self._complain(f'Bug {bug.id} is attached in multiple advisories: {all_advisories_id}')
 
