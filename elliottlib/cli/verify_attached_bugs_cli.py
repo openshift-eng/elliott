@@ -61,11 +61,11 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
         validator.validate(non_flaw_bugs, verify_bug_status, no_verify_blocking_bugs)
 
         # skip advisory type check if advisories are
-        # manually passed in and we don't know their type
+        # manually passed in, and we don't know their type
         if '?' not in advisory_id_map.keys():
             validator.verify_bugs_advisory_type(non_flaw_bugs, advisory_id_map, advisory_bug_map)
 
-        validator.verify_bugs_multiple_advisories(non_flaw_bugs)
+        await validator.verify_bugs_multiple_advisories(non_flaw_bugs)
         if verify_flaws:
             await validator.verify_attached_flaws(advisory_bug_map)
         if validator.problems:
@@ -153,12 +153,19 @@ class BugValidator:
                     self._complain(f'Unexpected Bugs found in {kind} advisory ({advisory_id}):'
                                    f' {[b.id for b in extra_bugs]}')
 
-    def verify_bugs_multiple_advisories(self, non_flaw_bugs: List[Bug]):
-        logger.info('Making sure bugs are not attached to multiple advisories..')
-        for bug in non_flaw_bugs:
+    async def verify_bugs_multiple_advisories(self, non_flaw_bugs: List[Bug]):
+        logger.info(f'Checking if bugs ({len(non_flaw_bugs)}) are attached to multiple advisories')
+
+        async def get_all_advisory_ids(bug):
             all_advisories_id = bug.all_advisory_ids()
             if len(all_advisories_id) > 1:
-                self._complain(f'Bug {bug.id} is attached in multiple advisories: {all_advisories_id}')
+                return f'Bug {bug.id} is attached in multiple advisories: {all_advisories_id}'
+            return None
+
+        results = await asyncio.gather(*[asyncio.create_task(get_all_advisory_ids(bug)) for bug in non_flaw_bugs])
+        for message in results:
+            if message:
+                self._complain(message)
 
     async def verify_attached_flaws(self, advisory_bugs: Dict[int, List[Bug]]):
         futures = []
