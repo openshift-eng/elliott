@@ -154,7 +154,7 @@ class BugValidator:
                                    f' {[b.id for b in extra_bugs]}')
 
     async def verify_bugs_multiple_advisories(self, non_flaw_bugs: List[Bug]):
-        logger.info(f'Checking if bugs ({len(non_flaw_bugs)}) are attached to multiple advisories')
+        logger.info(f'Checking {len(non_flaw_bugs)} bugs, if any bug is attached to multiple advisories')
 
         async def get_all_advisory_ids(bug):
             all_advisories_id = bug.all_advisory_ids()
