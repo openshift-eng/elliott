@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
 from jira import JIRA, Issue
+from errata_tool.jira_issue import JiraIssue as ErrataJira
+from errata_tool.bug import Bug as ErrataBug
 
 import bugzilla
 import click
@@ -55,6 +57,9 @@ class Bug:
 
     @property
     def whiteboard_component(self):
+        raise NotImplementedError
+
+    def all_advisory_ids(self):
         raise NotImplementedError
 
     def is_tracker_bug(self):
@@ -146,6 +151,9 @@ class BugzillaBug(Bug):
             component_name = tmp.groups()[0]
             return component_name
         return None
+
+    def all_advisory_ids(self):
+        return ErrataBug(self.id).all_advisory_ids
 
     def is_ocp_bug(self):
         return self.product == constants.BUGZILLA_PRODUCT_OCP
@@ -290,6 +298,9 @@ class JIRABug(Bug):
             if "Low" in self.bug.fields.customfield_12316142.value:
                 return "Low"
         return None
+
+    def all_advisory_ids(self):
+        return ErrataJira(self.id).all_advisory_ids
 
     def creation_time_parsed(self):
         return datetime.strptime(str(self.bug.fields.created), '%Y-%m-%dT%H:%M:%S.%f%z')
@@ -492,7 +503,7 @@ class JIRABugTracker(BugTracker):
         if invalid_bugs:
             logger.warn(f"Cannot fetch bugs from a different project (current project: {self._project}):"
                         f" {invalid_bugs}")
-        bugids = [b for b in bugids if self.looks_like_a_jira_project_bug(b)]
+        bugids = {b for b in bugids if self.looks_like_a_jira_project_bug(b)}
         if not bugids:
             return []
         query = self._query(bugids=bugids, with_target_release=False)
@@ -500,7 +511,7 @@ class JIRABugTracker(BugTracker):
             logger.info(query)
         bugs = self._search(query)
         if len(bugs) < len(bugids):
-            bugids_not_found = set(bugids) - {b.id for b in bugs}
+            bugids_not_found = bugids - {b.id for b in bugs}
             msg = f"Some bugs could not be fetched ({len(bugids) - len(bugs)}): {bugids_not_found}"
             if not permissive:
                 raise ValueError(msg)
