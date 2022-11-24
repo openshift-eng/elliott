@@ -922,6 +922,10 @@ def _construct_query_url(config, status, search_filter='default', flag=None):
     for f in filter_list:
         query_url.addFilter('component', 'notequals', f)
 
+    # CVEs for this image get filed into component that we need to look at. As this is about a
+    # deprecated system and fixing config is not an option, hard code this exclusion:
+    query_url.addFilter('status_whiteboard', 'notsubstring', 'component:assisted-installer-container')
+
     for s in status:
         query_url.addBugStatus(s)
 
