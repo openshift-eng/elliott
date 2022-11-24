@@ -642,6 +642,7 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
             attached_bugs = re.findall("Issue (.*) The issue is filed already in", str(e))
             if attached_bugs:
                 chunk_of_bugs = [b for b in chunk_of_bugs if b not in [b.upper() for b in attached_bugs]]
+                advisory = Erratum(errata_id=advisory_id)
                 advisory.addJiraIssues(chunk_of_bugs)
                 advisory.commit()
             else:
