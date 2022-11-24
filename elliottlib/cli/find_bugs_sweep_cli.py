@@ -9,6 +9,7 @@ from elliottlib.assembly import assembly_issues_config
 from elliottlib.bzutil import BugTracker, Bug, JIRABug
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import common
+from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import green_prefix, green_print, red_prefix, chunk
 
 
@@ -124,16 +125,19 @@ advisory with the --add option.
     if check_builds:
         logger.warn("--check-builds is ON by default, it will be deprecated in the future")
 
-    exit_code = 0
     bugs: type_bug_list = []
+    errors = []
     for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
         try:
             bugs.extend(find_and_attach_bugs(runtime, advisory_id, default_advisory_type, major_version, find_bugs_obj,
                         output, brew_event, noop, count_advisory_attach_flags, b))
         except Exception as e:
+            errors.append(e)
             logger.error(traceback.format_exc())
             logger.error(f'exception with {b.type} bug tracker: {e}')
-            exit_code = 1
+
+    if errors:
+        raise ElliottFatalError(f"Error finding or attaching bugs: {errors}. See logs for more information.")
 
     if not bugs:
         logger.info('No bugs found')
@@ -146,7 +150,7 @@ advisory with the --add option.
     if report:
         print_report(bugs, output)
 
-    sys.exit(exit_code)
+    sys.exit(0)
 
 
 def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
