@@ -9,6 +9,7 @@ python-bugzilla >= 3.2
 pyyaml
 requests
 requests_kerberos >= 0.13
+requests-gssapi ~= 1.2.3
 ruamel.yaml
 tenacity
 jira >= 3.4.1  # https://github.com/pycontribs/jira/issues/1486
