@@ -17,7 +17,6 @@ from elliottlib import exceptions, constants, brew, logutil
 from elliottlib.util import green_prefix, green_print, exit_unauthenticated, chunk
 from elliottlib import bzutil
 from requests_gssapi import HTTPSPNEGOAuth
-from spnego.exceptions import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
 from typing import List
 
@@ -568,10 +567,7 @@ def add_bugzilla_bugs_with_retry(advisory_id: int, bugids: List, noop: bool = Fa
     :return:
     """
     logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
-    try:
-        advisory = Erratum(errata_id=advisory_id)
-    except GSSError:
-        exit_unauthenticated()
+    advisory = Erratum(errata_id=advisory_id)
 
     if not advisory:
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
@@ -616,10 +612,7 @@ def add_jira_bugs_with_retry(advisory_id: int, bugids: List[str], noop: bool = F
     :param batch_size: perform operation in batches of given size
     """
     logger.info(f'Request to attach {len(bugids)} bugs to the advisory {advisory_id}')
-    try:
-        advisory = Erratum(errata_id=advisory_id)
-    except GSSError:
-        exit_unauthenticated()
+    advisory = Erratum(errata_id=advisory_id)
 
     if not advisory:
         raise exceptions.ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
@@ -723,8 +716,6 @@ def get_advisory_nvrs(advisory):
     """
     try:
         builds = get_builds(advisory)
-    except GSSError:
-        exit_unauthenticated()
     except exceptions.ErrataToolError as ex:
         raise exceptions.ElliottFatalError(getattr(ex, 'message', repr(ex)))
 
@@ -751,8 +742,6 @@ def get_all_advisory_nvrs(advisory):
     """
     try:
         builds = get_builds(advisory)
-    except GSSError:
-        exit_unauthenticated()
     except exceptions.ErrataToolError as ex:
         raise exceptions.ElliottFatalError(getattr(ex, 'message', repr(ex)))
 

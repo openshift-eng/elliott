@@ -7,9 +7,7 @@ from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated, exit_unauthorized, ensure_erratatool_auth
 from elliottlib.util import release_from_branch, green_prefix, green_print, red_print
 
-from errata_tool import Erratum, ErrataException
-from spnego.exceptions import GSSError
-import requests
+from errata_tool import Erratum
 import click
 
 LOGGER = logutil.getLogger(__name__)
@@ -45,10 +43,7 @@ Example to add standard metadata to a 3.10 images release
     runtime.initialize()
     release = release_from_branch(runtime.group_config.branch)
 
-    try:
-        advisory = Erratum(errata_id=advisory)
-    except GSSError:
-        exit_unauthenticated()
+    advisory = Erratum(errata_id=advisory)
 
     result = elliottlib.errata.add_comment(
         advisory.errata_id, {'release': release, 'kind': kind, 'impetus': impetus})

@@ -1,7 +1,6 @@
 import click
 from io import BytesIO
 import koji
-from spnego.exceptions import GSSError
 import re
 import requests
 import yaml
@@ -66,14 +65,11 @@ def verify_attached_operators_cli(runtime, exclude_shipped, advisories):
 def _get_attached_image_builds(brew_session, advisories):
     # get all attached image builds
     build_nvrs = []
-    try:
-        for advisory in advisories:
-            green_print(f"Retrieving builds from advisory {advisory}")
-            advisory = Erratum(errata_id=advisory)
-            for build_list in advisory.errata_builds.values():  # one per product version
-                build_nvrs.extend(build_list)
-    except GSSError:
-        exit_unauthenticated()
+    for advisory in advisories:
+        green_print(f"Retrieving builds from advisory {advisory}")
+        advisory = Erratum(errata_id=advisory)
+        for build_list in advisory.errata_builds.values():  # one per product version
+            build_nvrs.extend(build_list)
 
     green_print(f"Found {len(build_nvrs)} builds")
     return [build for build in brew.get_build_objects(build_nvrs, brew_session) if _is_image(build)]

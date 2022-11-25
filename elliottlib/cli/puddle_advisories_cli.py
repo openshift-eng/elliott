@@ -1,7 +1,6 @@
 import click
 import sys
 import elliottlib
-from spnego.exceptions import GSSError
 from elliottlib import logutil, Runtime
 from elliottlib.cli.common import cli
 from elliottlib.exceptions import ElliottFatalError
@@ -62,7 +61,5 @@ first comment.
                     sys.stderr.flush()
 
         click.echo(", ".join(use_in_puddle_conf))
-    except GSSError:
-        exit_unauthenticated()
     except elliottlib.exceptions.ErrataToolError as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))

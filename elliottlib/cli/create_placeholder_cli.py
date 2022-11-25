@@ -5,7 +5,6 @@ from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import exit_unauthenticated
 
 from errata_tool import Erratum
-from spnego.exceptions import GSSError
 import click
 
 LOGGER = logutil.getLogger(__name__)
@@ -59,10 +58,7 @@ def create_placeholder(kind, advisory_id, bug_tracker, noop):
     if not advisory_id:
         return
 
-    try:
-        advisory = Erratum(errata_id=advisory_id)
-    except GSSError:
-        exit_unauthenticated()
+    advisory = Erratum(errata_id=advisory_id)
 
     if advisory is False:
         raise ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")

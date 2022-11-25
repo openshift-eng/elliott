@@ -1,6 +1,5 @@
 import click
 import elliottlib
-from spnego.exceptions import GSSError
 from elliottlib.util import exit_unauthenticated
 from elliottlib.exceptions import ElliottFatalError
 
@@ -40,7 +39,5 @@ yourself online: https://errata.devel.redhat.com/filter/1965
                        state=erratum.errata_state,
                        synopsis=erratum.synopsis,
                        url=erratum.url()))
-    except GSSError:
-        exit_unauthenticated()
     except elliottlib.exceptions.ErrataToolError as ex:
         raise ElliottFatalError(getattr(ex, 'message', repr(ex)))

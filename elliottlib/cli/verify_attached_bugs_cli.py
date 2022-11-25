@@ -2,7 +2,6 @@ import asyncio
 import re
 from typing import Any, Dict, Iterable, List, Set, Tuple
 import click
-from spnego.exceptions import GSSError
 from errata_tool import Erratum
 
 from elliottlib import bzutil, constants, logutil
@@ -49,31 +48,28 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
 async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisory_id_map: Dict[str, int], verify_flaws:
                                bool, no_verify_blocking_bugs: bool):
     validator = BugValidator(runtime, output="text")
-    try:
-        await validator.errata_api.login()
-        advisory_bug_map = validator.get_attached_bugs(list(advisory_id_map.values()))
-        bugs = {b for bugs in advisory_bug_map.values() for b in bugs}
+    await validator.errata_api.login()
+    advisory_bug_map = validator.get_attached_bugs(list(advisory_id_map.values()))
+    bugs = {b for bugs in advisory_bug_map.values() for b in bugs}
 
-        # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products or
-        # placeholder
-        non_flaw_bugs = [b for b in bugs if b.is_ocp_bug()]
+    # bug.is_ocp_bug() filters by product/project, so we don't get flaw bugs or bugs of other products or
+    # placeholder
+    non_flaw_bugs = [b for b in bugs if b.is_ocp_bug()]
 
-        validator.validate(non_flaw_bugs, verify_bug_status, no_verify_blocking_bugs)
+    validator.validate(non_flaw_bugs, verify_bug_status, no_verify_blocking_bugs)
 
-        # skip advisory type check if advisories are
-        # manually passed in, and we don't know their type
-        if '?' not in advisory_id_map.keys():
-            validator.verify_bugs_advisory_type(non_flaw_bugs, advisory_id_map, advisory_bug_map)
+    # skip advisory type check if advisories are
+    # manually passed in, and we don't know their type
+    if '?' not in advisory_id_map.keys():
+        validator.verify_bugs_advisory_type(non_flaw_bugs, advisory_id_map, advisory_bug_map)
 
-        await validator.verify_bugs_multiple_advisories(non_flaw_bugs)
-        if verify_flaws:
-            await validator.verify_attached_flaws(advisory_bug_map)
-        if validator.problems:
-            if validator.output != 'slack':
-                red_print("Some bug problems were listed above. Please investigate.")
-            exit(1)
-    except GSSError:
-        exit_unauthenticated()
+    await validator.verify_bugs_multiple_advisories(non_flaw_bugs)
+    if verify_flaws:
+        await validator.verify_attached_flaws(advisory_bug_map)
+    if validator.problems:
+        if validator.output != 'slack':
+            red_print("Some bug problems were listed above. Please investigate.")
+        exit(1)
 
 
 @cli.command("verify-bugs", short_help="Verify bugs included in an assembly (default --assembly=stream)")
