@@ -16,7 +16,7 @@ import requests
 from elliottlib import exceptions, constants, brew, logutil
 from elliottlib.util import green_prefix, green_print, exit_unauthenticated, chunk
 from elliottlib import bzutil
-from requests_kerberos import HTTPKerberosAuth
+from requests_gssapi import HTTPSPNEGOAuth
 from spnego.exceptions import GSSError
 from errata_tool import Erratum, ErrataException, ErrataConnector
 from typing import List
@@ -281,7 +281,7 @@ def build_signed(build):
     filter_endpoint = constants.errata_get_build_url.format(id=build)
     res = requests.get(filter_endpoint,
                        verify=ssl.get_default_verify_paths().openssl_cafile,
-                       auth=HTTPKerberosAuth())
+                       auth=HTTPSPNEGOAuth())
     if res.status_code == 200:
         return res.json()['rpms_signed']
     elif res.status_code == 401:
@@ -308,7 +308,7 @@ def get_filtered_list(filter_id=constants.errata_default_filter, limit=5):
     filter_endpoint = constants.errata_filter_list_url.format(id=filter_id)
     res = requests.get(filter_endpoint,
                        verify=ssl.get_default_verify_paths().openssl_cafile,
-                       auth=HTTPKerberosAuth())
+                       auth=HTTPSPNEGOAuth())
     if res.status_code == 200:
         # When asked for an advisory list which does not exist
         # normally you would expect a code like '404' (not
@@ -346,7 +346,7 @@ def add_comment(advisory_id, comment):
     data = {"comment": json.dumps(comment)}
     return requests.post(constants.errata_add_comment_url.format(id=advisory_id),
                          verify=ssl.get_default_verify_paths().openssl_cafile,
-                         auth=HTTPKerberosAuth(),
+                         auth=HTTPSPNEGOAuth(),
                          data=data)
 
 
@@ -388,7 +388,7 @@ def get_comments(advisory_id):
             constants.errata_get_comments_url,
             params=params,
             verify=ssl.get_default_verify_paths().openssl_cafile,
-            auth=HTTPKerberosAuth(),
+            auth=HTTPSPNEGOAuth(),
             json=body)
         if res.ok:
             data = res.json().get('data', [])
@@ -440,7 +440,7 @@ def get_builds(advisory_id, session=None):
         session = requests.session()
     res = session.get(constants.errata_get_builds_url.format(id=advisory_id),
                       verify=ssl.get_default_verify_paths().openssl_cafile,
-                      auth=HTTPKerberosAuth())
+                      auth=HTTPSPNEGOAuth())
     if res.status_code == 200:
         return res.json()
     else:
@@ -472,7 +472,7 @@ def get_brew_builds(errata_id, session=None):
 
     res = session.get(constants.errata_get_builds_url.format(id=errata_id),
                       verify=ssl.get_default_verify_paths().openssl_cafile,
-                      auth=HTTPKerberosAuth())
+                      auth=HTTPSPNEGOAuth())
     brew_list = []
     if res.status_code == 200:
         jlist = res.json()
@@ -512,7 +512,7 @@ def get_brew_build(nvr, product_version='', session=None):
 
     res = session.get(constants.errata_get_build_url.format(id=nvr),
                       verify=ssl.get_default_verify_paths().openssl_cafile,
-                      auth=HTTPKerberosAuth())
+                      auth=HTTPSPNEGOAuth())
 
     if res.status_code == 200:
         return brew.Build(nvr=nvr, body=res.json(), product_version=product_version)
@@ -534,7 +534,7 @@ def get_advisories_for_bug(bug_id, session=None):
         session = requests.session()
     r = session.get(constants.errata_get_advisories_for_bug_url.format(id=int(bug_id)),
                     verify=ssl.get_default_verify_paths().openssl_cafile,
-                    auth=HTTPKerberosAuth())
+                    auth=HTTPSPNEGOAuth())
     r.raise_for_status()
     return r.json()
 
@@ -676,7 +676,7 @@ def get_rpmdiff_runs(advisory_id, status=None, session=None):
         resp = session.get(
             url,
             params=params,
-            auth=HTTPKerberosAuth(),
+            auth=HTTPSPNEGOAuth(),
         )
         resp.raise_for_status()
         data = resp.json()["data"]
