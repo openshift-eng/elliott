@@ -23,7 +23,7 @@ from koji import ClientSession
 from elliottlib import constants, exceptions, exectools, logutil, errata, util
 from elliottlib.cli import cli_opts
 from elliottlib.metadata import Metadata
-from elliottlib.util import isolate_timestamp_in_release
+from elliottlib.util import isolate_timestamp_in_release, chunk
 
 logger = logutil.getLogger(__name__)
 
@@ -460,6 +460,8 @@ class BugTracker:
 
 
 class JIRABugTracker(BugTracker):
+    JIRA_BUG_BATCH_SIZE = 50
+
     @staticmethod
     def get_config(runtime) -> Dict:
         major, minor = runtime.get_major_minor()
@@ -506,10 +508,16 @@ class JIRABugTracker(BugTracker):
         bugids = {b for b in bugids if self.looks_like_a_jira_project_bug(b)}
         if not bugids:
             return []
-        query = self._query(bugids=bugids, with_target_release=False)
-        if verbose:
-            logger.info(query)
-        bugs = self._search(query)
+
+        # Split the request in chunks, in order not to fall into
+        # jira.exceptions.JIRAError for request header size too large
+        bugs = []
+        for chunk_of_bugs in chunk(list(bugids), self.JIRA_BUG_BATCH_SIZE):
+            query = self._query(bugids=chunk_of_bugs, with_target_release=False)
+            if verbose:
+                logger.info(query)
+            bugs.extend(self._search(query))
+
         if len(bugs) < len(bugids):
             bugids_not_found = bugids - {b.id for b in bugs}
             msg = f"Some bugs could not be fetched ({len(bugids) - len(bugs)}): {bugids_not_found}"
