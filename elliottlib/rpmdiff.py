@@ -1,7 +1,7 @@
 
 from builtins import object
 import requests
-from requests_kerberos import HTTPKerberosAuth
+from requests_gssapi import HTTPSPNEGOAuth
 
 
 class RPMDiffClient(object):
@@ -16,7 +16,7 @@ class RPMDiffClient(object):
         return resp.json()["token"]
 
     def authenticate(self):
-        token = self.get_token(HTTPKerberosAuth())
+        token = self.get_token(HTTPSPNEGOAuth())
         self.session.headers["Authorization"] = "Token " + token
 
     def get_run(self, run_id):

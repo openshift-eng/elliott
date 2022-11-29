@@ -143,8 +143,8 @@ class TestBrew(unittest.TestCase):
             .and_return(flexmock(openssl_cafile="/my/cert.pem")))
 
         (flexmock(errata)
-            .should_receive("HTTPKerberosAuth")
-            .and_return("MyHTTPKerberosAuth"))
+            .should_receive("HTTPSPNEGOAuth")
+            .and_return("MyHTTPSPNEGOAuth"))
 
         response = flexmock(status_code=200)
         response.should_receive("json").and_return(test_structures.rpm_build_attached_json)
@@ -155,7 +155,7 @@ class TestBrew(unittest.TestCase):
         (flexmock(errata.requests.Session)
             .should_receive("get")
             .with_args(constants.errata_get_build_url.format(id=nvr),
-                       auth="MyHTTPKerberosAuth",
+                       auth="MyHTTPSPNEGOAuth",
                        verify="/my/cert.pem")
             .and_return(response))
 
@@ -169,8 +169,8 @@ class TestBrew(unittest.TestCase):
             .and_return(flexmock(openssl_cafile="/my/cert.pem")))
 
         (flexmock(errata)
-            .should_receive("HTTPKerberosAuth")
-            .and_return("MyHTTPKerberosAuth"))
+            .should_receive("HTTPSPNEGOAuth")
+            .and_return("MyHTTPSPNEGOAuth"))
 
         response = flexmock(status_code=200)
         response.should_receive("json").and_return(test_structures.rpm_build_attached_json)
@@ -182,7 +182,7 @@ class TestBrew(unittest.TestCase):
         (session
             .should_receive("get")
             .with_args(constants.errata_get_build_url.format(id=nvr),
-                       auth="MyHTTPKerberosAuth",
+                       auth="MyHTTPSPNEGOAuth",
                        verify="/my/cert.pem")
             .and_return(response))
 
@@ -196,8 +196,8 @@ class TestBrew(unittest.TestCase):
             .and_return(flexmock(openssl_cafile="/my/cert.pem")))
 
         (flexmock(errata)
-            .should_receive("HTTPKerberosAuth")
-            .and_return("MyHTTPKerberosAuth"))
+            .should_receive("HTTPSPNEGOAuth")
+            .and_return("MyHTTPSPNEGOAuth"))
 
         response = flexmock(status_code=404, text="_irrelevant_")
 
@@ -207,7 +207,7 @@ class TestBrew(unittest.TestCase):
         (flexmock(errata.requests.Session)
             .should_receive("get")
             .with_args(constants.errata_get_build_url.format(id=nvr),
-                       auth="MyHTTPKerberosAuth",
+                       auth="MyHTTPSPNEGOAuth",
                        verify="/my/cert.pem")
             .and_return(response))
 

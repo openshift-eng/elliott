@@ -69,7 +69,6 @@ from elliottlib.cli.repair_bugs_cli import repair_bugs_cli
 # 3rd party
 import click
 from errata_tool import ErrataException
-from spnego.exceptions import GSSError
 
 
 # -----------------------------------------------------------------------------
@@ -134,10 +133,7 @@ Fields for the short format: Release date, State, Synopsys, URL
         click.echo(advisory)
         return
 
-    try:
-        advisory = elliottlib.errata.Advisory(errata_id=advisory)
-    except GSSError:
-        exit_unauthenticated()
+    advisory = elliottlib.errata.Advisory(errata_id=advisory)
 
     if details:
         click.echo(advisory)
