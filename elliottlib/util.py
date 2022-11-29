@@ -10,7 +10,6 @@ from elliottlib import brew
 from elliottlib.exceptions import BrewBuildException
 
 from errata_tool import Erratum
-from spnego.exceptions import GSSError
 
 # -----------------------------------------------------------------------------
 # Constants and defaults
@@ -75,10 +74,7 @@ def exit_unauthorized():
 
 def ensure_erratatool_auth():
     """Test (cheaply) that we at least have authentication to erratatool"""
-    try:
-        Erratum(errata_id=1)
-    except GSSError:
-        exit_unauthenticated()
+    Erratum(errata_id=1)
 
 
 def validate_release_date(ctx, param, value):

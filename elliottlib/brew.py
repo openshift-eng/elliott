@@ -15,7 +15,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, BinaryIO
 # 3rd party
 import koji
 import requests
-from requests_kerberos import HTTPKerberosAuth
+from requests_gssapi import HTTPSPNEGOAuth
 
 # ours
 from elliottlib import constants, exceptions, logutil
@@ -171,11 +171,11 @@ def get_brew_build(nvr, product_version='', session=None):
     if session is not None:
         res = session.get(constants.errata_get_build_url.format(id=nvr),
                           verify=ssl.get_default_verify_paths().openssl_cafile,
-                          auth=HTTPKerberosAuth())
+                          auth=HTTPSPNEGOAuth())
     else:
         res = requests.get(constants.errata_get_build_url.format(id=nvr),
                            verify=ssl.get_default_verify_paths().openssl_cafile,
-                           auth=HTTPKerberosAuth())
+                           auth=HTTPSPNEGOAuth())
     if res.status_code == 200:
         return Build(nvr=nvr, body=res.json(), product_version=product_version)
     else:

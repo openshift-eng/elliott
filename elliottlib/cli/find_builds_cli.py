@@ -6,8 +6,7 @@ from typing import Dict, List, Set, Union
 import click
 import koji
 import requests
-from errata_tool import Erratum, ErrataException
-from spnego.exceptions import GSSError
+from errata_tool import ErrataException
 
 import elliottlib
 from elliottlib import Runtime, brew, constants, errata, logutil
@@ -223,9 +222,6 @@ PRESENT advisory. Here are some examples:
             cdn_repos = et_data.get('cdn_repos')
             if cdn_repos and not no_cdn_repos and kind == "image":
                 erratum.set_cdn_repos(cdn_repos)
-
-    except GSSError:
-        exit_unauthenticated()
     except ErrataException as e:
         red_print(f'Cannot change advisory {advisory}: {e}')
         exit(1)

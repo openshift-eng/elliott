@@ -7,7 +7,6 @@ from elliottlib.util import green_prefix
 from elliottlib.bzutil import get_jira_bz_bug_ids, JIRABugTracker, BugzillaBugTracker
 
 from errata_tool import ErrataException
-from spnego.exceptions import GSSError
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -55,10 +54,7 @@ def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove
     if default_advisory_type is not None:
         advisory_id = find_default_advisory(runtime, default_advisory_type)
 
-    try:
-        advisory = errata.Advisory(errata_id=advisory_id)
-    except GSSError:
-        exit_unauthenticated()
+    advisory = errata.Advisory(errata_id=advisory_id)
     if not advisory:
         raise ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
     attached_jira_ids = JIRABugTracker.advisory_bug_ids(advisory)
