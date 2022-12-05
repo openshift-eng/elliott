@@ -1122,10 +1122,10 @@ def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
             # first-fix tracker bug might be not visible but not break here
             if "not authorized" in e:
                 logger.warning(f"We are not authorized to access bug #{tracker_id}, need manually check if it's permission issue")
-            logger.warning(f"Failed to get tracker bug {tracker_id} info from bugtracker API")
-        else:
-            if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug():
-                tracker_bugs.append(b)
+                logger.warning(f"Failed to get tracker bug {tracker_id} info from bugtracker API")
+            else:
+                if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug():
+                    tracker_bugs.append(b)
 
     if not tracker_bugs:
         # No OCP trackers found
