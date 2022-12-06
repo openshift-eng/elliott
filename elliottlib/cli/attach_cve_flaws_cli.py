@@ -1,4 +1,3 @@
-import asyncio
 import sys
 import traceback
 from logging import Logger
@@ -8,8 +7,7 @@ import click
 from errata_tool import Erratum
 
 from elliottlib import constants
-from elliottlib.bzutil import (Bug, BugTracker, get_highest_security_impact,
-                               is_first_fix_any, sort_cve_bugs)
+from elliottlib.bzutil import sort_cve_bugs
 from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.errata import is_security_advisory
@@ -63,6 +61,8 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     exit_code = 0
     flaw_bug_tracker = runtime.bug_trackers('bugzilla')
     errata_config = runtime.get_errata_config()
+    errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
+
     for advisory_id in advisories:
         runtime.logger.info("Getting advisory %s", advisory_id)
         advisory = Erratum(errata_id=advisory_id)
@@ -72,7 +72,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
             attached_trackers.extend(get_attached_trackers(advisory, bug_tracker, runtime.logger))
 
         tracker_flaws, _, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, runtime.logger)
-        errata_api = None
+
         try:
             if first_fix_flaw_bugs:
                 _update_advisory(runtime, advisory, first_fix_flaw_bugs, flaw_bug_tracker, noop)
@@ -80,13 +80,14 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
                 pass  # TODO: convert RHSA back to RHBA
             # Associate builds with CVEs
             runtime.logger.info('Associating CVEs with builds')
-            errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
             await errata_api.login()
             await associate_builds_with_cves(errata_api, advisory, first_fix_flaw_bugs, attached_trackers, tracker_flaws, noop)
         except Exception as e:
             runtime.logger.error(traceback.format_exc())
             runtime.logger.error(f'Exception: {e}')
             exit_code = 1
+
+    await errata_api.close()
     sys.exit(exit_code)
 
 

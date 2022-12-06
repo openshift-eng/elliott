@@ -64,8 +64,13 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
         validator.verify_bugs_advisory_type(non_flaw_bugs, advisory_id_map, advisory_bug_map)
 
     await validator.verify_bugs_multiple_advisories(non_flaw_bugs)
+
     if verify_flaws:
         await validator.verify_attached_flaws(advisory_bug_map)
+
+    # Close client session
+    await validator.close()
+
     if validator.problems:
         if validator.output != 'slack':
             red_print("Some bug problems were listed above. Please investigate.")
@@ -106,6 +111,10 @@ async def verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bug
         ocp_bugs.extend(bugs)
 
     validator.validate(ocp_bugs, verify_bug_status, no_verify_blocking_bugs)
+
+    # Close client session
+    await validator.close()
+
     if validator.problems:
         if validator.output != 'slack':
             red_print("Some bug problems were listed above. Please investigate.")
@@ -121,6 +130,9 @@ class BugValidator:
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
         self.output = output
+
+    async def close(self):
+        await self.errata_api.close()
 
     def validate(self, non_flaw_bugs: List[Bug], verify_bug_status: bool, no_verify_blocking_bugs: bool):
         non_flaw_bugs = self.filter_bugs_by_release(non_flaw_bugs, complain=True)
