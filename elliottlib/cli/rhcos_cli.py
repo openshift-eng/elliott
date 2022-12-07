@@ -1,8 +1,7 @@
 import click
-import re
 import json
 from elliottlib.cli.common import cli
-from elliottlib import rhcos, cincinnati, util, exectools
+from elliottlib import rhcos, util, exectools
 
 
 @cli.command("rhcos", short_help="Show details of packages contained in OCP RHCOS builds")
