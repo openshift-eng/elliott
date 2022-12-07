@@ -22,7 +22,7 @@ def get_container_configs(runtime):
     return runtime.group_config.rhcos.payload_tags or ListModel([default_primary_container])
 
 
-def release_url(version, arch="x86_64", private=False):
+def release_url(runtime, version, arch="x86_64", private=False):
     """
     base url for a release stream in the release browser (AWS bucket).
 
@@ -32,7 +32,20 @@ def release_url(version, arch="x86_64", private=False):
     @return e.g. "https://releases-rhcos-art...com/storage/releases/rhcos-4.6-s390x"
     """
     # TODO: create private rhcos builds and do something with "private" here
-    return f"{constants.RHCOS_RELEASES_BASE_URL}/rhcos-{version}{util.brew_suffix_for_arch(arch)}"
+    bucket = arch
+    if runtime.group_config.urls.rhcos_release_base[bucket]:
+        return runtime.group_config.urls.rhcos_release_base[bucket]
+    multi_url = runtime.group_config.urls.rhcos_release_base["multi"]
+    bucket_url = runtime.group_config.urls.rhcos_release_base[bucket]
+    if multi_url:
+        if bucket_url:
+            raise ValueError(f"Multiple rhcos_release_base urls found in group config: `multi` and `{bucket}`")
+        return multi_url
+    if bucket_url:
+        return bucket_url
+
+    bucket_suffix = util.brew_suffix_for_arch(arch)
+    return f"{constants.RHCOS_RELEASES_BASE_URL}/rhcos-{version}{bucket_suffix}"
 
 
 # this is hard to test with retries, so wrap testable method
@@ -55,11 +68,11 @@ def _latest_build_id(version, arch="x86_64", private=False):
 
 # this is hard to test with retries, so wrap testable method
 @retry(reraise=True, stop=stop_after_attempt(10), wait=wait_fixed(3))
-def get_build_meta(build_id, version, arch="x86_64", private=False, meta_type="meta"):
-    return _build_meta(build_id, version, arch, private, meta_type)
+def get_build_meta(runtime, build_id, version, arch="x86_64", private=False, meta_type="meta"):
+    return _build_meta(runtime, build_id, version, arch, private, meta_type)
 
 
-def _build_meta(build_id, version, arch="x86_64", private=False, meta_type="meta"):
+def _build_meta(runtime, build_id, version, arch="x86_64", private=False, meta_type="meta"):
     """
     rhcos metadata for an id in the given stream from the release browser.
     meta_type is "meta" for the build record or "commitmeta" for its ostree content.
@@ -76,7 +89,7 @@ def _build_meta(build_id, version, arch="x86_64", private=False, meta_type="meta
          ...
      }
     """
-    url = f"{release_url(version, arch, private)}/{build_id}/"
+    url = f"{release_url(runtime, version, arch, private)}/{build_id}/"
     # before 4.3 the arch was not included in the path
     vtuple = tuple(int(f) for f in version.split("."))
     url += f"{meta_type}.json" if vtuple < (4, 3) else f"{arch}/{meta_type}.json"
@@ -99,10 +112,10 @@ def get_build_from_payload(payload_pullspec):
     return build_id, arch
 
 
-def get_rpm_nvrs(build_id, version, arch, private=''):
+def get_rpm_nvrs(runtime, build_id, version, arch, private=''):
     stream_name = f"{arch}{'-priv' if private else ''}"
     try:
-        commitmeta = get_build_meta(build_id, version, arch, private, meta_type="commitmeta")
+        commitmeta = get_build_meta(runtime, build_id, version, arch, private, meta_type="commitmeta")
         rpm_list = commitmeta.get("rpmostree.rpmdb.pkglist")
         if not rpm_list:
             raise Exception(f"no pkglist in {commitmeta}")
