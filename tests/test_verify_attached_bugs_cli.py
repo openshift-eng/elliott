@@ -1,9 +1,8 @@
-import unittest
+import asynctest
+from asynctest import patch as async_patch
 from click.testing import CliRunner
 from errata_tool import Erratum
 from elliottlib.cli.common import cli, Runtime
-from elliottlib.cli.verify_attached_bugs_cli import verify_bugs_cli
-import elliottlib.cli.find_bugs_sweep_cli as sweep_cli
 from elliottlib.cli.verify_attached_bugs_cli import BugValidator
 import elliottlib.cli.verify_attached_bugs_cli as verify_attached_bugs_cli
 from elliottlib.errata_async import AsyncErrataAPI
@@ -12,11 +11,12 @@ from flexmock import flexmock
 import asyncio
 
 
-class VerifyAttachedBugs(unittest.TestCase):
-    def test_validator_target_release(self):
+class VerifyAttachedBugs(asynctest.TestCase):
+    async def test_validator_target_release(self):
         runtime = Runtime()
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.9.z']})
+
         flexmock(AsyncErrataAPI).should_receive("__init__").and_return(None)
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
         validator = BugValidator(runtime, True)
@@ -62,7 +62,8 @@ class VerifyAttachedBugs(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA', result.output)
 
-    def test_verify_attached_bugs_cli_fail(self):
+    @async_patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
+    def test_verify_attached_bugs_cli_fail(self, _):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
@@ -109,7 +110,8 @@ class VerifyAttachedBugs(unittest.TestCase):
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA',
                       result.output)
 
-    def test_verify_attached_bugs_cli_fail_on_type(self):
+    @async_patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
+    def test_verify_attached_bugs_cli_fail_on_type(self, _):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
@@ -155,8 +157,8 @@ class VerifyAttachedBugs(unittest.TestCase):
                       result.output)
 
 
-class TestBugValidator(unittest.TestCase):
-    def test_get_attached_bugs_jira(self):
+class TestBugValidator(asynctest.TestCase):
+    async def test_get_attached_bugs_jira(self):
         runtime = Runtime()
         jira_bug_map = {
             'bug-1': flexmock(id='bug-1'),
@@ -195,7 +197,7 @@ class TestBugValidator(unittest.TestCase):
         )
         self.assertEqual(actual, expected)
 
-    def test_get_blocking_bugs_for(self):
+    async def test_get_blocking_bugs_for(self):
         runtime = Runtime()
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
@@ -234,7 +236,8 @@ class TestBugValidator(unittest.TestCase):
             bugs[2]: [depend_on_bz_bugs[0]]
         }
         self.assertEqual(actual, expected)
+        await validator.close()
 
 
 if __name__ == '__main__':
-    unittest.main()
+    asynctest.main()

@@ -123,7 +123,7 @@ advisory with the --add option.
     find_bugs_obj.exclude_status(exclude_status)
 
     if check_builds:
-        logger.warn("--check-builds is ON by default, it will be deprecated in the future")
+        logger.warning("--check-builds is ON by default, it will be deprecated in the future")
 
     bugs: type_bug_list = []
     errors = []
@@ -174,12 +174,12 @@ def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
         raise ValueError(f"The following {bug_tracker.type} bugs are defined in both 'include' and 'exclude': "
                          f"{included_bug_ids & excluded_bug_ids}")
     if included_bug_ids:
-        logger.warn(f"The following {bug_tracker.type} bugs will be additionally included because they are "
+        logger.warning(f"The following {bug_tracker.type} bugs will be additionally included because they are "
                     f"explicitly defined in the assembly config: {included_bug_ids}")
         included_bugs = bug_tracker.get_bugs(included_bug_ids)
         bugs.extend(included_bugs)
     if excluded_bug_ids:
-        logger.warn(f"The following {bug_tracker.type} bugs will be excluded because they are explicitly "
+        logger.warning(f"The following {bug_tracker.type} bugs will be excluded because they are explicitly "
                     f"defined in the assembly config: {excluded_bug_ids}")
         bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
@@ -264,7 +264,7 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
 
     warning_bug = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
     if warning_bug:
-        logger.warn(f"Bug {warning_bug} has CVE number in summary but does not have tracker keywords")
+        logger.warning(f"Bug {warning_bug} has CVE number in summary but does not have tracker keywords")
 
     if not advisory_id_map:
         logger.info("Skipping sorting/attaching Tracker Bugs. Advisories with attached builds must be given to "
