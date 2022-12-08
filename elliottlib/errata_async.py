@@ -34,9 +34,9 @@ class AsyncErrataAPI:
     async def _make_request(self, method: str, path: str, parse_json: bool = True, **kwargs) -> Union[Dict, bytes]:
         if "headers" not in kwargs:
             kwargs["headers"] = self._headers
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True)) as session:
+        await self.login()
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True), timeout=aiohttp.ClientTimeout(total=60 * 60)) as session:
             async with session.request(method, self._errata_url + path, **kwargs) as resp:
-                resp.raise_for_status()
                 result = await (resp.json() if parse_json else resp.read())
         return result
 

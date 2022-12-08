@@ -264,7 +264,7 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
 
     warning_bug = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
     if warning_bug:
-        logger.warn(f"Bug {warning_bug} has CVE number in summary but does not have tracker keywords")
+        logger.warning(f"Bug {warning_bug} has CVE number in summary but does not have tracker keywords")
 
     if not advisory_id_map:
         logger.info("Skipping sorting/attaching Tracker Bugs. Advisories with attached builds must be given to "

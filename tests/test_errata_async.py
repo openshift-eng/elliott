@@ -17,7 +17,8 @@ class TestAsyncErrataAPI(TestCase):
         self.assertEqual(api._headers["Authorization"], 'Negotiate ' + base64.b64encode(b"faketoken").decode())
 
     @patch("aiohttp.ClientSession")
-    def test_make_request(self, ClientSession: AsyncMock):
+    @patch("gssapi.SecurityContext", autospec=True)
+    def test_make_request(self, SecurityContext: Mock, ClientSession: AsyncMock):
         request = MagicMock(
             **{
                 'request.return_value.__aenter__.return_value': AsyncMock(
@@ -30,6 +31,8 @@ class TestAsyncErrataAPI(TestCase):
         )
         ClientSession.return_value.__aenter__.return_value = request
         api = AsyncErrataAPI("https://errata.example.com")
+        client_ctx = SecurityContext.return_value
+        client_ctx.step.return_value = b"faketoken"
         actual = get_event_loop().run_until_complete(api._make_request("HEAD", "/api/path"))
         self.assertEqual(actual, {"result": "fake"})
         actual = get_event_loop().run_until_complete(api._make_request("GET", "/api/path", parse_json=False))

@@ -503,8 +503,8 @@ class TestBZUtil(unittest.TestCase):
             .should_receive("query")
             .and_return(tracker_bug_objs))
         (bzapi
-            .should_receive("get_bug")
-            .and_return(bug_a))
+            .should_receive("get_bugs")
+            .and_return([bug_a]))
 
         expected = True
         actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
@@ -533,11 +533,7 @@ class TestBZUtil(unittest.TestCase):
         (bzapi
             .should_receive("query")
             .and_return(tracker_bug_objs))
-        (bzapi
-            .should_receive("get_bug")
-            .with_args(1)
-            .and_return(bug_a))
-        (bzapi.should_receive("get_bug").with_args(2).and_return(bug_a))
+        (bzapi.should_receive("get_bugs").and_return([bug_a]))
 
         expected = False
         actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
@@ -574,8 +570,7 @@ class TestBZUtil(unittest.TestCase):
         (bzapi
             .should_receive("query")
             .and_return(tracker_bug_objs))
-        (bzapi.should_receive("get_bug").with_args(1).and_return(bug_a))
-        (bzapi.should_receive("get_bug").with_args(2).and_return(bug_b))
+        (bzapi.should_receive("get_bugs").and_return([bug_a, bug_b]))
 
         expected = True
         actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
@@ -613,8 +608,8 @@ class TestBZUtil(unittest.TestCase):
             .should_receive("query")
             .and_return(tracker_bug_objs))
         (bzapi
-            .should_receive("get_bug")
-            .and_return(bug_a))
+            .should_receive("get_bugs")
+            .and_return([bug_a, bug_b]))
 
         expected = False
         actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
@@ -659,11 +654,8 @@ class TestBZUtil(unittest.TestCase):
             .should_receive("query")
             .and_return(tracker_bug_objs))
         (bzapi
-            .should_receive("get_bug")
-            .with_args(1)
-            .and_return(bug_a))
-        (bzapi.should_receive("get_bug").with_args(2).and_return(bug_b))
-        (bzapi.should_receive("get_bug").with_args(3).and_return(bug_c))
+            .should_receive("get_bugs")
+            .and_return([bug_a, bug_b, bug_c]))
 
         expected = True
         actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)

@@ -48,7 +48,6 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
 async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisory_id_map: Dict[str, int], verify_flaws:
                                bool, no_verify_blocking_bugs: bool):
     validator = BugValidator(runtime, output="text")
-    await validator.errata_api.login()
     advisory_bug_map = validator.get_attached_bugs(list(advisory_id_map.values()))
     bugs = {b for bugs in advisory_bug_map.values() for b in bugs}
 
@@ -178,6 +177,8 @@ class BugValidator:
         # Retrieve flaw bugs for attached_tracker_bugs
         tracker_flaws, flaw_id_bugs = BugTracker.get_corresponding_flaw_bugs(attached_trackers,
                                                                              self.runtime.bug_trackers('bugzilla'))
+        current_cve_package_exclusions = await AsyncErrataUtils.get_advisory_cve_package_exclusions(self.errata_api, advisory_id)
+        attached_builds = await self.errata_api.get_builds_flattened(advisory_id)
 
         # Find first-fix flaws
         first_fix_flaw_ids = set()
@@ -213,8 +214,8 @@ class BugValidator:
                            "You need to drop those flaw bugs or attach corresponding tracker bugs.")
 
         # Check if advisory is of the expected type
-        advisory_info = await self.errata_api.get_advisory(advisory_id)
-        advisory_type = next(iter(advisory_info["errata"].keys())).upper()  # should be one of [RHBA, RHSA, RHEA]
+        advisory_info = Erratum(errata_id=advisory_id)
+        advisory_type = advisory_info.errata_type  # should be one of [RHBA, RHSA, RHEA]
         if not first_fix_flaw_ids:
             if advisory_type == "RHSA":
                 self._complain(f"Advisory {advisory_id} is of type {advisory_type} "
@@ -236,8 +237,7 @@ class BugValidator:
                     raise ValueError(f"Flaw bug {flaw_id} should have exact 1 alias.")
                 cve = flaw_id_bugs[flaw_id].alias[0]
                 cve_components_mapping.setdefault(cve, set()).add(component_name)
-        current_cve_package_exclusions = await AsyncErrataUtils.get_advisory_cve_package_exclusions(self.errata_api, advisory_id)
-        attached_builds = await self.errata_api.get_builds_flattened(advisory_id)
+
         expected_cve_packages_exclusions = AsyncErrataUtils.compute_cve_package_exclusions(attached_builds, cve_components_mapping)
         extra_cve_package_exclusions, missing_cve_package_exclusions = AsyncErrataUtils.diff_cve_package_exclusions(current_cve_package_exclusions, expected_cve_packages_exclusions)
         for cve, cve_package_exclusions in extra_cve_package_exclusions.items():
@@ -254,7 +254,7 @@ class BugValidator:
                                "mapping or attach the corresponding tracker bugs.")
 
         # Check if flaw bugs match the CVE field of the advisory
-        advisory_cves = advisory_info["content"]["content"]["cve"].split()
+        advisory_cves = advisory_info.cve_names.split()
         extra_cves = cve_components_mapping.keys() - advisory_cves
         if extra_cves:
             self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are already attached "
