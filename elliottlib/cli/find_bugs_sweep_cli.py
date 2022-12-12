@@ -256,15 +256,16 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
 
     tracker_bugs = [b for b in bugs if b.is_tracker_bug() and b.whiteboard_component]
     logger.info(f"Tracker Bugs found: {len(tracker_bugs)}")
+    missed_trackers = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
+    if missed_trackers:
+        logger.error(f"Bugs {missed_trackers} have CVE number in summary but do not have tracker labels. Please "
+                     f"fix this")
+
     if not tracker_bugs:
         return bugs_by_type
 
     for b in tracker_bugs:
         logger.info((b.id, b.whiteboard_component))
-
-    warning_bug = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
-    if warning_bug:
-        logger.warn(f"Bug {warning_bug} has CVE number in summary but does not have tracker keywords")
 
     if not advisory_id_map:
         logger.info("Skipping sorting/attaching Tracker Bugs. Advisories with attached builds must be given to "

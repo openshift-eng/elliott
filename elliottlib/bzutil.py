@@ -865,13 +865,21 @@ class BugzillaBugTracker(BugTracker):
 
     def get_tracker_bugs(self, bug_ids: List, strict: bool = False, verbose: bool = False):
         fields = ["target_release", "blocks", 'whiteboard', 'keywords']
-        return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields, verbose=verbose) if
-                b.is_tracker_bug()]
+        bugs = self.get_bugs(bug_ids, permissive=not strict, include_fields=fields, verbose=verbose)
+        trackers = [b for b in bugs if b.is_tracker_bug()]
+        not_trackers = [b.id for b in bugs if not b.is_tracker_bug()]
+        if not_trackers and strict:
+            raise ValueError(f"Unexpected: {not_trackers} were found to not be qualified tracker bugs")
+        return trackers
 
     def get_flaw_bugs(self, bug_ids: List, strict: bool = True, verbose: bool = False):
         fields = ["product", "component", "depends_on", "alias", "severity", "summary"]
-        return [b for b in self.get_bugs(bug_ids, permissive=not strict, include_fields=fields, verbose=verbose) if
-                b.is_flaw_bug()]
+        bugs = self.get_bugs(bug_ids, permissive=not strict, include_fields=fields, verbose=verbose)
+        flaws = [b for b in bugs if b.is_flaw_bug()]
+        not_flaws = [b.id for b in bugs if not b.is_flaw_bug()]
+        if not_flaws and strict:
+            raise ValueError(f"Unexpected: {not_flaws} were found to not be qualified flaw bugs")
+        return flaws
 
 
 def get_highest_impact(trackers, tracker_flaws_map):

@@ -124,7 +124,7 @@ class BugValidator:
 
     def validate(self, non_flaw_bugs: List[Bug], verify_bug_status: bool, no_verify_blocking_bugs: bool):
         non_flaw_bugs = self.filter_bugs_by_release(non_flaw_bugs, complain=True)
-        self._verify_bug_summary(non_flaw_bugs)
+        self._detect_missed_trackers(non_flaw_bugs)
         if not no_verify_blocking_bugs:
             blocking_bugs_for = self._get_blocking_bugs_for(non_flaw_bugs)
             self._verify_blocking_bugs(blocking_bugs_for)
@@ -379,11 +379,12 @@ class BugValidator:
                 status = f"{bug.status}: {bug.resolution}"
             self._complain(f"Bug {bug.id} has status {status}")
 
-    def _verify_bug_summary(self, bugs):
-        # complain about bugs that should be CVE
+    def _detect_missed_trackers(self, bugs):
+        # complain about bugs that look like CVE trackers
+        # but do not identify as CVE trackers
         for bug in bugs:
             if bug.is_cve_in_summary() and not bug.is_tracker_bug():
-                self._complain(f"Bug {bug.id} has CVE number in summary but does not have tracker keywords")
+                self._complain(f"Bug {bug.id} has CVE number in summary but does not have tracker labels")
 
     def _complain(self, problem: str):
         red_print(problem)
