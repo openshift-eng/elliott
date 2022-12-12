@@ -175,12 +175,12 @@ def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
                          f"{included_bug_ids & excluded_bug_ids}")
     if included_bug_ids:
         logger.warning(f"The following {bug_tracker.type} bugs will be additionally included because they are "
-                    f"explicitly defined in the assembly config: {included_bug_ids}")
+                       f"explicitly defined in the assembly config: {included_bug_ids}")
         included_bugs = bug_tracker.get_bugs(included_bug_ids)
         bugs.extend(included_bugs)
     if excluded_bug_ids:
         logger.warning(f"The following {bug_tracker.type} bugs will be excluded because they are explicitly "
-                    f"defined in the assembly config: {excluded_bug_ids}")
+                       f"defined in the assembly config: {excluded_bug_ids}")
         bugs = [bug for bug in bugs if bug.id not in excluded_bug_ids]
 
     return bugs

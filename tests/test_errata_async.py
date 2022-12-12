@@ -20,7 +20,7 @@ class TestAsyncErrataAPI(IsolatedAsyncioTestCase):
         request = session_mock.return_value.request
         fake_response = request.return_value.__aenter__.return_value
         fake_response.json.return_value = {"result": "fake"}
-        fake_response.raise_for_status = Mock(return_value = None)
+        fake_response.raise_for_status = Mock(return_value=None)
         api = AsyncErrataAPI("https://errata.example.com")
         actual = await api._make_request("HEAD", "/api/path")
         self.assertEqual(actual, {"result": "fake"})
