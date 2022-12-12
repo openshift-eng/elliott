@@ -6,6 +6,7 @@ Test functions related to controlled command execution
 import asyncio
 import unittest
 
+import asynctest
 from flexmock import flexmock
 import mock
 
@@ -148,7 +149,7 @@ class TestCmdExec(unittest.TestCase):
         self.assertRaises(IOError, exectools.cmd_assert, "/usr/bin/false", 3, 1)
 
 
-class TestGather(unittest.TestCase):
+class TestGather(asynctest.TestCase):
     """
     """
 
@@ -230,8 +231,7 @@ class TestGather(unittest.TestCase):
         self.assertEqual(stdout, stdout_expected)
         self.assertEqual(stderr, stderr_expected)
 
-    def test_cmd_gather_async(self):
-        loop = asyncio.get_event_loop()
+    async def test_cmd_gather_async(self):
         cmd = ["uname", "-a"]
         fake_cwd = "/foo/bar"
         fake_stdout = b"fake_stdout"
@@ -242,20 +242,21 @@ class TestGather(unittest.TestCase):
             proc.returncode = 0
             proc.communicate.return_value = (fake_stdout, fake_stderr)
 
-            rc, out, err = loop.run_until_complete(exectools.cmd_gather_async(cmd, text_mode=True))
-            create_subprocess_exec.assert_called_once_with(*cmd, cwd=fake_cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            rc, out, err = await exectools.cmd_gather_async(cmd, text_mode=True)
+            create_subprocess_exec.assert_called_once_with(*cmd, cwd=fake_cwd, stdout=asyncio.subprocess.PIPE,
+                                                           stderr=asyncio.subprocess.PIPE)
             self.assertEqual(rc, 0)
             self.assertEqual(out, fake_stdout.decode("utf-8"))
             self.assertEqual(err, fake_stderr.decode("utf-8"))
 
             create_subprocess_exec.reset_mock()
-            rc, out, err = loop.run_until_complete(exectools.cmd_gather_async(cmd, text_mode=False))
-            create_subprocess_exec.assert_called_once_with(*cmd, cwd=fake_cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            rc, out, err = await exectools.cmd_gather_async(cmd, text_mode=False)
+            create_subprocess_exec.assert_called_once_with(*cmd, cwd=fake_cwd, stdout=asyncio.subprocess.PIPE,
+                                                           stderr=asyncio.subprocess.PIPE)
             self.assertEqual(rc, 0)
             self.assertEqual(out, fake_stdout)
             self.assertEqual(err, fake_stderr)
 
 
 if __name__ == "__main__":
-
     unittest.main()
