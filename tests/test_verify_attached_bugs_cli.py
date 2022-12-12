@@ -8,7 +8,6 @@ import elliottlib.cli.verify_attached_bugs_cli as verify_attached_bugs_cli
 from elliottlib.errata_async import AsyncErrataAPI
 from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker
 from flexmock import flexmock
-import asyncio
 
 
 class VerifyAttachedBugs(asynctest.TestCase):
@@ -63,7 +62,8 @@ class VerifyAttachedBugs(asynctest.TestCase):
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA', result.output)
 
     @async_patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
-    def test_verify_attached_bugs_cli_fail(self, _):
+    @async_patch('elliottlib.errata_async.AsyncErrataAPI.login')
+    def test_verify_attached_bugs_cli_fail(self, *_):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
@@ -73,10 +73,6 @@ class VerifyAttachedBugs(asynctest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'project': 'OCPBUGS', 'target_release': [
             '4.6.z']})
         flexmock(BugzillaBugTracker).should_receive("login")
-
-        f = asyncio.Future()
-        f.set_result(None)
-        flexmock(AsyncErrataAPI).should_receive("login").and_return(f)
 
         bugs = [
             flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
@@ -111,7 +107,8 @@ class VerifyAttachedBugs(asynctest.TestCase):
                       result.output)
 
     @async_patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
-    def test_verify_attached_bugs_cli_fail_on_type(self, _):
+    @async_patch('elliottlib.errata_async.AsyncErrataAPI.login')
+    def test_verify_attached_bugs_cli_fail_on_type(self, *_):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
@@ -123,10 +120,6 @@ class VerifyAttachedBugs(asynctest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("login")
         flexmock(Runtime).should_receive("get_default_advisories")\
             .and_return({'image': 1, 'rpm': 2, 'extras': 3, 'metadata': 4})
-
-        f = asyncio.Future()
-        f.set_result(None)
-        flexmock(AsyncErrataAPI).should_receive("login").and_return(f)
 
         bugs = [
             flexmock(id="OCPBUGS-1", is_ocp_bug=lambda: True),

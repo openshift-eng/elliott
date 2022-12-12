@@ -1,13 +1,14 @@
 import unittest
-from asyncio import get_event_loop
+from mock import AsyncMock, Mock, patch
+
+import asynctest
 
 from elliottlib.bzutil import BugzillaBug
-from mock import AsyncMock, Mock, patch
 from elliottlib.cli import attach_cve_flaws_cli
 from elliottlib.errata_async import AsyncErrataAPI
 
 
-class TestAttachCVEFlawsCLI(unittest.TestCase):
+class TestAttachCVEFlawsCLI(asynctest.TestCase):
     def test_get_updated_advisory_rhsa(self):
         boilerplate = {
             'security_reviewer': 'some reviewer',
@@ -60,7 +61,7 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
         )
 
     @patch("elliottlib.errata_async.AsyncErrataUtils.associate_builds_with_cves", autospec=True)
-    def test_associate_builds_with_cves_bz(self, fake_urils_associate_builds_with_cves: AsyncMock):
+    async def test_associate_builds_with_cves_bz(self, fake_urils_associate_builds_with_cves: AsyncMock):
         errata_api = AsyncMock(spec=AsyncErrataAPI)
         advisory = Mock(
             errata_id=12345,
@@ -98,8 +99,14 @@ class TestAttachCVEFlawsCLI(unittest.TestCase):
             103: BugzillaBug(Mock(id=103, keywords=["Security"], alias=["CVE-2099-3"])),
         }
         flaw_bugs = list(flaw_id_bugs.values())
-        actual = get_event_loop().run_until_complete(attach_cve_flaws_cli.associate_builds_with_cves(errata_api, advisory, flaw_bugs, attached_tracker_bugs, tracker_flaws, dry_run=False))
-        fake_urils_associate_builds_with_cves.assert_awaited_once_with(errata_api, 12345, ['a-1.0.0-1.el8', 'b-1.0.0-1.el8', 'c-1.0.0-1.el8', 'd-1.0.0-1.el8', 'a-1.0.0-1.el7', 'e-1.0.0-1.el7', 'f-1.0.0-1.el7'], {'CVE-2099-1': {'a', 'd', 'b'}, 'CVE-2099-3': {'a', 'd', 'b', 'c'}, 'CVE-2099-2': {'c', 'e'}}, dry_run=False)
+        actual = await attach_cve_flaws_cli.associate_builds_with_cves(
+            errata_api, advisory, flaw_bugs, attached_tracker_bugs, tracker_flaws, dry_run=False)
+        fake_urils_associate_builds_with_cves.assert_awaited_once_with(
+            errata_api, 12345, ['a-1.0.0-1.el8', 'b-1.0.0-1.el8', 'c-1.0.0-1.el8',
+                                'd-1.0.0-1.el8', 'a-1.0.0-1.el7', 'e-1.0.0-1.el7',
+                                'f-1.0.0-1.el7'], {'CVE-2099-1': {'a', 'd', 'b'},
+                                                   'CVE-2099-3': {'a', 'd', 'b', 'c'}, 'CVE-2099-2': {'c', 'e'}},
+            dry_run=False)
         self.assertEqual(actual, None)
 
 
