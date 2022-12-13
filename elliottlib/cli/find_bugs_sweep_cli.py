@@ -258,8 +258,8 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
     logger.info(f"Tracker Bugs found: {len(tracker_bugs)}")
     missed_trackers = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
     if missed_trackers:
-        logger.error(f"Bugs {missed_trackers} have CVE number in summary but do not have tracker labels. Please "
-                     f"fix this")
+        raise ValueError(f"Bugs {missed_trackers} have CVE number in summary but do not have tracker labels. Please "
+                         "fix this")
 
     if not tracker_bugs:
         return bugs_by_type

@@ -110,7 +110,8 @@ class FindBugsSweepTestCase(unittest.TestCase):
 
     def test_find_bugs_sweep_advisory_jira(self):
         runner = CliRunner()
-        bugs = [flexmock(id='BZ1', is_tracker_bug=lambda: False, component='whatever', sub_component='whatever')]
+        bugs = [flexmock(id='BZ1', is_tracker_bug=lambda: False, component='whatever', sub_component='whatever',
+                         is_cve_in_summary=lambda: False)]
         advisory_id = 123
 
         # common mocks
@@ -207,14 +208,22 @@ class FindBugsSweepTestCase(unittest.TestCase):
 
 
 class TestCategorizeBugsByType(unittest.TestCase):
+    def test_categorize_bugs_by_type_fail(self):
+        bugs = [
+            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True,
+                     whiteboard_component='foo'),
+            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True,
+                     whiteboard_component='bar'),
+        ]
+        flexmock(sweep_cli).should_receive("extras_bugs").and_return({bugs[0]})
+        self.assertRaises(ValueError, categorize_bugs_by_type, bugs, {}, 4)
+
     def test_categorize_bugs_by_type(self):
         advisory_id_map = {'image': 1, 'rpm': 2, 'extras': 3}
         bugs = [
             flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='foo'),
             flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='bar'),
             flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='buzz'),
-            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True),
-            flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True)
         ]
         builds_map = {
             'image': {bugs[2].whiteboard_component: None},
@@ -222,14 +231,14 @@ class TestCategorizeBugsByType(unittest.TestCase):
             'extras': {bugs[0].whiteboard_component: None}
         }
 
-        flexmock(sweep_cli).should_receive("extras_bugs").and_return({bugs[3]})
+        flexmock(sweep_cli).should_receive("extras_bugs").and_return({bugs[0]})
         for kind in advisory_id_map.keys():
             flexmock(errata).should_receive("get_advisory_nvrs").with_args(advisory_id_map[kind]).and_return(
                 builds_map[kind])
         expected = {
             'rpm': {bugs[1]},
-            'image': {bugs[4], bugs[2]},
-            'extras': {bugs[3], bugs[0]}
+            'image': {bugs[2]},
+            'extras': {bugs[0]}
         }
 
         actual = categorize_bugs_by_type(bugs, advisory_id_map, 4)
