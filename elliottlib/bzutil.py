@@ -111,7 +111,7 @@ class Bug:
                 'There should be only 1 target release for all bugs. Fix the offending bug(s) and try again.'
             raise ValueError(err)
 
-        return target_releases.keys()[0]
+        return list(target_releases.keys())[0]
 
 
 class BugzillaBug(Bug):
