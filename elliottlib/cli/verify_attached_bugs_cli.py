@@ -19,10 +19,14 @@ logger = logutil.getLogger(__name__)
 @click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
 @click.option("--verify-flaws", is_flag=True, help="Check that flaw bugs are attached and associated with specific builds", type=bool, default=False)
 @click.option("--no-verify-blocking-bugs", is_flag=True, help="Don't check if there are open bugs for the next minor version blocking bugs for this minor version", type=bool, default=False)
+@click.option("--skip-multiple-advisories-check", is_flag=True, help="Do not check if bugs are attached to multiple "
+                                                                     "advisories", type=bool,
+              default=False)
 @click.argument("advisories", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
-async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool, no_verify_blocking_bugs: bool):
+async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool,
+                                    no_verify_blocking_bugs: bool, skip_multiple_advisories_check: bool):
     """
     Verify the bugs in the advisories (specified as arguments or in group.yml) for a release.
     Requires a runtime to ensure that all bugs in the advisories match the runtime version.
@@ -42,11 +46,11 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
     if not advisory_id_map:
         red_print("No advisories specified on command line or in [group.yml|releases.yml]")
         exit(1)
-    await verify_attached_bugs(runtime, verify_bug_status, advisory_id_map, verify_flaws, no_verify_blocking_bugs)
+    await verify_attached_bugs(runtime, verify_bug_status, advisory_id_map, verify_flaws, no_verify_blocking_bugs, skip_multiple_advisories_check)
 
 
 async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisory_id_map: Dict[str, int], verify_flaws:
-                               bool, no_verify_blocking_bugs: bool):
+                               bool, no_verify_blocking_bugs: bool, skip_multiple_advisories_check: bool):
     validator = BugValidator(runtime, output="text")
     await validator.errata_api.login()
     advisory_bug_map = validator.get_attached_bugs(list(advisory_id_map.values()))
@@ -63,7 +67,8 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
     if '?' not in advisory_id_map.keys():
         validator.verify_bugs_advisory_type(non_flaw_bugs, advisory_id_map, advisory_bug_map)
 
-    await validator.verify_bugs_multiple_advisories(non_flaw_bugs)
+    if not skip_multiple_advisories_check:
+        await validator.verify_bugs_multiple_advisories(non_flaw_bugs)
 
     if verify_flaws:
         await validator.verify_attached_flaws(advisory_bug_map)
