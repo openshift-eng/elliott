@@ -141,10 +141,15 @@ class AsyncErrataUtils:
 
         extra_cves = cve_components_mapping.keys() - advisory_cves
         if extra_cves:
-            raise ValueError(f"The following CVEs are not associated with advisory {advisory_id}: {', '.join(sorted(extra_cves))}")
+            raise ValueError(f"The following CVEs does not seem to be associated with advisory {advisory_id}: "
+                             f"{', '.join(sorted(extra_cves))}. Make sure CVE names field in advisory"
+                             f"is consistent with CVEs that are attached (`elliott attach-cve-flaws` is your friend)")
         missing_cves = advisory_cves - cve_components_mapping.keys()
         if missing_cves:
-            raise ValueError(f"Tracker bugs for the following CVEs associated with advisory {advisory_id} are not attached: {', '.join(sorted(missing_cves))}")
+            raise ValueError(f"Tracker bugs for the following CVEs associated with advisory {advisory_id} "
+                             f"are not attached: {', '.join(sorted(missing_cves))}. Either attach trackers or remove "
+                             f"associated flaw bug (`elliott verify-attached-bugs` is your friend) and remove {missing_cves}"
+                             " from the CVE names field in advisory")
 
         _LOGGER.info("Getting current CVE package exclusions for advisory %s", advisory_id)
         current_cve_package_exclusions = await cls.get_advisory_cve_package_exclusions(api, advisory_id)
