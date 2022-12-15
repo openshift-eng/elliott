@@ -25,9 +25,8 @@ logger = logutil.getLogger(__name__)
 @click.argument("advisories", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
-async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...],
-                                   verify_flaws: bool, no_verify_blocking_bugs: bool, skip_multiple_advisories_check:
-                                   bool):
+async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool,
+                                    no_verify_blocking_bugs: bool, skip_multiple_advisories_check: bool):
     """
     Verify the bugs in the advisories (specified as arguments or in group.yml) for a release.
     Requires a runtime to ensure that all bugs in the advisories match the runtime version.
