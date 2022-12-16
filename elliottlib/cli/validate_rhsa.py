@@ -40,11 +40,23 @@ def validate_rhsa_cli(runtime, advisory):
         exit(1)
         return
 
-    ignores = ['ErratumValidator.check_spelling', 'ErratumValidator.check_multiple_builds']
-    alerts = [alert for alert in resp.json() if alert.get('rule_name') not in ignores]
+    alerts = resp.json()
 
-    if alerts:
-        for a in alerts:
+    ignores = [
+        'ErratumValidator.check_spelling',
+        'ErratumValidator.check_multiple_builds',
+        'ErratumValidator.check_ps_review_presence'
+    ]
+    actionable_alerts = []
+    for alert in alerts:
+        if alert.get('rule_name') in ignores:
+            continue
+        if alert.get('rule_name') == 'ErratumValidator.check_erratum_text_fields' and alert.get('text', '').startswith('Typo: '):
+            continue
+        actionable_alerts.append(alert)
+
+    if actionable_alerts:
+        for a in actionable_alerts:
             print("E: {text}".format(text=a.get("text")))
             howto = a.get("how_to_resolve")
             if howto:
