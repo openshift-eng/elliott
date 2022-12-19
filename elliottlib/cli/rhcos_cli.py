@@ -1,8 +1,7 @@
 import click
-import re
 import json
 from elliottlib.cli.common import cli
-from elliottlib import rhcos, cincinnati, util, exectools
+from elliottlib import rhcos, util, exectools
 
 
 @cli.command("rhcos", short_help="Show details of packages contained in OCP RHCOS builds")
@@ -26,28 +25,28 @@ def rhcos_cli(runtime, release, packages, arch, go):
     Usage:
 
 \b Nightly
-    $ elliott rhcos -r 4.8.0-0.nightly-s390x-2021-07-31-070046
+    $ elliott -g openshift-4.8 rhcos -r 4.8.0-0.nightly-s390x-2021-07-31-070046
 
 \b Named Release
-    $ elliott rhcos -r 4.6.31
+    $ elliott -g openshift-4.6 rhcos -r 4.6.31
 
 \b Any Pullspec
-    $ elliott rhcos -r <pullspec>
+    $ elliott -g openshift-4.X rhcos -r <pullspec>
 
 \b Assembly Definition
     $ elliott --group openshift-4.8 --assembly 4.8.21 rhcos
 
 \b Only lookup specified package(s)
-    $ elliott rhcos -r 4.6.31 -p "openshift,runc,cri-o,selinux-policy"
+    $ elliott -g openshift-4.6 rhcos -r 4.6.31 -p "openshift,runc,cri-o,selinux-policy"
 
 \b Also lookup go build version (if available)
-    $ elliott rhcos -r 4.6.31 -p openshift --go
+    $ elliott -g openshift-4.6 rhcos -r 4.6.31 -p openshift --go
 
 \b Specify arch (default being x64)
-    $ elliott rhcos -r 4.6.31 --arch s390x -p openshift
+    $ elliott -g openshift-4.6 rhcos -r 4.6.31 --arch s390x -p openshift
 
 \b Get all arches (supported only for named release and assembly)
-    $ elliott rhcos -r 4.6.31 --arch all -p openshift
+    $ elliott -g openshift-4.6 rhcos -r 4.6.31 --arch all -p openshift
 """
     named_assembly = runtime.assembly not in ['stream', 'test']
     count_options = sum(map(bool, [named_assembly, release]))
@@ -60,17 +59,13 @@ def rhcos_cli(runtime, release, packages, arch, go):
     if arch == "all" and (pullspec or nightly):
         raise click.BadParameter("--arch=all cannot be used with --release <pullspec> or <*nightly*>")
 
-    if release:
-        runtime.initialize(no_group=True)
-        major, minor = re.search(r'(\d+)\.(\d+).', release).groups()
-        major, minor = int(major), int(minor)
-        if nightly:
-            for a in util.go_arches:
-                if a in release:
-                    arch = a
-    else:
-        runtime.initialize()
-        major, minor = runtime.get_major_minor()
+    runtime.initialize()
+    major, minor = runtime.get_major_minor()
+    if nightly:
+        for a in util.go_arches:
+            if a in release:
+                arch = a
+                break
 
     version = f'{major}.{minor}'
     logger = runtime.logger
@@ -99,7 +94,7 @@ def rhcos_cli(runtime, release, packages, arch, go):
                      arch in target_arches]
 
     for build, local_arch in build_ids:
-        _via_build_id(build, local_arch, version, packages, go, logger)
+        _via_build_id(runtime, build, local_arch, version, packages, go, logger)
 
 
 def get_pullspec(release, arch):
@@ -138,13 +133,13 @@ def get_build_id_from_rhcos_pullspec(pullspec, logger):
     return build_id
 
 
-def _via_build_id(build_id, arch, version, packages, go, logger):
+def _via_build_id(runtime, build_id, arch, version, packages, go, logger):
     if not build_id:
         Exception('Cannot find build_id')
 
     arch = util.brew_arch_for_go_arch(arch)
     util.green_print(f'Build: {build_id} Arch: {arch}')
-    nvrs = rhcos.get_rpm_nvrs(build_id, version, arch)
+    nvrs = rhcos.get_rpm_nvrs(runtime, build_id, version, arch)
     if not nvrs:
         return
     if packages:
