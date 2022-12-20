@@ -13,7 +13,7 @@ from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
 from elliottlib.errata import is_security_advisory
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, BugTracker
+from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any_new, BugTracker
 
 
 @cli.command('attach-cve-flaws',
@@ -71,7 +71,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         for bug_tracker in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
             attached_trackers.extend(get_attached_trackers(advisory, bug_tracker, runtime.logger))
 
-        tracker_flaws, _, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, runtime.logger)
+        tracker_flaws, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, runtime.logger)
 
         try:
             if first_fix_flaw_bugs:
@@ -104,35 +104,36 @@ def get_attached_trackers(advisory: Erratum, bug_tracker: BugTracker, logger: Lo
     return attached_tracker_bugs
 
 
-def get_flaws(flaw_bug_tracker: BugTracker, tracker_bugs: Iterable[Bug], logger: Logger):
+def get_flaws(flaw_bug_tracker: BugTracker, tracker_bugs: Iterable[Bug], logger: Logger) -> (Dict, List):
     # validate and get target_release
     if not tracker_bugs:
-        return {}, {}, []  # Bug.get_target_release will panic on empty array
+        return {}, []  # Bug.get_target_release will panic on empty array
     current_target_release = Bug.get_target_release(tracker_bugs)
-    tracker_flaws, flaw_id_bugs = BugTracker.get_corresponding_flaw_bugs(
+    tracker_flaws, flaw_tracker_map = BugTracker.get_corresponding_flaw_bugs(
         tracker_bugs,
         flaw_bug_tracker,
         strict=True
     )
-    logger.info(f'Found {len(flaw_id_bugs)} {flaw_bug_tracker.type} corresponding flaw bugs:'
-                f' {sorted(flaw_id_bugs.keys())}')
+    logger.info(f'Found {len(flaw_tracker_map)} {flaw_bug_tracker.type} corresponding flaw bugs:'
+                f' {sorted(flaw_tracker_map.keys())}')
 
     # current_target_release is digit.digit.[z|0]
     # if current_target_release is GA then run first-fix bug filtering
     # for GA not every flaw bug is considered first-fix
     # for z-stream every flaw bug is considered first-fix
+    # https://docs.engineering.redhat.com/display/PRODSEC/Security+errata+-+First+fix
     if current_target_release[-1] == 'z':
         logger.info("Detected z-stream target release, every flaw bug is considered first-fix")
-        first_fix_flaw_bugs = list(flaw_id_bugs.values())
+        first_fix_flaw_bugs = [f['bug'] for f in flaw_tracker_map.values()]
     else:
         logger.info("Detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
-            flaw_bug for flaw_bug in flaw_id_bugs.values()
-            if is_first_fix_any(flaw_bug_tracker, flaw_bug, current_target_release)
+            flaw_bug_info['bug'] for flaw_bug_info in flaw_tracker_map.values()
+            if is_first_fix_any_new(flaw_bug_tracker, flaw_bug_info['bug'], flaw_bug_info['trackers'], current_target_release)
         ]
 
-    logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_id_bugs)} flaw bugs considered "first-fix"')
-    return tracker_flaws, flaw_id_bugs, first_fix_flaw_bugs
+    logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_tracker_map)} flaw bugs considered "first-fix"')
+    return tracker_flaws, first_fix_flaw_bugs
 
 
 def _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop):

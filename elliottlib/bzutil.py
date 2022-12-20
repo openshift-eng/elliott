@@ -7,16 +7,17 @@ import itertools
 import re
 import urllib.parse
 import xmlrpc.client
+import json
+import bugzilla
+import click
+import os
+from urllib import request
 from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
 from jira import JIRA, Issue
 from errata_tool.jira_issue import JiraIssue as ErrataJira
 from errata_tool.bug import Bug as ErrataBug
-
-import bugzilla
-import click
-import os
 from bugzilla.bug import Bug
 from koji import ClientSession
 
@@ -422,7 +423,7 @@ class BugTracker:
 
     @staticmethod
     def get_corresponding_flaw_bugs(tracker_bugs: List[Bug], flaw_bug_tracker,
-                                    strict: bool = False, verbose: bool = False):
+                                    strict: bool = False, verbose: bool = False) -> (Dict, Dict):
         """Get corresponding flaw bug objects for given list of tracker bug objects.
         flaw_bug_tracker object to fetch flaw bugs from
 
@@ -434,26 +435,42 @@ class BugTracker:
             list(set(sum([t.corresponding_flaw_bug_ids for t in tracker_bugs], []))),
             verbose=verbose
         )
-        flaw_id_bugs = {bug.id: bug for bug in flaw_bugs}
+        flaw_tracker_map = {bug.id: {'bug': bug, 'trackers': []}
+                            for bug in flaw_bugs}
 
         # Validate that each tracker has a corresponding flaw bug
-        flaw_ids = set(flaw_id_bugs.keys())
-        no_flaws = set()
-        for tracker in tracker_bugs:
-            if not set(tracker.corresponding_flaw_bug_ids).intersection(flaw_ids):
-                no_flaws.add(tracker.id)
-        if no_flaws:
-            msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
-            if strict:
-                raise exceptions.ElliottFatalError(msg)
+        # and a whiteboard component
+        trackers_with_no_flaws = []
+        trackers_with_no_components = []
+        for t in tracker_bugs:
+            flaw_bug_ids = [i for i in t.corresponding_flaw_bug_ids if i in flaw_tracker_map]
+            if len(flaw_bug_ids) == 0:
+                trackers_with_no_flaws.append(t.id)
             else:
-                logger.warning(msg)
+                flaw_tracker_map[flaw_bug_ids[0]].append(t)
+            component = t.whiteboard_component
+            if not component:
+                trackers_with_no_components.append(t.id)
+
+        error_msg = ''
+        if trackers_with_no_flaws:
+            error_msg += f'Cannot find any corresponding flaw bugs for these trackers: {sorted(trackers_with_no_flaws)}'
+
+        if trackers_with_no_components:
+            error_msg += "These trackers do not have a valid whiteboard component value:" \
+                         f" {sorted(trackers_with_no_components)}"
+
+        if error_msg:
+            if strict:
+                raise exceptions.ElliottFatalError(error_msg)
+            else:
+                logger.warning(error_msg)
 
         tracker_flaws = {
-            tracker.id: [b for b in tracker.corresponding_flaw_bug_ids if b in flaw_id_bugs]
+            tracker.id: [b for b in tracker.corresponding_flaw_bug_ids if b in flaw_tracker_map]
             for tracker in tracker_bugs
         }
-        return tracker_flaws, flaw_id_bugs
+        return tracker_flaws, flaw_tracker_map
 
     def get_tracker_bugs(self, bug_ids: List, strict: bool = False, verbose: bool = False):
         raise NotImplementedError
@@ -1098,8 +1115,34 @@ def sort_cve_bugs(bugs):
     return sorted(bugs, key=cve_sort_key, reverse=True)
 
 
+def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
+    # all z stream bugs are considered first fix
+    if current_target_release[-1] != '0':
+        return True
+
+    if not tracker_bugs:
+        # This shouldn't happen
+        raise ValueError(f'flaw bug {flaw_bug.id} does not seem to have trackers')
+
+    if not flaw_bug.alias:
+        raise ValueError(f'flaw bug {flaw_bug.id} does not have an alias')
+
+    alias = flaw_bug.alias[0]
+    cve_url = f"https://access.redhat.com/hydra/rest/securitydata/cve/{alias}.json"
+    with request.urlopen(cve_url) as req:
+        data = json.loads(req.read().decode())
+    fixed_components = []
+    for release_info in data['affected_release']:
+        if "Red Hat OpenShift Container Platform 4" in release_info['product_name']:
+            fixed_components.append(release_info['package'])
+
+
+    return False
+
+
 def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
     """
+    https://docs.engineering.redhat.com/display/PRODSEC/Security+errata+-+First+fix
     Check if a flaw bug is considered a first-fix for a GA target release
     for any of its trackers components. A return value of True means it should be
     attached to an advisory.
