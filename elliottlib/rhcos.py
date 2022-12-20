@@ -99,13 +99,9 @@ def _build_meta(runtime, build_id, version, arch="x86_64", private=False, meta_t
 
 def get_build_from_payload(payload_pullspec):
     rhcos_tag = 'machine-os-content'
-    out, err = exectools.cmd_assert(["oc", "adm", "release", "info", "--image-for", rhcos_tag, "--", payload_pullspec])
-    if err:
-        raise Exception(f"Error running oc adm: {err}")
+    out, _ = exectools.cmd_assert(["oc", "adm", "release", "info", "--image-for", rhcos_tag, "--", payload_pullspec])
     rhcos_pullspec = out.split('\n')[0]
-    out, err = exectools.cmd_assert(["oc", "image", "info", "-o", "json", rhcos_pullspec])
-    if err:
-        raise Exception(f"Error running oc adm: {err}")
+    out, _ = exectools.cmd_assert(["oc", "image", "info", "-o", "json", rhcos_pullspec])
     image_info = json.loads(out)
     build_id = image_info["config"]["config"]["Labels"]["version"]
     arch = image_info["config"]["config"]["Labels"]["architecture"]
