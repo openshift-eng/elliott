@@ -7,11 +7,11 @@ import itertools
 import re
 import urllib.parse
 import xmlrpc.client
-import json
 import bugzilla
 import click
 import os
 import requests
+from requests_kerberos import HTTPKerberosAuth, OPTIONAL
 from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
@@ -1148,7 +1148,6 @@ def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
             if '/' in pkg_name:
                 pyxis_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
                             f"/repository/{pkg_name}/images?page_size=1&include=data.brew"
-                from requests_kerberos import HTTPKerberosAuth, OPTIONAL
                 response = requests.get(pyxis_url, auth=HTTPKerberosAuth(mutual_authentication=OPTIONAL))
                 if response.status_code == requests.codes.ok:
                     data = response.json()['data']
