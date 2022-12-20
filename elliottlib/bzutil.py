@@ -1131,11 +1131,26 @@ def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
     cve_url = f"https://access.redhat.com/hydra/rest/securitydata/cve/{alias}.json"
     with request.urlopen(cve_url) as req:
         data = json.loads(req.read().decode())
+
+    ocp_product_name = f"Red Hat OpenShift Container Platform {current_target_release[0]}"
     fixed_components = []
     for release_info in data['affected_release']:
-        if "Red Hat OpenShift Container Platform 4" in release_info['product_name']:
-            fixed_components.append(release_info['package'])
+        if ocp_product_name in release_info['product_name']:
+            pkg = release_info['package']
+            # openshift4/ose-baremetal-rhel8-operator:v4.10.0-202208182025.p0.g97ce15e.assembly.stream
+            pkg_name = pkg.split('/')[-1].split(':')[0]
+            fixed_components.append(pkg_name)
 
+    # get tracker components
+    first_fix_components = []
+    for t in tracker_bugs:
+        component = t.whiteboard_component.split('-container')[0]
+        if component not in fixed_components:
+            first_fix_components.append((component, t.id))
+
+    if first_fix_components:
+        logger.info(f'{flaw_bug.id} considered first-fix for these (component, tracker) pairs: {first_fix_components}')
+        return True
 
     return False
 
