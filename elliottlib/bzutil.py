@@ -11,7 +11,7 @@ import json
 import bugzilla
 import click
 import os
-from urllib import request
+import requests
 from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
@@ -447,7 +447,7 @@ class BugTracker:
             if len(flaw_bug_ids) == 0:
                 trackers_with_no_flaws.append(t.id)
             else:
-                flaw_tracker_map[flaw_bug_ids[0]].append(t)
+                flaw_tracker_map[flaw_bug_ids[0]]['trackers'].append(t)
             component = t.whiteboard_component
             if not component:
                 trackers_with_no_components.append(t.id)
@@ -1129,8 +1129,8 @@ def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
 
     alias = flaw_bug.alias[0]
     cve_url = f"https://access.redhat.com/hydra/rest/securitydata/cve/{alias}.json"
-    with request.urlopen(cve_url) as req:
-        data = json.loads(req.read().decode())
+    print(f"trying {cve_url}")
+    data = requests.get(cve_url).json()
 
     ocp_product_name = f"Red Hat OpenShift Container Platform {current_target_release[0]}"
     fixed_components = []
@@ -1149,7 +1149,8 @@ def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
             first_fix_components.append((component, t.id))
 
     if first_fix_components:
-        logger.info(f'{flaw_bug.id} considered first-fix for these (component, tracker) pairs: {first_fix_components}')
+        logger.info(f'{flaw_bug.id} considered first-fix for these (component, tracker): {first_fix_components}')
+        logger.info(f'These were not found in fixed_components for this flaw bug: {fixed_components}')
         return True
 
     return False

@@ -129,7 +129,7 @@ def get_flaws(flaw_bug_tracker: BugTracker, tracker_bugs: Iterable[Bug], logger:
         logger.info("Detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug_info['bug'] for flaw_bug_info in flaw_tracker_map.values()
-            if is_first_fix_any_new(flaw_bug_tracker, flaw_bug_info['bug'], flaw_bug_info['trackers'], current_target_release)
+            if is_first_fix_any_new(flaw_bug_info['bug'], flaw_bug_info['trackers'], current_target_release)
         ]
 
     logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_tracker_map)} flaw bugs considered "first-fix"')
