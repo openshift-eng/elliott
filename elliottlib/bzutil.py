@@ -422,8 +422,8 @@ class BugTracker:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
 
     @staticmethod
-    def get_corresponding_flaw_bugs(tracker_bugs: List[Bug], flaw_bug_tracker,
-                                    strict: bool = False, verbose: bool = False) -> (Dict, Dict):
+    def get_corresponding_flaw_bugs(tracker_bugs: List[Bug], flaw_bug_tracker, brew_api,
+                                    strict: bool = True, verbose: bool = False) -> (Dict, Dict):
         """Get corresponding flaw bug objects for given list of tracker bug objects.
         flaw_bug_tracker object to fetch flaw bugs from
 
@@ -441,24 +441,30 @@ class BugTracker:
         # Validate that each tracker has a corresponding flaw bug
         # and a whiteboard component
         trackers_with_no_flaws = []
-        trackers_with_no_components = []
+        trackers_with_invalid_components = []
         for t in tracker_bugs:
             flaw_bug_ids = [i for i in t.corresponding_flaw_bug_ids if i in flaw_tracker_map]
             if len(flaw_bug_ids) == 0:
                 trackers_with_no_flaws.append(t.id)
             else:
                 flaw_tracker_map[flaw_bug_ids[0]]['trackers'].append(t)
+
             component = t.whiteboard_component
             if not component:
-                trackers_with_no_components.append(t.id)
+                trackers_with_invalid_components.append(t.id)
+
+            # is this component a valid package name in brew?
+            if not brew_api.getPackageID(component):
+                logger.info(f'package `{component}` not found in brew')
+                trackers_with_invalid_components.append(t.id)
 
         error_msg = ''
         if trackers_with_no_flaws:
             error_msg += f'Cannot find any corresponding flaw bugs for these trackers: {sorted(trackers_with_no_flaws)}'
 
-        if trackers_with_no_components:
+        if trackers_with_invalid_components:
             error_msg += "These trackers do not have a valid whiteboard component value:" \
-                         f" {sorted(trackers_with_no_components)}"
+                         f" {sorted(trackers_with_invalid_components)}. Please check they exist in brew as a package"
 
         if error_msg:
             if strict:
@@ -1129,28 +1135,44 @@ def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
 
     alias = flaw_bug.alias[0]
     cve_url = f"https://access.redhat.com/hydra/rest/securitydata/cve/{alias}.json"
-    print(f"trying {cve_url}")
-    data = requests.get(cve_url).json()
+    response = requests.get(cve_url)
+    response.raise_for_status()
+    data = response.json()
 
-    ocp_product_name = f"Red Hat OpenShift Container Platform {current_target_release[0]}"
-    fixed_components = []
-    for release_info in data['affected_release']:
-        if ocp_product_name in release_info['product_name']:
-            pkg = release_info['package']
-            # openshift4/ose-baremetal-rhel8-operator:v4.10.0-202208182025.p0.g97ce15e.assembly.stream
-            pkg_name = pkg.split('/')[-1].split(':')[0]
-            fixed_components.append(pkg_name)
+    major, minor = util.minor_version_tuple(current_target_release)
+    ocp_product_name = f"Red Hat OpenShift Container Platform {major}"
+    components_not_yet_fixed = []
+    for package_info in data['package_state']:
+        if ocp_product_name in package_info['product_name'] and package_info['fix_state'] == 'Affected':
+            pkg_name = package_info['package_name']
+            if '/' in pkg_name:
+                pyxis_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
+                            f"/repository/{pkg_name}/images?page_size=1&include=data.brew"
+                from requests_kerberos import HTTPKerberosAuth, OPTIONAL
+                response = requests.get(pyxis_url, auth=HTTPKerberosAuth(mutual_authentication=OPTIONAL))
+                if response.status_code == requests.codes.ok:
+                    data = response.json()['data']
+                    if data:
+                        pkg_name = data[0]['brew']['package']
+                    else:
+                        logger.warn(f'could not find brew package info at {pyxis_url}')
+                else:
+                    logger.warn(f'got status={response.status_code} for {pyxis_url}')
+            components_not_yet_fixed.append(pkg_name)
+
+    logger.debug(f'Unfixed components: {components_not_yet_fixed}')
 
     # get tracker components
     first_fix_components = []
     for t in tracker_bugs:
-        component = t.whiteboard_component.split('-container')[0]
-        if component not in fixed_components:
+        component = t.whiteboard_component
+        if component in components_not_yet_fixed:
             first_fix_components.append((component, t.id))
+        else:
+            logger.debug(f'Could not find `{component}` in unfixed components')
 
     if first_fix_components:
         logger.info(f'{flaw_bug.id} considered first-fix for these (component, tracker): {first_fix_components}')
-        logger.info(f'These were not found in fixed_components for this flaw bug: {fixed_components}')
         return True
 
     return False

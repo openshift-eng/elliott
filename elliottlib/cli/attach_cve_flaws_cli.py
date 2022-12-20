@@ -62,7 +62,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     flaw_bug_tracker = runtime.bug_trackers('bugzilla')
     errata_config = runtime.get_errata_config()
     errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
-
+    brew_api = runtime.build_retrying_koji_client()
     for advisory_id in advisories:
         runtime.logger.info("Getting advisory %s", advisory_id)
         advisory = Erratum(errata_id=advisory_id)
@@ -71,7 +71,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         for bug_tracker in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
             attached_trackers.extend(get_attached_trackers(advisory, bug_tracker, runtime.logger))
 
-        tracker_flaws, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, runtime.logger)
+        tracker_flaws, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, brew_api, runtime.logger)
 
         try:
             if first_fix_flaw_bugs:
@@ -104,7 +104,7 @@ def get_attached_trackers(advisory: Erratum, bug_tracker: BugTracker, logger: Lo
     return attached_tracker_bugs
 
 
-def get_flaws(flaw_bug_tracker: BugTracker, tracker_bugs: Iterable[Bug], logger: Logger) -> (Dict, List):
+def get_flaws(flaw_bug_tracker: BugTracker, tracker_bugs: Iterable[Bug], brew_api, logger: Logger) -> (Dict, List):
     # validate and get target_release
     if not tracker_bugs:
         return {}, []  # Bug.get_target_release will panic on empty array
@@ -112,7 +112,7 @@ def get_flaws(flaw_bug_tracker: BugTracker, tracker_bugs: Iterable[Bug], logger:
     tracker_flaws, flaw_tracker_map = BugTracker.get_corresponding_flaw_bugs(
         tracker_bugs,
         flaw_bug_tracker,
-        strict=True
+        brew_api
     )
     logger.info(f'Found {len(flaw_tracker_map)} {flaw_bug_tracker.type} corresponding flaw bugs:'
                 f' {sorted(flaw_tracker_map.keys())}')
