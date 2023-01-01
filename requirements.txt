@@ -13,3 +13,4 @@ ruamel.yaml
 tenacity
 jira >= 3.4.1  # https://github.com/pycontribs/jira/issues/1486
 setuptools-scm
+certifi>=2022.12.7 # not directly required, pinned by Snyk to avoid a vulnerability
