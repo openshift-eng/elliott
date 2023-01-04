@@ -1145,8 +1145,8 @@ def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current
     for package_info in data['package_state']:
         if ocp_product_name in package_info['product_name'] and package_info['fix_state'] == 'Affected':
             pkg_name = package_info['package_name']
-            # for images `package_name` field is container delivery repo, which we use to lookup their brew name
-            # for rpms it's their brew package name
+            # for images `package_name` field is usually the container delivery repo
+            # otherwise we assume it's the exact brew package name
             if '/' in pkg_name:
                 pyxis_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
                             f"/repository/{pkg_name}/images?page_size=1&include=data.brew"
