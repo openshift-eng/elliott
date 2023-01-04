@@ -450,21 +450,6 @@ class TestBZUtil(unittest.TestCase):
         actual = bzutil.approximate_cutoff_timestamp(mock.ANY, koji_api, [])
         self.assertEqual(datetime(2021, 7, 4, 0, 0, 0, 0, tzinfo=timezone.utc).timestamp(), actual)
 
-    def test_is_first_fix_any_validate(self):
-        bzapi = None
-        bug = None
-        tr = '4.8.z'
-        expected = True
-        actual = bzutil.is_first_fix_any(bzapi, bug, tr)
-        self.assertEqual(expected, actual)
-
-        bzapi = None
-        bug = flexmock(depends_on=[])
-        tr = '4.8.0'
-        expected = True
-        actual = bzutil.is_first_fix_any(bzapi, bug, tr)
-        self.assertEqual(expected, actual)
-
     def test_sort_cve_bugs(self):
         flaw_bugs = [
             flexmock(alias=['CVE-2022-123'], severity='Low'),
@@ -481,31 +466,34 @@ class TestBZUtil(unittest.TestCase):
         self.assertEqual('CVE-2021-789', sort_list[3])
         self.assertEqual('CVE-2022-123', sort_list[4])
 
+    def test_is_first_fix_any_validate(self):
+        tr = '4.8.z'
+        expected = True
+        actual = bzutil.is_first_fix_any(None, [], tr)
+        self.assertEqual(expected, actual)
+
+        # should raise error when no tracker bugs are found
+        tr = '4.8.0'
+        self.assertRaisesRegex(
+            ValueError,
+            r'does not seem to have trackers',
+            bzutil.is_first_fix_any, BugzillaBug(flexmock(id=1)), [], tr)
+
+        # should raise error when flaw alias isn't present
+        tr = '4.8.0'
+        self.assertRaisesRegex(
+            ValueError,
+            r'does not have an alias',
+            bzutil.is_first_fix_any, BugzillaBug(flexmock(id=1)), ['foobar'], tr)
+
     def test_is_first_fix_any_no_valid_trackers(self):
         tr = '4.8.0'
-        tracker_bug_ids = [1, 2]
+        tracker_bugs = [1, 2]
         bug_a = BugzillaBug(flexmock(
             id=1,
             product=constants.BUGZILLA_PRODUCT_OCP,
             keywords=['foo'])
         )
-        tracker_bug_objs = [bug_a]
-        flaw_bug = flexmock(id=6, depends_on=tracker_bug_ids)
-        bzapi = flexmock()
-        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
-        (bzapi
-            .should_receive("build_query")
-            .with_args(
-                product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=tracker_bug_ids,
-                include_fields=fields))
-        (bzapi
-            .should_receive("query")
-            .and_return(tracker_bug_objs))
-        (bzapi
-            .should_receive("get_bug")
-            .and_return(bug_a))
-
         expected = True
         actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
         self.assertEqual(expected, actual)

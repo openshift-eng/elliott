@@ -1121,7 +1121,7 @@ def sort_cve_bugs(bugs):
     return sorted(bugs, key=cve_sort_key, reverse=True)
 
 
-def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
+def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current_target_release: str):
     # all z stream bugs are considered first fix
     if current_target_release[-1] != '0':
         return True
@@ -1130,7 +1130,7 @@ def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
         # This shouldn't happen
         raise ValueError(f'flaw bug {flaw_bug.id} does not seem to have trackers')
 
-    if not flaw_bug.alias:
+    if not (hasattr(flaw_bug, 'alias') and flaw_bug.alias):
         raise ValueError(f'flaw bug {flaw_bug.id} does not have an alias')
 
     alias = flaw_bug.alias[0]
@@ -1145,6 +1145,8 @@ def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
     for package_info in data['package_state']:
         if ocp_product_name in package_info['product_name'] and package_info['fix_state'] == 'Affected':
             pkg_name = package_info['package_name']
+            # for images `package_name` field is container delivery repo, which we use to lookup their brew name
+            # for rpms it's their brew package name
             if '/' in pkg_name:
                 pyxis_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
                             f"/repository/{pkg_name}/images?page_size=1&include=data.brew"
@@ -1173,97 +1175,5 @@ def is_first_fix_any_new(flaw_bug, tracker_bugs, current_target_release):
     if first_fix_components:
         logger.info(f'{flaw_bug.id} considered first-fix for these (component, tracker): {first_fix_components}')
         return True
-
-    return False
-
-
-def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
-    """
-    https://docs.engineering.redhat.com/display/PRODSEC/Security+errata+-+First+fix
-    Check if a flaw bug is considered a first-fix for a GA target release
-    for any of its trackers components. A return value of True means it should be
-    attached to an advisory.
-    """
-    # all z stream bugs are considered first fix
-    if current_target_release[-1] != '0':
-        return True
-
-    # get all tracker bugs for a flaw bug
-    tracker_ids = flaw_bug.depends_on
-    if not tracker_ids:
-        # No trackers found
-        # is a first fix
-        # shouldn't happen ideally
-        return True
-
-    # filter tracker bugs by OCP product
-    tracker_bugs = []
-    for tracker_id in tracker_ids:
-        try:
-            b = bugtracker.get_bug(tracker_id)
-        except Exception as e:
-            # first-fix tracker bug might be not visible but not break here
-            if "not authorized" in e:
-                logger.warning(f"We are not authorized to access bug #{tracker_id}, need manually check if it's permission issue")
-            logger.warning(f"Failed to get tracker bug {tracker_id} info from bugtracker API")
-        else:
-            if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug():
-                tracker_bugs.append(b)
-
-    if not tracker_bugs:
-        # No OCP trackers found
-        # is a first fix
-        return True
-
-    # make sure 3.X or 4.X bugs are being compared to each other
-    def same_major_release(bug):
-        return util.minor_version_tuple(current_target_release)[0] == util.minor_version_tuple(bug.target_release[0])[0]
-
-    def already_fixed(bug):
-        pending = bug.status == 'RELEASE_PENDING'
-        closed = bug.status == 'CLOSED' and bug.resolution in ['ERRATA', 'CURRENTRELEASE', 'NEXTRELEASE']
-        if pending or closed:
-            return True
-        return False
-
-    # group trackers by components
-    component_tracker_groups = dict()
-    component_not_found = '[NotFound]'
-    for b in tracker_bugs:
-        # filter out trackers that don't belong ex. 3.X bugs for 4.X target release
-        if not same_major_release(b):
-            continue
-        component = b.whiteboard_component
-        if not component:
-            component = component_not_found
-
-        if component not in component_tracker_groups:
-            component_tracker_groups[component] = set()
-        component_tracker_groups[component].add(b)
-
-    if component_not_found in component_tracker_groups:
-        invalid_trackers = sorted([b.id for b in component_tracker_groups[component_not_found]])
-        logger.warning(f"For flaw bug {flaw_bug.id} - these tracker bugs do not have a valid "
-                       f"whiteboard component value: {invalid_trackers} "
-                       "Cannot reliably determine if flaw bug is first "
-                       "fix. Check tracker bugs manually")
-        return False
-
-    # if any tracker bug for the flaw bug
-    # has been fixed for the same major release version
-    # then it is not a first fix
-    def is_first_fix_group(trackers):
-        for b in trackers:
-            if already_fixed(b):
-                return False
-        return True
-
-    # if for any component is_first_fix_group is true
-    # then flaw bug is first fix
-    for component, trackers in component_tracker_groups.items():
-        if is_first_fix_group(trackers):
-            logger.info(f'{flaw_bug.id} considered first-fix for component: {component} for trackers: '
-                        f'{[t.id for t in trackers]}')
-            return True
 
     return False

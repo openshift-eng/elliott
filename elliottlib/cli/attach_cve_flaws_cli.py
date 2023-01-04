@@ -13,7 +13,7 @@ from elliottlib.cli.common import (cli, click_coroutine, find_default_advisory,
 from elliottlib.errata import is_security_advisory
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
-from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any_new, BugTracker
+from elliottlib.bzutil import Bug, get_highest_security_impact, is_first_fix_any, BugTracker
 
 
 @cli.command('attach-cve-flaws',
@@ -129,7 +129,7 @@ def get_flaws(flaw_bug_tracker: BugTracker, tracker_bugs: Iterable[Bug], brew_ap
         logger.info("Detected GA release, applying first-fix filtering..")
         first_fix_flaw_bugs = [
             flaw_bug_info['bug'] for flaw_bug_info in flaw_tracker_map.values()
-            if is_first_fix_any_new(flaw_bug_info['bug'], flaw_bug_info['trackers'], current_target_release)
+            if is_first_fix_any(flaw_bug_info['bug'], flaw_bug_info['trackers'], current_target_release)
         ]
 
     logger.info(f'{len(first_fix_flaw_bugs)} out of {len(flaw_tracker_map)} flaw bugs considered "first-fix"')
