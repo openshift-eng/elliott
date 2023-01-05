@@ -440,31 +440,36 @@ class BugTracker:
 
         # Validate that each tracker has a corresponding flaw bug
         # and a whiteboard component
-        trackers_with_no_flaws = []
-        trackers_with_invalid_components = []
+        trackers_with_no_flaws = set()
+        trackers_with_invalid_components = set()
         for t in tracker_bugs:
-            flaw_bug_ids = [i for i in t.corresponding_flaw_bug_ids if i in flaw_tracker_map]
-            if len(flaw_bug_ids) == 0:
-                trackers_with_no_flaws.append(t.id)
-            else:
-                flaw_tracker_map[flaw_bug_ids[0]]['trackers'].append(t)
-
             component = t.whiteboard_component
             if not component:
-                trackers_with_invalid_components.append(t.id)
+                trackers_with_invalid_components.add(t.id)
+                continue
 
             # is this component a valid package name in brew?
             if not brew_api.getPackageID(component):
                 logger.info(f'package `{component}` not found in brew')
-                trackers_with_invalid_components.append(t.id)
+                trackers_with_invalid_components.add(t.id)
+                continue
+
+            flaw_bug_ids = [i for i in t.corresponding_flaw_bug_ids if i in flaw_tracker_map]
+            if not len(flaw_bug_ids):
+                trackers_with_no_flaws.add(t.id)
+                continue
+
+            for f_id in flaw_bug_ids:
+                flaw_tracker_map[f_id]['trackers'].append(t)
 
         error_msg = ''
         if trackers_with_no_flaws:
-            error_msg += f'Cannot find any corresponding flaw bugs for these trackers: {sorted(trackers_with_no_flaws)}'
+            error_msg += 'Cannot find any corresponding flaw bugs for these trackers: ' \
+                         f'{sorted(trackers_with_no_flaws)}. '
 
         if trackers_with_invalid_components:
             error_msg += "These trackers do not have a valid whiteboard component value:" \
-                         f" {sorted(trackers_with_invalid_components)}. Please check they exist in brew as a package"
+                         f" {sorted(trackers_with_invalid_components)}."
 
         if error_msg:
             if strict:
@@ -472,9 +477,10 @@ class BugTracker:
             else:
                 logger.warning(error_msg)
 
+        invalid_trackers = trackers_with_no_flaws | trackers_with_invalid_components
         tracker_flaws = {
-            tracker.id: [b for b in tracker.corresponding_flaw_bug_ids if b in flaw_tracker_map]
-            for tracker in tracker_bugs
+            t.id: [b for b in t.corresponding_flaw_bug_ids if b in flaw_tracker_map]
+            for t in tracker_bugs if t.id not in invalid_trackers
         }
         return tracker_flaws, flaw_tracker_map
 

@@ -23,6 +23,57 @@ class TestBug(unittest.TestCase):
         self.assertEqual(BugzillaBug(bug_true).is_cve_in_summary(), True)
 
 
+class TestBugTracker(unittest.TestCase):
+    def test_get_corresponding_flaw_bugs(self):
+        flaw_a = flexmock(id=1)
+        flaw_b = flexmock(id=2)
+        flaw_c = flexmock(id=3)
+        valid_flaw_bugs = [flaw_a, flaw_b]
+
+        tracker_bugs = [
+            flexmock(corresponding_flaw_bug_ids=[flaw_a.id, flaw_b.id], id=10, whiteboard_component='component:foo'),
+            flexmock(corresponding_flaw_bug_ids=[flaw_b.id, flaw_c.id], id=11, whiteboard_component='component:bar'),
+            flexmock(corresponding_flaw_bug_ids=[flaw_b.id], id=12, whiteboard_component=None),
+            flexmock(corresponding_flaw_bug_ids=[flaw_c.id], id=13, whiteboard_component='component:foobar'),
+        ]
+
+        flexmock(BugzillaBugTracker).should_receive("login")
+        flexmock(BugzillaBugTracker).should_receive("get_flaw_bugs").and_return(valid_flaw_bugs)
+        expected = (
+            {10: [flaw_a.id, flaw_b.id], 11: [flaw_b.id]},
+            {
+                flaw_a.id: {'bug': flaw_a, 'trackers': [tracker_bugs[0]]},
+                flaw_b.id: {'bug': flaw_b, 'trackers': [tracker_bugs[0], tracker_bugs[1]]}
+            }
+        )
+        brew_api = flexmock()
+        brew_api.should_receive("getPackageID").and_return(True)
+        actual = BugTracker.get_corresponding_flaw_bugs(tracker_bugs, BugzillaBugTracker({}), brew_api, strict=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_corresponding_flaw_bugs_strict(self):
+        flaw_a = flexmock(id=1)
+        flaw_b = flexmock(id=2)
+        flaw_c = flexmock(id=3)
+        valid_flaw_bugs = [flaw_a, flaw_b]
+
+        tracker_bugs = [
+            flexmock(corresponding_flaw_bug_ids=[flaw_a.id, flaw_b.id], id=10, whiteboard_component='component:foo'),
+            flexmock(corresponding_flaw_bug_ids=[flaw_b.id, flaw_c.id], id=11, whiteboard_component='component:bar'),
+            flexmock(corresponding_flaw_bug_ids=[flaw_b.id], id=12, whiteboard_component=None),
+            flexmock(corresponding_flaw_bug_ids=[flaw_c.id], id=13, whiteboard_component='component:foobar'),
+        ]
+
+        flexmock(BugzillaBugTracker).should_receive("login")
+        flexmock(BugzillaBugTracker).should_receive("get_flaw_bugs").and_return(valid_flaw_bugs)
+
+        brew_api = flexmock()
+        brew_api.should_receive("getPackageID").and_return(True)
+        self.assertRaises(
+            exceptions.ElliottFatalError,
+            BugTracker.get_corresponding_flaw_bugs, tracker_bugs, BugzillaBugTracker({}), brew_api, strict=True)
+
+
 class TestJIRABugTracker(unittest.TestCase):
     def test_get_config(self):
         config = {'foo': 1, 'jira_config': {'bar': 2}}
@@ -33,30 +84,6 @@ class TestJIRABugTracker(unittest.TestCase):
         actual = JIRABugTracker.get_config(runtime)
         expected = {'foo': 1, 'bar': 2}
         self.assertEqual(actual, expected)
-
-    def test_get_corresponding_flaw_bugs_jira(self):
-        product = 'Security Response'
-        component = 'vulnerability'
-        valid_flaw = BugzillaBug(flexmock(product=product, component=component, id=9999))
-        invalid_flaw = BugzillaBug(flexmock(product=product, component='foo', id=9998))
-        flaw_bugs = [valid_flaw, invalid_flaw]
-
-        tracker_bugs = [
-            JIRABug(flexmock(key='OCPBUGS-1', fields=flexmock(labels=[f"flaw:bz#{valid_flaw.id}",
-                                                                      f"flaw:bz#{invalid_flaw.id}"]))),
-            JIRABug(flexmock(key='OCPBUGS-2', fields=flexmock(labels=[f"flaw:bz#{invalid_flaw.id}"]))),
-            JIRABug(flexmock(key='OCPBUGS-3', fields=flexmock(labels=[f"flaw:bz#{valid_flaw.id}"])))
-        ]
-
-        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
-        flexmock(BugzillaBugTracker).should_receive("get_bugs").and_return(flaw_bugs)
-        flaw_bug_tracker = BugzillaBugTracker({})
-        expected = (
-            {'OCPBUGS-1': [valid_flaw.id], 'OCPBUGS-2': [], 'OCPBUGS-3': [valid_flaw.id]},
-            {valid_flaw.id: valid_flaw}
-        )
-        actual = BugTracker.get_corresponding_flaw_bugs(tracker_bugs, flaw_bug_tracker)
-        self.assertEqual(expected, actual)
 
 
 class TestBugzillaBugTracker(unittest.TestCase):
@@ -69,54 +96,6 @@ class TestBugzillaBugTracker(unittest.TestCase):
         actual = BugzillaBugTracker.get_config(runtime)
         expected = {'foo': 1, 'bar': 2}
         self.assertEqual(actual, expected)
-
-    def test_get_corresponding_flaw_bugs(self):
-        product = 'Security Response'
-        component = 'vulnerability'
-        valid_flaw_a = BugzillaBug(flexmock(product=product, component=component, id=1))
-        valid_flaw_b = BugzillaBug(flexmock(product=product, component=component, id=2))
-        invalid_flaw_c = BugzillaBug(flexmock(product='foo', component=component, id=3))
-        invalid_flaw_d = BugzillaBug(flexmock(product=product, component='bar', id=4))
-        flaw_bugs = [valid_flaw_a, valid_flaw_b]
-
-        tracker_bugs = [
-            BugzillaBug(flexmock(blocks=[valid_flaw_a.id, valid_flaw_b.id], id=10)),
-            BugzillaBug(flexmock(blocks=[valid_flaw_b.id, invalid_flaw_c.id, invalid_flaw_d.id], id=11)),
-        ]
-
-        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
-        flexmock(BugzillaBugTracker).should_receive("get_bugs").and_return(flaw_bugs)
-        bug_tracker = BugzillaBugTracker({})
-
-        expected = (
-            {10: [valid_flaw_a.id, valid_flaw_b.id], 11: [valid_flaw_b.id]},
-            {valid_flaw_a.id: valid_flaw_a, valid_flaw_b.id: valid_flaw_b}
-        )
-        actual = BugTracker.get_corresponding_flaw_bugs(tracker_bugs, bug_tracker)
-        self.assertEqual(expected, actual)
-
-    def test_get_corresponding_flaw_bugs_bz_strict(self):
-        tracker_bugs = [
-            BugzillaBug(flexmock(blocks=[1, 2], id=10)),
-            BugzillaBug(flexmock(blocks=[2, 3], id=11)),
-            BugzillaBug(flexmock(blocks=[], id=12))
-        ]
-        product = 'Security Response'
-        component = 'vulnerability'
-        bug_a = BugzillaBug(flexmock(product=product, component='wrong_component', id=1))
-        bug_b = BugzillaBug(flexmock(product='wrong_product', component=component, id=2))
-        bug_c = BugzillaBug(flexmock(product=product, component=component, id=3))
-        flaw_bugs = [bug_a, bug_b, bug_c]
-
-        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
-        flexmock(BugzillaBugTracker).should_receive("get_bugs").and_return(flaw_bugs)
-        bug_tracker = BugzillaBugTracker({})
-
-        self.assertRaisesRegex(
-            exceptions.ElliottFatalError,
-            r'^No flaw bugs could be found for these trackers: {10, 12}$',
-            BugTracker.get_corresponding_flaw_bugs,
-            tracker_bugs, bug_tracker, strict=True)
 
 
 class TestJIRABug(unittest.TestCase):
