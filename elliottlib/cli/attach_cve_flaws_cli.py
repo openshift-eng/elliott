@@ -197,6 +197,7 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
     cve_str = ' '.join(cve_names)
     if advisory.cve_names != cve_str:
         advisory.update(cve_names=cve_str)
+        logger.info(f'Adjusting CVE Names.."')
         updated = True
 
     if updated:
@@ -208,12 +209,10 @@ def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, 
 
     highest_impact = get_highest_security_impact(flaw_bugs)
     if highest_impact != advisory.security_impact:
-        if constants.security_impact_map[advisory.security_impact] < constants.security_impact_map[highest_impact]:
+        if advisory.security_impact != highest_impact:
             logger.info(f'Adjusting advisory security impact from {advisory.security_impact} to {highest_impact}')
             advisory.update(security_impact=highest_impact)
             updated = True
-        else:
-            logger.info(f'Advisory current security impact {advisory.security_impact} is higher than {highest_impact} no need to adjust')
 
     if highest_impact not in advisory.topic:
         topic = cve_boilerplate['topic'].format(IMPACT=highest_impact)

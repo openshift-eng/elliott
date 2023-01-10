@@ -239,22 +239,6 @@ class BugValidator:
                     raise ValueError(f"Flaw bug {flaw_id} should have exact 1 alias.")
                 cve = flaw_id_bugs[flaw_id].alias[0]
                 cve_components_mapping.setdefault(cve, set()).add(component_name)
-        current_cve_package_exclusions = await AsyncErrataUtils.get_advisory_cve_package_exclusions(self.errata_api, advisory_id)
-        attached_builds = await self.errata_api.get_builds_flattened(advisory_id)
-        expected_cve_packages_exclusions = AsyncErrataUtils.compute_cve_package_exclusions(attached_builds, cve_components_mapping)
-        extra_cve_package_exclusions, missing_cve_package_exclusions = AsyncErrataUtils.diff_cve_package_exclusions(current_cve_package_exclusions, expected_cve_packages_exclusions)
-        for cve, cve_package_exclusions in extra_cve_package_exclusions.items():
-            if cve_package_exclusions:
-                self._complain(f"On advisory {advisory_id}, {cve} is not associated with Brew components "
-                               f"{', '.join(sorted(cve_package_exclusions))}."
-                               " You may need to associate the CVE with the components "
-                               "in the CVE mapping or drop the tracker bugs.")
-        for cve, cve_package_exclusions in missing_cve_package_exclusions.items():
-            if cve_package_exclusions:
-                self._complain(f"On advisory {advisory_id}, {cve} is associated with Brew components "
-                               f"{', '.join(sorted(cve_package_exclusions))} without a tracker bug."
-                               " You may need to explicitly exclude those Brew components from the CVE "
-                               "mapping or attach the corresponding tracker bugs.")
 
         # Check if flaw bugs match the CVE field of the advisory
         advisory_cves = advisory_info["content"]["content"]["cve"].split()
@@ -266,6 +250,26 @@ class BugValidator:
         if missing_cves:
             self._complain(f"On advisory {advisory_id}, bugs for the following CVEs are not attached but listed in "
                            f"advisory's `CVE Names` field: {', '.join(sorted(missing_cves))}")
+
+        # Verify CVE mapping is accurate
+        current_cve_package_exclusions = await AsyncErrataUtils.get_advisory_cve_package_exclusions(self.errata_api,
+                                                                                                    advisory_id)
+        attached_builds = await self.errata_api.get_builds_flattened(advisory_id)
+        expected_cve_packages_exclusions = AsyncErrataUtils.compute_cve_package_exclusions(attached_builds,
+                                                                                           cve_components_mapping)
+        extra_cve_package_exclusions, missing_cve_package_exclusions = AsyncErrataUtils.diff_cve_package_exclusions(
+            current_cve_package_exclusions, expected_cve_packages_exclusions)
+
+        mismapped_cves = set()
+        for cve, cve_package_exclusions in extra_cve_package_exclusions.items():
+            if cve_package_exclusions:
+                mismapped_cves.add(cve)
+        for cve, cve_package_exclusions in missing_cve_package_exclusions.items():
+            if cve_package_exclusions:
+                mismapped_cves.add(cve)
+        if mismapped_cves:
+            self._complain(f"On advisory {advisory_id}, CVEs {mismapped_cves} are not associated with "
+                           f"expected Brew components. You need to drop or reconcile them (`elliott attach-cve-flaws`)")
 
     def get_attached_bugs(self, advisory_ids: List[str]) -> Dict[int, Set[Bug]]:
         """ Get bugs attached to specified advisories
