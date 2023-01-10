@@ -229,7 +229,8 @@ class TestCategorizeBugsByType(unittest.TestCase):
         expected = {
             'rpm': {bugs[1]},
             'image': {bugs[4], bugs[2]},
-            'extras': {bugs[3], bugs[0]}
+            'extras': {bugs[3], bugs[0]},
+            'metadata': set()
         }
 
         actual = categorize_bugs_by_type(bugs, advisory_id_map, 4)
