@@ -231,6 +231,10 @@ class BugValidator:
             component_name = tracker.whiteboard_component
             flaw_ids = tracker_flaws[tracker.id]
             for flaw_id in flaw_ids:
+                # This means associated flaw wasn't considered a first fix
+                if flaw_id not in flaw_id_bugs:
+                    continue
+
                 if len(flaw_id_bugs[flaw_id].alias) != 1:
                     raise ValueError(f"Flaw bug {flaw_id} should have exact 1 alias.")
                 cve = flaw_id_bugs[flaw_id].alias[0]
