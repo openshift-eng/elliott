@@ -1148,14 +1148,15 @@ def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current
     major, minor = util.minor_version_tuple(current_target_release)
     ocp_product_name = f"Red Hat OpenShift Container Platform {major}"
     components_not_yet_fixed = []
+    pyxis_base_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
+                     "/repository/{pkg_name}/images?page_size=1&include=data.brew"
     for package_info in data['package_state']:
         if ocp_product_name in package_info['product_name'] and package_info['fix_state'] == 'Affected':
             pkg_name = package_info['package_name']
             # for images `package_name` field is usually the container delivery repo
             # otherwise we assume it's the exact brew package name
             if '/' in pkg_name:
-                pyxis_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
-                            f"/repository/{pkg_name}/images?page_size=1&include=data.brew"
+                pyxis_url = pyxis_base_url.format(pkg_name=pkg_name)
                 response = requests.get(pyxis_url, auth=HTTPKerberosAuth(mutual_authentication=OPTIONAL))
                 if response.status_code == requests.codes.ok:
                     data = response.json()['data']
