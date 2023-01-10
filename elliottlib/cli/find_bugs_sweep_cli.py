@@ -268,8 +268,8 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
 
     mislabeled_trackers = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
     if mislabeled_trackers:
-        raise ValueError(f"Bug(s) {mislabeled_trackers} have CVE in description but do not have TrackerBug labels. "
-                         "Please investigate.")
+        logger.warning(f"Bug(s) {mislabeled_trackers} have CVE in description but do not have TrackerBug labels. "
+                       "Please investigate.")
 
     if not advisory_id_map:
         logger.info("Skipping sorting/attaching Tracker Bugs. Advisories with attached builds must be given to "
