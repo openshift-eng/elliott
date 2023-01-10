@@ -152,8 +152,6 @@ class BugValidator:
     def verify_bugs_advisory_type(self, non_flaw_bugs, advisory_id_map, advisory_bug_map):
         bugs_by_type = categorize_bugs_by_type(non_flaw_bugs, advisory_id_map)
         for kind, advisory_id in advisory_id_map.items():
-            if kind in ['metadata']:
-                continue
             actual = {b for b in advisory_bug_map[advisory_id] if b.is_ocp_bug()}
             expected = bugs_by_type[kind]
             if actual != expected:

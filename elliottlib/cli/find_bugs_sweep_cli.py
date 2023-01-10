@@ -245,7 +245,8 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
         # But at GA time it can have operator builds for the early operator release
         # and thus related extras bugs (including trackers and flaws) will need to be attached to it
         # see: https://art-docs.engineering.redhat.com/release/4.y-ga/#early-silent-operator-release
-        "metadata": set()
+        "metadata": set(),
+        "microshift": set()
     }
 
     # for 3.x, all bugs should go to the rpm advisory
