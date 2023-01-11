@@ -232,6 +232,7 @@ class TestCategorizeBugsByType(unittest.TestCase):
             'rpm': {bugs[1]},
             'image': {bugs[4], bugs[2]},
             'extras': {bugs[3], bugs[0]},
+            'metadata': set(),
             'microshift': {bugs[5]},
         }
 

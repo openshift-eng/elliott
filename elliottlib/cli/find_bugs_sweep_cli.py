@@ -237,11 +237,15 @@ def get_assembly_bug_ids(runtime, bug_tracker_type):
 
 
 def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], major_version: int = 4):
-    # key is type ("rpm", "image", "extras"), value is a set of bug IDs.
     bugs_by_type = {
         "rpm": set(),
         "image": set(),
         "extras": set(),
+        # Metadata advisory will not have Bugs for z-stream releases
+        # But at GA time it can have operator builds for the early operator release
+        # and thus related extras bugs (including trackers and flaws) will need to be attached to it
+        # see: https://art-docs.engineering.redhat.com/release/4.y-ga/#early-silent-operator-release
+        "metadata": set(),
         "microshift": set(),
     }
 
@@ -266,9 +270,10 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
     for b in tracker_bugs:
         logger.info((b.id, b.whiteboard_component))
 
-    warning_bug = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
-    if warning_bug:
-        logger.warning(f"Bug {warning_bug} has CVE number in summary but does not have tracker keywords")
+    mislabeled_trackers = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
+    if mislabeled_trackers:
+        logger.warning(f"Bug(s) {mislabeled_trackers} have CVE in description but do not have TrackerBug labels. "
+                       "Please investigate.")
 
     if not advisory_id_map:
         logger.info("Skipping sorting/attaching Tracker Bugs. Advisories with attached builds must be given to "
