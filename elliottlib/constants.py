@@ -75,6 +75,7 @@ errata_valid_impetus = [
     'test',
     'extras',
     'metadata',
+    "microshift",
 ]
 
 # These are the types of advisories that may have definitions in group.yml
@@ -84,6 +85,7 @@ standard_advisory_types = [
     'image',
     'extras',
     'metadata',
+    "microshift",
 ]
 
 

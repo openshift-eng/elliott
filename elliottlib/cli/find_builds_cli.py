@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import json
 import re
 from typing import Dict, List, Set, Union
@@ -76,9 +77,12 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option(
     '--include-shipped', required=False, is_flag=True,
     help='Do not filter out shipped builds')
+@click.option(
+    '--member-only', is_flag=True,
+    help='(For rpms) Only sweep member rpms')
 @pass_runtime
 def find_builds_cli(runtime: Runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached,
-                    remove, clean, no_cdn_repos, payload, non_payload, include_shipped):
+                    remove, clean, no_cdn_repos, payload, non_payload, include_shipped, member_only: bool):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -164,7 +168,7 @@ PRESENT advisory. Here are some examples:
             unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, payload,
                                                           non_payload, include_shipped)
         elif kind == 'rpm':
-            unshipped_nvrps = _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_session, include_shipped)
+            unshipped_nvrps = _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_session, include_shipped, member_only)
 
     pbar_header(
         'Fetching builds from Errata: ',
@@ -348,7 +352,7 @@ def _ensure_accepted_tags(builds: List[Dict], brew_session: koji.ClientSession, 
         build["tag_name"] = accepted_tag
 
 
-def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew_session: koji.ClientSession, include_shipped: bool):
+def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew_session: koji.ClientSession, include_shipped: bool, member_only: bool):
     assembly = runtime.assembly
     if runtime.assembly_basis_event:
         LOGGER.warning(f'Constraining rpm search to stream assembly due to assembly basis event {runtime.assembly_basis_event}')
@@ -366,38 +370,44 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
 
     green_prefix('Generating list of rpms: ')
     click.echo('Hold on a moment, fetching Brew builds')
-
-    builder = BuildFinder(brew_session, logger=LOGGER)
     builds: List[Dict] = []
-    for tag in tag_pv_map:
-        # keys are rpm component names, values are nvres
-        component_builds: Dict[str, Dict] = builder.from_tag("rpm", tag, inherit=False, assembly=assembly, event=runtime.brew_event)
 
-        if runtime.assembly_basis_event:
-            # If an assembly has a basis event, rpms pinned by "is" and group dependencies should take precedence over every build from the tag
-            el_version = isolate_el_version_in_brew_tag(tag)
-            if not el_version:
-                continue  # Only honor pinned rpms if this tag is relevant to a RHEL version
+    if member_only:  # Sweep only member rpms
+        for tag in tag_pv_map:
+            tasks = [exectools.to_thread(progress_func, functools.partial(rpm.get_latest_build, default=None, el_target=tag)) for rpm in runtime.rpm_metas()]
+            builds_for_tag = asyncio.get_event_loop().run_until_complete(asyncio.gather(*tasks))
+            builds.extend(filter(lambda b: b is not None, builds_for_tag))
 
-            # Honors pinned NVRs by "is"
-            pinned_by_is = builder.from_pinned_by_is(el_version, runtime.assembly, runtime.get_releases_config(), runtime.rpm_map)
-            _ensure_accepted_tags(pinned_by_is.values(), brew_session, tag_pv_map)
+    else:  # Sweep all tagged rpms
+        builder = BuildFinder(brew_session, logger=LOGGER)
+        for tag in tag_pv_map:
+            # keys are rpm component names, values are nvres
+            component_builds: Dict[str, Dict] = builder.from_tag("rpm", tag, inherit=False, assembly=assembly, event=runtime.brew_event)
+            if runtime.assembly_basis_event:
+                # If an assembly has a basis event, rpms pinned by "is" and group dependencies should take precedence over every build from the tag
+                el_version = isolate_el_version_in_brew_tag(tag)
+                if not el_version:
+                    continue  # Only honor pinned rpms if this tag is relevant to a RHEL version
 
-            # Builds pinned by "is" should take precedence over every build from tag
-            for component, pinned_build in pinned_by_is.items():
-                if component in component_builds and pinned_build["id"] != component_builds[component]["id"]:
-                    LOGGER.warning("Swapping stream nvr %s for pinned nvr %s...", component_builds[component]["nvr"], pinned_build["nvr"])
+                # Honors pinned NVRs by "is"
+                pinned_by_is = builder.from_pinned_by_is(el_version, runtime.assembly, runtime.get_releases_config(), runtime.rpm_map)
+                _ensure_accepted_tags(pinned_by_is.values(), brew_session, tag_pv_map)
 
-            component_builds.update(pinned_by_is)  # pinned rpms take precedence over those from tags
+                # Builds pinned by "is" should take precedence over every build from tag
+                for component, pinned_build in pinned_by_is.items():
+                    if component in component_builds and pinned_build["id"] != component_builds[component]["id"]:
+                        LOGGER.warning("Swapping stream nvr %s for pinned nvr %s...", component_builds[component]["nvr"], pinned_build["nvr"])
 
-            # Honors group dependencies
-            group_deps = builder.from_group_deps(el_version, runtime.group_config, runtime.rpm_map)  # the return value doesn't include any ART managed rpms
-            # Group dependencies should take precedence over anything previously determined except those pinned by "is".
-            for component, dep_build in group_deps.items():
-                if component in component_builds and dep_build["id"] != component_builds[component]["id"]:
-                    LOGGER.warning("Swapping stream nvr %s for group dependency nvr %s...", component_builds[component]["nvr"], dep_build["nvr"])
-            component_builds.update(group_deps)
-        builds.extend(component_builds.values())
+                component_builds.update(pinned_by_is)  # pinned rpms take precedence over those from tags
+
+                # Honors group dependencies
+                group_deps = builder.from_group_deps(el_version, runtime.group_config, runtime.rpm_map)  # the return value doesn't include any ART managed rpms
+                # Group dependencies should take precedence over anything previously determined except those pinned by "is".
+                for component, dep_build in group_deps.items():
+                    if component in component_builds and dep_build["id"] != component_builds[component]["id"]:
+                        LOGGER.warning("Swapping stream nvr %s for group dependency nvr %s...", component_builds[component]["nvr"], dep_build["nvr"])
+                component_builds.update(group_deps)
+            builds.extend(component_builds.values())
 
     _ensure_accepted_tags(builds, brew_session, tag_pv_map, raise_exception=False)
     qualified_builds = [b for b in builds if "tag_name" in b]
