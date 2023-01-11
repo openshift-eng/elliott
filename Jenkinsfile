@@ -2,8 +2,9 @@
 
 pipeline {
     agent {
-        docker.withRegistry('https://quay.io') {
+        docker {
             image "openshift-art/art-ci-toolkit:latest"
+            registryUrl 'https://quay.io/'
             alwaysPull true
             args "-e http_proxy -e https_proxy -e no_proxy -e HTTP_PROXY -e HTTPS_PROXY -e NO_PROXY --entrypoint=''"
         }
