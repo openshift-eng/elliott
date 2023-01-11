@@ -241,7 +241,8 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
     bugs_by_type = {
         "rpm": set(),
         "image": set(),
-        "extras": set()
+        "extras": set(),
+        "microshift": set(),
     }
 
     # for 3.x, all bugs should go to the rpm advisory
@@ -250,9 +251,12 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
         return bugs_by_type
 
     # for 4.x, first sort all non_tracker_bugs
-    non_tracker_bugs = [b for b in bugs if not b.is_tracker_bug()]
+    non_tracker_bugs = {b for b in bugs if not b.is_tracker_bug()}
     bugs_by_type["extras"] = extras_bugs(non_tracker_bugs)
-    bugs_by_type["image"] = set(non_tracker_bugs) - bugs_by_type["extras"]
+    remaining = non_tracker_bugs - bugs_by_type["extras"]
+    bugs_by_type["microshift"] = {b for b in remaining if b.component and b.component.startswith('MicroShift')}
+    remaining = remaining - bugs_by_type["microshift"]
+    bugs_by_type["image"] = remaining
 
     tracker_bugs = [b for b in bugs if b.is_tracker_bug() and b.whiteboard_component]
     logger.info(f"Tracker Bugs found: {len(tracker_bugs)}")

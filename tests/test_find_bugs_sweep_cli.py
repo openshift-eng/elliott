@@ -208,18 +208,20 @@ class FindBugsSweepTestCase(unittest.TestCase):
 
 class TestCategorizeBugsByType(unittest.TestCase):
     def test_categorize_bugs_by_type(self):
-        advisory_id_map = {'image': 1, 'rpm': 2, 'extras': 3}
+        advisory_id_map = {'image': 1, 'rpm': 2, 'extras': 3, 'microshift': 4}
         bugs = [
-            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='foo'),
-            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='bar'),
-            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='buzz'),
-            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True),
-            flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True)
+            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='foo', component=''),
+            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='bar', component=''),
+            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='buzz', component=''),
+            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True, component=''),
+            flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True, component=''),
+            flexmock(id='OCPBUGS-6', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True, component='MicroShift')
         ]
         builds_map = {
             'image': {bugs[2].whiteboard_component: None},
             'rpm': {bugs[1].whiteboard_component: None},
-            'extras': {bugs[0].whiteboard_component: None}
+            'extras': {bugs[0].whiteboard_component: None},
+            'microshift': set(),
         }
 
         flexmock(sweep_cli).should_receive("extras_bugs").and_return({bugs[3]})
@@ -229,7 +231,8 @@ class TestCategorizeBugsByType(unittest.TestCase):
         expected = {
             'rpm': {bugs[1]},
             'image': {bugs[4], bugs[2]},
-            'extras': {bugs[3], bugs[0]}
+            'extras': {bugs[3], bugs[0]},
+            'microshift': {bugs[5]},
         }
 
         actual = categorize_bugs_by_type(bugs, advisory_id_map, 4)
