@@ -71,17 +71,18 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         for bug_tracker in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
             attached_trackers.extend(get_attached_trackers(advisory, bug_tracker, runtime.logger))
 
-        tracker_flaws, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, brew_api, runtime.logger)
+        tracker_flaws, flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, brew_api, runtime.logger)
 
         try:
-            if first_fix_flaw_bugs:
-                _update_advisory(runtime, advisory, first_fix_flaw_bugs, flaw_bug_tracker, noop)
+            if flaw_bugs:
+                _update_advisory(runtime, advisory, flaw_bugs, flaw_bug_tracker, noop)
+                # Associate builds with CVEs
+                runtime.logger.info('Associating CVEs with builds')
+                await errata_api.login()
+                await associate_builds_with_cves(errata_api, advisory, flaw_bugs, attached_trackers,
+                                                 tracker_flaws, noop)
             else:
                 pass  # TODO: convert RHSA back to RHBA
-            # Associate builds with CVEs
-            runtime.logger.info('Associating CVEs with builds')
-            await errata_api.login()
-            await associate_builds_with_cves(errata_api, advisory, first_fix_flaw_bugs, attached_trackers, tracker_flaws, noop)
         except Exception as e:
             runtime.logger.error(traceback.format_exc())
             runtime.logger.error(f'Exception: {e}')
