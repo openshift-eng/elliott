@@ -10,6 +10,7 @@ from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
 from elliottlib.util import (exit_unauthenticated, minor_version_tuple, red_print)
 from elliottlib.bzutil import Bug, BugTracker
+from elliottlib.cli.attach_cve_flaws_cli import get_flaws
 from elliottlib.cli.find_bugs_sweep_cli import get_bugs_sweep, FindBugsSweep, categorize_bugs_by_type
 
 logger = logutil.getLogger(__name__)
@@ -190,29 +191,13 @@ class BugValidator:
         await asyncio.gather(*futures)
 
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
-        # Retrieve flaw bugs for attached_tracker_bugs
-        tracker_flaws, flaw_id_bugs = BugTracker.get_corresponding_flaw_bugs(attached_trackers,
-                                                                             self.runtime.bug_trackers('bugzilla'))
+        flaw_bug_tracker = self.runtime.bug_trackers('bugzilla')
+        brew_api = self.runtime.build_retrying_koji_client()
+        tracker_flaws, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, brew_api,
+                                                       self.runtime.logger)
 
-        # Find first-fix flaws
-        first_fix_flaw_ids = set()
-        if attached_trackers:
-            current_target_release = bzutil.Bug.get_target_release(attached_trackers)
-            if current_target_release[-1] == 'z':
-                first_fix_flaw_ids = flaw_id_bugs.keys()
-            else:
-                first_fix_flaw_ids = {
-                    flaw_bug.id for flaw_bug in flaw_id_bugs.values()
-                    # We are passing in bugzilla as a bug tracker since flaw bugs are
-                    # always bugzilla bugs their links ("depends_on"/"blocked") fields
-                    # which we use to find its trackers - will always link to other bz bugs
-                    # This is a gap in our first fix logic since we won't be able to get to
-                    # jira tracker bugs for bz flaws and determine first fix at GA time
-                    # TODO: https://issues.redhat.com/browse/ART-4347
-                    if bzutil.is_first_fix_any(self.runtime.bug_trackers('bugzilla'), flaw_bug, current_target_release)
-                }
-
-        # Check if attached flaws match attached trackers
+        # Check if attached flaws match expected flaws
+        first_fix_flaw_ids = {b.id for b in first_fix_flaw_bugs}
         attached_flaw_ids = {b.id for b in attached_flaws}
         missing_flaw_ids = first_fix_flaw_ids - attached_flaw_ids
         if missing_flaw_ids:
@@ -240,13 +225,16 @@ class BugValidator:
                            f"{first_fix_flaw_ids}. It should be converted to RHSA.")
 
         # Check if flaw bugs are associated with specific builds
+        flaw_id_bugs = {f.id: f for f in first_fix_flaw_bugs}
         cve_components_mapping: Dict[str, Set[str]] = {}
         for tracker in attached_trackers:
             component_name = tracker.whiteboard_component
-            if not component_name:
-                raise ValueError(f"Tracker bug {tracker.id} doesn't have a valid component name in its whiteboard field.")
             flaw_ids = tracker_flaws[tracker.id]
             for flaw_id in flaw_ids:
+                # This means associated flaw wasn't considered a first fix
+                if flaw_id not in flaw_id_bugs:
+                    continue
+
                 if len(flaw_id_bugs[flaw_id].alias) != 1:
                     raise ValueError(f"Flaw bug {flaw_id} should have exact 1 alias.")
                 cve = flaw_id_bugs[flaw_id].alias[0]

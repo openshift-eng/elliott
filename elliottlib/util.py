@@ -270,16 +270,17 @@ def convert_remote_git_to_https(source):
 
 def minor_version_tuple(bz_target):
     """
-    Turns '4.5' or '4.5.z' into numeric (4, 5)
+    Turns '4.5' or '4.5.z' or '4.5.0' into numeric (4, 5)
     Assume the target version begins with numbers 'x.y' - explode otherwise
 
-    :param bz_target: A string like "4.5.0"
+    :param bz_target: Target version string like "4.5.0"
     :return: A tuple like (4, 5)
     """
     if bz_target == '---':
-        return (0, 0)
-    major, minor, _ = f"{bz_target}.z".split('.', 2)
-    return (int(major), int(minor))
+        return 0, 0
+
+    match = re.match(r'^(\d+).(\d+)(.0|.z)?$', bz_target)
+    return int(match.groups()[0]), int(match.groups()[1])
 
 
 def get_golang_version_from_build_log(log):

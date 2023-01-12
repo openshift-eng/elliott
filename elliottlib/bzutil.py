@@ -7,16 +7,17 @@ import itertools
 import re
 import urllib.parse
 import xmlrpc.client
+import bugzilla
+import click
+import os
+import requests
+from requests_kerberos import HTTPKerberosAuth, OPTIONAL
 from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
 from jira import JIRA, Issue
 from errata_tool.jira_issue import JiraIssue as ErrataJira
 from errata_tool.bug import Bug as ErrataBug
-
-import bugzilla
-import click
-import os
 from bugzilla.bug import Bug
 from koji import ClientSession
 
@@ -421,8 +422,8 @@ class BugTracker:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
 
     @staticmethod
-    def get_corresponding_flaw_bugs(tracker_bugs: List[Bug], flaw_bug_tracker,
-                                    strict: bool = False, verbose: bool = False):
+    def get_corresponding_flaw_bugs(tracker_bugs: List[Bug], flaw_bug_tracker, brew_api,
+                                    strict: bool = True, verbose: bool = False) -> (Dict, Dict):
         """Get corresponding flaw bug objects for given list of tracker bug objects.
         flaw_bug_tracker object to fetch flaw bugs from
 
@@ -434,26 +435,54 @@ class BugTracker:
             list(set(sum([t.corresponding_flaw_bug_ids for t in tracker_bugs], []))),
             verbose=verbose
         )
-        flaw_id_bugs = {bug.id: bug for bug in flaw_bugs}
+        flaw_tracker_map = {bug.id: {'bug': bug, 'trackers': []}
+                            for bug in flaw_bugs}
 
         # Validate that each tracker has a corresponding flaw bug
-        flaw_ids = set(flaw_id_bugs.keys())
-        no_flaws = set()
-        for tracker in tracker_bugs:
-            if not set(tracker.corresponding_flaw_bug_ids).intersection(flaw_ids):
-                no_flaws.add(tracker.id)
-        if no_flaws:
-            msg = f'No flaw bugs could be found for these trackers: {no_flaws}'
-            if strict:
-                raise exceptions.ElliottFatalError(msg)
-            else:
-                logger.warning(msg)
+        # and a whiteboard component
+        trackers_with_no_flaws = set()
+        trackers_with_invalid_components = set()
+        for t in tracker_bugs:
+            component = t.whiteboard_component
+            if not component:
+                trackers_with_invalid_components.add(t.id)
+                continue
 
+            # is this component a valid package name in brew?
+            if not brew_api.getPackageID(component):
+                logger.info(f'package `{component}` not found in brew')
+                trackers_with_invalid_components.add(t.id)
+                continue
+
+            flaw_bug_ids = [i for i in t.corresponding_flaw_bug_ids if i in flaw_tracker_map]
+            if not len(flaw_bug_ids):
+                trackers_with_no_flaws.add(t.id)
+                continue
+
+            for f_id in flaw_bug_ids:
+                flaw_tracker_map[f_id]['trackers'].append(t)
+
+        error_msg = ''
+        if trackers_with_no_flaws:
+            error_msg += 'Cannot find any corresponding flaw bugs for these trackers: ' \
+                         f'{sorted(trackers_with_no_flaws)}. '
+
+        if trackers_with_invalid_components:
+            error_msg += "These trackers do not have a valid whiteboard component value:" \
+                         f" {sorted(trackers_with_invalid_components)}."
+
+        if error_msg:
+            if strict:
+                raise exceptions.ElliottFatalError(error_msg)
+            else:
+                logger.warning(error_msg)
+
+        invalid_trackers = trackers_with_no_flaws | trackers_with_invalid_components
         tracker_flaws = {
-            tracker.id: [b for b in tracker.corresponding_flaw_bug_ids if b in flaw_id_bugs]
-            for tracker in tracker_bugs
+            t.id: [b for b in t.corresponding_flaw_bug_ids if b in flaw_tracker_map]
+            for t in tracker_bugs if t.id not in invalid_trackers
         }
-        return tracker_flaws, flaw_id_bugs
+        return tracker_flaws, flaw_tracker_map
 
     def get_tracker_bugs(self, bug_ids: List, strict: bool = False, verbose: bool = False):
         raise NotImplementedError
@@ -1098,92 +1127,61 @@ def sort_cve_bugs(bugs):
     return sorted(bugs, key=cve_sort_key, reverse=True)
 
 
-def is_first_fix_any(bugtracker, flaw_bug, current_target_release):
-    """
-    Check if a flaw bug is considered a first-fix for a GA target release
-    for any of its trackers components. A return value of True means it should be
-    attached to an advisory.
-    """
+def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current_target_release: str):
     # all z stream bugs are considered first fix
     if current_target_release[-1] != '0':
         return True
 
-    # get all tracker bugs for a flaw bug
-    tracker_ids = flaw_bug.depends_on
-    if not tracker_ids:
-        # No trackers found
-        # is a first fix
-        # shouldn't happen ideally
-        return True
-
-    # filter tracker bugs by OCP product
-    tracker_bugs = []
-    for tracker_id in tracker_ids:
-        try:
-            b = bugtracker.get_bug(tracker_id)
-        except Exception as e:
-            # first-fix tracker bug might be not visible but not break here
-            if "not authorized" in e:
-                logger.warning(f"We are not authorized to access bug #{tracker_id}, need manually check if it's permission issue")
-            logger.warning(f"Failed to get tracker bug {tracker_id} info from bugtracker API")
-        else:
-            if b.product == constants.BUGZILLA_PRODUCT_OCP and b.is_tracker_bug():
-                tracker_bugs.append(b)
-
     if not tracker_bugs:
-        # No OCP trackers found
-        # is a first fix
+        # This shouldn't happen
+        raise ValueError(f'flaw bug {flaw_bug.id} does not seem to have trackers')
+
+    if not (hasattr(flaw_bug, 'alias') and flaw_bug.alias):
+        raise ValueError(f'flaw bug {flaw_bug.id} does not have an alias')
+
+    alias = flaw_bug.alias[0]
+    cve_url = f"https://access.redhat.com/hydra/rest/securitydata/cve/{alias}.json"
+    response = requests.get(cve_url)
+    response.raise_for_status()
+    data = response.json()
+
+    major, minor = util.minor_version_tuple(current_target_release)
+    ocp_product_name = f"Red Hat OpenShift Container Platform {major}"
+    components_not_yet_fixed = []
+    pyxis_base_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
+                     "/repository/{pkg_name}/images?page_size=1&include=data.brew"
+    for package_info in data['package_state']:
+        if ocp_product_name in package_info['product_name'] and \
+           package_info['fix_state'] in ['Affected', 'Under investigation']:
+            pkg_name = package_info['package_name']
+            # for images `package_name` field is usually the container delivery repo
+            # otherwise we assume it's the exact brew package name
+            if '/' in pkg_name:
+                pyxis_url = pyxis_base_url.format(pkg_name=pkg_name)
+                response = requests.get(pyxis_url, auth=HTTPKerberosAuth(mutual_authentication=OPTIONAL))
+                if response.status_code == requests.codes.ok:
+                    data = response.json()['data']
+                    if data:
+                        pkg_name = data[0]['brew']['package']
+                    else:
+                        logger.warn(f'could not find brew package info at {pyxis_url}')
+                else:
+                    logger.warn(f'got status={response.status_code} for {pyxis_url}')
+            components_not_yet_fixed.append(pkg_name)
+
+    # get tracker components
+    first_fix_components = []
+    for t in tracker_bugs:
+        component = t.whiteboard_component
+        if component in components_not_yet_fixed:
+            first_fix_components.append((component, t.id))
+
+    if first_fix_components:
+        logger.info(f'{flaw_bug.id} ({alias}) considered first-fix for these (component, tracker):'
+                    f' {first_fix_components}')
         return True
 
-    # make sure 3.X or 4.X bugs are being compared to each other
-    def same_major_release(bug):
-        return util.minor_version_tuple(current_target_release)[0] == util.minor_version_tuple(bug.target_release[0])[0]
-
-    def already_fixed(bug):
-        pending = bug.status == 'RELEASE_PENDING'
-        closed = bug.status == 'CLOSED' and bug.resolution in ['ERRATA', 'CURRENTRELEASE', 'NEXTRELEASE']
-        if pending or closed:
-            return True
-        return False
-
-    # group trackers by components
-    component_tracker_groups = dict()
-    component_not_found = '[NotFound]'
-    for b in tracker_bugs:
-        # filter out trackers that don't belong ex. 3.X bugs for 4.X target release
-        if not same_major_release(b):
-            continue
-        component = b.whiteboard_component
-        if not component:
-            component = component_not_found
-
-        if component not in component_tracker_groups:
-            component_tracker_groups[component] = set()
-        component_tracker_groups[component].add(b)
-
-    if component_not_found in component_tracker_groups:
-        invalid_trackers = sorted([b.id for b in component_tracker_groups[component_not_found]])
-        logger.warning(f"For flaw bug {flaw_bug.id} - these tracker bugs do not have a valid "
-                       f"whiteboard component value: {invalid_trackers} "
-                       "Cannot reliably determine if flaw bug is first "
-                       "fix. Check tracker bugs manually")
-        return False
-
-    # if any tracker bug for the flaw bug
-    # has been fixed for the same major release version
-    # then it is not a first fix
-    def is_first_fix_group(trackers):
-        for b in trackers:
-            if already_fixed(b):
-                return False
-        return True
-
-    # if for any component is_first_fix_group is true
-    # then flaw bug is first fix
-    for component, trackers in component_tracker_groups.items():
-        if is_first_fix_group(trackers):
-            logger.info(f'{flaw_bug.id} considered first-fix for component: {component} for trackers: '
-                        f'{[t.id for t in trackers]}')
-            return True
-
+    logger.info(f'{flaw_bug.id} ({alias}) not considered a first-fix because newly fixed trackers '
+                f'components {[t.whiteboard_component for t in tracker_bugs]}, were not found in unfixed components '
+                f'{components_not_yet_fixed}')
     return False

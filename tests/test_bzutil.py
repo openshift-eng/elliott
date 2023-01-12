@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 import logging
 import unittest
-from unittest.mock import Mock
+from unittest.mock import MagicMock, patch
+import requests
 import xmlrpc.client
 
 from flexmock import flexmock
@@ -22,6 +23,57 @@ class TestBug(unittest.TestCase):
         self.assertEqual(BugzillaBug(bug_true).is_cve_in_summary(), True)
 
 
+class TestBugTracker(unittest.TestCase):
+    def test_get_corresponding_flaw_bugs(self):
+        flaw_a = flexmock(id=1)
+        flaw_b = flexmock(id=2)
+        flaw_c = flexmock(id=3)
+        valid_flaw_bugs = [flaw_a, flaw_b]
+
+        tracker_bugs = [
+            flexmock(corresponding_flaw_bug_ids=[flaw_a.id, flaw_b.id], id=10, whiteboard_component='component:foo'),
+            flexmock(corresponding_flaw_bug_ids=[flaw_b.id, flaw_c.id], id=11, whiteboard_component='component:bar'),
+            flexmock(corresponding_flaw_bug_ids=[flaw_b.id], id=12, whiteboard_component=None),
+            flexmock(corresponding_flaw_bug_ids=[flaw_c.id], id=13, whiteboard_component='component:foobar'),
+        ]
+
+        flexmock(BugzillaBugTracker).should_receive("login")
+        flexmock(BugzillaBugTracker).should_receive("get_flaw_bugs").and_return(valid_flaw_bugs)
+        expected = (
+            {10: [flaw_a.id, flaw_b.id], 11: [flaw_b.id]},
+            {
+                flaw_a.id: {'bug': flaw_a, 'trackers': [tracker_bugs[0]]},
+                flaw_b.id: {'bug': flaw_b, 'trackers': [tracker_bugs[0], tracker_bugs[1]]}
+            }
+        )
+        brew_api = flexmock()
+        brew_api.should_receive("getPackageID").and_return(True)
+        actual = BugTracker.get_corresponding_flaw_bugs(tracker_bugs, BugzillaBugTracker({}), brew_api, strict=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_corresponding_flaw_bugs_strict(self):
+        flaw_a = flexmock(id=1)
+        flaw_b = flexmock(id=2)
+        flaw_c = flexmock(id=3)
+        valid_flaw_bugs = [flaw_a, flaw_b]
+
+        tracker_bugs = [
+            flexmock(corresponding_flaw_bug_ids=[flaw_a.id, flaw_b.id], id=10, whiteboard_component='component:foo'),
+            flexmock(corresponding_flaw_bug_ids=[flaw_b.id, flaw_c.id], id=11, whiteboard_component='component:bar'),
+            flexmock(corresponding_flaw_bug_ids=[flaw_b.id], id=12, whiteboard_component=None),
+            flexmock(corresponding_flaw_bug_ids=[flaw_c.id], id=13, whiteboard_component='component:foobar'),
+        ]
+
+        flexmock(BugzillaBugTracker).should_receive("login")
+        flexmock(BugzillaBugTracker).should_receive("get_flaw_bugs").and_return(valid_flaw_bugs)
+
+        brew_api = flexmock()
+        brew_api.should_receive("getPackageID").and_return(True)
+        self.assertRaises(
+            exceptions.ElliottFatalError,
+            BugTracker.get_corresponding_flaw_bugs, tracker_bugs, BugzillaBugTracker({}), brew_api, strict=True)
+
+
 class TestJIRABugTracker(unittest.TestCase):
     def test_get_config(self):
         config = {'foo': 1, 'jira_config': {'bar': 2}}
@@ -32,30 +84,6 @@ class TestJIRABugTracker(unittest.TestCase):
         actual = JIRABugTracker.get_config(runtime)
         expected = {'foo': 1, 'bar': 2}
         self.assertEqual(actual, expected)
-
-    def test_get_corresponding_flaw_bugs_jira(self):
-        product = 'Security Response'
-        component = 'vulnerability'
-        valid_flaw = BugzillaBug(flexmock(product=product, component=component, id=9999))
-        invalid_flaw = BugzillaBug(flexmock(product=product, component='foo', id=9998))
-        flaw_bugs = [valid_flaw, invalid_flaw]
-
-        tracker_bugs = [
-            JIRABug(flexmock(key='OCPBUGS-1', fields=flexmock(labels=[f"flaw:bz#{valid_flaw.id}",
-                                                                      f"flaw:bz#{invalid_flaw.id}"]))),
-            JIRABug(flexmock(key='OCPBUGS-2', fields=flexmock(labels=[f"flaw:bz#{invalid_flaw.id}"]))),
-            JIRABug(flexmock(key='OCPBUGS-3', fields=flexmock(labels=[f"flaw:bz#{valid_flaw.id}"])))
-        ]
-
-        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
-        flexmock(BugzillaBugTracker).should_receive("get_bugs").and_return(flaw_bugs)
-        flaw_bug_tracker = BugzillaBugTracker({})
-        expected = (
-            {'OCPBUGS-1': [valid_flaw.id], 'OCPBUGS-2': [], 'OCPBUGS-3': [valid_flaw.id]},
-            {valid_flaw.id: valid_flaw}
-        )
-        actual = BugTracker.get_corresponding_flaw_bugs(tracker_bugs, flaw_bug_tracker)
-        self.assertEqual(expected, actual)
 
 
 class TestBugzillaBugTracker(unittest.TestCase):
@@ -68,54 +96,6 @@ class TestBugzillaBugTracker(unittest.TestCase):
         actual = BugzillaBugTracker.get_config(runtime)
         expected = {'foo': 1, 'bar': 2}
         self.assertEqual(actual, expected)
-
-    def test_get_corresponding_flaw_bugs(self):
-        product = 'Security Response'
-        component = 'vulnerability'
-        valid_flaw_a = BugzillaBug(flexmock(product=product, component=component, id=1))
-        valid_flaw_b = BugzillaBug(flexmock(product=product, component=component, id=2))
-        invalid_flaw_c = BugzillaBug(flexmock(product='foo', component=component, id=3))
-        invalid_flaw_d = BugzillaBug(flexmock(product=product, component='bar', id=4))
-        flaw_bugs = [valid_flaw_a, valid_flaw_b]
-
-        tracker_bugs = [
-            BugzillaBug(flexmock(blocks=[valid_flaw_a.id, valid_flaw_b.id], id=10)),
-            BugzillaBug(flexmock(blocks=[valid_flaw_b.id, invalid_flaw_c.id, invalid_flaw_d.id], id=11)),
-        ]
-
-        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
-        flexmock(BugzillaBugTracker).should_receive("get_bugs").and_return(flaw_bugs)
-        bug_tracker = BugzillaBugTracker({})
-
-        expected = (
-            {10: [valid_flaw_a.id, valid_flaw_b.id], 11: [valid_flaw_b.id]},
-            {valid_flaw_a.id: valid_flaw_a, valid_flaw_b.id: valid_flaw_b}
-        )
-        actual = BugTracker.get_corresponding_flaw_bugs(tracker_bugs, bug_tracker)
-        self.assertEqual(expected, actual)
-
-    def test_get_corresponding_flaw_bugs_bz_strict(self):
-        tracker_bugs = [
-            BugzillaBug(flexmock(blocks=[1, 2], id=10)),
-            BugzillaBug(flexmock(blocks=[2, 3], id=11)),
-            BugzillaBug(flexmock(blocks=[], id=12))
-        ]
-        product = 'Security Response'
-        component = 'vulnerability'
-        bug_a = BugzillaBug(flexmock(product=product, component='wrong_component', id=1))
-        bug_b = BugzillaBug(flexmock(product='wrong_product', component=component, id=2))
-        bug_c = BugzillaBug(flexmock(product=product, component=component, id=3))
-        flaw_bugs = [bug_a, bug_b, bug_c]
-
-        flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
-        flexmock(BugzillaBugTracker).should_receive("get_bugs").and_return(flaw_bugs)
-        bug_tracker = BugzillaBugTracker({})
-
-        self.assertRaisesRegex(
-            exceptions.ElliottFatalError,
-            r'^No flaw bugs could be found for these trackers: {10, 12}$',
-            BugTracker.get_corresponding_flaw_bugs,
-            tracker_bugs, bug_tracker, strict=True)
 
 
 class TestJIRABug(unittest.TestCase):
@@ -450,21 +430,6 @@ class TestBZUtil(unittest.TestCase):
         actual = bzutil.approximate_cutoff_timestamp(mock.ANY, koji_api, [])
         self.assertEqual(datetime(2021, 7, 4, 0, 0, 0, 0, tzinfo=timezone.utc).timestamp(), actual)
 
-    def test_is_first_fix_any_validate(self):
-        bzapi = None
-        bug = None
-        tr = '4.8.z'
-        expected = True
-        actual = bzutil.is_first_fix_any(bzapi, bug, tr)
-        self.assertEqual(expected, actual)
-
-        bzapi = None
-        bug = flexmock(depends_on=[])
-        tr = '4.8.0'
-        expected = True
-        actual = bzutil.is_first_fix_any(bzapi, bug, tr)
-        self.assertEqual(expected, actual)
-
     def test_sort_cve_bugs(self):
         flaw_bugs = [
             flexmock(alias=['CVE-2022-123'], severity='Low'),
@@ -481,192 +446,116 @@ class TestBZUtil(unittest.TestCase):
         self.assertEqual('CVE-2021-789', sort_list[3])
         self.assertEqual('CVE-2022-123', sort_list[4])
 
-    def test_is_first_fix_any_no_valid_trackers(self):
-        tr = '4.8.0'
-        tracker_bug_ids = [1, 2]
-        bug_a = BugzillaBug(flexmock(
-            id=1,
-            product=constants.BUGZILLA_PRODUCT_OCP,
-            keywords=['foo'])
-        )
-        tracker_bug_objs = [bug_a]
-        flaw_bug = flexmock(id=6, depends_on=tracker_bug_ids)
-        bzapi = flexmock()
-        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
-        (bzapi
-            .should_receive("build_query")
-            .with_args(
-                product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=tracker_bug_ids,
-                include_fields=fields))
-        (bzapi
-            .should_receive("query")
-            .and_return(tracker_bug_objs))
-        (bzapi
-            .should_receive("get_bug")
-            .and_return(bug_a))
-
+    def test_is_first_fix_any_validate(self):
+        tr = '4.8.z'
         expected = True
-        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(None, [], tr)
         self.assertEqual(expected, actual)
 
-    def test_is_first_fix_any_missing_whiteboard_component(self):
+        # should raise error when no tracker bugs are found
         tr = '4.8.0'
-        bug_a = BugzillaBug(flexmock(
-            id=1,
-            product=constants.BUGZILLA_PRODUCT_OCP,
-            keywords=constants.TRACKER_BUG_KEYWORDS,
-            whiteboard='', target_release=[tr]
-        ))
-        tracker_bug_objs = [bug_a]
-        tracker_bugs_ids = [1, 2]
-        flaw_bug = flexmock(id=5, product=constants.BUGZILLA_PRODUCT_OCP, depends_on=tracker_bugs_ids)
+        self.assertRaisesRegex(
+            ValueError,
+            r'does not seem to have trackers',
+            bzutil.is_first_fix_any, BugzillaBug(flexmock(id=1)), [], tr)
 
-        bzapi = flexmock()
-        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
-        (bzapi
-            .should_receive("build_query")
-            .with_args(
-                product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=tracker_bugs_ids,
-                include_fields=fields))
-        (bzapi
-            .should_receive("query")
-            .and_return(tracker_bug_objs))
-        (bzapi
-            .should_receive("get_bug")
-            .with_args(1)
-            .and_return(bug_a))
-        (bzapi.should_receive("get_bug").with_args(2).and_return(bug_a))
+        # should raise error when flaw alias isn't present
+        tr = '4.8.0'
+        self.assertRaisesRegex(
+            ValueError,
+            r'does not have an alias',
+            bzutil.is_first_fix_any, BugzillaBug(flexmock(id=1)), ['foobar'], tr)
 
+    def test_is_first_fix_any(self):
+        hydra_data = {
+            'package_state': [
+                {
+                    'product_name': "Red Hat Advanced Cluster Management for Kubernetes 2",
+                    'fix_state': "Affected",
+                    'package_name': "rhacm2/agent-service-rhel8"
+                },
+                {
+                    'product_name': "Red Hat OpenShift Container Platform 4",
+                    'fix_state': "Affected",
+                    'package_name': "openshift-clients"
+                },
+                {
+                    'product_name': "Red Hat OpenShift Container Platform 4",
+                    'fix_state': "Affected",
+                    'package_name': "openshift4/some-image"
+                },
+                {
+                    'product_name': "Red Hat OpenShift Container Platform 4",
+                    'fix_state': "Not Affected",
+                    'package_name': "openshift4/some-other-image"
+                },
+                {
+                    'product_name': "Red Hat OpenShift Container Platform 3",
+                    'fix_state': "Affected",
+                    'package_name': "openshift3/some-image"
+                }
+            ]
+        }
+        flexmock(requests).should_receive('get')\
+            .and_return(flexmock(json=lambda: hydra_data, raise_for_status=lambda: None))\
+            .ordered()
+
+        pyxis_data = {'data': [{'brew': {'package': 'some-image'}}]}
+        flexmock(requests).should_receive('get')\
+            .and_return(flexmock(status_code=200, json=lambda: pyxis_data))\
+            .ordered()
+
+        tr = '4.8.0'
+        flaw_bug = BugzillaBug(flexmock(id=1, alias=['CVE-123']))
+        tracker_bugs = [flexmock(id=2, whiteboard_component='openshift-clients')]
+        expected = True
+        actual = bzutil.is_first_fix_any(flaw_bug, tracker_bugs, tr)
+        self.assertEqual(expected, actual)
+
+    def test_is_first_fix_any_fail(self):
+        hydra_data = {
+            'package_state': [
+                {
+                    'product_name': "Red Hat Advanced Cluster Management for Kubernetes 2",
+                    'fix_state': "Affected",
+                    'package_name': "rhacm2/agent-service-rhel8"
+                },
+                {
+                    'product_name': "Red Hat OpenShift Container Platform 4",
+                    'fix_state': "Affected",
+                    'package_name': "openshift-clients"
+                },
+                {
+                    'product_name': "Red Hat OpenShift Container Platform 4",
+                    'fix_state': "Affected",
+                    'package_name': "openshift4/some-image"
+                },
+                {
+                    'product_name': "Red Hat OpenShift Container Platform 4",
+                    'fix_state': "Not Affected",
+                    'package_name': "openshift4/some-other-image"
+                },
+                {
+                    'product_name': "Red Hat OpenShift Container Platform 3",
+                    'fix_state': "Affected",
+                    'package_name': "openshift3/some-image"
+                }
+            ]
+        }
+        flexmock(requests).should_receive('get')\
+            .and_return(flexmock(json=lambda: hydra_data, raise_for_status=lambda: None))\
+            .ordered()
+
+        pyxis_data = {'data': [{'brew': {'package': 'some-image'}}]}
+        flexmock(requests).should_receive('get')\
+            .and_return(flexmock(status_code=200, json=lambda: pyxis_data))\
+            .ordered()
+
+        tr = '4.8.0'
+        flaw_bug = BugzillaBug(flexmock(id=1, alias=['CVE-123']))
+        tracker_bugs = [flexmock(id=2, whiteboard_component='openshift')]
         expected = False
-        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
-        self.assertEqual(expected, actual)
-
-    def test_is_first_fix_any_is_first_fix_group(self):
-        tr = '4.8.0'
-        bug_a = BugzillaBug(flexmock(
-            id=1,
-            keywords=constants.TRACKER_BUG_KEYWORDS,
-            product=constants.BUGZILLA_PRODUCT_OCP,
-            whiteboard='component:runc',
-            target_release=['3.11.z'],
-            status='RELEASE_PENDING'))
-        bug_b = BugzillaBug(flexmock(
-            id=2,
-            keywords=constants.TRACKER_BUG_KEYWORDS,
-            product=constants.BUGZILLA_PRODUCT_OCP,
-            whiteboard='component:runc',
-            target_release=[tr],
-            status='ON_QA'))
-        tracker_bug_objs = [bug_a, bug_b]
-        tracker_bug_ids = [t.id for t in tracker_bug_objs]
-        flaw_bug = BugzillaBug(flexmock(id=3, depends_on=tracker_bug_ids))
-
-        bzapi = flexmock()
-        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
-        (bzapi
-            .should_receive("build_query")
-            .with_args(
-                product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=tracker_bug_ids,
-                include_fields=fields))
-        (bzapi
-            .should_receive("query")
-            .and_return(tracker_bug_objs))
-        (bzapi.should_receive("get_bug").with_args(1).and_return(bug_a))
-        (bzapi.should_receive("get_bug").with_args(2).and_return(bug_b))
-
-        expected = True
-        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
-        self.assertEqual(expected, actual)
-
-    def test_is_first_fix_any_already_fixed(self):
-        tr = '4.8.0'
-        bug_a = BugzillaBug(flexmock(
-            id=1,
-            keywords=constants.TRACKER_BUG_KEYWORDS,
-            product=constants.BUGZILLA_PRODUCT_OCP,
-            whiteboard='component:runc',
-            target_release=['4.7.z'],
-            status='RELEASE_PENDING'))
-        bug_b = BugzillaBug(flexmock(
-            id=2,
-            keywords=constants.TRACKER_BUG_KEYWORDS,
-            product=constants.BUGZILLA_PRODUCT_OCP,
-            whiteboard='component:runc',
-            target_release=[tr],
-            status='ON_QA'))
-        tracker_bug_objs = [bug_a, bug_b]
-        tracker_bug_ids = [t.id for t in tracker_bug_objs]
-        flaw_bug = BugzillaBug(flexmock(id=3, depends_on=tracker_bug_ids))
-
-        bzapi = flexmock()
-        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
-        (bzapi
-            .should_receive("build_query")
-            .with_args(
-                product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=tracker_bug_ids,
-                include_fields=fields))
-        (bzapi
-            .should_receive("query")
-            .and_return(tracker_bug_objs))
-        (bzapi
-            .should_receive("get_bug")
-            .and_return(bug_a))
-
-        expected = False
-        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
-        self.assertEqual(expected, actual)
-
-    def test_is_first_fix_any_any(self):
-        tr = '4.8.0'
-        bug_a = BugzillaBug(flexmock(
-            id=1,
-            keywords=constants.TRACKER_BUG_KEYWORDS,
-            whiteboard='component:runc',
-            product=constants.BUGZILLA_PRODUCT_OCP,
-            target_release=['4.7.z'],
-            status='RELEASE_PENDING'))
-        bug_b = BugzillaBug(flexmock(
-            id=2,
-            keywords=constants.TRACKER_BUG_KEYWORDS,
-            whiteboard='component:runc',
-            product=constants.BUGZILLA_PRODUCT_OCP,
-            target_release=[tr],
-            status='ON_QA'))
-        bug_c = BugzillaBug(flexmock(
-            id=3,
-            keywords=constants.TRACKER_BUG_KEYWORDS,
-            whiteboard='component:crio',
-            product=constants.BUGZILLA_PRODUCT_OCP,
-            target_release=[tr],
-            status='ON_QA'))
-        tracker_bug_objs = [bug_a, bug_b, bug_c]
-        tracker_bug_ids = [t.id for t in tracker_bug_objs]
-        flaw_bug = BugzillaBug(flexmock(id=4, depends_on=tracker_bug_ids))
-
-        bzapi = flexmock()
-        fields = ['keywords', 'target_release', 'status', 'resolution', 'whiteboard']
-        (bzapi
-            .should_receive("build_query")
-            .with_args(
-                product=constants.BUGZILLA_PRODUCT_OCP,
-                bug_id=tracker_bug_ids,
-                include_fields=fields))
-        (bzapi
-            .should_receive("query")
-            .and_return(tracker_bug_objs))
-        (bzapi
-            .should_receive("get_bug")
-            .with_args(1)
-            .and_return(bug_a))
-        (bzapi.should_receive("get_bug").with_args(2).and_return(bug_b))
-        (bzapi.should_receive("get_bug").with_args(3).and_return(bug_c))
-
-        expected = True
-        actual = bzutil.is_first_fix_any(bzapi, flaw_bug, tr)
+        actual = bzutil.is_first_fix_any(flaw_bug, tracker_bugs, tr)
         self.assertEqual(expected, actual)
 
 
