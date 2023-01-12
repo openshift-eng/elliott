@@ -1151,7 +1151,8 @@ def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current
     pyxis_base_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
                      "/repository/{pkg_name}/images?page_size=1&include=data.brew"
     for package_info in data['package_state']:
-        if ocp_product_name in package_info['product_name'] and package_info['fix_state'] == 'Affected':
+        if ocp_product_name in package_info['product_name'] and \
+           package_info['fix_state'] in ['Affected', 'Under investigation']:
             pkg_name = package_info['package_name']
             # for images `package_name` field is usually the container delivery repo
             # otherwise we assume it's the exact brew package name
@@ -1168,19 +1169,19 @@ def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current
                     logger.warn(f'got status={response.status_code} for {pyxis_url}')
             components_not_yet_fixed.append(pkg_name)
 
-    logger.debug(f'Unfixed components: {components_not_yet_fixed}')
-
     # get tracker components
     first_fix_components = []
     for t in tracker_bugs:
         component = t.whiteboard_component
         if component in components_not_yet_fixed:
             first_fix_components.append((component, t.id))
-        else:
-            logger.debug(f'Could not find `{component}` in unfixed components')
 
     if first_fix_components:
-        logger.info(f'{flaw_bug.id} considered first-fix for these (component, tracker): {first_fix_components}')
+        logger.info(f'{flaw_bug.id} ({alias}) considered first-fix for these (component, tracker):'
+                    f' {first_fix_components}')
         return True
 
+    logger.info(f'{flaw_bug.id} ({alias}) not considered a first-fix because newly fixed trackers '
+                f'components {[t.whiteboard_component for t in tracker_bugs]}, were not found in unfixed components '
+                f'{components_not_yet_fixed}')
     return False
