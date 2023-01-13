@@ -481,13 +481,8 @@ class TestBZUtil(unittest.TestCase):
                 },
                 {
                     'product_name': "Red Hat OpenShift Container Platform 4",
-                    'fix_state': "Affected",
+                    'fix_state': "Some other status",
                     'package_name': "openshift4/some-image"
-                },
-                {
-                    'product_name': "Red Hat OpenShift Container Platform 4",
-                    'fix_state': "Not Affected",
-                    'package_name': "openshift4/some-other-image"
                 },
                 {
                     'product_name': "Red Hat OpenShift Container Platform 3",
@@ -527,13 +522,8 @@ class TestBZUtil(unittest.TestCase):
                 },
                 {
                     'product_name': "Red Hat OpenShift Container Platform 4",
-                    'fix_state': "Affected",
+                    'fix_state': "Some other status",
                     'package_name': "openshift4/some-image"
-                },
-                {
-                    'product_name': "Red Hat OpenShift Container Platform 4",
-                    'fix_state': "Not Affected",
-                    'package_name': "openshift4/some-other-image"
                 },
                 {
                     'product_name': "Red Hat OpenShift Container Platform 3",
