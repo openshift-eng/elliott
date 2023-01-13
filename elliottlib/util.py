@@ -567,13 +567,17 @@ def get_golang_container_nvrs(nvrs, logger):
         for p, pinfo in parents.items():
             if 'builder' in p or 'go-toolset' in p:
                 go_version = pinfo.get('nvr')
+                break
+
+        # If the image is not directly built using a golang builder, just remove it from the output
+        if not go_version or go_version == 'N/A':
+            logger.debug(f'Could not find parent Go builder image for {nvr}')
+            continue
 
         go_container_nvrs[name] = {
             'nvr': nvr,
             'go': go_version
         }
-        if not go_version or go_version == 'N/A':
-            logger.debug(f'Could not find parent Go builder image for {nvr}')
 
     return go_container_nvrs
 
