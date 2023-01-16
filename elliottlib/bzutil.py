@@ -1151,8 +1151,10 @@ def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current
     pyxis_base_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
                      "/repository/{pkg_name}/images?page_size=1&include=data.brew"
     for package_info in data['package_state']:
-        if ocp_product_name in package_info['product_name'] and \
-           package_info['fix_state'] in ['Affected', 'Under investigation']:
+        # previously we were also checking `package_info['fix_state'] in ['Affected', 'Under investigation']`
+        # but we don't need to verify that since according to @sfowler if a package has a tracker for a cve
+        # and was found in the list of unfixed components then it is assumed to be `Affected`
+        if ocp_product_name in package_info['product_name']:
             pkg_name = package_info['package_name']
             # for images `package_name` field is usually the container delivery repo
             # otherwise we assume it's the exact brew package name
