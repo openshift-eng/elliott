@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
 from jira import JIRA, Issue
-from errata_tool import Erratum
 from errata_tool.jira_issue import JiraIssue as ErrataJira
 from errata_tool.bug import Bug as ErrataBug
 from bugzilla.bug import Bug
@@ -375,8 +374,7 @@ class BugTracker:
     def remove_bugs(self, advisory_obj, bugids: List, noop=False):
         raise NotImplementedError
 
-    def attach_bugs(self, bugids: List, advisory_id: int = 0, advisory_obj: Erratum = None, noop=False,
-                    verbose=False):
+    def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
         raise NotImplementedError
 
     def add_comment(self, bugid, comment: str, private: bool, noop=False):
@@ -669,11 +667,8 @@ class JIRABugTracker(BugTracker):
         advisory_obj.removeJIRAIssues(bugids)
         advisory_obj.commit()
 
-    def attach_bugs(self, bugids: List, advisory_id: int = 0, advisory_obj: Erratum = None, noop=False,
-                    verbose=False):
-        if not advisory_obj:
-            advisory_obj = Erratum(errata_id=advisory_id)
-        return errata.add_jira_bugs_with_retry(advisory_obj, bugids, noop=noop)
+    def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
+        return errata.add_jira_bugs_with_retry(advisory_id, bugids, noop=noop)
 
     def filter_bugs_by_cutoff_event(self, bugs: Iterable, desired_statuses: Iterable[str],
                                     sweep_cutoff_timestamp: float, verbose=False) -> List:
@@ -775,10 +770,8 @@ class BugzillaBugTracker(BugTracker):
         advisory_id = advisory_obj.errata_id
         return errata.remove_multi_bugs(advisory_id, bugids)
 
-    def attach_bugs(self, bugids: List, advisory_id: int = 0, advisory_obj: Erratum = None, noop=False, verbose=False):
-        if not advisory_obj:
-            advisory_obj = Erratum(errata_id=advisory_id)
-        return errata.add_bugzilla_bugs_with_retry(advisory_obj, bugids, noop=noop)
+    def attach_bugs(self, advisory_id: int, bugids: List, noop=False, verbose=False):
+        return errata.add_bugzilla_bugs_with_retry(advisory_id, bugids, noop=noop)
 
     def create_bug(self, title, description, target_status, keywords: List, noop=False) -> BugzillaBug:
         create_info = self._client.build_createbug(
