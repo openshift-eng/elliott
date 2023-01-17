@@ -7,11 +7,8 @@ from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib.cli.find_bugs_sweep_cli import extras_bugs, get_assembly_bug_ids, categorize_bugs_by_type
 from elliottlib.cli.common import cli, Runtime
-import xmlrpc.client
 import elliottlib.cli.find_bugs_sweep_cli as sweep_cli
-import elliottlib.bzutil as bzutil
 from elliottlib import errata
-from elliottlib.cli import common
 import traceback
 
 
@@ -127,7 +124,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
         flexmock(JIRABugTracker).should_receive("login")
         flexmock(JIRABugTracker).should_receive("search").and_return(bugs)
-        flexmock(JIRABugTracker).should_receive("attach_bugs").with_args(advisory_id, [b.id for b in bugs],
+        flexmock(JIRABugTracker).should_receive("attach_bugs").with_args([b.id for b in bugs], advisory_id=advisory_id,
                                                                          noop=False, verbose=False)
         flexmock(JIRABugTracker).should_receive("filter_attached_bugs").and_return([])
 
@@ -135,7 +132,7 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
         flexmock(BugzillaBugTracker).should_receive("login").and_return(None)
         flexmock(BugzillaBugTracker).should_receive("search").and_return(bugs)
-        flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args(advisory_id, [b.id for b in bugs],
+        flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args([b.id for b in bugs], advisory_id=advisory_id,
                                                                              noop=False, verbose=False)
         flexmock(BugzillaBugTracker).should_receive("filter_attached_bugs").and_return([])
 
@@ -168,8 +165,9 @@ class FindBugsSweepTestCase(unittest.TestCase):
         flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
         flexmock(BugzillaBugTracker).should_receive("login")
         flexmock(BugzillaBugTracker).should_receive("search").and_return(bugs)
-        flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args(123, ['BZ1'], noop=False, verbose=False)
         flexmock(BugzillaBugTracker).should_receive("filter_attached_bugs").and_return([])
+        flexmock(BugzillaBugTracker).should_receive("attach_bugs").with_args(['BZ1'], advisory_id=123, noop=False,
+                                                                             verbose=False)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:sweep', '--use-default-advisory', 'image'])
         if result.exit_code != 0:

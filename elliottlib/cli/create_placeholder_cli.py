@@ -64,4 +64,4 @@ def create_placeholder(kind, advisory_id, bug_tracker, noop):
         raise ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
 
     click.echo("Attaching bug to advisory...")
-    bug_tracker.attach_bugs(advisory_id, [newbug.id])
+    bug_tracker.attach_bugs([newbug.id], advisory_obj=advisory)

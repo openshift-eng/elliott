@@ -148,10 +148,11 @@ def _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop):
 
     flaw_ids = [flaw_bug.id for flaw_bug in flaw_bugs]
     runtime.logger.info(f'Attaching {len(flaw_ids)} flaw bugs')
-    bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
+    bug_tracker.attach_bugs(flaw_ids, advisory_obj=advisory, noop=noop)
 
 
-async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, flaw_bugs: Iterable[Bug], attached_tracker_bugs: List[Bug], tracker_flaws: Dict[int, Iterable], dry_run: bool):
+async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, flaw_bugs: Iterable[Bug],
+                                     attached_tracker_bugs: List[Bug], tracker_flaws: Dict[int, Iterable], dry_run: bool):
     attached_builds = [b for pv in advisory.errata_builds.values() for b in pv]
     cve_components_mapping: Dict[str, Set[str]] = {}
     for tracker in attached_tracker_bugs:
@@ -167,7 +168,8 @@ async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Errat
             cve = flaw_id_bugs[flaw_id].alias[0]
             cve_components_mapping.setdefault(cve, set()).add(component_name)
 
-    await AsyncErrataUtils.associate_builds_with_cves(errata_api, advisory.errata_id, attached_builds, cve_components_mapping, dry_run=dry_run)
+    await AsyncErrataUtils.associate_builds_with_cves(errata_api, advisory.errata_id, attached_builds,
+                                                      cve_components_mapping, dry_run=dry_run)
 
 
 def get_updated_advisory_rhsa(logger, cve_boilerplate: dict, advisory: Erratum, flaw_bugs):
