@@ -579,11 +579,6 @@ def get_golang_container_nvrs(nvrs: List[Tuple[str, str, str]], logger) -> Dict[
         if not go_version:
             logger.debug(f'Could not find parent Go builder image for {nvr}')
             continue
-        
-        go_container_nvrs[name] = {
-            'nvr': nvr,
-            'go': go_version
-        }
 
         if go_version not in go_nvr_map:
             go_nvr_map[go_version] = set()
