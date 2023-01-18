@@ -6,6 +6,7 @@ from urllib.parse import quote, urlparse
 
 import aiohttp
 import gssapi
+from elliottlib.exectools import limit_concurrency
 
 from elliottlib.rpm_utils import parse_nvr
 from elliottlib import constants
@@ -14,7 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class AsyncErrataAPI:
-    def __init__(self, url: str):
+    def __init__(self, url: str = constants.errata_url):
         self._errata_url = urlparse(url).geturl()
         self._session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True))
         self._gssapi_client_ctx = None
@@ -87,6 +88,16 @@ class AsyncErrataAPI:
     async def delete_cve_package_exclusion(self, exclusion_id: int):
         path = f"/api/v1/cve_package_exclusion/{int(exclusion_id)}"
         await self._make_request(aiohttp.hdrs.METH_DELETE, path, parse_json=False)
+
+    @limit_concurrency(limit=16)
+    async def get_advisories_for_jira(self, jira_key: str):
+        path = f"/jira_issues/{quote(jira_key)}/advisories.json"
+        return await self._make_request(aiohttp.hdrs.METH_GET, path)
+
+    @limit_concurrency(limit=16)
+    async def get_advisories_for_bug(self, jira_key: str):
+        path = f"/bugs/{quote(jira_key)}/advisories.json"
+        return await self._make_request(aiohttp.hdrs.METH_GET, path)
 
 
 class AsyncErrataUtils:
