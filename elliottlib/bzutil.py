@@ -23,6 +23,7 @@ from koji import ClientSession
 
 from elliottlib import constants, exceptions, exectools, logutil, errata, util
 from elliottlib.cli import cli_opts
+from elliottlib.errata_async import AsyncErrataAPI
 from elliottlib.metadata import Metadata
 from elliottlib.util import isolate_timestamp_in_release, chunk
 
@@ -678,6 +679,15 @@ class JIRABugTracker(BugTracker):
                 f'before("{dt}")'
         return self._search(query, verbose=verbose)
 
+    def filter_attached_bugs(self, bugs: Iterable):
+        bugs = list(bugs)
+        api = AsyncErrataAPI()
+        asyncio.get_event_loop().run_until_complete(api.login())
+        tasks = [api.get_advisories_for_jira(bug.id) for bug in bugs]
+        results = asyncio.get_event_loop().run_until_complete(asyncio.gather(*tasks))
+        attached_bugs = [bug for bug, advisories in zip(bugs, results) if advisories]
+        return attached_bugs
+
     @staticmethod
     def advisory_bug_ids(advisory_obj):
         return advisory_obj.jira_issues
@@ -886,6 +896,15 @@ class BugzillaBugTracker(BugTracker):
             qualified_bugs.append(bug)
 
         return qualified_bugs
+
+    def filter_attached_bugs(self, bugs: Iterable):
+        bugs = list(bugs)
+        api = AsyncErrataAPI()
+        asyncio.get_event_loop().run_until_complete(api.login())
+        tasks = [api.get_advisories_for_bug(bug.id) for bug in bugs]
+        results = asyncio.get_event_loop().run_until_complete(asyncio.gather(*tasks))
+        attached_bugs = [bug for bug, advisories in zip(bugs, results) if advisories]
+        return attached_bugs
 
     @staticmethod
     def advisory_bug_ids(advisory_obj):
