@@ -148,7 +148,7 @@ def _update_advisory(runtime, advisory, flaw_bugs, bug_tracker, noop):
 
     flaw_ids = [flaw_bug.id for flaw_bug in flaw_bugs]
     runtime.logger.info(f'Attaching {len(flaw_ids)} flaw bugs')
-    bug_tracker.attach_bugs(advisory_id, flaw_ids, noop)
+    bug_tracker.attach_bugs(flaw_ids, advisory_obj=advisory, noop=noop)
 
 
 async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Erratum, flaw_bugs: Iterable[Bug], attached_tracker_bugs: List[Bug], tracker_flaws: Dict[int, Iterable], dry_run: bool):

@@ -214,7 +214,7 @@ def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, m
     # `--add ADVISORY_NUMBER` should respect the user's wish
     # and attach all available bugs to whatever advisory is specified.
     if advisory_id and not default_advisory_type:
-        bug_tracker.attach_bugs(advisory_id, [b.id for b in bugs], noop=noop, verbose=runtime.debug)
+        bug_tracker.attach_bugs([b.id for b in bugs], advisory_id=advisory_id, noop=noop, verbose=runtime.debug)
         return bugs
 
     if not advisory_ids:
@@ -225,7 +225,8 @@ def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, m
     for advisory_type in sorted(advisory_types_to_attach):
         kind_bugs = bugs_by_type.get(advisory_type)
         if kind_bugs:
-            bug_tracker.attach_bugs(advisory_ids[advisory_type], [b.id for b in kind_bugs], noop=noop, verbose=runtime.debug)
+            bug_tracker.attach_bugs([b.id for b in kind_bugs], advisory_id=advisory_ids[advisory_type], noop=noop,
+                                    verbose=runtime.debug)
     return bugs
 
 
