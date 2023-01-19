@@ -299,7 +299,9 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
         attached_builds = errata.get_advisory_nvrs(advisory)
         packages = list(attached_builds.keys())
         if kind == 'image':
-            packages.extend(constants.SPECIAL_CVE_COMPONENTS)
+            # golang builder is a special tracker component
+            # which applies to all our golang images
+            packages.append(constants.GOLANG_BUILDER_CVE_COMPONENT)
 
         for bug in tracker_bugs:
             package_name = bug.whiteboard_component

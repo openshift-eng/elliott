@@ -224,39 +224,44 @@ class BugValidator:
             self._complain(f"Advisory {advisory_id} is of type {advisory_type} but has first-fix flaw bugs "
                            f"{first_fix_flaw_ids}. It should be converted to RHSA.")
 
-        # Check if flaw bugs are associated with specific builds
+        # Validate CVE mappings (of CVEs and builds)
         flaw_id_bugs = {f.id: f for f in first_fix_flaw_bugs}
         cve_components_mapping: Dict[str, Set[str]] = {}
         for tracker in attached_trackers:
             component_name = tracker.whiteboard_component
             flaw_ids = tracker_flaws[tracker.id]
             for flaw_id in flaw_ids:
-                # This means associated flaw wasn't considered a first fix
-                if flaw_id not in flaw_id_bugs:
+                if flaw_id not in flaw_id_bugs:  # This means associated flaw wasn't considered a first fix
                     continue
 
                 if len(flaw_id_bugs[flaw_id].alias) != 1:
                     raise ValueError(f"Flaw bug {flaw_id} should have exact 1 alias.")
                 cve = flaw_id_bugs[flaw_id].alias[0]
                 cve_components_mapping.setdefault(cve, set()).add(component_name)
-        current_cve_package_exclusions = await AsyncErrataUtils.get_advisory_cve_package_exclusions(self.errata_api, advisory_id)
+
         attached_builds = await self.errata_api.get_builds_flattened(advisory_id)
-        expected_cve_packages_exclusions = AsyncErrataUtils.compute_cve_package_exclusions(attached_builds, cve_components_mapping)
-        extra_cve_package_exclusions, missing_cve_package_exclusions = AsyncErrataUtils.diff_cve_package_exclusions(current_cve_package_exclusions, expected_cve_packages_exclusions)
-        for cve, cve_package_exclusions in extra_cve_package_exclusions.items():
+        try:
+            extra_exclusions, missing_exclusions = await AsyncErrataUtils.validate_cves_and_get_exclusions_diff(
+                self.errata_api,
+                advisory_id, attached_builds,
+                cve_components_mapping)
+        except ValueError as e:
+            self._complain(e)
+
+        for cve, cve_package_exclusions in extra_exclusions.items():
             if cve_package_exclusions:
                 self._complain(f"On advisory {advisory_id}, {cve} is not associated with Brew components "
                                f"{', '.join(sorted(cve_package_exclusions))}."
                                " You may need to associate the CVE with the components "
                                "in the CVE mapping or drop the tracker bugs.")
-        for cve, cve_package_exclusions in missing_cve_package_exclusions.items():
+        for cve, cve_package_exclusions in missing_exclusions.items():
             if cve_package_exclusions:
                 self._complain(f"On advisory {advisory_id}, {cve} is associated with Brew components "
                                f"{', '.join(sorted(cve_package_exclusions))} without a tracker bug."
                                " You may need to explicitly exclude those Brew components from the CVE "
                                "mapping or attach the corresponding tracker bugs.")
 
-        # Check if flaw bugs match the CVE field of the advisory
+        # Validate `CVE Names` field of the advisory
         advisory_cves = advisory_info["content"]["content"]["cve"].split()
         extra_cves = cve_components_mapping.keys() - advisory_cves
         if extra_cves:

@@ -5,7 +5,7 @@ from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.rpm_utils import parse_nvr
 
-logger = logutil.getLogger(__name__)
+_LOGGER = logutil.getLogger(__name__)
 
 
 @cli.command("go", short_help="Get version of Go for advisory builds")
@@ -56,13 +56,13 @@ def get_golang_versions_cli(runtime, advisory_id, default_advisory_type, nvrs, c
     if advisory_id:
         if components:
             components = [c.strip() for c in components.split(',')]
-        return get_advisory_golang(advisory_id, components, logger)
+        return get_advisory_golang(advisory_id, components)
     if nvrs:
         nvrs = [n.strip() for n in nvrs.split(',')]
-        return get_nvrs_golang(nvrs, logger)
+        return get_nvrs_golang(nvrs)
 
 
-def get_nvrs_golang(nvrs, logger):
+def get_nvrs_golang(nvrs):
     container_nvrs, rpm_nvrs = [], []
     for n in nvrs:
         parsed_nvr = parse_nvr(n)
@@ -72,19 +72,19 @@ def get_nvrs_golang(nvrs, logger):
         else:
             rpm_nvrs.append(nvr_tuple)
 
-    nvrs = {}
     if rpm_nvrs:
-        nvrs.update(util.get_golang_rpm_nvrs(rpm_nvrs, logger))
+        go_nvr_map = util.get_golang_rpm_nvrs(rpm_nvrs, _LOGGER)
+        util.pretty_print_nvrs_go(go_nvr_map)
     if container_nvrs:
-        nvrs.update(util.get_golang_container_nvrs(container_nvrs, logger))
-    util.pretty_print_nvrs_go(nvrs)
+        go_nvr_map = util.get_golang_container_nvrs(container_nvrs, _LOGGER)
+        util.pretty_print_nvrs_go(go_nvr_map)
 
 
-def get_advisory_golang(advisory_id, components, logger):
+def get_advisory_golang(advisory_id, components):
     nvrs = errata.get_all_advisory_nvrs(advisory_id)
-    logger.debug(f'{len(nvrs)} builds found in advisory')
+    _LOGGER.debug(f'{len(nvrs)} builds found in advisory')
     if not nvrs:
-        logger.debug('No builds found. exiting')
+        _LOGGER.debug('No builds found. exiting')
         return
     if components:
         if 'openshift' in components:
@@ -94,8 +94,8 @@ def get_advisory_golang(advisory_id, components, logger):
 
     content_type = errata.get_erratum_content_type(advisory_id)
     if content_type == 'docker':
-        nvrs = util.get_golang_container_nvrs(nvrs, logger)
+        go_nvr_map = util.get_golang_container_nvrs(nvrs, _LOGGER)
     else:
-        nvrs = util.get_golang_rpm_nvrs(nvrs, logger)
+        go_nvr_map = util.get_golang_rpm_nvrs(nvrs, _LOGGER)
 
-    util.pretty_print_nvrs_go(nvrs, group=len(nvrs) > 5)
+    util.pretty_print_nvrs_go(go_nvr_map)

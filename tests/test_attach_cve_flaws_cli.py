@@ -4,6 +4,7 @@ from mock import AsyncMock, Mock, patch
 import asynctest
 
 from elliottlib.bzutil import BugzillaBug
+from elliottlib import constants
 from elliottlib.cli import attach_cve_flaws_cli
 from elliottlib.errata_async import AsyncErrataAPI
 
@@ -61,7 +62,7 @@ class TestAttachCVEFlawsCLI(asynctest.TestCase):
         )
 
     @patch("elliottlib.errata_async.AsyncErrataUtils.associate_builds_with_cves", autospec=True)
-    async def test_associate_builds_with_cves_bz(self, fake_urils_associate_builds_with_cves: AsyncMock):
+    async def test_associate_builds_with_cves_bz(self, fake_urls_associate_builds_with_cves: AsyncMock):
         errata_api = AsyncMock(spec=AsyncErrataAPI)
         advisory = Mock(
             errata_id=12345,
@@ -87,11 +88,11 @@ class TestAttachCVEFlawsCLI(asynctest.TestCase):
             5: [102],
         }
         attached_tracker_bugs = [
-            BugzillaBug(Mock(id=1, keywords=["Security", "SecurityTracking"], whiteboard="component: a")),
-            BugzillaBug(Mock(id=2, keywords=["Security", "SecurityTracking"], whiteboard="component: b")),
-            BugzillaBug(Mock(id=3, keywords=["Security", "SecurityTracking"], whiteboard="component: c")),
-            BugzillaBug(Mock(id=4, keywords=["Security", "SecurityTracking"], whiteboard="component: d")),
-            BugzillaBug(Mock(id=5, keywords=["Security", "SecurityTracking"], whiteboard="component: e")),
+            BugzillaBug(Mock(id=1, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard="component: a")),
+            BugzillaBug(Mock(id=2, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard="component: b")),
+            BugzillaBug(Mock(id=3, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard="component: c")),
+            BugzillaBug(Mock(id=4, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard="component: d")),
+            BugzillaBug(Mock(id=5, keywords=constants.TRACKER_BUG_KEYWORDS, whiteboard="component: e")),
         ]
         flaw_id_bugs = {
             101: BugzillaBug(Mock(id=101, keywords=["Security"], alias=["CVE-2099-1"])),
@@ -101,11 +102,14 @@ class TestAttachCVEFlawsCLI(asynctest.TestCase):
         flaw_bugs = list(flaw_id_bugs.values())
         actual = await attach_cve_flaws_cli.associate_builds_with_cves(
             errata_api, advisory, flaw_bugs, attached_tracker_bugs, tracker_flaws, dry_run=False)
-        fake_urils_associate_builds_with_cves.assert_awaited_once_with(
-            errata_api, 12345, ['a-1.0.0-1.el8', 'b-1.0.0-1.el8', 'c-1.0.0-1.el8',
-                                'd-1.0.0-1.el8', 'a-1.0.0-1.el7', 'e-1.0.0-1.el7',
-                                'f-1.0.0-1.el7'], {'CVE-2099-1': {'a', 'd', 'b'},
-                                                   'CVE-2099-3': {'a', 'd', 'b', 'c'}, 'CVE-2099-2': {'c', 'e'}},
+        expected_builds = ['a-1.0.0-1.el8', 'b-1.0.0-1.el8', 'c-1.0.0-1.el8',
+                           'd-1.0.0-1.el8', 'a-1.0.0-1.el7', 'e-1.0.0-1.el7',
+                           'f-1.0.0-1.el7']
+        expected_cve_component_mapping = {'CVE-2099-1': {'a', 'd', 'b'},
+                                          'CVE-2099-3': {'a', 'd', 'b', 'c'},
+                                          'CVE-2099-2': {'c', 'e'}}
+        fake_urls_associate_builds_with_cves.assert_awaited_once_with(
+            errata_api, 12345, expected_builds, expected_cve_component_mapping,
             dry_run=False)
         self.assertEqual(actual, None)
 

@@ -541,21 +541,28 @@ def isolate_timestamp_in_release(release: str) -> Optional[str]:
     return None
 
 
-def get_golang_container_nvrs(nvrs, logger):
+def get_golang_container_nvrs(nvrs: List[Tuple[str, str, str]], logger) -> Dict[str, Dict[str, str]]:
+    """
+    :param nvrs: a list of tuples containing (name, version, release) in order
+    :param logger: logger
+
+    :return: a dict mapping go version string to a list of nvrs built from that go version
+    """
     all_build_objs = brew.get_build_objects([
         '{}-{}-{}'.format(*n) for n in nvrs
     ])
-    go_container_nvrs = {}
+    go_nvr_map = {}
     for build in all_build_objs:
-        go_version = 'N/A'
+        go_version = None
         nvr = (build['name'], build['version'], build['release'])
         name = nvr[0]
         if 'golang-builder' in name or 'go-toolset' in name:
             go_version = golang_builder_version(nvr, logger)
-            go_container_nvrs[name] = {
-                'nvr': nvr,
-                'go': go_version
-            }
+            if not go_version:
+                raise ValueError(f'Cannot find go version for {name}')
+            if go_version not in go_nvr_map:
+                go_nvr_map[go_version] = set()
+            go_nvr_map[go_version].add(nvr)
             continue
 
         try:
@@ -569,21 +576,18 @@ def get_golang_container_nvrs(nvrs, logger):
                 go_version = pinfo.get('nvr')
                 break
 
-        # If the image is not directly built using a golang builder, just remove it from the output
-        if not go_version or go_version == 'N/A':
+        if not go_version:
             logger.debug(f'Could not find parent Go builder image for {nvr}')
             continue
 
-        go_container_nvrs[name] = {
-            'nvr': nvr,
-            'go': go_version
-        }
-
-    return go_container_nvrs
+        if go_version not in go_nvr_map:
+            go_nvr_map[go_version] = set()
+        go_nvr_map[go_version].add(nvr)
+    return go_nvr_map
 
 
 def golang_builder_version(nvr, logger):
-    go_version = 'N/A'
+    go_version = None
     try:
         build_log = brew.get_nvr_arch_log(*nvr)
     except BrewBuildException:
@@ -597,9 +601,9 @@ def golang_builder_version(nvr, logger):
 
 
 def get_golang_rpm_nvrs(nvrs, logger):
-    go_rpm_nvrs = {}
+    go_nvr_map = {}
     for nvr in nvrs:
-        go_version = 'N/A'
+        go_version = None
         # what we build in brew as openshift
         # is called openshift-hyperkube in rhcos
         if nvr[0] == 'openshift-hyperkube':
@@ -616,36 +620,22 @@ def get_golang_rpm_nvrs(nvrs, logger):
             except AttributeError:
                 logger.debug(f'Could not find go version in root log for {nvr}')
 
-        go_rpm_nvrs[nvr[0]] = {
-            'nvr': nvr,
-            'go': go_version
-        }
-    return go_rpm_nvrs
-
-
-def pretty_print_nvrs_go(nvrs, group=False, ignore_na=False):
-    go_groups = {}
-    for component in nvrs.keys():
-        go_version = nvrs[component]['go']
-        nvr = nvrs[component]['nvr']
-        if go_version not in go_groups:
-            go_groups[go_version] = []
-        go_groups[go_version].append(nvr)
-
-    if not group:
-        green_print('NVR | Go Version')
-    for go_version in sorted(go_groups.keys()):
-        nvrs = go_groups[go_version]
-        if go_version == 'N/A' and ignore_na:
+        if not go_version:
             continue
-        if group:
-            green_print(f'Following nvrs are built with {go_version}:')
+
+        if go_version not in go_nvr_map:
+            go_nvr_map[go_version] = set()
+        go_nvr_map[go_version].add(nvr)
+    return go_nvr_map
+
+
+def pretty_print_nvrs_go(go_nvr_map):
+    for go_version in sorted(go_nvr_map.keys()):
+        nvrs = go_nvr_map[go_version]
+        green_print(f'Following nvrs are built with {go_version}:')
         for nvr in sorted(nvrs):
             pretty_nvr = '-'.join(nvr)
-            if group:
-                print(pretty_nvr)
-            else:
-                print(f'{pretty_nvr} | {go_version}')
+            print(pretty_nvr)
 
 
 # some of our systems refer to golang's architecture nomenclature; translate between that and brew arches
