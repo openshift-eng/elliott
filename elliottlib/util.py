@@ -546,7 +546,7 @@ def get_golang_container_nvrs(nvrs: List[Tuple[str, str, str]], logger) -> Dict[
     :param nvrs: a list of tuples containing (name, version, release) in order
     :param logger: logger
 
-    :return: a dict mapping nvr 'name' to a dict containing nvr and go-builder as values
+    :return: a dict mapping go version string to a list of nvrs built from that go version
     """
     all_build_objs = brew.get_build_objects([
         '{}-{}-{}'.format(*n) for n in nvrs
