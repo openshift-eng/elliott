@@ -96,8 +96,8 @@ class AsyncErrataAPI:
         return await self._make_request(aiohttp.hdrs.METH_GET, path)
 
     @limit_concurrency(limit=16)
-    async def get_advisories_for_bug(self, jira_key: str):
-        path = f"/bugs/{quote(jira_key)}/advisories.json"
+    async def get_advisories_for_bug(self, bz_key: str):
+        path = f"/bugs/{bz_key}/advisories.json"
         return await self._make_request(aiohttp.hdrs.METH_GET, path)
 
 
