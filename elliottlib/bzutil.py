@@ -691,6 +691,7 @@ class JIRABugTracker(BugTracker):
         tasks = [api.get_advisories_for_jira(bug.id) for bug in bugs]
         results = asyncio.get_event_loop().run_until_complete(asyncio.gather(*tasks))
         attached_bugs = [bug for bug, advisories in zip(bugs, results) if advisories]
+        asyncio.get_event_loop().run_until_complete(api.close())
         return attached_bugs
 
     @staticmethod
@@ -911,6 +912,7 @@ class BugzillaBugTracker(BugTracker):
         tasks = [api.get_advisories_for_bug(bug.id) for bug in bugs]
         results = asyncio.get_event_loop().run_until_complete(asyncio.gather(*tasks))
         attached_bugs = [bug for bug, advisories in zip(bugs, results) if advisories]
+        asyncio.get_event_loop().run_until_complete(api.close())
         return attached_bugs
 
     @staticmethod
