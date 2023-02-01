@@ -1,6 +1,7 @@
 import click
+import koji
 
-from elliottlib import errata, logutil, util
+from elliottlib import errata, logutil, util, brew, constants
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option)
 from elliottlib.rpm_utils import parse_nvr
@@ -47,11 +48,13 @@ def get_golang_versions_cli(runtime, advisory_id, default_advisory_type, nvrs, c
     if count_options > 1:
         raise click.BadParameter("Use only one of --advisory, --nvrs, --use-default-advisory")
 
-    if default_advisory_type:
-        runtime.initialize()
-        advisory_id = find_default_advisory(runtime, default_advisory_type)
-    else:
+    if advisory_id or nvrs:
         runtime.initialize(no_group=True)
+    else:
+        runtime.initialize()
+
+    if default_advisory_type:
+        advisory_id = find_default_advisory(runtime, default_advisory_type)
 
     if advisory_id:
         if components:
@@ -60,6 +63,20 @@ def get_golang_versions_cli(runtime, advisory_id, default_advisory_type, nvrs, c
     if nvrs:
         nvrs = [n.strip() for n in nvrs.split(',')]
         return get_nvrs_golang(nvrs)
+
+    toolset_name = 'go-toolset'
+    build_tag = f'{runtime.group_config.branch}-build'
+    container_name = 'openshift-golang-builder-container'
+    candidate_tag = f'{runtime.group_config.branch}-candidate'
+
+    brew_session = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
+    builds = brew.get_latest_builds([(build_tag, toolset_name),
+                                     (candidate_tag, container_name)],
+                                    session=brew_session)
+    toolset_build = builds[0][0]
+    container_build = builds[1][0]
+    print(f'Latest {toolset_name} in {build_tag}: {toolset_build["nvr"]} brew_buildid={toolset_build["build_id"]}')
+    print(f'Latest {container_name} in {candidate_tag}: {container_build["nvr"]} brew_buildid={container_build["build_id"]}')
 
 
 def get_nvrs_golang(nvrs):
