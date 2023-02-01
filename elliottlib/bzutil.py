@@ -226,7 +226,10 @@ class JIRABug(Bug):
     @property
     def target_release(self):
         # field "Target Version"
-        return [x.name for x in self.bug.fields.customfield_12319940]
+        tr_field = self.bug.fields.customfield_12319940
+        if not tr_field:
+            raise ValueError(f'bug {self.id} does not have `Target Version` field set')
+        return [x.name for x in tr_field]
 
     @property
     def sub_component(self):
