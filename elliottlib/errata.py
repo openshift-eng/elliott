@@ -757,6 +757,11 @@ def get_advisory(advisory_id):
     return ErrataConnector()._get(f'/api/v1/erratum/{advisory_id}')
 
 
+def get_advisory_greenwave(advisory_id):
+    result = ErrataConnector()._get(f'/api/v1/external_tests?filter[test_type]=greenwave_cvp&filter[status]=FAILED&filter[active]=true&filter[errata_id]={advisory_id}')
+    return result.get('data', [])
+
+
 def is_security_advisory(advisory):
     return advisory.errata_type == 'RHSA'
 
