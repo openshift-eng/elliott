@@ -86,15 +86,13 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @use_default_advisory_option
 @click.option('--details', is_flag=True, default=False,
               help="Print the full object of the advisory")
-@click.option('--greenwave', is_flag=True, default=False,
-              help="Print the failed greenwave result of the advisory")
 @click.option('--id-only', is_flag=True, default=False,
               help="Print only the ID of the default advisory")
 @click.option('--json', 'as_json', metavar="FILE_NAME",
               help="Dump the advisory as JSON to a file (or '-' for stdout)")
 @pass_runtime
 @click.pass_context
-def get(ctx, runtime, default_advisory_type, details, greenwave, id_only, as_json, advisory):
+def get(ctx, runtime, default_advisory_type, details, id_only, as_json, advisory):
     """Get details about a specific advisory from the Errata Tool. By
 default a brief one-line informational string is printed. Use the
 --details option to fetch and print the full details of the advisory.
@@ -133,10 +131,6 @@ Fields for the short format: Release date, State, Synopsys, URL
 
     if id_only:
         click.echo(advisory)
-        return
-
-    if greenwave:
-        click.echo(elliottlib.errata.get_advisory_greenwave(advisory))
         return
 
     advisory = elliottlib.errata.Advisory(errata_id=advisory)

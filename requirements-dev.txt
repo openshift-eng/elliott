@@ -1,5 +1,5 @@
 pip>=20.3.3
-setuptools>=41.6.0
+setuptools>=65.5.1
 
 -rrequirements.txt
 
