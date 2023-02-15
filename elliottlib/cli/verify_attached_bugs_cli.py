@@ -79,6 +79,7 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 
     if validator.problems:
         if validator.output != 'slack':
+            red_print(f"Found the following problems: {validator.problems}")
             red_print("Some bug problems were listed above. Please investigate.")
         exit(1)
 
