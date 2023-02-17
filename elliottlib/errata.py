@@ -758,7 +758,7 @@ def get_advisory(advisory_id):
 
 
 def get_advisory_greenwave(advisory_id):
-    result = ErrataConnector()._get(f'/api/v1/external_tests?filter[test_type]=greenwave_cvp&filter[status]=FAILED&filter[active]=true&filter[errata_id]={advisory_id}')
+    result = ErrataConnector()._get(f'/api/v1/external_tests?filter[test_type]=greenwave_cvp&filter[status]=FAILED&filter[active]=true&page[size]=1000&filter[errata_id]={advisory_id}')
     return result.get('data', [])
 
 
