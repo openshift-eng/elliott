@@ -781,7 +781,7 @@ def set_blocking_errata(target_advisory_id, blocking_advisory_id, blocking_state
         raise IOError(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} with error: {response.text} status code: {response.status_code}')
     return response.json()
 
-def get_blocking_errata(advisory_id) -> dict:
+def get_blocking_errata(advisory_id) -> list:
     """Get a list of blocking advisory ids for a given advisory
     
     :param advisory_id: advisory number
