@@ -9,6 +9,7 @@ from elliottlib.assembly import assembly_issues_config
 from elliottlib.bzutil import BugTracker, Bug, JIRABug
 from elliottlib import (Runtime, bzutil, constants, errata, logutil)
 from elliottlib.cli import common
+from elliottlib.cli.common import click_coroutine
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import green_prefix, green_print, red_prefix, chunk
 
@@ -81,7 +82,8 @@ class FindBugsSweep(FindBugsMode):
               default=False,
               help="Don't change anything")
 @click.pass_obj
-def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
+@click_coroutine
+async def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
                         report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY.
 
@@ -129,7 +131,7 @@ advisory with the --add option.
     errors = []
     for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
         try:
-            bugs.extend(find_and_attach_bugs(runtime, advisory_id, default_advisory_type, major_version, find_bugs_obj,
+            bugs.extend(await find_and_attach_bugs(runtime, advisory_id, default_advisory_type, major_version, find_bugs_obj,
                         output, brew_event, noop, count_advisory_attach_flags, b))
         except Exception as e:
             errors.append(e)
@@ -194,14 +196,14 @@ async def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracke
     return bugs
 
 
-def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, major_version,
+async def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, major_version,
                          find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
     if output == 'text':
         statuses = sorted(find_bugs_obj.status)
         tr = bug_tracker.target_release()
         green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
 
-    bugs = get_bugs_sweep(runtime, find_bugs_obj, brew_event, bug_tracker)
+    bugs = await get_bugs_sweep(runtime, find_bugs_obj, brew_event, bug_tracker)
 
     advisory_ids = runtime.get_default_advisories()
     bugs_by_type = categorize_bugs_by_type(bugs, advisory_ids,
