@@ -765,6 +765,7 @@ def is_advisory_impact_smaller_than(advisory, impact):
     i = [None] + constants.SECURITY_IMPACT
     return i.index(advisory.security_impact) < i.index(impact)
 
+
 def set_blocking_errata(target_advisory_id, blocking_advisory_id, blocking_state):
     """Set a blocker advisory (at blocking state) for given target advisory
 
@@ -781,9 +782,10 @@ def set_blocking_errata(target_advisory_id, blocking_advisory_id, blocking_state
         raise IOError(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} with error: {response.text} status code: {response.status_code}')
     return response.json()
 
+
 def get_blocking_errata(advisory_id) -> list:
     """Get a list of blocking advisory ids for a given advisory
-    
+
     :param advisory_id: advisory number
     :return: a list of advisory ids
     """
