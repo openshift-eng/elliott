@@ -21,7 +21,8 @@ class VerifyAttachedBugs(asynctest.TestCase):
         validator = BugValidator(runtime, True)
         self.assertEqual(validator.target_releases, ['4.9.z'])
 
-    def test_verify_bugs_with_sweep_cli(self):
+    @async_patch('elliottlib.cli.verify_attached_bugs_cli.get_bugs_sweep')
+    def test_verify_bugs_with_sweep_cli(self, get_bugs_sweep_mock):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
@@ -47,17 +48,11 @@ class VerifyAttachedBugs(asynctest.TestCase):
             bugs[1]: [depend_on_bugs[0]],
         }
 
-        flexmock(verify_attached_bugs_cli).should_receive("get_bugs_sweep").and_return(bugs).ordered()
-        flexmock(verify_attached_bugs_cli).should_receive("get_bugs_sweep").and_return([]).ordered()
+        get_bugs_sweep_mock.return_value = bugs
         flexmock(BugValidator).should_receive("_get_blocking_bugs_for")\
-            .with_args(bugs)\
             .and_return(blocking_bugs_map)
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=4.6.6', 'verify-bugs'])
-        # if result.exit_code != 0:
-        #     exc_type, exc_value, exc_traceback = result.exc_info
-        #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-        #     self.fail(t)
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA', result.output)
 
