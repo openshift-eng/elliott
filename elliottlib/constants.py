@@ -3,11 +3,11 @@ This file contains constants that are used to manage OCP Image and RPM builds
 """
 
 BREW_HUB = "https://brewhub.engineering.redhat.com/brewhub"
-BREW_DOWNLOAD_URL = "http://download.eng.bos.redhat.com/brewroot"
+BREW_DOWNLOAD_URL = "https://download.eng.bos.redhat.com/brewroot"
 RHCOS_RELEASES_BASE_URL = "https://releases-rhcos-art.apps.ocp-virt.prod.psi.redhat.com/storage/releases"
 CINCINNATI_BASE_URL = "https://api.openshift.com/api/upgrades_info/v1/graph"
 BREW_DOWNLOAD_TEMPLATE = BREW_DOWNLOAD_URL + "/packages/{name}/{version}/{release}/files/{file_path}"
-CGIT_URL = "http://pkgs.devel.redhat.com/cgit"
+CGIT_URL = "https://pkgs.devel.redhat.com/cgit"
 RESULTSDB_API_URL = "https://resultsdb-api.engineering.redhat.com"
 
 VALID_BUG_STATES = ['NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_QA', 'VERIFIED', 'RELEASE_PENDING', 'CLOSED']
@@ -31,7 +31,7 @@ BUG_ATTACH_CHUNK_SIZE = 100
 # https://jira.coreos.com/browse/ART-1192
 SECURITY_IMPACT = ["Low", "Low", "Moderate", "Important", "Critical"]
 security_impact_map = {'Critical': 4, 'Important': 3, 'Moderate': 2, 'Low': 1}
-errata_xmlrpc_url = 'http://errata.engineering.redhat.com/errata/xmlrpc.cgi'
+errata_xmlrpc_url = 'https://errata.engineering.redhat.com/errata/xmlrpc.cgi'
 errata_url = "https://errata.devel.redhat.com"
 # errata_url = "https://errata.stage.engineering.redhat.com"
 
@@ -143,7 +143,7 @@ RPMDIFF_HUB_URL = "https://rpmdiff-hub.host.prod.eng.bos.redhat.com"
 
 ADVISORY_TYPES = ('rhba', 'rhea', 'rhsa')
 
-SFM2_ERRATA_ALERTS_URL = "http://sfm2.prodsec.redhat.com/api/public/errata/{id}/alerts"
+SFM2_ERRATA_ALERTS_URL = "https://sfm2.prodsec.redhat.com/api/public/errata/{id}/alerts"
 
 ######################################################################
 # API endpoints with string formatting placeholders as

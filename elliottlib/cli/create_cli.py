@@ -137,7 +137,7 @@ advisory.
         # This is a little strange, I grant you that. For reference you
         # may wish to review the click docs
         #
-        # http://click.pocoo.org/5/advanced/#invoking-other-commands
+        # https://click.pocoo.org/5/advanced/#invoking-other-commands
         #
         # You may be thinking, "But, add_metadata doesn't take keyword
         # arguments!" and that would be correct. However, we're not

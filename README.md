@@ -35,7 +35,7 @@ cover some basics.
 * Elliott was first created by
   [Sam Munilla](https://www.cdc.gov/salmonella/index.html) and is a
   reference to Steven Spielberg's 1982 summer blockbuster,
-  [E.T. the Extra-Terrestrial](http://www.imdb.com/title/tt0083866/)
+  [E.T. the Extra-Terrestrial](https://www.imdb.com/title/tt0083866/)
   * "ET" is also a short-hand way of referencing the [Errata Tool](https://errata.devel.redhat.com/), see the connection now?
 * Grammar and Synonyms
   * **Erratum** - is the *singluar* version of the word "Errata"
