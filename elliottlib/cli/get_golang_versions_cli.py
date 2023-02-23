@@ -9,7 +9,7 @@ _LOGGER = logutil.getLogger(__name__)
 
 
 @cli.command("go", short_help="Get version of Go for advisory builds")
-@click.option('--advisory', '-a', 'advisory_id',
+@click.option('--advisory', '-a', 'advisory_id', type=int,
               help="The advisory ID to fetch builds from")
 @use_default_advisory_option
 @click.option('--nvrs', '-n',
@@ -57,9 +57,11 @@ def get_golang_versions_cli(runtime, advisory_id, default_advisory_type, nvrs, c
         if components:
             components = [c.strip() for c in components.split(',')]
         return get_advisory_golang(advisory_id, components)
-    if nvrs:
+    elif nvrs:
         nvrs = [n.strip() for n in nvrs.split(',')]
         return get_nvrs_golang(nvrs)
+    else:
+        util.red_print('The input value is not valid.')
 
 
 def get_nvrs_golang(nvrs):
@@ -75,9 +77,11 @@ def get_nvrs_golang(nvrs):
     if rpm_nvrs:
         go_nvr_map = util.get_golang_rpm_nvrs(rpm_nvrs, _LOGGER)
         util.pretty_print_nvrs_go(go_nvr_map)
-    if container_nvrs:
+    elif container_nvrs:
         go_nvr_map = util.get_golang_container_nvrs(container_nvrs, _LOGGER)
         util.pretty_print_nvrs_go(go_nvr_map)
+    else:
+        util.green_print('There is no builds related to golang.')
 
 
 def get_advisory_golang(advisory_id, components):
@@ -85,6 +89,7 @@ def get_advisory_golang(advisory_id, components):
     _LOGGER.debug(f'{len(nvrs)} builds found in advisory')
     if not nvrs:
         _LOGGER.debug('No builds found. exiting')
+        util.green_print(f'there is no builds related to golang')
         return
     if components:
         if 'openshift' in components:
