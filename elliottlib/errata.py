@@ -766,12 +766,12 @@ def is_advisory_impact_smaller_than(advisory, impact):
     return i.index(advisory.security_impact) < i.index(impact)
 
 
-def set_blocking_errata(target_advisory_id, blocking_advisory_id, blocking_state):
+def set_blocking_errata(target_advisory_id, blocking_advisory_id, blocking_state="SHIPPED_LIVE") -> dict:
     """Set a blocker advisory (at blocking state) for given target advisory
 
     :param target_advisory_id: advisory number of the target
     :param blocking_advisory_id: advisory number of the blocker
-    :param blocking_state: a valid advisory state like "SHIPPED_LIVE"
+    :param blocking_state: a valid advisory state like "SHIPPED_LIVE" (default to "SHIPPED_LIVE")
     """
     response = ErrataConnector()._post(f'/api/v1/erratum/{target_advisory_id}/add_blocking_errata', data={"blocking_errata": blocking_advisory_id})
     if response.status_code != requests.codes.created:
