@@ -111,7 +111,7 @@ class Metadata(object):
         component_name = meta_name
 
         # For apbs, component name seems to have -apb appended.
-        # ex. http://dist-git.host.prod.eng.bos.redhat.com/cgit/apbs/openshift-enterprise-mediawiki/tree/Dockerfile?h=rhaos-3.7-rhel-7
+        # ex. https://dist-git.host.prod.eng.bos.redhat.com/cgit/apbs/openshift-enterprise-mediawiki/tree/Dockerfile?h=rhaos-3.7-rhel-7
         if namespace == "apbs":
             component_name = "%s-apb" % component_name
 

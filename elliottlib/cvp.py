@@ -94,9 +94,9 @@ class CVPInspector:
             futures = []
             for cvp_result in test_results:
                 # Each CVP test result stored in ResultsDB has a link to an external storage with more CVP test details
-                # e.g. http://external-ci-coldstorage.datahub.redhat.com/cvp/cvp-product-test/openshift-enterprise-console-container-v4.9.0-202205181110.p0.ge43e6e7.assembly.art2675/edef5ab1-62fb-480e-b0da-f63ce6d19d28/
+                # e.g. https://external-ci-coldstorage.datahub.redhat.com/cvp/cvp-product-test/openshift-enterprise-console-container-v4.9.0-202205181110.p0.ge43e6e7.assembly.art2675/edef5ab1-62fb-480e-b0da-f63ce6d19d28/
                 url = urljoin(cvp_result["ref_url"], "sanity-tests-optional-results.json")
-                # example results http://external-ci-coldstorage.datahub.redhat.com/cvp/cvp-product-test/openshift-enterprise-console-container-v4.9.0-202205181110.p0.ge43e6e7.assembly.art2675/edef5ab1-62fb-480e-b0da-f63ce6d19d28/sanity-tests-optional-results.json
+                # example results https://external-ci-coldstorage.datahub.redhat.com/cvp/cvp-product-test/openshift-enterprise-console-container-v4.9.0-202205181110.p0.ge43e6e7.assembly.art2675/edef5ab1-62fb-480e-b0da-f63ce6d19d28/sanity-tests-optional-results.json
                 futures.append(_fetch(url))
             optional_results = await asyncio.gather(*futures)
         return optional_results

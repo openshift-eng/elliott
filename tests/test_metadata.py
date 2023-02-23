@@ -15,7 +15,7 @@ class TestMetadata(unittest.TestCase):
     def setUp(self) -> None:
         data_obj = MagicMock(key="foo", filename="foo.yml", data={"name": "foo"})
         runtime = MagicMock()
-        runtime.group_config.urls.cgit = "http://distgit.example.com/cgit"
+        runtime.group_config.urls.cgit = "https://distgit.example.com/cgit"
         runtime.group_config.scan_freshness.threshold_hours = 6
         runtime.logger = Mock()
 

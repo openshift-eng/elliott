@@ -461,7 +461,7 @@ def get_brew_builds(errata_id, session=None):
     yield a significant reduction in total query time when looking up
     many builds.
 
-    http://docs.python-requests.org/en/master/user/advanced/#session-objects
+    https://docs.python-requests.org/en/master/user/advanced/#session-objects
 
     :return: A List of initialized Build object with the build details
     :raises exceptions.BrewBuildException: When erratum return errors
@@ -501,7 +501,7 @@ def get_brew_build(nvr, product_version='', session=None):
     yield a significant reduction in total query time when looking up
     many builds.
 
-    http://docs.python-requests.org/en/master/user/advanced/#session-objects
+    https://docs.python-requests.org/en/master/user/advanced/#session-objects
 
     :return: An initialized Build object with the build details
     :raises exceptions.BrewBuildException: When build not found
