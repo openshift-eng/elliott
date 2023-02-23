@@ -153,7 +153,7 @@ advisory with the --add option.
     sys.exit(0)
 
 
-def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
+async def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
     sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
@@ -171,7 +171,7 @@ def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
 
     # filter bugs that have been swept into other advisories
     logger.info("Filtering bugs that haven't been attached to any advisories...")
-    attached_bugs = bug_tracker.filter_attached_bugs(bugs)
+    attached_bugs = await bug_tracker.filter_attached_bugs(bugs)
     if attached_bugs:
         attached_bug_ids = {b.id for b in attached_bugs}
         logger.warning("The following bugs have been attached to advisories: %s", attached_bug_ids)
