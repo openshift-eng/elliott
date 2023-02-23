@@ -774,11 +774,13 @@ def set_blocking_errata(target_advisory_id, blocking_advisory_id, blocking_state
     :param blocking_state: a valid advisory state like "SHIPPED_LIVE"
     """
     response = ErrataConnector()._post(f'/api/v1/erratum/{target_advisory_id}/add_blocking_errata', data={"blocking_errata": blocking_advisory_id})
-    if response.status_code != requests.codes.ok:
-        raise IOError(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} with error: {response.text} status code: {response.status_code}')
-    data = {"blocking_errata": blocking_advisory_id, "blocking_state": blocking_state}
+    if response.status_code != requests.codes.created:
+        # This can 404 if the advisory is already in the list
+        if not "Advisory already listed" in response.text:
+            logger.warning(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} with error: {response.text} status code: {response.status_code}')
+    data = {"blocking_errata": blocking_advisory_id, "blocker_state": blocking_state}
     response = ErrataConnector()._post(f'/api/v1/erratum/{target_advisory_id}/set_blocker_state_for_blocking_errata', data=data)
-    if response.status_code != requests.codes.ok:
+    if response.status_code != requests.codes.created:
         raise IOError(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} with error: {response.text} status code: {response.status_code}')
     return response.json()
 
