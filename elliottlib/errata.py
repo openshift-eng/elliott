@@ -764,3 +764,39 @@ def is_security_advisory(advisory):
 def is_advisory_impact_smaller_than(advisory, impact):
     i = [None] + constants.SECURITY_IMPACT
     return i.index(advisory.security_impact) < i.index(impact)
+
+def set_blocking_errata(target_advisory_id, blocking_advisory_id, blocking_state):
+    """Set a blocker advisory (at blocking state) for given target advisory
+
+    :param target_advisory_id: advisory number of the target
+    :param blocking_advisory_id: advisory number of the blocker
+    :param blocking_state: a valid advisory state like "SHIPPED_LIVE"
+    """
+    response = ErrataConnector()._post(f'/api/v1/erratum/{target_advisory_id}/add_blocking_errata', data={"blocking_errata": blocking_advisory_id})
+    if response.status_code != requests.codes.ok:
+        raise IOError(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} with error: {response.text} status code: {response.status_code}')
+    data = {"blocking_errata": blocking_advisory_id, "blocking_state": blocking_state}
+    response = ErrataConnector()._post(f'/api/v1/erratum/{target_advisory_id}/set_blocker_state_for_blocking_errata', data=data)
+    if response.status_code != requests.codes.ok:
+        raise IOError(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} with error: {response.text} status code: {response.status_code}')
+    return response.json()
+
+def get_blocking_errata(advisory_id) -> dict:
+    """Get a list of blocking advisory ids for a given advisory
+    
+    :param advisory_id: advisory number
+    :return: a list of advisory ids
+    """
+    errata = get_advisory(advisory_id)['errata']
+    # This response is unecessarily nested, so we need to dig into it
+    """
+    "errata": {
+        "rhba": {
+            "id": 110351,
+            "blocking_advisories": [100, 200]
+            ...
+    """
+    for k in errata:
+        if errata[k]["id"] == advisory_id:
+            return errata[k]['blocking_advisories']
+    return None
