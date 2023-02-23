@@ -84,7 +84,7 @@ class FindBugsSweep(FindBugsMode):
 @click.pass_obj
 @click_coroutine
 async def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
-                        report, output, into_default_advisories, brew_event, noop):
+                              report, output, into_default_advisories, brew_event, noop):
     """Find OCP bugs and (optional) add them to ADVISORY.
 
  The --group automatically determines the correct target-releases to search
@@ -197,7 +197,7 @@ async def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracke
 
 
 async def find_and_attach_bugs(runtime: Runtime, advisory_id, default_advisory_type, major_version,
-                         find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
+                               find_bugs_obj, output, brew_event, noop, count_advisory_attach_flags, bug_tracker):
     if output == 'text':
         statuses = sorted(find_bugs_obj.status)
         tr = bug_tracker.target_release()
