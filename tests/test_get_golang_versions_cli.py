@@ -10,7 +10,7 @@ from click.testing import CliRunner
 class TestGetGolangVersionsCli(unittest.TestCase):
     def test_get_golang_versions_advisory(self):
         runner = CliRunner()
-        advisory_id = '123'
+        advisory_id = 123
         content_type = 'not docker'
         flexmock(Runtime).should_receive("initialize").and_return(None)
         nvrs = [('foo', 'v1', 'r'), ('bar', 'v1', 'r'), ('runc', 'v1', 'r'), ('podman', 'v1', 'r')]
@@ -45,7 +45,7 @@ class TestGetGolangVersionsCli(unittest.TestCase):
             should_receive("get_golang_container_nvrs"). \
             with_args([('podman-container', '3.0.1', '6.el8')], logger).and_return(go_nvr_map)
         flexmock(utillib). \
-            should_receive("pretty_print_nvrs_go").twice()
+            should_receive("pretty_print_nvrs_go").once()
 
         result = runner.invoke(cli, ['go', '--nvrs', 'podman-container-3.0.1-6.el8,podman-1.9.3-3.rhaos4.6.el8'])
         self.assertEqual(result.exit_code, 0)
