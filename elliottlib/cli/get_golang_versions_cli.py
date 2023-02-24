@@ -89,7 +89,7 @@ def get_advisory_golang(advisory_id, components):
     _LOGGER.debug(f'{len(nvrs)} builds found in advisory')
     if not nvrs:
         _LOGGER.debug('No builds found. exiting')
-        util.green_print(f'there is no builds related to golang')
+        util.green_print('there is no builds related to golang')
         return
     if components:
         if 'openshift' in components:
