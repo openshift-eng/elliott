@@ -14,6 +14,8 @@ cover
 *.egg-info
 .tox
 
+# Ignore _version.py created by setuptools_scm
+_version.py
 
 # Ignore emacs backup files
 *~
