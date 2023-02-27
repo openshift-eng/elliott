@@ -766,33 +766,39 @@ def is_advisory_impact_smaller_than(advisory, impact):
     return i.index(advisory.security_impact) < i.index(impact)
 
 
-def set_blocking_errata(target_advisory_id, blocking_advisory_id, blocking_state="SHIPPED_LIVE") -> dict:
+def set_blocking_advisory(target_advisory_id, blocking_advisory_id, blocking_state="SHIPPED_LIVE") -> dict:
     """Set a blocker advisory (at blocking state) for given target advisory
 
     :param target_advisory_id: advisory number of the target
     :param blocking_advisory_id: advisory number of the blocker
     :param blocking_state: a valid advisory state like "SHIPPED_LIVE" (default to "SHIPPED_LIVE")
     """
-    response = ErrataConnector()._post(f'/api/v1/erratum/{target_advisory_id}/add_blocking_errata', data={"blocking_errata": blocking_advisory_id})
+    response = ErrataConnector()._post(f'/api/v1/erratum/{target_advisory_id}/add_blocking_errata',
+                                       data={"blocking_errata": blocking_advisory_id})
     if response.status_code != requests.codes.created:
-        # This can 404 if the advisory is already in the list
-        if not "Advisory already listed" in response.text:
-            logger.warning(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} with error: {response.text} status code: {response.status_code}')
+        # The endpoint 404s if the advisory is already in the list
+        # with the error text "Advisory already listed"
+        # so only warn if the error is something else
+        if "Advisory already listed" not in response.text:
+            logger.warning(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id}'
+                           f' with error: {response.text} status code: {response.status_code}')
     data = {"blocking_errata": blocking_advisory_id, "blocker_state": blocking_state}
-    response = ErrataConnector()._post(f'/api/v1/erratum/{target_advisory_id}/set_blocker_state_for_blocking_errata', data=data)
+    response = ErrataConnector()._post(f'/api/v1/erratum/{target_advisory_id}/set_blocker_state_for_blocking_errata',
+                                       data=data)
     if response.status_code != requests.codes.created:
-        raise IOError(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} with error: {response.text} status code: {response.status_code}')
+        raise IOError(f'Failed to set blocking advisory {blocking_advisory_id} for advisory {target_advisory_id} '
+                      f'with error: {response.text} status code: {response.status_code}')
     return response.json()
 
 
-def get_blocking_errata(advisory_id) -> list:
+def get_blocking_advisories(advisory_id) -> list:
     """Get a list of blocking advisory ids for a given advisory
 
     :param advisory_id: advisory number
     :return: a list of advisory ids
     """
     errata = get_advisory(advisory_id)['errata']
-    # This response is unecessarily nested, so we need to dig into it
+    # This response is unnecessarily nested, so we need to dig into it
     """
     "errata": {
         "rhba": {
