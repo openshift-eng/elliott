@@ -11,7 +11,7 @@ import bugzilla
 import click
 import os
 import requests
-from requests_kerberos import HTTPKerberosAuth, OPTIONAL
+from requests_gssapi import HTTPSPNEGOAuth
 from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
@@ -1189,7 +1189,7 @@ def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current
             # otherwise we assume it's the exact brew package name
             if '/' in pkg_name:
                 pyxis_url = pyxis_base_url.format(pkg_name=pkg_name)
-                response = requests.get(pyxis_url, auth=HTTPKerberosAuth(mutual_authentication=OPTIONAL))
+                response = requests.get(pyxis_url, auth=HTTPSPNEGOAuth())
                 if response.status_code == requests.codes.ok:
                     data = response.json()['data']
                     if data:
