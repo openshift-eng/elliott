@@ -1,7 +1,4 @@
 pip>=20.3.3
-
--rrequirements.txt
-
 # test reqs
 flexmock
 mock>=4.0.3
