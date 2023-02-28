@@ -14,11 +14,11 @@ import re
 import click
 import requests
 from elliottlib import exceptions, constants, brew, logutil
-from elliottlib.util import green_prefix, green_print, exit_unauthenticated, chunk
+from elliottlib.util import green_print, chunk
 from elliottlib import bzutil
 from requests_gssapi import HTTPSPNEGOAuth
 from errata_tool import Erratum, ErrataException, ErrataConnector
-from typing import List
+from typing import List, Optional
 
 
 import xmlrpc.client
@@ -791,8 +791,9 @@ def set_blocking_advisory(target_advisory_id, blocking_advisory_id, blocking_sta
     return response.json()
 
 
-def get_blocking_advisories(advisory_id) -> list:
+def get_blocking_advisories(advisory_id) -> Optional[List]:
     """Get a list of blocking advisory ids for a given advisory
+    if blocking_advisories are not found in ET response, None is returned
 
     :param advisory_id: advisory number
     :return: a list of advisory ids
