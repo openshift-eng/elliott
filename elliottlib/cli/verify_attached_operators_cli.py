@@ -124,7 +124,7 @@ def _download_appregistry_image_references(appregistry_build):
                 with z.open(filename) as csv_file:
                     if csv:
                         raise ElliottFatalError(f"found more than one CSV in {appregistry_build['nvr']}?!? {filename}")
-                    csv = yaml.full_load(csv_file)
+                    csv = yaml.safe_load(csv_file)
 
     if not csv:
         raise ElliottFatalError(f"could not find the csv for appregistry {appregistry_build['nvr']}")
