@@ -222,7 +222,7 @@ class GitData(object):
                                 raw_text = raw_text.format(**replace_vars)
                             except KeyError as e:
                                 raise ValueError(f'{data_file} contains template key `{e.args[0]}` but no value was provided')
-                        data = yaml.full_load(raw_text)
+                        data = yaml.safe_load(raw_text)
                         use = True
                         if exclude and base_name in exclude:
                             use = False
