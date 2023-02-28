@@ -11,7 +11,7 @@ import bugzilla
 import click
 import os
 import requests
-from requests_kerberos import HTTPKerberosAuth, OPTIONAL
+from requests_gssapi import HTTPSPNEGOAuth
 from datetime import datetime, timezone
 from time import sleep
 from typing import Dict, Iterable, List, Optional
@@ -687,14 +687,13 @@ class JIRABugTracker(BugTracker):
                 f'before("{dt}")'
         return self._search(query, verbose=verbose)
 
-    def filter_attached_bugs(self, bugs: Iterable):
+    async def filter_attached_bugs(self, bugs: Iterable):
         bugs = list(bugs)
         api = AsyncErrataAPI()
-        asyncio.get_event_loop().run_until_complete(api.login())
-        tasks = [api.get_advisories_for_jira(bug.id) for bug in bugs]
-        results = asyncio.get_event_loop().run_until_complete(asyncio.gather(*tasks))
+        await api.login()
+        results = await asyncio.gather(*[api.get_advisories_for_jira(bug.id) for bug in bugs])
         attached_bugs = [bug for bug, advisories in zip(bugs, results) if advisories]
-        asyncio.get_event_loop().run_until_complete(api.close())
+        await api.close()
         return attached_bugs
 
     @staticmethod
@@ -908,14 +907,13 @@ class BugzillaBugTracker(BugTracker):
 
         return qualified_bugs
 
-    def filter_attached_bugs(self, bugs: Iterable):
+    async def filter_attached_bugs(self, bugs: Iterable):
         bugs = list(bugs)
         api = AsyncErrataAPI()
-        asyncio.get_event_loop().run_until_complete(api.login())
-        tasks = [api.get_advisories_for_bug(bug.id) for bug in bugs]
-        results = asyncio.get_event_loop().run_until_complete(asyncio.gather(*tasks))
+        await api.login()
+        results = await asyncio.gather(*[api.get_advisories_for_bug(bug.id) for bug in bugs])
         attached_bugs = [bug for bug, advisories in zip(bugs, results) if advisories]
-        asyncio.get_event_loop().run_until_complete(api.close())
+        await api.close()
         return attached_bugs
 
     @staticmethod
@@ -1191,7 +1189,7 @@ def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current
             # otherwise we assume it's the exact brew package name
             if '/' in pkg_name:
                 pyxis_url = pyxis_base_url.format(pkg_name=pkg_name)
-                response = requests.get(pyxis_url, auth=HTTPKerberosAuth(mutual_authentication=OPTIONAL))
+                response = requests.get(pyxis_url, auth=HTTPSPNEGOAuth())
                 if response.status_code == requests.codes.ok:
                     data = response.json()['data']
                     if data:

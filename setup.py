@@ -12,7 +12,9 @@ setup(
     name="rh-elliott",
     author="AOS ART Team",
     author_email="aos-team-art@redhat.com",
-    use_scm_version=True,
+    use_scm_version={
+        'write_to': 'elliottlib/_version.py',
+    },
     setup_requires=['setuptools_scm'],
     description="CLI tool for managing and automating Red Hat software releases",
     long_description=open('README.md').read(),
