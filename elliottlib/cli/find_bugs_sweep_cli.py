@@ -158,7 +158,7 @@ advisory with the --add option.
 async def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracker):
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
-    sweep_cutoff_timestamp = get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
+    sweep_cutoff_timestamp = await get_sweep_cutoff_timestamp(runtime, cli_brew_event=brew_event)
     if sweep_cutoff_timestamp:
         utc_ts = datetime.utcfromtimestamp(sweep_cutoff_timestamp)
         logger.info(f"Filtering bugs that have changed ({len(bugs)}) to one of the desired statuses before the "
@@ -392,7 +392,7 @@ def print_report(bugs: type_bug_list, output: str = 'text') -> None:
                                                                                      bug.summary[:60]))
 
 
-def get_sweep_cutoff_timestamp(runtime, cli_brew_event):
+async def get_sweep_cutoff_timestamp(runtime, cli_brew_event):
     sweep_cutoff_timestamp = 0
     if cli_brew_event:
         logger.info(f"Using command line specified cutoff event {runtime.assembly_basis_event}...")
@@ -400,7 +400,7 @@ def get_sweep_cutoff_timestamp(runtime, cli_brew_event):
     elif runtime.assembly_basis_event:
         logger.info(f"Determining approximate cutoff timestamp from basis event {runtime.assembly_basis_event}...")
         brew_api = runtime.build_retrying_koji_client()
-        sweep_cutoff_timestamp = bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api,
-                                                                     runtime.rpm_metas() + runtime.image_metas())
+        sweep_cutoff_timestamp = await bzutil.approximate_cutoff_timestamp(runtime.assembly_basis_event, brew_api,
+                                                                           runtime.rpm_metas() + runtime.image_metas())
 
     return sweep_cutoff_timestamp

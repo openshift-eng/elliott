@@ -1124,11 +1124,11 @@ def to_timestamp(dt: xmlrpc.client.DateTime):
     return datetime.strptime(dt.value, "%Y%m%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
 
 
-def approximate_cutoff_timestamp(basis_event: int, koji_api: ClientSession, metas: Iterable[Metadata]) -> float:
+async def approximate_cutoff_timestamp(basis_event: int, koji_api: ClientSession, metas: Iterable[Metadata]) -> float:
     """ Calculate an approximate sweep cutoff timestamp from the given basis event
     """
     basis_timestamp = koji_api.getEvent(basis_event)["ts"]
-    builds: List[Dict] = asyncio.get_event_loop().run_until_complete(asyncio.gather(*[exectools.to_thread(meta.get_latest_build, complete_before_event=basis_event, honor_is=False) for meta in metas]))
+    builds: List[Dict] = await asyncio.gather(*[exectools.to_thread(meta.get_latest_build, complete_before_event=basis_event, honor_is=False) for meta in metas])
     nvrs = [b["nvr"] for b in builds]
     rebase_timestamp_strings = filter(None, [isolate_timestamp_in_release(nvr) for nvr in nvrs])  # the timestamp in the release field of NVR is the approximate rebase time
     # convert to UNIX timestamps
