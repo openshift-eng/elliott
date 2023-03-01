@@ -27,6 +27,7 @@ async def find_bugs_no_tv(runtime: Runtime, comment):
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug,
                                 with_target_release=False, custom_query=' AND "Target Version" is EMPTY AND '
                                                                         'component != "Release"')
+    print(f'Found {len(bugs)} bugs with status={find_bugs_obj.status} and no Target Version set')
     print([b.id for b in bugs])
     # comment = "This bug has been found to have no 'Target Version' field set.
     # ART automation strictly relies on it to attach bugs to advisories.
