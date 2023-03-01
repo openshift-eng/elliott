@@ -28,10 +28,11 @@ class FindBugsMode:
     def exclude_status(self, status: List):
         self.status -= set(status)
 
-    def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
+    def search(self, bug_tracker_obj: BugTracker, verbose: bool = False, **kwargs):
         return bug_tracker_obj.search(
             self.status,
-            verbose=verbose
+            verbose=verbose,
+            **kwargs
         )
 
 

@@ -654,14 +654,15 @@ class JIRABugTracker(BugTracker):
             status=status,
             with_target_release=True,
             search_filter=search_filter,
-            custom_query='and "Release Blocker" = "Approved"'
+            custom_query=' and "Release Blocker" = "Approved"'
         )
-        return self._search(query, verbose=verbose, **kwargs)
+        return self._search(query, verbose=verbose)
 
-    def search(self, status, search_filter='default', verbose=False):
+    def search(self, status, search_filter='default', verbose=False, **kwargs):
         query = self._query(
             status=status,
-            search_filter=search_filter
+            search_filter=search_filter,
+            **kwargs
         )
         return self._search(query, verbose=verbose)
 
