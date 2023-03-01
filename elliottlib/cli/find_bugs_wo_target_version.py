@@ -4,7 +4,7 @@ from elliottlib import (Runtime, logutil)
 from elliottlib.cli import common
 from elliottlib.cli.common import click_coroutine
 
-from elliottlib.cli.find_bugs_sweep_cli import FindBugsSweep
+from elliottlib.cli.find_bugs_sweep_cli import FindBugsSweep, print_report
 
 
 logger = logutil.getLogger(__name__)
@@ -14,9 +14,13 @@ logger = logutil.getLogger(__name__)
 @click.option("--comment", "comment",
               required=False,
               help="Add comment to found bugs")
+@click.option("--report",
+              required=False,
+              is_flag=True,
+              help="Output a detailed report of found bugs")
 @click.pass_obj
 @click_coroutine
-async def find_bugs_no_tv(runtime: Runtime, comment):
+async def find_bugs_no_tv(runtime: Runtime, comment, report):
     if runtime.assembly != 'stream':
         raise click.BadParameter("This command is intended to work only with --assembly=stream",
                                  param_hint='--assembly')
@@ -32,6 +36,9 @@ async def find_bugs_no_tv(runtime: Runtime, comment):
     # comment = "This bug has been found to have no 'Target Version' field set.
     # ART automation strictly relies on it to attach bugs to advisories.
     # Please set the target version to the release that you expect the fix to go in."
+    if report:
+        print_report(bugs)
+
     if comment:
         for bug in bugs:
             bug_tracker.add_comment(bug, comment, private=False)
