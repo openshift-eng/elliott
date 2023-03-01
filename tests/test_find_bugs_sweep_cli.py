@@ -1,15 +1,18 @@
+import traceback
 import unittest
+from asynctest import patch as async_patch
+from datetime import datetime, timezone
+
+from click.testing import CliRunner
 from flexmock import flexmock
 from mock import patch, MagicMock, Mock
-from datetime import datetime, timezone
-from click.testing import CliRunner
-from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
-from elliottlib.cli.find_bugs_sweep_cli import extras_bugs, get_assembly_bug_ids, categorize_bugs_by_type
-from elliottlib.cli.common import cli, Runtime
+
 import elliottlib.cli.find_bugs_sweep_cli as sweep_cli
 from elliottlib import errata
-import traceback
+from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
+from elliottlib.cli.common import cli, Runtime
+from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
+from elliottlib.cli.find_bugs_sweep_cli import extras_bugs, get_assembly_bug_ids, categorize_bugs_by_type
 
 
 class TestFindBugsMode(unittest.TestCase):
@@ -111,7 +114,8 @@ class FindBugsSweepTestCase(unittest.IsolatedAsyncioTestCase):
 
     @patch('elliottlib.bzutil.JIRABugTracker.filter_attached_bugs')
     @patch('elliottlib.bzutil.BugzillaBugTracker.filter_attached_bugs')
-    def test_find_bugs_sweep_brew_event(self, bugzilla_filter_mock, jira_filter_mock):
+    @async_patch('elliottlib.cli.find_bugs_sweep_cli.get_sweep_cutoff_timestamp')
+    def test_find_bugs_sweep_brew_event(self, *_):
         runner = CliRunner()
         bugs = [flexmock(id='BZ1', status='ON_QA')]
         flexmock(Runtime).should_receive("initialize").and_return(None)
@@ -122,11 +126,8 @@ class FindBugsSweepTestCase(unittest.IsolatedAsyncioTestCase):
         flexmock(JIRABugTracker).should_receive("login")
         flexmock(JIRABugTracker).should_receive("search").and_return(bugs)
         flexmock(JIRABugTracker).should_receive("filter_bugs_by_cutoff_event").and_return([])
-        jira_filter_mock.return_value = []
 
         # common mocks
-        ts = datetime(2021, 6, 30, 12, 30, 00, 0, tzinfo=timezone.utc).timestamp()
-        flexmock(sweep_cli).should_receive("get_sweep_cutoff_timestamp").and_return(ts)
         flexmock(sweep_cli).should_receive("get_assembly_bug_ids").and_return(set(), set())
         flexmock(Runtime).should_receive("get_default_advisories").and_return({})
 
@@ -135,7 +136,6 @@ class FindBugsSweepTestCase(unittest.IsolatedAsyncioTestCase):
         flexmock(BugzillaBugTracker).should_receive("login")
         flexmock(BugzillaBugTracker).should_receive("search").and_return(bugs)
         flexmock(BugzillaBugTracker).should_receive("filter_bugs_by_cutoff_event").and_return([])
-        bugzilla_filter_mock.return_value = []
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly', '4.6.52', 'find-bugs:sweep'])
         if result.exit_code != 0:
