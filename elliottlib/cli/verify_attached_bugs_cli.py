@@ -346,12 +346,12 @@ class BugValidator:
         return k
 
     def _verify_blocking_bugs(self, blocking_bugs_for):
-        # complain about blocker bugs that aren't verified or shipped
+        # complain about blocking bugs that aren't verified or shipped
         for bug, blockers in blocking_bugs_for.items():
             for blocker in blockers:
                 message = str()
                 if blocker.status not in ['VERIFIED', 'RELEASE_PENDING', 'CLOSED', 'Release Pending', 'Verified',
-                                          'Closed']:
+                                          'Closed'] and not (blocker.status == bug.status == "ON_QA"):
                     if self.output == 'text':
                         message = f"Regression possible: {bug.status} bug {bug.id} is a backport of bug " \
                             f"{blocker.id} which has status {blocker.status}"

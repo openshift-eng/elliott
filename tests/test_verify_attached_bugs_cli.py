@@ -38,7 +38,7 @@ class VerifyAttachedBugs(asynctest.TestCase):
                      status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
         depend_on_bugs = [
-            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA',
+            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='MODIFIED',
                      is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
             flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending',
                      is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
@@ -54,7 +54,8 @@ class VerifyAttachedBugs(asynctest.TestCase):
 
         result = runner.invoke(cli, ['-g', 'openshift-4.6', '--assembly=4.6.6', 'verify-bugs'])
         self.assertEqual(result.exit_code, 1)
-        self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA', result.output)
+        self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status MODIFIED',
+                      result.output)
 
     @async_patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
     @async_patch('elliottlib.errata_async.AsyncErrataAPI.login')
@@ -76,7 +77,7 @@ class VerifyAttachedBugs(asynctest.TestCase):
                      status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
         ]
         depend_on_bugs = [
-            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='ON_QA',
+            flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='MODIFIED',
                      is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False),
             flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending',
                      is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_cve_in_summary=lambda: False)
@@ -98,8 +99,8 @@ class VerifyAttachedBugs(asynctest.TestCase):
         #     t = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
         #     self.fail(t)
         self.assertEqual(result.exit_code, 1)
-        self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status ON_QA',
-                      result.output)
+        self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status '
+                      'MODIFIED', result.output)
 
     @async_patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
     @async_patch('elliottlib.errata_async.AsyncErrataAPI.login')
