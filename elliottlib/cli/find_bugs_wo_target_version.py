@@ -41,4 +41,4 @@ async def find_bugs_no_tv(runtime: Runtime, comment, report):
 
     if comment:
         for bug in bugs:
-            bug_tracker.add_comment(bug, comment, private=False)
+            bug_tracker.add_comment(bug.id, comment, private=True)
