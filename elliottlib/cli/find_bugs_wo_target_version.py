@@ -17,10 +17,12 @@ logger = logutil.getLogger(__name__)
 @click.pass_obj
 @click_coroutine
 async def find_bugs_no_tv(runtime: Runtime, comment):
-    runtime.initialize(mode="both")
-    major_version, _ = runtime.get_major_minor()
-    find_bugs_obj = FindBugsSweep()
+    if runtime.assembly != 'stream':
+        raise click.BadParameter("This command is intended to work only with --assembly=stream",
+                                 param_hint='--assembly')
 
+    runtime.initialize(mode="both")
+    find_bugs_obj = FindBugsSweep()
     bug_tracker = runtime.bug_trackers('jira')
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug,
                                 with_target_release=False, custom_query=' AND "Target Version" is EMPTY AND '
