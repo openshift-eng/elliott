@@ -15,7 +15,7 @@ from elliottlib import exectools
 from elliottlib.assembly import assembly_metadata_config, assembly_rhcos_config
 from elliottlib.build_finder import BuildFinder
 from elliottlib.cli.common import (cli, find_default_advisory,
-                                   use_default_advisory_option)
+                                   use_default_advisory_option, click_coroutine)
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.imagecfg import ImageMetadata
 from elliottlib.util import (ensure_erratatool_auth, exit_unauthenticated,
@@ -80,9 +80,10 @@ pass_runtime = click.make_pass_decorator(Runtime)
 @click.option(
     '--member-only', is_flag=True,
     help='(For rpms) Only sweep member rpms')
+@click_coroutine
 @pass_runtime
-def find_builds_cli(runtime: Runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached,
-                    remove, clean, no_cdn_repos, payload, non_payload, include_shipped, member_only: bool):
+async def find_builds_cli(runtime: Runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached,
+                          remove, clean, no_cdn_repos, payload, non_payload, include_shipped, member_only: bool):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
 given group. Provide builds manually by giving one or more --build
@@ -165,10 +166,10 @@ PRESENT advisory. Here are some examples:
         unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1], tag_pv_map)
     else:
         if kind == 'image':
-            unshipped_nvrps = _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, payload,
-                                                          non_payload, include_shipped)
+            unshipped_nvrps = await _fetch_builds_by_kind_image(runtime, tag_pv_map, brew_session, payload,
+                                                                non_payload, include_shipped)
         elif kind == 'rpm':
-            unshipped_nvrps = _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_session, include_shipped, member_only)
+            unshipped_nvrps = await _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_session, include_shipped, member_only)
 
     pbar_header(
         'Fetching builds from Errata: ',
@@ -299,8 +300,8 @@ def _find_shipped_builds(build_ids: List[Union[str, int]], brew_session: koji.Cl
     return shipped_ids
 
 
-def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
-                                brew_session: koji.ClientSession, payload_only: bool, non_payload_only: bool, include_shipped: bool):
+async def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
+                                      brew_session: koji.ClientSession, payload_only: bool, non_payload_only: bool, include_shipped: bool):
     image_metas: List[ImageMetadata] = []
     for image in runtime.image_metas():
         if image.base_only or not image.is_release:
@@ -313,7 +314,7 @@ def _fetch_builds_by_kind_image(runtime: Runtime, tag_pv_map: Dict[str, str],
         'Generating list of images: ',
         f'Hold on a moment, fetching Brew builds for {len(image_metas)} components...')
 
-    brew_latest_builds: List[Dict] = asyncio.get_event_loop().run_until_complete(asyncio.gather(*[exectools.to_thread(progress_func, image.get_latest_build) for image in image_metas]))
+    brew_latest_builds: List[Dict] = await asyncio.gather(*[exectools.to_thread(progress_func, image.get_latest_build) for image in image_metas])
 
     _ensure_accepted_tags(brew_latest_builds, brew_session, tag_pv_map)
     shipped = set()
@@ -352,7 +353,7 @@ def _ensure_accepted_tags(builds: List[Dict], brew_session: koji.ClientSession, 
         build["tag_name"] = accepted_tag
 
 
-def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew_session: koji.ClientSession, include_shipped: bool, member_only: bool):
+async def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew_session: koji.ClientSession, include_shipped: bool, member_only: bool):
     assembly = runtime.assembly
     if runtime.assembly_basis_event:
         LOGGER.warning(f'Constraining rpm search to stream assembly due to assembly basis event {runtime.assembly_basis_event}')
@@ -375,7 +376,7 @@ def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str], brew
     if member_only:  # Sweep only member rpms
         for tag in tag_pv_map:
             tasks = [exectools.to_thread(progress_func, functools.partial(rpm.get_latest_build, default=None, el_target=tag)) for rpm in runtime.rpm_metas()]
-            builds_for_tag = asyncio.get_event_loop().run_until_complete(asyncio.gather(*tasks))
+            builds_for_tag = await asyncio.gather(*tasks)
             builds.extend(filter(lambda b: b is not None, builds_for_tag))
 
     else:  # Sweep all tagged rpms
