@@ -109,7 +109,7 @@ async def verify_bugs_cli(runtime, verify_bug_status, output, no_verify_blocking
 
 async def verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bugs):
     validator = BugValidator(runtime, output)
-    find_bugs_obj = FindBugsSweep()
+    find_bugs_obj = FindBugsSweep(cve_only=False)
     ocp_bugs = []
     logger.info(f'Using {runtime.assembly} assembly to search bugs')
     for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:

@@ -12,7 +12,8 @@ from elliottlib.util import green_prefix
 class FindBugsBlocker(FindBugsMode):
     def __init__(self):
         super().__init__(
-            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'}
+            status={'NEW', 'ASSIGNED', 'POST', 'MODIFIED', 'ON_DEV', 'ON_QA'},
+            cve_only=False,
         )
 
     def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):

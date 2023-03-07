@@ -360,6 +360,9 @@ class BugTracker:
     def blocker_search(self, status, search_filter, verbose=False, **kwargs):
         raise NotImplementedError
 
+    def cve_tracker_search(self, status, search_filter, verbose=False, **kwargs):
+        raise NotImplementedError
+
     def get_bug(self, bugid, **kwargs):
         raise NotImplementedError
 
@@ -665,6 +668,14 @@ class JIRABugTracker(BugTracker):
         )
         return self._search(query, verbose=verbose)
 
+    def cve_tracker_search(self, status, search_filter='default', verbose=False):
+        query = self._query(
+            status=status,
+            search_filter=search_filter,
+            include_labels=["SecurityTracking"],
+        )
+        return self._search(query, verbose=verbose)
+
     def remove_bugs(self, advisory_obj, bugids: List, noop=False):
         if noop:
             print(f"Would've removed bugs: {bugids}")
@@ -764,6 +775,11 @@ class BugzillaBugTracker(BugTracker):
 
     def search(self, status, search_filter='default', verbose=False):
         query = _construct_query_url(self.config, status, search_filter)
+        return self._search(query, verbose)
+
+    def cve_tracker_search(self, status, search_filter='default', verbose=False):
+        query = _construct_query_url(self.config, status, search_filter)
+        query.addKeyword('SecurityTracking')
         return self._search(query, verbose)
 
     def _search(self, query, verbose=False):
