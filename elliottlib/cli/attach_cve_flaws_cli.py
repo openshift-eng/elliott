@@ -39,7 +39,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     Example:
 
     $ elliott --group openshift-4.6 attach-cve-flaws --use-default-advisory image
-    INFO Cloning config data from https://github.com/openshift/ocp-build-data.git
+    INFO Cloning config data from https://github.com/openshift-eng/ocp-build-data.git
     INFO Using branch from group.yml: rhaos-4.6-rhel-8
     INFO found 114 tracker bugs attached to the advisory
     INFO found 58 corresponding flaw bugs
