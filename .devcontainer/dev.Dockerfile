@@ -54,5 +54,5 @@ RUN chown "$USERNAME" -R . \
  && sudo -u "$USERNAME" pip3 install --user -r ./requirements.txt -r requirements-dev.txt \
  && sudo -u "$USERNAME" pip3 install --user --editable .
 USER "$USER_UID"
-ENV ELLIOTT_DATA_PATH=https://github.com/openshift/ocp-build-data \
+ENV ELLIOTT_DATA_PATH=https://github.com/openshift-eng/ocp-build-data \
     _ELLIOTT_DATA_PATH=/workspaces/ocp-build-data

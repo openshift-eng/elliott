@@ -276,8 +276,8 @@ attached to a 3.6
 
     <elliott> $ ./elliott --group openshift-3.6 find-builds -k image
 
-    2018-11-27 10:23:28,117 INFO Using git@github.com:openshift/ocp-build-data.git for metadata
-    2018-11-27 10:23:28,117 INFO Cloning config data from git@github.com:openshift/ocp-build-data.git
+    2018-11-27 10:23:28,117 INFO Using git@github.com:openshift-eng/ocp-build-data.git for metadata
+    2018-11-27 10:23:28,117 INFO Cloning config data from git@github.com:openshift-eng/ocp-build-data.git
     2018-11-27 10:23:29,146 INFO Using branch from group.yml: rhaos-3.6-rhel-7
     Generating list of images: Hold on a moment, fetching Brew buildinfo
     [****************************************]
