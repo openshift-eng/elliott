@@ -172,7 +172,7 @@ class BugValidator:
         async def get_all_advisory_ids(bug):
             all_advisories_id = bug.all_advisory_ids()
             if len(all_advisories_id) > 1:
-                return f'Bug {bug.id} is attached in multiple advisories: {all_advisories_id}'
+                return f'Bug <{bug.weburl}|{bug.id}> is attached in multiple advisories: {all_advisories_id}'
             return None
 
         results = await asyncio.gather(*[asyncio.create_task(get_all_advisory_ids(bug)) for bug in non_flaw_bugs])
@@ -386,13 +386,13 @@ class BugValidator:
             status = f"{bug.status}"
             if bug.status in ['CLOSED', 'Closed']:
                 status = f"{bug.status}: {bug.resolution}"
-            self._complain(f"Bug {bug.id} has status {status}")
+            self._complain(f"Bug <{bug.weburl}|{bug.id}> has status {status}")
 
     def _verify_bug_summary(self, bugs):
         # complain about bugs that should be CVE
         for bug in bugs:
             if bug.is_cve_in_summary() and not bug.is_tracker_bug():
-                self._complain(f"Bug {bug.id} has CVE number in summary but does not have tracker keywords (retitle bug to lowercase cve if valid)")
+                self._complain(f"Bug <{bug.weburl}|{bug.id}> has CVE number in summary but does not have tracker keywords (retitle bug to lowercase cve if valid)")
 
     def _complain(self, problem: str):
         red_print(problem)
