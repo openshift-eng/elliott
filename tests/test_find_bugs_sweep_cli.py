@@ -25,7 +25,7 @@ class TestFindBugsMode(unittest.TestCase):
             'server': "server"
         }
         bug_tracker = BugzillaBugTracker(config)
-        find_bugs = FindBugsMode(status=['foo', 'bar'])
+        find_bugs = FindBugsMode(status=['foo', 'bar'], cve_only=False)
         find_bugs.include_status(['alpha'])
         find_bugs.exclude_status(['foo'])
         bugs = find_bugs.search(bug_tracker_obj=bug_tracker)

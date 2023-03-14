@@ -13,7 +13,8 @@ LOGGER = logutil.getLogger(__name__)
 class FindBugsQE(FindBugsMode):
     def __init__(self):
         super().__init__(
-            status={'MODIFIED'}
+            status={'MODIFIED'},
+            cve_only=False,
         )
 
 

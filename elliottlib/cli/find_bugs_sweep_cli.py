@@ -19,8 +19,9 @@ type_bug_list = List[Bug]
 
 
 class FindBugsMode:
-    def __init__(self, status: List):
+    def __init__(self, status: List, cve_only: bool):
         self.status = set(status)
+        self.cve_only = cve_only
 
     def include_status(self, status: List):
         self.status |= set(status)
@@ -29,15 +30,16 @@ class FindBugsMode:
         self.status -= set(status)
 
     def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
-        return bug_tracker_obj.search(
+        func = bug_tracker_obj.cve_tracker_search if self.cve_only else bug_tracker_obj.search
+        return func(
             self.status,
             verbose=verbose
         )
 
 
 class FindBugsSweep(FindBugsMode):
-    def __init__(self):
-        super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'})
+    def __init__(self, cve_only: bool):
+        super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'}, cve_only=cve_only)
 
 
 @common.cli.command("find-bugs:sweep", short_help="Sweep qualified bugs into advisories")
@@ -77,6 +79,9 @@ class FindBugsSweep(FindBugsMode):
                    '"extras" instead of the default "image", bugs filtered into "none" are not attached at all.')
 @click.option('--brew-event', type=click.INT, required=False,
               help='Only in sweep mode: SWEEP bugs that have changed to the desired status before the Brew event')
+@click.option("--cve-only",
+              is_flag=True,
+              help="Only find CVE trackers")
 @click.option("--noop", "--dry-run",
               is_flag=True,
               default=False,
@@ -84,7 +89,7 @@ class FindBugsSweep(FindBugsMode):
 @click.pass_obj
 @click_coroutine
 async def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
-                              report, output, into_default_advisories, brew_event, noop):
+                              report, output, into_default_advisories, brew_event, cve_only, noop):
     """Find OCP bugs and (optional) add them to ADVISORY.
 
  The --group automatically determines the correct target-releases to search
@@ -120,7 +125,7 @@ advisory with the --add option.
 
     runtime.initialize(mode="both")
     major_version, _ = runtime.get_major_minor()
-    find_bugs_obj = FindBugsSweep()
+    find_bugs_obj = FindBugsSweep(cve_only=cve_only)
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
 
