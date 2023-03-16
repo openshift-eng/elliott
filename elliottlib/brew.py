@@ -9,6 +9,7 @@ import logging
 import ssl
 import threading
 import time
+import re
 from enum import Enum
 from typing import Dict, Iterable, List, Optional, Tuple, BinaryIO
 
@@ -201,14 +202,15 @@ def get_nvr_arch_log(name, version, release, arch='x86_64'):
 
 
 def get_nvr_root_log(name, version, release, arch='x86_64'):
-    root_log_url = '{host}/vol/rhel-{rhel_version}/packages/{name}/{version}/{release}/data/logs/{arch}/root.log'.format(
-        host=constants.BREW_DOWNLOAD_URL,
-        rhel_version=(7 if 'el7' in release else 8),
-        name=name,
-        version=version,
-        release=release,
-        arch=arch,
-    )
+    tmp = re.search(r'\.el(\d+)', release)
+    try:
+        rhel_version = int(tmp.groups()[0])
+    except Exception as e:
+        logger.warning(f"Could not find rhel version in release {release} : {e}")
+        logger.warning("Assuming rhel-8")
+        rhel_version = 8
+
+    root_log_url = f'{constants.BREW_DOWNLOAD_URL}/vol/rhel-{rhel_version}/packages/{name}/{version}/{release}/data/logs/{arch}/root.log'
 
     logger.debug(f"Trying {root_log_url}")
     res = requests.get(root_log_url, verify=ssl.get_default_verify_paths().openssl_cafile)
