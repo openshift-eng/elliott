@@ -509,6 +509,18 @@ class TestBZUtil(asynctest.TestCase):
         actual = bzutil.is_first_fix_any(flaw_bug, tracker_bugs, tr)
         self.assertEqual(expected, actual)
 
+    def test_is_first_fix_any_missing_package_state(self):
+        hydra_data = {}
+        flexmock(requests).should_receive('get')\
+            .and_return(flexmock(json=lambda: hydra_data, raise_for_status=lambda: None))\
+
+        tr = '4.8.0'
+        flaw_bug = BugzillaBug(flexmock(id=1, alias=['CVE-123']))
+        tracker_bugs = [flexmock(id=2, whiteboard_component='openshift-clients')]
+        expected = False
+        actual = bzutil.is_first_fix_any(flaw_bug, tracker_bugs, tr)
+        self.assertEqual(expected, actual)
+
     def test_is_first_fix_any_fail(self):
         hydra_data = {
             'package_state': [
