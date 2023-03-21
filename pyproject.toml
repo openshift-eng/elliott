@@ -65,8 +65,8 @@ dependencies = [
 elliott = "elliottlib.cli.__main__:main"
 
 [project.urls]
-homepage = "https://github.com/openshift/elliott"
-repository = "https://github.com/openshift/elliott.git"
+homepage = "https://github.com/openshift-eng/elliott"
+repository = "https://github.com/openshift-eng/elliott.git"
 
 [project.optional-dependencies]
 tests = [
