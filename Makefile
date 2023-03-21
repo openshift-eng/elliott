@@ -1,7 +1,7 @@
 .PHONY: venv tox lint test
 
 install:
-	./venv/bin/pip install -r requirements-dev.txt -r requirements.txt
+	./venv/bin/pip install .[tests]
 
 venv:
 	python3.8 -m venv venv
