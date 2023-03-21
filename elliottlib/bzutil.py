@@ -1195,6 +1195,11 @@ def is_first_fix_any(flaw_bug: BugzillaBug, tracker_bugs: Iterable[Bug], current
     components_not_yet_fixed = []
     pyxis_base_url = "https://pyxis.engineering.redhat.com/v1/repositories/registry/registry.access.redhat.com" \
                      "/repository/{pkg_name}/images?page_size=1&include=data.brew"
+
+    if 'package_state' not in data:
+        logger.info(f'{flaw_bug.id} ({alias}) not considered a first-fix because no unfixed components were found')
+        return False
+
     for package_info in data['package_state']:
         # previously we were also checking `package_info['fix_state'] in ['Affected', 'Under investigation']`
         # but we don't need to verify that since according to @sfowler if a package has a tracker for a cve
