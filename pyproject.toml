@@ -1,0 +1,86 @@
+[build-system]
+requires = [
+    "setuptools>=65.5.1",  # not directly required, pinned by Snyk to avoid a vulnerability
+    "setuptools_scm[toml]>=6.2",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["elliottlib"]
+
+[tool.setuptools_scm]
+write_to = "elliottlib/_version.py"
+
+[project]
+dynamic = ["version"]
+name="rh-elliott"
+authors = [
+    {name = "AOS ART Team", email = "aos-team-art@redhat.com"},
+]
+description = "CLI tool for managing and automating Red Hat software releases"
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["openshift", "errata", "advisory"]
+license.file = "LICENSE"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Environment :: Console",
+    "Operating System :: POSIX",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Bug Tracking",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Utilities",
+    "Natural Language :: English",
+]
+dependencies = [
+    "aiohttp[speedups] >= 3.6",
+    "click >= 8.1.3",
+    "errata-tool >= 1.29.0",
+    "future",
+    "koji >= 1.18",
+    "semver",
+    "pygit2 == 1.10.1",  # https://github.com/libgit2/pygit2/issues/1176
+    "python-bugzilla >= 3.2",
+    "pyyaml",
+    "requests",
+    "requests-gssapi ~= 1.2.3",
+    "ruamel.yaml",
+    "tenacity",
+    "jira >= 3.4.1",  # https://github.com/pycontribs/jira/issues/1486
+]
+
+[project.scripts]
+elliott = "elliottlib.cli.__main__:main"
+
+[project.urls]
+homepage = "https://github.com/openshift-eng/elliott"
+repository = "https://github.com/openshift-eng/elliott.git"
+
+[project.optional-dependencies]
+tests = [
+    # test reqs
+    "flexmock",
+    "mock>=4.0.3",
+    "asynctest>=0.13.0",
+    # tox reqs
+    "coverage>=5.3",
+    "flake8>=3.8.4",
+    "tox>=3.20.1",
+    # makefile reqs
+    "virtualenv>=20.2.2",
+    "pytest>=6.2.1",
+    "mypy>=0.812",
+    "pylint",
+]
