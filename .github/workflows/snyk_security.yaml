@@ -1,4 +1,4 @@
-name: Snyk Security
+name: Snyk Scan
 
 on: [ push, pull_request ]
 
