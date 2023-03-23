@@ -157,11 +157,11 @@ def print_success_message(tarball_sources_list, out_dir):
 
 All tarball sources are successfully created.
 
-To send all tarball sources to rcm-guest, run:
+To send all tarball sources to spmm-utils, run:
 
-    rsync -avz --no-perms --no-owner --no-group {} ocp-build@rcm-guest.app.eng.bos.redhat.com:/mnt/rcm-guest/ocp-client-handoff/
+    rsync -avz --no-perms --no-owner --no-group {} spmm-util.hosts.prod.psi.bos.redhat.com:ocp-client-handoff/
 
-Then notify RCM (https://projects.engineering.redhat.com/projects/RCM/issues) that the following tarball sources have been uploaded to rcm-guest:
+Then notify RCM (https://projects.engineering.redhat.com/projects/RCM/issues) that the following tarball sources have been uploaded to spmm-utils:
 
 {}
     """.format(pipes.quote(os.path.abspath(out_dir) + "/"), "\n".join(relative_paths)))
