@@ -16,23 +16,42 @@ from elliottlib.cli.find_bugs_sweep_cli import get_bugs_sweep, FindBugsSweep, ca
 logger = logutil.getLogger(__name__)
 
 
-@cli.command("verify-attached-bugs", short_help="Verify bugs in a release will not be regressed in the next version")
-@click.option("--verify-bug-status", is_flag=True, help="Check that bugs of advisories are all VERIFIED or more", type=bool, default=False)
-@click.option("--verify-flaws", is_flag=True, help="Check that flaw bugs are attached and associated with specific builds", type=bool, default=False)
-@click.option("--no-verify-blocking-bugs", is_flag=True, help="Don't check if there are open bugs for the next minor version blocking bugs for this minor version", type=bool, default=False)
-@click.option("--skip-multiple-advisories-check", is_flag=True, help="Do not check if bugs are attached to multiple "
-                                                                     "advisories", type=bool,
-              default=False)
+@cli.command("verify-attached-bugs",
+             short_help="Run validations on bugs attached to release advisories and report results")
+@click.option("--verify-bug-status", is_flag=True,
+              help="Check that bugs of advisories are all VERIFIED or more",
+              type=bool, default=False)
+@click.option("--verify-flaws", is_flag=True,
+              help="Check that flaw bugs are attached and associated with respective builds",
+              type=bool, default=False)
+@click.option("--no-verify-blocking-bugs", is_flag=True,
+              help="Don't check if there are open bugs for the next minor version blocking bugs for this minor version",
+              type=bool, default=False)
+@click.option("--skip-multiple-advisories-check", is_flag=True,
+              help="Do not check if bugs are attached to multiple advisories",
+              type=bool, default=False)
 @click.argument("advisories", nargs=-1, type=click.IntRange(1), required=False)
 @pass_runtime
 @click_coroutine
 async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, advisories: Tuple[int, ...], verify_flaws: bool,
                                    no_verify_blocking_bugs: bool, skip_multiple_advisories_check: bool):
     """
-    Verify the bugs in the advisories (specified as arguments or in group.yml) for a release.
-    Requires a runtime to ensure that all bugs in the advisories match the runtime version.
-    Also ensures that bugs in the next release which block bugs in these advisories have
-    been verified, as those represent backports we do not want to regress in upgrades.
+    Validate bugs in release advisories (specified in arguments or as part of an assembly).
+    Requires group param (-g openshift-X.Y)
+
+    Default validations:
+    - Target Release: All bugs belong to the group's target release.
+    - Bug Sorting: Bugs are attached to the correct advisory type (image/rpm/extras) using
+    find-bugs:sweep logic. This only runs with --assembly. To skip manually specify advisories.
+    - Improper Tracker Bugs: Bugs that have CVE in their title but do not have Tracker Bug labels set.
+    - Regression Check: If there are any backport bugs, make sure they don't get ahead of their original bug.
+    This is to make sure we don't regress when upgrading from OCP X.Y to X.Y+1. To skip use --no-verify-blocking-bugs.
+    - Bugs aren't attached to multiple advisories. To skip use --skip-multiple-advisories-check.
+
+    Additional validations:
+    - Bug Status (--verify-bug-status): All bugs are in at least in VERIFIED state
+    - Flaw Bugs (--verify-flaws): All flaw bugs are attached to advisories (using attach-cve-flaws logic) and
+    associated with respective builds. Verify advisory type is RHSA when applicable, and CVE names field is correct.
 
     If any verification fails, a text explanation is given and the return code is 1.
     Otherwise, prints the number of bugs in the advisories and exits with success.
@@ -99,9 +118,18 @@ async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, adviso
 @click_coroutine
 async def verify_bugs_cli(runtime, verify_bug_status, output, no_verify_blocking_bugs: bool):
     """
-    Verify the bugs that qualify as being part of an assembly (specified as --assembly)
-    By default --assembly=stream
-    Checks are similar to verify-attached-bugs
+    Validate bugs that qualify as being part of an assembly (specified as --assembly)
+    Requires group param (-g openshift-X.Y). By default runs for --assembly=stream
+
+    Default validations:
+    - Target Release: All bugs belong to the group's target release.
+    - Improper Tracker Bugs: Bugs that have CVE in their title but do not have Tracker Bug labels set.
+    - Regression Check: If there are any backport bugs, make sure they don't get ahead of their original bug.
+    This is to make sure we don't regress when upgrading from OCP X.Y to X.Y+1. To skip use --no-verify-blocking-bugs.
+
+    Additional validations:
+    - Bug Status (--verify-bug-status): All bugs are at least in VERIFIED state
+
     """
     runtime.initialize()
     await verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bugs)
