@@ -39,17 +39,17 @@ class TestVerifyAttachedOperators(unittest.TestCase):
     def test_verify_attached_operators_ok(self):
         out = subprocess.run(
             constants.ELLIOTT_CMD
-            + ["--group", "openshift-4.9", "verify-attached-operators", "81215"],  # 4.9.0 advisories all GA
+            + ["--group", "openshift-4.12", "verify-attached-operators", "110351"],
             capture_output=True,
             encoding='utf-8',
         )
-        self.assertIn("All operator manifest references were found.", out.stdout)
+        self.assertIn("All operator bundles were valid and references were found.", out.stdout)
 
     def test_verify_attached_operators_wrong(self):
         out = subprocess.run(
             constants.ELLIOTT_CMD
-            + ["--group", "openshift-4.8", "verify-attached-operators", "--exclude-shipped", "81215"],
-            # 4.9.0 GA metadata advisory; will not find matches in 4.8 shipped
+            + ["--group", "openshift-4.8", "verify-attached-operators", "--omit-shipped", "--omit-attached", "81215"],
+            # 4.9.0 GA metadata advisory; will be missing operands from other advisories
             capture_output=True,
             encoding='utf-8',
         )

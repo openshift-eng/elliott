@@ -13,6 +13,7 @@ import ssl
 import re
 import click
 import requests
+from functools import lru_cache
 from elliottlib import exceptions, constants, brew, logutil
 from elliottlib.util import green_print, chunk
 from elliottlib import bzutil
@@ -676,6 +677,15 @@ def get_rpmdiff_runs(advisory_id, status=None, session=None):
         page_number += 1
 
 
+def get_image_cdns(advisory_id):
+    return errata_xmlrpc.get_advisory_cdn_docker_file_list(advisory_id)
+
+
+@lru_cache()  # advisories slow to look up, and not expected to change during a run
+def get_cached_image_cdns(advisory_id):
+    return get_image_cdns(advisory_id)
+
+
 def get_advisory_images(image_advisory_id, raw=False):
     """List images of a given advisory, raw, or in the format we usually send to CCS (docs team)
 
@@ -684,7 +694,7 @@ def get_advisory_images(image_advisory_id, raw=False):
 
     :return: str with a list of images
     """
-    cdn_docker_file_list = errata_xmlrpc.get_advisory_cdn_docker_file_list(image_advisory_id)
+    cdn_docker_file_list = get_image_cdns(image_advisory_id)
 
     if raw:
         return '\n'.join(cdn_docker_file_list.keys())
