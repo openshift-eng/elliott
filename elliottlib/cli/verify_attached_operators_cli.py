@@ -42,7 +42,7 @@ def verify_attached_operators_cli(runtime, exclude_shipped, advisories):
     referenced_specs = _extract_operator_manifest_image_references(image_builds)
     if not referenced_specs:
         adv_str = ", ".join(str(a) for a in advisories)
-        green_print(f"No bundle or appregistry builds found in advisories ({adv_str}).")
+        green_print(f"No bundle builds found in advisories ({adv_str}).")
         return
 
     if not exclude_shipped:
@@ -83,10 +83,6 @@ def _is_bundle(image_build):
     return 'operator_bundle' in image_build.get('extra', {}).get('osbs_build', {}).get('subtypes', [])
 
 
-def _is_appregistry(image_build):
-    return 'operator_appregistry' in image_build.get('extra', {}).get('osbs_build', {}).get('subtypes', [])
-
-
 def _extract_operator_manifest_image_references(image_builds):
     # extract referenced images from bundles to be shipped
     # returns a map[pullspec: bundle_nvr]
@@ -95,40 +91,37 @@ def _extract_operator_manifest_image_references(image_builds):
         if _is_bundle(image):
             for pullspec in image['extra']['image']['operator_manifests']['related_images']['pullspecs']:
                 image_specs[pullspec['new']] = image['nvr']
-        elif _is_appregistry(image):
-            for pullspec in _download_appregistry_image_references(image):
-                image_specs[pullspec] = image['nvr']
     return image_specs
 
 
-def _download_appregistry_image_references(appregistry_build):
-    # for appregistry, image references are buried in the CSV in an archive
+def _download_bundle_csv(bundle_build):
+    # the CSV is buried in an archive
     url = constants.BREW_DOWNLOAD_TEMPLATE.format(
-        name=appregistry_build['package_name'],
-        version=appregistry_build['version'],
-        release=appregistry_build['release'],
+        name=bundle_build['package_name'],
+        version=bundle_build['version'],
+        release=bundle_build['release'],
         file_path="operator-manifests/operator_manifests.zip",
     )
     try:
         res = requests.get(url, timeout=10.0)
     except Exception as ex:
-        raise ElliottFatalError(f"appregistry data download {url} failed: {ex}")
+        raise ElliottFatalError(f"manifest data download {url} failed: {ex}")
     if res.status_code != 200:
-        raise ElliottFatalError(f"appregistry data download {url} failed (status_code={res.status_code}): {res.text}")
+        raise ElliottFatalError(f"manifest data download {url} failed (status_code={res.status_code}): {res.text}")
 
-    minor_version = re.match(r'^v(\d+\.\d+)', appregistry_build['version']).groups()[0]
+    minor_version = re.match(r'^v(\d+\.\d+)', bundle_build['version']).groups()[0]
     csv = {}
     with ZipFile(BytesIO(res.content)) as z:
         for filename in z.namelist():
             if re.match(f"^{minor_version}/.*clusterserviceversion.yaml", filename):
                 with z.open(filename) as csv_file:
                     if csv:
-                        raise ElliottFatalError(f"found more than one CSV in {appregistry_build['nvr']}?!? {filename}")
+                        raise ElliottFatalError(f"found more than one CSV in {bundle_build['nvr']}?!? {filename}")
                     csv = yaml.safe_load(csv_file)
 
     if not csv:
-        raise ElliottFatalError(f"could not find the csv for appregistry {appregistry_build['nvr']}")
-    return [ref['image'] for ref in csv['spec']['relatedImages']]
+        raise ElliottFatalError(f"could not find the csv bundle {bundle_build['nvr']}")
+    return csv
 
 
 def _get_shipped_images(runtime, brew_session):
