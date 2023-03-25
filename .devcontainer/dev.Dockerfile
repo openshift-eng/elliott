@@ -51,8 +51,8 @@ RUN groupadd --gid "$USER_GID" "$USERNAME" \
 WORKDIR /workspaces/elliott
 COPY . .
 RUN chown "$USERNAME" -R . \
- && sudo -u "$USERNAME" pip3 install --user -r ./requirements.txt -r requirements-dev.txt \
- && sudo -u "$USERNAME" pip3 install --user --editable .
+ && sudo -u "$USERNAME" pip3 install --user -U pip>=22.3 setuptools>=64 \
+ && sudo -u "$USERNAME" pip3 install --user --editable .[tests]
 USER "$USER_UID"
 ENV ELLIOTT_DATA_PATH=https://github.com/openshift-eng/ocp-build-data \
     _ELLIOTT_DATA_PATH=/workspaces/ocp-build-data

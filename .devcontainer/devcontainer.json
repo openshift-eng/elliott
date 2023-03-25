@@ -32,7 +32,7 @@
 	// Uncomment the next line if you want to publish any ports.
 	// "appPort": [],
 	// Uncomment the next line to run commands after the container is created - for example installing git.
-	"postCreateCommand": "sudo chown -R dev: /workspaces/elliott-working-dir && pip3 install --user -r requirements-dev.txt -r requirements.txt -e .",
+	"postCreateCommand": "sudo chown -R dev: /workspaces/elliott-working-dir && pip3 install --user --editable .[tests]",
 	// Add the IDs of extensions you want installed when the container is created in the array below.
 	"extensions": [
 		"ms-python.python",
