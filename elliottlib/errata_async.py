@@ -97,6 +97,8 @@ class AsyncErrataAPI:
         try:
             result = await self._make_request(aiohttp.hdrs.METH_GET, path)
         except ClientResponseError as e:
+            # When newly created jira bugs are not sync'd to ET we get a 404, 
+            # assume that they are not attached to any advisory
             if ignore_not_found and e.status == 404:
                 result = []
             else:
