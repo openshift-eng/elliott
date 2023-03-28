@@ -153,16 +153,19 @@ class TestAsyncErrataUtils(IsolatedAsyncioTestCase):
             "CVE-2099-2": {"c"},
             "CVE-2099-3": {constants.GOLANG_BUILDER_CVE_COMPONENT},
         }
-        attached_builds = ["a-1.0.0-1.el8", "a-1.0.0-1.el7", "b-1.0.0-1.el8", "c-1.0.0-1.el8", "d-1.0.0-1.el8"]
-        builder_nvr_string = 'openshift-golang-builder-container-v1.18.0-202204191948.sha1patch.el8.g4d4caca'
+        attached_builds = ["a-1.0.0-1.el8", "a-1.0.0-1.el9", "b-1.0.0-1.el9", "c-1.0.0-1.el8", "d-1.0.0-1.el8"]
+        builder_el8 = 'openshift-golang-builder-container-v1.18.0-202204191948.sha1patch.el8.g4d4caca'
+        builder_el9 = 'openshift-golang-builder-container-v1.18.0-202204191948.sha1patch.el9.g4d4caca'
         get_go_container_nvrs.return_value = {
-            builder_nvr_string: {(n['name'], n['version'], n['release'])
-                                 for n in [parse_nvr(n) for n in attached_builds[2:]]}
+            builder_el8: {(n['name'], n['version'], n['release'])
+                          for n in [parse_nvr(n) for n in attached_builds if 'el8' in n]},
+            builder_el9: {(n['name'], n['version'], n['release'])
+                          for n in [parse_nvr(n) for n in attached_builds if 'el9' in n]}
         }
         expected = {
             "CVE-2099-1": {"a", "b"},
             "CVE-2099-2": {"c"},
-            "CVE-2099-3": {"b", "c", "d"},
+            "CVE-2099-3": {"a", "b", "c", "d"},
         }
         actual = AsyncErrataUtils.populate_golang_cve_components(golang_cve_names,
                                                                  expected_cve_components,
