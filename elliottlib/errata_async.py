@@ -2,6 +2,7 @@ import asyncio
 import base64
 from typing import Dict, Iterable, List, Set, Union
 from urllib.parse import quote, urlparse
+from aiohttp import ClientResponseError
 
 import aiohttp
 import gssapi
@@ -91,9 +92,19 @@ class AsyncErrataAPI:
         await self._make_request(aiohttp.hdrs.METH_DELETE, path, parse_json=False)
 
     @limit_concurrency(limit=16)
-    async def get_advisories_for_jira(self, jira_key: str):
+    async def get_advisories_for_jira(self, jira_key: str, ignore_not_found=False):
         path = f"/jira_issues/{quote(jira_key)}/advisories.json"
-        return await self._make_request(aiohttp.hdrs.METH_GET, path)
+        try:
+            result = await self._make_request(aiohttp.hdrs.METH_GET, path)
+        except ClientResponseError as e:
+            # When newly created jira bugs are not sync'd to ET we get a 404, 
+            # assume that they are not attached to any advisory
+            if ignore_not_found and e.status == 404:
+                result = []
+            else:
+                raise
+        return result
+
 
     @limit_concurrency(limit=16)
     async def get_advisories_for_bug(self, bz_key: str):
