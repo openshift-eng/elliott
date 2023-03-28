@@ -54,6 +54,8 @@ def find_bugs_qe(runtime, find_bugs_obj, noop, bug_tracker):
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
     click.echo(f"Found {len(bugs)} bugs: {', '.join(sorted(str(b.id) for b in bugs))}")
 
-    release_comment = f"This bug is expected to ship in the next {major_version}.{minor_version} release."
+    release_comment = (
+        "An ART build cycle completed after this fix was made, which usually means it can be"
+        f" expected in the next created {major_version}.{minor_version} nightly and release.")
     for bug in bugs:
         bug_tracker.update_bug_status(bug, 'ON_QA', comment=release_comment, noop=noop)

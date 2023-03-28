@@ -21,7 +21,9 @@ class FindBugsQETestCase(unittest.TestCase):
         })
         flexmock(JIRABugTracker).should_receive("login").and_return(None)
         flexmock(JIRABugTracker).should_receive("search").and_return([jira_bug])
-        expected_comment = 'This bug is expected to ship in the next 4.6 release.'
+        expected_comment = (
+            "An ART build cycle completed after this fix was made, which usually means it can be"
+            " expected in the next created 4.6 nightly and release.")
         flexmock(JIRABugTracker).should_receive("update_bug_status").with_args(
             jira_bug, 'ON_QA', comment=expected_comment, noop=True
         )
