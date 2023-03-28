@@ -102,7 +102,7 @@ class AsyncErrataAPI:
             if ignore_not_found and e.status == 404:
                 result = []
             else:
-                raise(e)
+                raise
         return result
 
 
