@@ -167,14 +167,15 @@ class AsyncErrataUtils:
         parsed_nvrs = [(n['name'], n['version'], n['release']) for n in [parse_nvr(n) for n in attached_builds]]
         go_nvr_map = util.get_golang_container_nvrs(parsed_nvrs, _LOGGER)
 
-        # image advisory should have maximum 2 go build versions - one for etcd and one for all other images
-        # in case of other image advisories, there should only be 1
-        if len(go_nvr_map) > 2:
+        # image advisory should have maximum 3 go build versions - one for etcd and
+        # possibly 2 (rhelX and rhelX+1) for all other images
+        # in case of other image advisories, there should max be 2
+        if len(go_nvr_map) > 3:
             raise ValueError(f"Unexpected go build versions found {go_nvr_map.keys()}. "
-                             "There should not be more than 2: 1 for etcd and 1 for all other images. Please "
-                             "investigate")
+                             "There should not be more than 3: 1 for etcd and maximum 2 for all other images. "
+                             "Please investigate")
 
-        etcd_golang_builder, base_golang_builder = None, None
+        etcd_golang_builder, base_golang_builders = None, []
         for builder_nvr_string in go_nvr_map.keys():
             builder_nvr = parse_nvr(builder_nvr_string)
 
@@ -186,11 +187,11 @@ class AsyncErrataUtils:
             if len(go_nvr_map[builder_nvr_string]) == 1 and 'etcd' in list(go_nvr_map[builder_nvr_string])[0]:
                 etcd_golang_builder = builder_nvr_string
             else:
-                base_golang_builder = builder_nvr_string
+                base_golang_builders.append(builder_nvr_string)
 
-        # Now try to categorize CVEs into either etcd-specific or one that affects all other images
-        # for now we skip etcd and associate every cve with all base_golang build images
-        # TODO: figure out how to find out if a golang CVE only affects etcd
+        # Now try to map CVEs to {etcd, rhelX, rhelX+1} builders
+        # TODO: Figure out how to find out if a golang CVE only affects etcd
+        # For now we map CVEs to base_golang build images
 
         if etcd_golang_builder:
             _LOGGER.warning(f'etcd build found in advisory {go_nvr_map[etcd_golang_builder][0]}, with builder: '
@@ -198,9 +199,12 @@ class AsyncErrataUtils:
                             'with etcd build')
 
         for cve_name in golang_cve_names:
-            expected_cve_components[cve_name] = {nvr[0] for nvr in go_nvr_map[base_golang_builder]}
-            _LOGGER.info(f"Associating golang {cve_name} with all golang "
-                         f"images ({len(go_nvr_map[base_golang_builder])})")
+            nvrs = set()
+            for base_golang_builder in base_golang_builders:
+                nvrs.update({nvr[0] for nvr in go_nvr_map[base_golang_builder]})
+            _LOGGER.info(f"Associating golang {cve_name} with golang "
+                         f"images ({len(nvrs)})")
+            expected_cve_components[cve_name] = nvrs
 
         return expected_cve_components
 
