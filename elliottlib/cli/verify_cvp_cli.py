@@ -159,6 +159,7 @@ async def verify_cvp_cli(runtime: Runtime, all_images, nvrs, include_content_set
         yaml.dump(report, sys.stdout)
     else:
         print_report(report)
+        failed_optional = report.get("sanity_test_optional_checks", {}).get("failed")
         if failed or failed_optional:
             exit(2)
 
