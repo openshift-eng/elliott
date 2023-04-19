@@ -1,3 +1,4 @@
+from typing import Tuple
 import click
 from io import BytesIO
 import koji
@@ -12,6 +13,7 @@ from errata_tool import Erratum
 from elliottlib import brew, constants, exectools, errata
 from elliottlib.cli.common import cli, pass_runtime
 from elliottlib.exceptions import ElliottFatalError, BrewBuildException
+from elliottlib.runtime import Runtime
 from elliottlib.util import (exit_unauthenticated, red_print, green_print)
 
 
@@ -26,7 +28,7 @@ from elliottlib.util import (exit_unauthenticated, red_print, green_print)
               help='Do not query images shipping in other advisories to satisfy bundle references')
 @click.argument("advisories", nargs=-1, type=click.IntRange(1), required=True)
 @pass_runtime
-def verify_attached_operators_cli(runtime, omit_shipped, omit_attached, advisories):
+def verify_attached_operators_cli(runtime: Runtime, omit_shipped: bool, omit_attached: bool, advisories: Tuple[int, ...]):
     """
     Verify attached operator bundle references are shipping or already shipped.
 
@@ -54,7 +56,7 @@ def verify_attached_operators_cli(runtime, omit_shipped, omit_attached, advisori
     fulfill bundle references, as are those attached to advisories specified in the args.
     """
 
-    runtime.initialize()
+    runtime.initialize(mode="images")
     brew_session = koji.ClientSession(runtime.group_config.urls.brewhub or constants.BREW_HUB)
     image_builds = _get_attached_image_builds(brew_session, advisories)
 
@@ -171,11 +173,10 @@ def _download_bundle_csv(bundle_build):
     return csv
 
 
-def _get_shipped_images(runtime, brew_session):
+def _get_shipped_images(runtime: Runtime, brew_session):
     # retrieve all image builds ever shipped for this version (potential operands)
     # NOTE: this will tend to be the slow part, aside from querying ET
-    tag = f"{runtime.branch}-container-released"
-    tags = {tag, tag.replace('-rhel-8-', '-rhel-9-')}  # set of one or two depending
+    tags = {f"{image.branch()}-container-released" for image in runtime.image_metas()}
     released = brew.get_tagged_builds([(tag, None) for tag in tags], build_type='image', event=None, session=brew_session)
     released = brew.get_build_objects([b['build_id'] for b in released], session=brew_session)
     return [b for b in released if _is_image(b)]  # filter out source images
