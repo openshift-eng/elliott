@@ -258,12 +258,12 @@ class TestCategorizeBugsByType(unittest.TestCase):
     def test_categorize_bugs_by_type(self):
         advisory_id_map = {'image': 1, 'rpm': 2, 'extras': 3, 'microshift': 4}
         bugs = [
-            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='foo', component=''),
-            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='bar', component=''),
-            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='buzz', component=''),
-            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True, component=''),
-            flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True, component=''),
-            flexmock(id='OCPBUGS-6', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True, component='MicroShift')
+            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_fake_tracker_bug=lambda: True, whiteboard_component='foo', component=''),
+            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_fake_tracker_bug=lambda: True, whiteboard_component='bar', component=''),
+            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: True, is_fake_tracker_bug=lambda: True, whiteboard_component='buzz', component=''),
+            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: True, component=''),
+            flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: True, component=''),
+            flexmock(id='OCPBUGS-6', is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: True, component='MicroShift')
         ]
         builds_map = {
             'image': {bugs[2].whiteboard_component: None},

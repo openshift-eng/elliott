@@ -283,7 +283,7 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
     for b in tracker_bugs:
         logger.info((b.id, b.whiteboard_component))
 
-    mislabeled_trackers = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
+    mislabeled_trackers = [b.id for b in non_tracker_bugs if b.is_fake_tracker_bug()]
     if mislabeled_trackers:
         logger.warning(f"Bug(s) {mislabeled_trackers} have CVE in description but do not have TrackerBug labels. "
                        "Please investigate.")

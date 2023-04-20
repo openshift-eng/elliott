@@ -68,8 +68,8 @@ class Bug:
     def is_tracker_bug(self):
         raise NotImplementedError
 
-    def is_cve_in_summary(self):
-        return bool(re.search(r'CVE-\d+-\d+', self.summary))
+    def is_fake_tracker_bug(self):
+        raise NotImplementedError
 
     def is_flaw_bug(self):
         return self.product == "Security Response" and self.component == "vulnerability"
@@ -163,6 +163,14 @@ class BugzillaBug(Bug):
         has_whiteboard_component = bool(self.whiteboard_component)
         return has_keywords and has_whiteboard_component
 
+    def is_fake_tracker_bug(self):
+        if self.is_tracker_bug():
+            return False
+        has_cve_in_summary = bool(re.search(r'CVE-\d+-\d+', self.summary))
+        has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
+        has_whiteboard_component = bool(self.whiteboard_component)
+        return has_keywords or has_cve_in_summary or has_whiteboard_component
+
     def all_advisory_ids(self):
         return ErrataBug(self.id).all_advisory_ids
 
@@ -196,6 +204,15 @@ class JIRABug(Bug):
         has_whiteboard_component = bool(self.whiteboard_component)
         has_linked_flaw = bool(self.corresponding_flaw_bug_ids)
         return has_keywords and has_whiteboard_component and has_linked_flaw
+
+    def is_fake_tracker_bug(self):
+        if self.is_tracker_bug():
+            return False
+        has_cve_in_summary = bool(re.search(r'CVE-\d+-\d+', self.summary))
+        has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
+        has_whiteboard_component = bool(self.whiteboard_component)
+        has_linked_flaw = bool(self.corresponding_flaw_bug_ids)
+        return has_keywords or has_cve_in_summary or has_whiteboard_component or has_linked_flaw
 
     @property
     def summary(self):
