@@ -47,11 +47,6 @@ class FindBugsSweep(FindBugsMode):
               type=int, metavar='ADVISORY',
               help="Add found bugs to ADVISORY")
 @common.use_default_advisory_option
-@click.option("--check-builds",
-              default=None,
-              required=False,
-              is_flag=True,
-              help='Attach tracker bugs only if corresponding builds are attached to advisory')
 @click.option("--include-status", 'include_status',
               multiple=True,
               default=None,
@@ -88,7 +83,7 @@ class FindBugsSweep(FindBugsMode):
               help="Don't change anything")
 @click.pass_obj
 @click_coroutine
-async def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
+async def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, include_status, exclude_status,
                               report, output, into_default_advisories, brew_event, cve_only, noop):
     """Find OCP bugs and (optional) add them to ADVISORY.
 
@@ -128,9 +123,6 @@ advisory with the --add option.
     find_bugs_obj = FindBugsSweep(cve_only=cve_only)
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
-
-    if check_builds:
-        logger.warning("--check-builds is ON by default, it will be deprecated in the future")
 
     bugs: type_bug_list = []
     errors = []
@@ -271,14 +263,19 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
         return bugs_by_type
 
     # for 4.x, first sort all non_tracker_bugs
-    non_tracker_bugs = {b for b in bugs if not b.is_tracker_bug()}
+    tracker_bugs = set()
+    non_tracker_bugs = set()
+    for b in bugs:
+        if b.is_tracker_bug():
+            tracker_bugs.add(b)
+        else:
+            non_tracker_bugs.add(b)
     bugs_by_type["extras"] = extras_bugs(non_tracker_bugs)
     remaining = non_tracker_bugs - bugs_by_type["extras"]
     bugs_by_type["microshift"] = {b for b in remaining if b.component and b.component.startswith('MicroShift')}
     remaining = remaining - bugs_by_type["microshift"]
     bugs_by_type["image"] = remaining
 
-    tracker_bugs = [b for b in bugs if b.is_tracker_bug() and b.whiteboard_component]
     logger.info(f"Tracker Bugs found: {len(tracker_bugs)}")
     if not tracker_bugs:
         return bugs_by_type
