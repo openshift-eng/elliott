@@ -47,6 +47,10 @@ class Bug:
     def __init__(self, bug_obj):
         self.bug = bug_obj
 
+    @property
+    def id(self):
+        raise NotImplementedError
+
     def created_days_ago(self):
         created_date = self.creation_time_parsed()
         return (datetime_now() - created_date).days
@@ -75,6 +79,13 @@ class Bug:
         return self.product == "Security Response" and self.component == "vulnerability"
 
     def is_ocp_bug(self):
+        raise NotImplementedError
+
+    def component(self):
+        raise NotImplementedError
+
+    @property
+    def product(self):
         raise NotImplementedError
 
     @staticmethod
@@ -125,7 +136,10 @@ class BugzillaBug(Bug):
 
     def __init__(self, bug_obj):
         super().__init__(bug_obj)
-        self.id = self.bug.id
+
+    @property
+    def id(self):
+        return self.bug.id
 
     @property
     def target_release(self):
@@ -184,7 +198,10 @@ class BugzillaBug(Bug):
 class JIRABug(Bug):
     def __init__(self, bug_obj: Issue):
         super().__init__(bug_obj)
-        self.id = self.bug.key
+
+    @property
+    def id(self):
+        return self.bug.key
 
     @property
     def weburl(self):
@@ -574,7 +591,7 @@ class JIRABugTracker(BugTracker):
         if invalid_bugs:
             logger.warn(f"Cannot fetch bugs from a different project (current project: {self._project}):"
                         f" {invalid_bugs}")
-        bugids = {b for b in bugids if self.looks_like_a_jira_project_bug(b)}
+        bugids = [b for b in bugids if self.looks_like_a_jira_project_bug(b)]
         if not bugids:
             return []
 
@@ -588,7 +605,7 @@ class JIRABugTracker(BugTracker):
             bugs.extend(self._search(query))
 
         if len(bugs) < len(bugids):
-            bugids_not_found = bugids - {b.id for b in bugs}
+            bugids_not_found = set(bugids) - {b.id for b in bugs}
             msg = f"Some bugs could not be fetched ({len(bugids) - len(bugs)}): {bugids_not_found}"
             if not permissive:
                 raise ValueError(msg)
