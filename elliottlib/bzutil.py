@@ -66,7 +66,7 @@ class Bug:
         raise NotImplementedError
 
     def is_tracker_bug(self):
-        return set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
+        raise NotImplementedError
 
     def is_cve_in_summary(self):
         return bool(re.search(r'CVE-\d+-\d+', self.summary))
@@ -158,6 +158,11 @@ class BugzillaBug(Bug):
             return component_name
         return None
 
+    def is_tracker_bug(self):
+        has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
+        has_whiteboard_component = bool(self.whiteboard_component)
+        return has_keywords and has_whiteboard_component
+
     def all_advisory_ids(self):
         return ErrataBug(self.id).all_advisory_ids
 
@@ -185,6 +190,12 @@ class JIRABug(Bug):
     @property
     def status(self):
         return self.bug.fields.status.name
+
+    def is_tracker_bug(self):
+        has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
+        has_whiteboard_component = bool(self.whiteboard_component)
+        has_linked_flaw = bool(self.corresponding_flaw_bug_ids)
+        return has_keywords and has_whiteboard_component and has_linked_flaw
 
     @property
     def summary(self):
