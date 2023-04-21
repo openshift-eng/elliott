@@ -727,22 +727,25 @@ class JIRABugTracker(BugTracker):
             status=status,
             with_target_release=True,
             search_filter=search_filter,
-            custom_query='and "Release Blocker" = "Approved"'
-        )
-        return self._search(query, verbose=verbose, **kwargs)
-
-    def search(self, status, search_filter='default', verbose=False):
-        query = self._query(
-            status=status,
-            search_filter=search_filter
+            custom_query=' and "Release Blocker" = "Approved"',
+            **kwargs
         )
         return self._search(query, verbose=verbose)
 
-    def cve_tracker_search(self, status, search_filter='default', verbose=False):
+    def search(self, status, search_filter='default', verbose=False, **kwargs):
+        query = self._query(
+            status=status,
+            search_filter=search_filter,
+            **kwargs
+        )
+        return self._search(query, verbose=verbose)
+
+    def cve_tracker_search(self, status, search_filter='default', verbose=False, **kwargs):
         query = self._query(
             status=status,
             search_filter=search_filter,
             include_labels=["SecurityTracking"],
+            **kwargs
         )
         return self._search(query, verbose=verbose)
 
@@ -838,15 +841,15 @@ class BugzillaBugTracker(BugTracker):
     def client(self):
         return self._client
 
-    def blocker_search(self, status, search_filter='default', verbose=False):
+    def blocker_search(self, status, search_filter='default', verbose=False, **kwargs):
         query = _construct_query_url(self.config, status, search_filter, flag='blocker+')
         return self._search(query, verbose)
 
-    def search(self, status, search_filter='default', verbose=False):
+    def search(self, status, search_filter='default', verbose=False, **kwargs):
         query = _construct_query_url(self.config, status, search_filter)
         return self._search(query, verbose)
 
-    def cve_tracker_search(self, status, search_filter='default', verbose=False):
+    def cve_tracker_search(self, status, search_filter='default', verbose=False, **kwargs):
         query = _construct_query_url(self.config, status, search_filter)
         query.addKeyword('SecurityTracking')
         return self._search(query, verbose)

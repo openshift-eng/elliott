@@ -30,16 +30,17 @@ class FindBugsMode:
     def exclude_status(self, status: List):
         self.status -= set(status)
 
-    def search(self, bug_tracker_obj: BugTracker, verbose: bool = False):
+    def search(self, bug_tracker_obj: BugTracker, verbose: bool = False, **kwargs):
         func = bug_tracker_obj.cve_tracker_search if self.cve_only else bug_tracker_obj.search
         return func(
             self.status,
-            verbose=verbose
+            verbose=verbose,
+            **kwargs
         )
 
 
 class FindBugsSweep(FindBugsMode):
-    def __init__(self, cve_only: bool):
+    def __init__(self, cve_only: bool = False):
         super().__init__(status={'MODIFIED', 'ON_QA', 'VERIFIED'}, cve_only=cve_only)
 
 
