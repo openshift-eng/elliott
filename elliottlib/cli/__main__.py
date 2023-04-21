@@ -68,6 +68,7 @@ from elliottlib.cli.repair_bugs_cli import repair_bugs_cli
 from elliottlib.cli.find_unconsumed_rpms import find_unconsumed_rpms_cli
 from elliottlib.cli.find_bugs_kernel_cli import find_bugs_kernel_cli
 from elliottlib.cli.find_bugs_kernel_clones_cli import find_bugs_kernel_clones_cli
+from elliottlib.cli.find_bugs_invalid import find_bugs_invalid_cli
 
 # 3rd party
 import click
@@ -483,6 +484,8 @@ cli.add_command(repair_bugs_cli)
 cli.add_command(find_unconsumed_rpms_cli)
 cli.add_command(find_bugs_kernel_cli)
 cli.add_command(find_bugs_kernel_clones_cli)
+cli.add_command(find_bugs_invalid_cli)
+
 
 # -----------------------------------------------------------------------------
 # CLI Entry point
