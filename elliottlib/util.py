@@ -687,6 +687,7 @@ def all_same(items: Iterable[Any]):
     first = next(it, None)
     return all(x == first for x in it)
 
+
 async def get_nvrs_from_payload(pullspec, rhcos_images, logger):
     all_payload_nvrs = {}
     logger.info("Fetching release info...")

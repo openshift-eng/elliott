@@ -120,6 +120,7 @@ def print_advisory_golang(advisory_id, components):
 
     util.pretty_print_nvrs_go(go_nvr_map)
 
+
 async def print_release_golang(pullspec, rhcos_images, components):
     nvr_map = await util.get_nvrs_from_payload(pullspec, rhcos_images, _LOGGER)
     nvrs = [(n, vr_tuple[0], vr_tuple[1]) for n, vr_tuple in nvr_map.items()]
