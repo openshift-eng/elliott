@@ -1,4 +1,6 @@
 import datetime, re, click
+import json
+import asyncio
 from collections import deque
 from itertools import chain
 from multiprocessing import cpu_count
@@ -7,6 +9,7 @@ from sys import getsizeof, stderr
 from typing import Dict, Iterable, List, Optional, Tuple, Sequence, Any
 
 from elliottlib import brew
+from elliottlib import exectools
 from elliottlib.exceptions import BrewBuildException
 
 from errata_tool import Erratum
@@ -632,7 +635,7 @@ def get_golang_rpm_nvrs(nvrs, logger):
 def pretty_print_nvrs_go(go_nvr_map):
     for go_version in sorted(go_nvr_map.keys()):
         nvrs = go_nvr_map[go_version]
-        green_print(f'Following nvrs are built with {go_version}:')
+        green_print(f'* Following nvrs ({len(nvrs)}) are built with {go_version}:')
         for nvr in sorted(nvrs):
             pretty_nvr = '-'.join(nvr)
             print(pretty_nvr)
@@ -683,3 +686,51 @@ def all_same(items: Iterable[Any]):
     it = iter(items)
     first = next(it, None)
     return all(x == first for x in it)
+
+async def get_nvrs_from_payload(pullspec, rhcos_images, logger):
+    all_payload_nvrs = {}
+    logger.info("Fetching release info...")
+    release_export_cmd = f'oc adm release info {pullspec} -o json'
+
+    rc, stdout, stderr = exectools.cmd_gather(release_export_cmd)
+    if rc != 0:
+        # Probably no point in continuing.. can't contact brew?
+        msg = f"Unable to run oc release info: out={stdout}  ; err={stderr}"
+        logger.error(msg)
+        raise RuntimeError(msg)
+
+    payload_json = json.loads(stdout)
+    logger.info("Looping over payload images...")
+    logger.info(f"{len(payload_json['references']['spec']['tags'])} images to check")
+    cmds = [['oc', 'image', 'info', '-o', 'json', tag['from']['name']] for tag in
+            payload_json['references']['spec']['tags']]
+
+    logger.info("Querying image infos...")
+    cmd_results = await asyncio.gather(*[exectools.cmd_gather_async(cmd) for cmd in cmds])
+
+    for image, cmd, cmd_result in zip(payload_json['references']['spec']['tags'], cmds, cmd_results):
+        image_name = image['name']
+        rc, stdout, stderr = cmd_result
+        if rc != 0:
+            # Probably no point in continuing.. can't contact brew?
+            msg = f"Unable to run oc image info: cmd={cmd!r}, out={stdout}  ; err={stderr}"
+            logger.error(msg)
+            raise RuntimeError(msg)
+
+        image_info = json.loads(stdout)
+        labels = image_info['config']['config']['Labels']
+
+        # RHCOS images are not built in brew, so skip them
+        if image_name in rhcos_images:
+            logger.info(f"Skipping rhcos image {image_name}")
+            continue
+
+        if not labels or any(i not in labels for i in ['version', 'release', 'com.redhat.component']):
+            msg = f"For image {image_name} expected labels don't exist"
+            logger.error(msg)
+            raise ValueError(msg)
+        component = labels['com.redhat.component']
+        v = labels['version']
+        r = labels['release']
+        all_payload_nvrs[component] = (v, r)
+    return all_payload_nvrs

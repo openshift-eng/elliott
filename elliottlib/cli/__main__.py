@@ -12,14 +12,13 @@ web service.
 # stdlib
 from multiprocessing import cpu_count
 from multiprocessing.dummy import Pool as ThreadPool
-import asyncio
 import datetime
 import json
 import sys
 from typing import Dict, List
 
 # ours
-from elliottlib import exectools
+from elliottlib import util
 from elliottlib import Runtime
 from elliottlib import rhcos
 import elliottlib.constants
@@ -29,7 +28,7 @@ import elliottlib.errata
 import elliottlib.exceptions
 
 from elliottlib.exceptions import ElliottFatalError
-from elliottlib.util import exit_unauthenticated, green_prefix
+from elliottlib.util import green_prefix
 from elliottlib.util import red_print
 from elliottlib.util import green_print, red_prefix
 from elliottlib.util import yellow_print, yellow_prefix
@@ -209,57 +208,7 @@ written out to summary_results.json.
 
     click.echo("Found {} builds".format(len(all_advisory_nvrs)))
 
-    all_payload_nvrs = {}
-    click.echo("Fetching release info")
-    release_export_cmd = 'oc adm release info {} -o json'.format(payload)
-
-    rc, stdout, stderr = exectools.cmd_gather(release_export_cmd)
-    if rc != 0:
-        # Probably no point in continuing.. can't contact brew?
-        print("Unable to run oc release info: out={}  ; err={}".format(stdout, stderr))
-        exit(1)
-    else:
-        click.echo("Got release info")
-
-    payload_json = json.loads(stdout)
-
-    green_prefix("Looping over payload images: ")
-    click.echo("{} images to check".format(len(payload_json['references']['spec']['tags'])))
-    cmds = [['oc', 'image', 'info', '-o', 'json', tag['from']['name']] for tag in payload_json['references']['spec']['tags']]
-
-    green_prefix("Querying image infos...")
-    cmd_results = await asyncio.gather(*[exectools.cmd_gather_async(cmd) for cmd in cmds])
-
-    for image, cmd, cmd_result in zip(payload_json['references']['spec']['tags'], cmds, cmd_results):
-        click.echo("----")
-        image_name = image['name']
-        rc, stdout, stderr = cmd_result
-        if rc != 0:
-            # Probably no point in continuing.. can't contact brew?
-            red_prefix("Unable to run oc image info: ")
-            red_print(f"cmd={cmd!r}, out={stdout}  ; err={stderr}")
-            exit(1)
-
-        image_info = json.loads(stdout)
-        labels = image_info['config']['config']['Labels']
-
-        # The machine-os-content image doesn't follow the standard
-        # pattern. We need to skip that image when we find it, it is
-        # not attached to advisories.
-        if image_name in rhcos_images:
-            yellow_prefix(f"Skipping rhcos image {image_name}: ")
-            click.echo("Not required for checks")
-            continue
-
-        if not labels or any(i not in labels for i in ['version', 'release', 'com.redhat.component']):
-            red_print(f"For image {image_name} expected labels don't exist")
-            exit(1)
-        component = labels['com.redhat.component']
-        click.echo(f"Payload name: {image_name}")
-        click.echo(f"Brew name: {component}")
-        v = labels['version']
-        r = labels['release']
-        all_payload_nvrs[component] = f"{v}-{r}"
+    all_payload_nvrs = await util.get_nvrs_from_payload(payload, rhcos_images, runtime.logger)
 
     missing_in_errata = {}
     payload_doesnt_match_errata = {}
@@ -275,7 +224,8 @@ written out to summary_results.json.
     green_prefix("Analyzing data: ")
     click.echo("{} images to consider from payload".format(len(all_payload_nvrs)))
 
-    for image, vr in all_payload_nvrs.items():
+    for image, vr_tuple in all_payload_nvrs.items():
+        vr = f"{vr_tuple[0]}-{vr_tuple[1]}"
         imagevr = f"{image}-{vr}"
         yellow_prefix("Cross-checking from payload: ")
         click.echo(imagevr)
