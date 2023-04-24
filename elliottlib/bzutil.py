@@ -638,13 +638,8 @@ class JIRABugTracker(BugTracker):
                 logger.warn(msg)
         return bugs
 
-    def get_bug_remote_links(self, bug: JIRABug):
-        remote_links = self._client.remote_links(bug)
-        link_dict = {}
-        for link in remote_links:
-            if link.__contains__('relationship'):
-                link_dict[link.relationship] = link.object.url
-        return link_dict
+    def get_bug_remote_links(self, bug_id: str):
+        return self._client.remote_links(bug_id)
 
     def create_bug(self, bug_title: str, bug_description: str, target_status: str, keywords: List, noop=False) -> \
             JIRABug:

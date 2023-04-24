@@ -135,7 +135,7 @@ async def cmd_gather_async(cmd, text_mode=True):
 
     logger.debug("Executing:cmd_gather {}".format(cmd_info))
     proc = await asyncio.create_subprocess_exec(
-        *cmd, cwd=cwd,
+        *cmd_list, cwd=cwd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE)
 
