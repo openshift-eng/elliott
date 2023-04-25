@@ -8,6 +8,7 @@ from requests_gssapi import HTTPSPNEGOAuth
 from elliottlib.cli.common import cli
 from elliottlib.constants import errata_drop_url
 from elliottlib.exceptions import ElliottFatalError
+from elliottlib.errata import remove_dependent_advisories
 
 
 @cli.command("advisory-drop", short_help="Drop advisory")
@@ -40,6 +41,7 @@ def advisory_drop_cli(advisory):
             adv.removeJIRAIssues(all_jiras)
         if all_builds:
             adv.removeBuilds(all_builds)
+        remove_dependent_advisories(advisory)
         adv.commit()
 
     # Drop advisory

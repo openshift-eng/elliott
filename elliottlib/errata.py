@@ -801,7 +801,7 @@ def set_blocking_advisory(target_advisory_id, blocking_advisory_id, blocking_sta
     return response.json()
 
 
-def get_blocking_advisories(advisory_id) -> Optional[List]:
+def get_blocking_advisories(advisory_id) -> List:
     """Get a list of blocking advisory ids for a given advisory
     if blocking_advisories are not found in ET response, None is returned
 
@@ -820,4 +820,36 @@ def get_blocking_advisories(advisory_id) -> Optional[List]:
     for k in errata:
         if errata[k]["id"] == advisory_id:
             return errata[k]['blocking_advisories']
-    return None
+    return []
+
+
+def get_dependent_advisories(advisory_id) -> List:
+    """Get a list of depending advisory ids for a given advisory
+    if depending_advisories are not found in ET response, None is returned
+
+    :param advisory_id: advisory number
+    :return: a list of advisory ids
+    """
+    errata = get_advisory(advisory_id)['errata']
+    # This response is unnecessarily nested, so we need to dig into it
+    """
+    "errata": {
+        "rhba": {
+            "id": 110351,
+            "dependent_advisories": [100, 200]
+            ...
+    """
+    for k in errata:
+        if errata[k]["id"] == advisory_id:
+            return errata[k]['dependent_advisories']
+    return []
+
+
+def remove_dependent_advisories(advisory_id):
+    endpoint = f'/api/v1/erratum/{advisory_id}/remove_dependent_errata'
+    for dependent in get_dependent_advisories(advisory_id):
+        data = {"dependent_errata": int(dependent)}
+        response = ErrataConnector()._post(endpoint, data=data)
+        if response.status_code != requests.codes.created:
+            raise IOError(f'Failed to remove dependent {dependent} from {advisory_id}'
+                          f'with code {response.status_code} and error: {response.text}')
