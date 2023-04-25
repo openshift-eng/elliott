@@ -81,6 +81,7 @@ class Bug:
     def is_ocp_bug(self):
         raise NotImplementedError
 
+    @property
     def component(self):
         raise NotImplementedError
 
@@ -140,6 +141,14 @@ class BugzillaBug(Bug):
     @property
     def id(self):
         return self.bug.id
+
+    @property
+    def product(self):
+        return self.bug.product
+
+    @property
+    def component(self):
+        return self.bug.component
 
     @property
     def target_release(self):

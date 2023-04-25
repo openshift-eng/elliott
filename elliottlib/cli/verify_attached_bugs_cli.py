@@ -417,10 +417,11 @@ class BugValidator:
             self._complain(f"Bug <{bug.weburl}|{bug.id}> has status {status}")
 
     def _find_invalid_trackers(self, bugs):
+        logger.info("Checking for invalid tracker bugs")
         # complain about invalid tracker bugs
         for bug in bugs:
             if bug.is_invalid_tracker_bug():
-                self._complain(f"Bug <{bug.weburl}|{bug.id}> looks like a tracker bug but is not. CVE in summary? Missing labels?")
+                self._complain(f"Bug <{bug.weburl}|{bug.id}> is an invalid tracker bug. Please fix")
 
     def _complain(self, problem: str):
         red_print(problem)
