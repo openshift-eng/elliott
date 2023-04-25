@@ -3,7 +3,7 @@ import click
 import sys
 import traceback
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Set
 
 from elliottlib.assembly import assembly_issues_config
 from elliottlib.bzutil import BugTracker, Bug, JIRABug
@@ -16,6 +16,7 @@ from elliottlib.util import green_prefix, green_print, red_prefix, chunk
 
 logger = logutil.getLogger(__name__)
 type_bug_list = List[Bug]
+type_bug_set = Set[Bug]
 
 
 class FindBugsMode:
@@ -47,11 +48,6 @@ class FindBugsSweep(FindBugsMode):
               type=int, metavar='ADVISORY',
               help="Add found bugs to ADVISORY")
 @common.use_default_advisory_option
-@click.option("--check-builds",
-              default=None,
-              required=False,
-              is_flag=True,
-              help='Attach tracker bugs only if corresponding builds are attached to advisory')
 @click.option("--include-status", 'include_status',
               multiple=True,
               default=None,
@@ -88,7 +84,7 @@ class FindBugsSweep(FindBugsMode):
               help="Don't change anything")
 @click.pass_obj
 @click_coroutine
-async def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, check_builds, include_status, exclude_status,
+async def find_bugs_sweep_cli(runtime: Runtime, advisory_id, default_advisory_type, include_status, exclude_status,
                               report, output, into_default_advisories, brew_event, cve_only, noop):
     """Find OCP bugs and (optional) add them to ADVISORY.
 
@@ -128,9 +124,6 @@ advisory with the --add option.
     find_bugs_obj = FindBugsSweep(cve_only=cve_only)
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
-
-    if check_builds:
-        logger.warning("--check-builds is ON by default, it will be deprecated in the future")
 
     bugs: type_bug_list = []
     errors = []
@@ -253,7 +246,7 @@ def get_assembly_bug_ids(runtime, bug_tracker_type):
 
 
 def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], major_version: int = 4):
-    bugs_by_type = {
+    bugs_by_type: Dict[str, type_bug_set] = {
         "rpm": set(),
         "image": set(),
         "extras": set(),
@@ -271,33 +264,42 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
         return bugs_by_type
 
     # for 4.x, first sort all non_tracker_bugs
-    non_tracker_bugs = {b for b in bugs if not b.is_tracker_bug()}
+    tracker_bugs: type_bug_set = set()
+    non_tracker_bugs: type_bug_set = set()
+    fake_trackers: type_bug_set = set()
+
+    for b in bugs:
+        if b.is_tracker_bug():
+            tracker_bugs.add(b)
+        else:
+            non_tracker_bugs.add(b)
+            if b.is_fake_tracker_bug():
+                fake_trackers.add(b)
+
     bugs_by_type["extras"] = extras_bugs(non_tracker_bugs)
     remaining = non_tracker_bugs - bugs_by_type["extras"]
     bugs_by_type["microshift"] = {b for b in remaining if b.component and b.component.startswith('MicroShift')}
     remaining = remaining - bugs_by_type["microshift"]
     bugs_by_type["image"] = remaining
 
-    tracker_bugs = [b for b in bugs if b.is_tracker_bug() and b.whiteboard_component]
-    logger.info(f"Tracker Bugs found: {len(tracker_bugs)}")
+    if fake_trackers:
+        raise ElliottFatalError(f"Bug(s) {[t.id for t in fake_trackers]} look like CVE trackers, but really are not. Please fix.")
+
     if not tracker_bugs:
         return bugs_by_type
 
-    for b in tracker_bugs:
-        logger.info((b.id, b.whiteboard_component))
+    logger.info(f"Tracker Bugs found: {len(tracker_bugs)}")
 
-    mislabeled_trackers = [b.id for b in non_tracker_bugs if b.is_cve_in_summary()]
-    if mislabeled_trackers:
-        logger.warning(f"Bug(s) {mislabeled_trackers} have CVE in description but do not have TrackerBug labels. "
-                       "Please investigate.")
+    for b in tracker_bugs:
+        logger.info(f'Tracker bug, component: {(b.id, b.whiteboard_component)}')
 
     if not advisory_id_map:
         logger.info("Skipping sorting/attaching Tracker Bugs. Advisories with attached builds must be given to "
                     "validate trackers.")
         return bugs_by_type
 
-    found = set()
     logger.info("Validating tracker bugs with builds in advisories..")
+    found = set()
     for kind in bugs_by_type.keys():
         if len(found) == len(tracker_bugs):
             break
@@ -333,7 +335,7 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
     return bugs_by_type
 
 
-def extras_bugs(bugs: type_bug_list) -> type_bug_list:
+def extras_bugs(bugs: type_bug_set) -> type_bug_set:
     # optional operators bugs should be swept to the "extras" advisory
     # a way to identify operator-related bugs is by its "Component" value.
     # temporarily hardcode here until we need to move it to ocp-build-data.

@@ -419,8 +419,8 @@ class BugValidator:
     def _verify_bug_summary(self, bugs):
         # complain about bugs that should be CVE
         for bug in bugs:
-            if bug.is_cve_in_summary() and not bug.is_tracker_bug():
-                self._complain(f"Bug <{bug.weburl}|{bug.id}> has CVE number in summary but does not have tracker keywords (retitle bug to lowercase cve if valid)")
+            if bug.is_fake_tracker_bug():
+                self._complain(f"Bug <{bug.weburl}|{bug.id}> looks like a tracker bug but is not. CVE in summary? Missing labels?")
 
     def _complain(self, problem: str):
         red_print(problem)

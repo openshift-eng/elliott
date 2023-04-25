@@ -9,6 +9,7 @@ from mock import patch, MagicMock, Mock
 
 import elliottlib.cli.find_bugs_sweep_cli as sweep_cli
 from elliottlib import errata
+from elliottlib.exceptions import ElliottFatalError
 from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
 from elliottlib.cli.common import cli, Runtime
 from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
@@ -147,7 +148,12 @@ class FindBugsSweepTestCase(unittest.IsolatedAsyncioTestCase):
     @patch('elliottlib.bzutil.BugzillaBugTracker.filter_attached_bugs')
     def test_find_bugs_sweep_advisory_jira(self, bugzilla_filter_mock, jira_filter_mock):
         runner = CliRunner()
-        bugs = [flexmock(id='BZ1', is_tracker_bug=lambda: False, component='whatever', sub_component='whatever')]
+        bugs = [flexmock(
+            id='BZ1',
+            is_tracker_bug=lambda: False,
+            is_fake_tracker_bug=lambda: False,
+            component='whatever',
+            sub_component='whatever')]
         advisory_id = 123
 
         # common mocks
@@ -258,18 +264,17 @@ class TestCategorizeBugsByType(unittest.TestCase):
     def test_categorize_bugs_by_type(self):
         advisory_id_map = {'image': 1, 'rpm': 2, 'extras': 3, 'microshift': 4}
         bugs = [
-            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='foo', component=''),
-            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='bar', component=''),
-            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: True, is_cve_in_summary=lambda: True, whiteboard_component='buzz', component=''),
-            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True, component=''),
-            flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True, component=''),
-            flexmock(id='OCPBUGS-6', is_tracker_bug=lambda: False, is_cve_in_summary=lambda: True, component='MicroShift')
+            flexmock(id='OCPBUGS-0', is_tracker_bug=lambda: True, is_fake_tracker_bug=lambda: False, whiteboard_component='foo', component=''),
+            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_fake_tracker_bug=lambda: False, whiteboard_component='bar', component=''),
+            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_fake_tracker_bug=lambda: False, whiteboard_component='buzz', component=''),
+            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False, component=''),
+            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False, component='MicroShift'),
         ]
         builds_map = {
             'image': {bugs[2].whiteboard_component: None},
             'rpm': {bugs[1].whiteboard_component: None},
             'extras': {bugs[0].whiteboard_component: None},
-            'microshift': set(),
+            'microshift': dict(),
         }
 
         flexmock(sweep_cli).should_receive("extras_bugs").and_return({bugs[3]})
@@ -277,15 +282,26 @@ class TestCategorizeBugsByType(unittest.TestCase):
             flexmock(errata).should_receive("get_advisory_nvrs").with_args(advisory_id_map[kind]).and_return(
                 builds_map[kind])
         expected = {
-            'rpm': {bugs[1]},
-            'image': {bugs[4], bugs[2]},
-            'extras': {bugs[3], bugs[0]},
+            'rpm': {bugs[1].id},
+            'image': {bugs[2].id},
+            'extras': {bugs[0].id, bugs[3].id},
             'metadata': set(),
-            'microshift': {bugs[5]},
+            'microshift': {bugs[4].id},
         }
 
-        actual = categorize_bugs_by_type(bugs, advisory_id_map, 4)
-        self.assertEqual(expected, actual)
+        queried = categorize_bugs_by_type(bugs, advisory_id_map, 4)
+        for adv in queried:
+            actual = set()
+            for bug in queried[adv]:
+                actual.add(bug.id)
+            self.assertEqual(actual, expected[adv])
+
+    def test_raise_fake_trackers(self):
+        bugs = [flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: True, component='')]
+        advisory_id_map = {'image': 1, 'rpm': 2, 'extras': 3, 'microshift': 4}
+        flexmock(sweep_cli).should_receive("extras_bugs").and_return({bugs[0]})
+        with self.assertRaisesRegex(ElliottFatalError, 'look like CVE trackers'):
+            categorize_bugs_by_type(bugs, advisory_id_map, 4)
 
 
 class TestGenAssemblyBugIDs(unittest.TestCase):

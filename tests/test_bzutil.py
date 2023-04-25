@@ -20,9 +20,9 @@ class TestBug(unittest.TestCase):
         bug_obj = flexmock(id=2)
         self.assertEqual(Bug(bug_obj).bug.id, bug_obj.id)
 
-    def test_is_cve_in_summary(self):
-        bug_true = flexmock(id=1, summary="CVE-2022-0001")
-        self.assertEqual(BugzillaBug(bug_true).is_cve_in_summary(), True)
+    def test_is_fake_tracker_bug(self):
+        bug_true = flexmock(id=1, summary="CVE-2022-0001", keywords=[], whiteboard_component=None)
+        self.assertEqual(BugzillaBug(bug_true).is_fake_tracker_bug(), True)
 
 
 class TestBugTracker(unittest.TestCase):
@@ -141,13 +141,33 @@ class TestJIRABug(unittest.TestCase):
         self.assertEqual(JIRABug(bug2).is_ocp_bug(), True)
 
     def test_is_tracker_bug(self):
-        bug = flexmock(key='OCPBUGS1', fields=flexmock(labels=constants.TRACKER_BUG_KEYWORDS + ['somethingelse']))
+        bug = flexmock(
+            key='OCPBUGS1',
+            fields=flexmock(labels=constants.TRACKER_BUG_KEYWORDS + ['somethingelse', 'pscomponent:my-image', 'flaw:bz#123']))
         expected = True
         actual = JIRABug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
 
-    def test_is_tracker_bug_fail(self):
-        bug = flexmock(key='OCPBUGS1', fields=flexmock(labels=['somethingelse']))
+    def test_is_tracker_bug_missing_keywords(self):
+        bug = flexmock(
+            key='OCPBUGS1',
+            fields=flexmock(labels=['somethingelse', 'pscomponent:my-image', 'flaw:bz#123']))
+        expected = False
+        actual = JIRABug(bug).is_tracker_bug()
+        self.assertEqual(expected, actual)
+
+    def test_is_tracker_bug_missing_pscomponent(self):
+        bug = flexmock(
+            key='OCPBUGS1',
+            fields=flexmock(labels=constants.TRACKER_BUG_KEYWORDS + ['somethingelse', 'flaw:bz#123']))
+        expected = False
+        actual = JIRABug(bug).is_tracker_bug()
+        self.assertEqual(expected, actual)
+
+    def test_is_tracker_bug_missing_flaw(self):
+        bug = flexmock(
+            key='OCPBUGS1',
+            fields=flexmock(labels=constants.TRACKER_BUG_KEYWORDS + ['somethingelse', 'pscomponent:my-image']))
         expected = False
         actual = JIRABug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
@@ -183,24 +203,27 @@ class TestJIRABug(unittest.TestCase):
         bug = JIRABug(flexmock(key=1, fields=flexmock(labels=["foo"])))
         self.assertIsNone(bug.whiteboard_component)
 
-        bug = JIRABug(flexmock(key=1, fields=flexmock(labels=["component: "])))
+        bug = JIRABug(flexmock(key=1, fields=flexmock(labels=["pscomponent: "])))
         self.assertIsNone(bug.whiteboard_component)
 
         for expected in ["something", "openvswitch2.15", "trailing_blank 	"]:
-            bug = JIRABug(flexmock(key=1, fields=flexmock(labels=[f"component: {expected}"])))
+            bug = JIRABug(flexmock(key=1, fields=flexmock(labels=[f"pscomponent: {expected}"])))
             actual = bug.whiteboard_component
             self.assertEqual(actual, expected.strip())
 
 
 class TestBugzillaBug(unittest.TestCase):
     def test_is_tracker_bug(self):
-        bug = flexmock(id='1', keywords=constants.TRACKER_BUG_KEYWORDS)
+        bug = flexmock(
+            id='1',
+            keywords=constants.TRACKER_BUG_KEYWORDS,
+            whiteboard_component='my-image')
         expected = True
         actual = BugzillaBug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
 
     def test_is_tracker_bug_fail(self):
-        bug = flexmock(id='1', keywords=['SomeOtherKeyword'])
+        bug = flexmock(id='1', keywords=['SomeOtherKeyword'], whiteboard_component='my-image')
         expected = False
         actual = BugzillaBug(bug).is_tracker_bug()
         self.assertEqual(expected, actual)
