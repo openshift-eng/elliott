@@ -141,7 +141,7 @@ async def verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bug
     ocp_bugs = []
     logger.info(f'Using {runtime.assembly} assembly to search bugs')
     for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
-        bugs = await get_bugs_sweep(runtime, find_bugs_obj, None, b)
+        bugs = find_bugs_obj.search(bug_tracker_obj=b, verbose=runtime.debug)
         logger.info(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
         ocp_bugs.extend(bugs)
 
