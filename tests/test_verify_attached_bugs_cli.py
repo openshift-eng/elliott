@@ -7,6 +7,7 @@ from elliottlib.cli.verify_attached_bugs_cli import BugValidator
 import elliottlib.cli.verify_attached_bugs_cli as verify_attached_bugs_cli
 from elliottlib.errata_async import AsyncErrataAPI
 from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker
+from elliottlib.cli.find_bugs_sweep_cli import FindBugsSweep
 from flexmock import flexmock
 
 
@@ -21,8 +22,7 @@ class VerifyAttachedBugs(asynctest.TestCase):
         validator = BugValidator(runtime, True)
         self.assertEqual(validator.target_releases, ['4.9.z'])
 
-    @async_patch('elliottlib.cli.verify_attached_bugs_cli.get_bugs_sweep')
-    def test_verify_bugs_with_sweep_cli(self, get_bugs_sweep_mock):
+    def test_verify_bugs_with_sweep_cli(self):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
@@ -48,7 +48,8 @@ class VerifyAttachedBugs(asynctest.TestCase):
             bugs[1]: [depend_on_bugs[0]],
         }
 
-        get_bugs_sweep_mock.return_value = bugs
+        flexmock(JIRABugTracker).should_receive("search").and_return(bugs)
+        flexmock(BugzillaBugTracker).should_receive("search").and_return([])
         flexmock(BugValidator).should_receive("_get_blocking_bugs_for")\
             .and_return(blocking_bugs_map)
 
