@@ -826,7 +826,7 @@ def get_blocking_advisories(advisory_id) -> List[int]:
 
 def get_dependent_advisories(advisory_id) -> List[int]:
     """Get a list of dependent advisory ids for a given advisory
-    Raises IOError if the advisory or blocking_advisories not found
+    Raises IOError if the advisory or dependent_advisories not found
 
     :param advisory_id: advisory number
     :return: a list of advisory ids
