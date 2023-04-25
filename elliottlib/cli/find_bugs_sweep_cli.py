@@ -273,7 +273,7 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
             tracker_bugs.add(b)
         else:
             non_tracker_bugs.add(b)
-            if b.is_fake_tracker_bug():
+            if b.is_invalid_tracker_bug():
                 fake_trackers.add(b)
 
     bugs_by_type["extras"] = extras_bugs(non_tracker_bugs)

@@ -20,9 +20,9 @@ class TestBug(unittest.TestCase):
         bug_obj = flexmock(id=2)
         self.assertEqual(Bug(bug_obj).bug.id, bug_obj.id)
 
-    def test_is_fake_tracker_bug(self):
+    def test_is_invalid_tracker_bug(self):
         bug_true = flexmock(id=1, summary="CVE-2022-0001", keywords=[], whiteboard_component=None)
-        self.assertEqual(BugzillaBug(bug_true).is_fake_tracker_bug(), True)
+        self.assertEqual(BugzillaBug(bug_true).is_invalid_tracker_bug(), True)
 
 
 class TestBugTracker(unittest.TestCase):
