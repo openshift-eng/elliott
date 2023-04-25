@@ -72,7 +72,7 @@ class Bug:
     def is_tracker_bug(self):
         raise NotImplementedError
 
-    def is_fake_tracker_bug(self):
+    def is_invalid_tracker_bug(self):
         raise NotImplementedError
 
     def is_flaw_bug(self):
@@ -81,6 +81,7 @@ class Bug:
     def is_ocp_bug(self):
         raise NotImplementedError
 
+    @property
     def component(self):
         raise NotImplementedError
 
@@ -142,6 +143,14 @@ class BugzillaBug(Bug):
         return self.bug.id
 
     @property
+    def product(self):
+        return self.bug.product
+
+    @property
+    def component(self):
+        return self.bug.component
+
+    @property
     def target_release(self):
         return self.bug.target_release
 
@@ -177,7 +186,7 @@ class BugzillaBug(Bug):
         has_whiteboard_component = bool(self.whiteboard_component)
         return has_keywords and has_whiteboard_component
 
-    def is_fake_tracker_bug(self):
+    def is_invalid_tracker_bug(self):
         if self.is_tracker_bug():
             return False
         has_cve_in_summary = bool(re.search(r'CVE-\d+-\d+', self.summary))
@@ -222,7 +231,7 @@ class JIRABug(Bug):
         has_linked_flaw = bool(self.corresponding_flaw_bug_ids)
         return has_keywords and has_whiteboard_component and has_linked_flaw
 
-    def is_fake_tracker_bug(self):
+    def is_invalid_tracker_bug(self):
         if self.is_tracker_bug():
             return False
         has_cve_in_summary = bool(re.search(r'CVE-\d+-\d+', self.summary))

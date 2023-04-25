@@ -8,10 +8,10 @@ from elliottlib import bzutil, constants, logutil
 from elliottlib.cli.common import cli, click_coroutine, pass_runtime
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib.runtime import Runtime
-from elliottlib.util import (exit_unauthenticated, minor_version_tuple, red_print)
-from elliottlib.bzutil import Bug, BugTracker
+from elliottlib.util import (minor_version_tuple, red_print)
+from elliottlib.bzutil import Bug
 from elliottlib.cli.attach_cve_flaws_cli import get_flaws
-from elliottlib.cli.find_bugs_sweep_cli import get_bugs_sweep, FindBugsSweep, categorize_bugs_by_type
+from elliottlib.cli.find_bugs_sweep_cli import FindBugsSweep, categorize_bugs_by_type
 
 logger = logutil.getLogger(__name__)
 
@@ -141,7 +141,7 @@ async def verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bug
     ocp_bugs = []
     logger.info(f'Using {runtime.assembly} assembly to search bugs')
     for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
-        bugs = await get_bugs_sweep(runtime, find_bugs_obj, None, b)
+        bugs = find_bugs_obj.search(bug_tracker_obj=b, verbose=runtime.debug)
         logger.info(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
         ocp_bugs.extend(bugs)
 
@@ -171,7 +171,7 @@ class BugValidator:
 
     def validate(self, non_flaw_bugs: List[Bug], verify_bug_status: bool, no_verify_blocking_bugs: bool):
         non_flaw_bugs = self.filter_bugs_by_release(non_flaw_bugs, complain=True)
-        self._verify_bug_summary(non_flaw_bugs)
+        self._find_invalid_trackers(non_flaw_bugs)
         if not no_verify_blocking_bugs:
             blocking_bugs_for = self._get_blocking_bugs_for(non_flaw_bugs)
             self._verify_blocking_bugs(blocking_bugs_for)
@@ -416,11 +416,12 @@ class BugValidator:
                 status = f"{bug.status}: {bug.resolution}"
             self._complain(f"Bug <{bug.weburl}|{bug.id}> has status {status}")
 
-    def _verify_bug_summary(self, bugs):
-        # complain about bugs that should be CVE
+    def _find_invalid_trackers(self, bugs):
+        logger.info("Checking for invalid tracker bugs")
+        # complain about invalid tracker bugs
         for bug in bugs:
-            if bug.is_fake_tracker_bug():
-                self._complain(f"Bug <{bug.weburl}|{bug.id}> looks like a tracker bug but is not. CVE in summary? Missing labels?")
+            if bug.is_invalid_tracker_bug():
+                self._complain(f"Bug <{bug.weburl}|{bug.id}> is an invalid tracker bug. Please fix")
 
     def _complain(self, problem: str):
         red_print(problem)

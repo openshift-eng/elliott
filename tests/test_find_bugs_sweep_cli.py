@@ -151,7 +151,7 @@ class FindBugsSweepTestCase(unittest.IsolatedAsyncioTestCase):
         bugs = [flexmock(
             id='BZ1',
             is_tracker_bug=lambda: False,
-            is_fake_tracker_bug=lambda: False,
+            is_invalid_tracker_bug=lambda: False,
             component='whatever',
             sub_component='whatever')]
         advisory_id = 123
@@ -264,11 +264,11 @@ class TestCategorizeBugsByType(unittest.TestCase):
     def test_categorize_bugs_by_type(self):
         advisory_id_map = {'image': 1, 'rpm': 2, 'extras': 3, 'microshift': 4}
         bugs = [
-            flexmock(id='OCPBUGS-0', is_tracker_bug=lambda: True, is_fake_tracker_bug=lambda: False, whiteboard_component='foo', component=''),
-            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_fake_tracker_bug=lambda: False, whiteboard_component='bar', component=''),
-            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_fake_tracker_bug=lambda: False, whiteboard_component='buzz', component=''),
-            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False, component=''),
-            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False, component='MicroShift'),
+            flexmock(id='OCPBUGS-0', is_tracker_bug=lambda: True, is_invalid_tracker_bug=lambda: False, whiteboard_component='foo', component=''),
+            flexmock(id='OCPBUGS-1', is_tracker_bug=lambda: True, is_invalid_tracker_bug=lambda: False, whiteboard_component='bar', component=''),
+            flexmock(id='OCPBUGS-2', is_tracker_bug=lambda: True, is_invalid_tracker_bug=lambda: False, whiteboard_component='buzz', component=''),
+            flexmock(id='OCPBUGS-3', is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False, component=''),
+            flexmock(id='OCPBUGS-4', is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False, component='MicroShift'),
         ]
         builds_map = {
             'image': {bugs[2].whiteboard_component: None},
@@ -297,7 +297,7 @@ class TestCategorizeBugsByType(unittest.TestCase):
             self.assertEqual(actual, expected[adv])
 
     def test_raise_fake_trackers(self):
-        bugs = [flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: True, component='')]
+        bugs = [flexmock(id='OCPBUGS-5', is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: True, component='')]
         advisory_id_map = {'image': 1, 'rpm': 2, 'extras': 3, 'microshift': 4}
         flexmock(sweep_cli).should_receive("extras_bugs").and_return({bugs[0]})
         with self.assertRaisesRegex(ElliottFatalError, 'look like CVE trackers'):

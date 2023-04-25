@@ -7,6 +7,7 @@ from elliottlib.cli.verify_attached_bugs_cli import BugValidator
 import elliottlib.cli.verify_attached_bugs_cli as verify_attached_bugs_cli
 from elliottlib.errata_async import AsyncErrataAPI
 from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker
+from elliottlib.cli.find_bugs_sweep_cli import FindBugsSweep
 from flexmock import flexmock
 
 
@@ -21,8 +22,7 @@ class VerifyAttachedBugs(asynctest.TestCase):
         validator = BugValidator(runtime, True)
         self.assertEqual(validator.target_releases, ['4.9.z'])
 
-    @async_patch('elliottlib.cli.verify_attached_bugs_cli.get_bugs_sweep')
-    def test_verify_bugs_with_sweep_cli(self, get_bugs_sweep_mock):
+    def test_verify_bugs_with_sweep_cli(self):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
@@ -33,22 +33,23 @@ class VerifyAttachedBugs(asynctest.TestCase):
 
         bugs = [
             flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
-                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False),
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False),
             flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
-                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False)
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False)
         ]
         depend_on_bugs = [
             flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='MODIFIED',
-                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False),
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False),
             flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending',
-                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False)
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False)
         ]
         blocking_bugs_map = {
             bugs[0]: [depend_on_bugs[1]],
             bugs[1]: [depend_on_bugs[0]],
         }
 
-        get_bugs_sweep_mock.return_value = bugs
+        flexmock(JIRABugTracker).should_receive("search").and_return(bugs)
+        flexmock(BugzillaBugTracker).should_receive("search").and_return([])
         flexmock(BugValidator).should_receive("_get_blocking_bugs_for")\
             .and_return(blocking_bugs_map)
 
@@ -72,15 +73,15 @@ class VerifyAttachedBugs(asynctest.TestCase):
 
         bugs = [
             flexmock(id="OCPBUGS-1", target_release=['4.6.z'], depends_on=['OCPBUGS-4'],
-                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False),
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False),
             flexmock(id="OCPBUGS-2", target_release=['4.6.z'], depends_on=['OCPBUGS-3'],
-                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False)
+                     status='ON_QA', is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False)
         ]
         depend_on_bugs = [
             flexmock(id="OCPBUGS-3", target_release=['4.7.z'], status='MODIFIED',
-                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False),
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False),
             flexmock(id="OCPBUGS-4", target_release=['4.7.z'], status='Release Pending',
-                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_fake_tracker_bug=lambda: False)
+                     is_ocp_bug=lambda: True, is_tracker_bug=lambda: False, is_invalid_tracker_bug=lambda: False)
         ]
         blocking_bugs_map = {
             bugs[0]: [depend_on_bugs[1]],
