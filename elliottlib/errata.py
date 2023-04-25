@@ -801,13 +801,14 @@ def set_blocking_advisory(target_advisory_id, blocking_advisory_id, blocking_sta
     return response.json()
 
 
-def get_blocking_advisories(advisory_id) -> List:
+def get_blocking_advisories(advisory_id) -> List[int]:
     """Get a list of blocking advisory ids for a given advisory
-    if blocking_advisories are not found in ET response, None is returned
+    Raises IOError if the advisory or blocking_advisories not found
 
     :param advisory_id: advisory number
     :return: a list of advisory ids
     """
+    advisory_id = int(advisory_id)
     errata = get_advisory(advisory_id)['errata']
     # This response is unnecessarily nested, so we need to dig into it
     """
@@ -820,16 +821,17 @@ def get_blocking_advisories(advisory_id) -> List:
     for k in errata:
         if errata[k]["id"] == advisory_id:
             return errata[k]['blocking_advisories']
-    return []
+    raise IOError(f'Failed to find blocking advisories for {advisory_id} in ET response: {errata}')
 
 
-def get_dependent_advisories(advisory_id) -> List:
-    """Get a list of depending advisory ids for a given advisory
-    if depending_advisories are not found in ET response, None is returned
+def get_dependent_advisories(advisory_id) -> List[int]:
+    """Get a list of dependent advisory ids for a given advisory
+    Raises IOError if the advisory or blocking_advisories not found
 
     :param advisory_id: advisory number
     :return: a list of advisory ids
     """
+    advisory_id = int(advisory_id)
     errata = get_advisory(advisory_id)['errata']
     # This response is unnecessarily nested, so we need to dig into it
     """
@@ -842,7 +844,7 @@ def get_dependent_advisories(advisory_id) -> List:
     for k in errata:
         if errata[k]["id"] == advisory_id:
             return errata[k]['dependent_advisories']
-    return []
+    raise IOError(f'Failed to find dependent advisories for {advisory_id} in ET response: {errata}')
 
 
 def remove_dependent_advisories(advisory_id):
