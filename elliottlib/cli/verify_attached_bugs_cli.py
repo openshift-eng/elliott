@@ -364,8 +364,17 @@ class BugValidator:
         logger.debug(f"Candidate Blocker bugs found: {[b.id for b in blockers]}")
         blocking_bugs = {}
         for bug in blockers:
-            next_target = any(is_next_target(target) for target in bug.target_release)
-            if bug.is_ocp_bug() and next_target and managed_by_art(bug):
+            if not bug.is_ocp_bug() or not managed_by_art(bug):
+                continue
+            target_release = []
+            # A bug without `Target Version` shouldn't be considered as a blocking bug
+            try:
+                target_release = bug.target_release
+            except ValueError as err:  # bug.target_release will raise ValueError if Target Version is not set
+                if "does not have `Target Version` field set" not in str(err):
+                    raise
+            next_target = any(is_next_target(target) for target in target_release)
+            if next_target:
                 blocking_bugs[bug.id] = bug
         logger.info(f"Blocking bugs for next target release ({next_version[0]}.{next_version[1]}): "
                     f"{list(blocking_bugs.keys())}")
