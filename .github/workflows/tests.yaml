@@ -10,6 +10,8 @@ jobs:
     container: fedora:37
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: '0'
       - name: Set up Python 3.8
         uses: actions/setup-python@v4
         with:
