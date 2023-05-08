@@ -57,9 +57,6 @@ pass_runtime = click.make_pass_decorator(Runtime)
     '--json', 'as_json', metavar='FILE_NAME',
     help='Dump new builds as JSON array to a file (or "-" for stdout)')
 @click.option(
-    '--allow-attached', metavar='FILE_NAME', is_flag=True,
-    help='Allow images that have been attached to other advisories (default to True when "--build/-b" is used)')
-@click.option(
     '--remove', required=False, is_flag=True,
     help='Remove builds from advisories instead of adding (default to False)')
 @click.option(
@@ -82,7 +79,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
     help='(For rpms) Only sweep member rpms')
 @click_coroutine
 @pass_runtime
-async def find_builds_cli(runtime: Runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json, allow_attached,
+async def find_builds_cli(runtime: Runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json,
                           remove, clean, no_cdn_repos, payload, non_payload, include_shipped, member_only: bool):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
@@ -187,8 +184,10 @@ PRESENT advisory. Here are some examples:
             unshipped_nvrps,
             lambda nvrp: elliottlib.errata.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
         )
-        if not allow_attached:
-            unshipped_builds = _filter_out_inviable_builds(kind, unshipped_builds, elliottlib.errata)
+        previous = len(unshipped_builds)
+        unshipped_builds = _filter_out_inviable_builds(kind, unshipped_builds, elliottlib.errata)
+        if len(unshipped_builds) != previous:
+            click.echo(f'Filtered out {previous - len(unshipped_builds)} inviable build(s)')
 
         _json_dump(as_json, unshipped_builds, kind, tag_pv_map)
 
