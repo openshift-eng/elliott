@@ -189,6 +189,9 @@ class BugzillaBug(Bug):
     def is_invalid_tracker_bug(self):
         if self.is_tracker_bug():
             return False
+        if 'WeaknessTracking' in self.keywords:
+            # See e.g. https://bugzilla.redhat.com/show_bug.cgi?id=2092289. This bug is not a CVE tracker
+            return False
         has_cve_in_summary = bool(re.search(r'CVE-\d+-\d+', self.summary))
         has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
         has_whiteboard_component = bool(self.whiteboard_component)
@@ -233,6 +236,9 @@ class JIRABug(Bug):
 
     def is_invalid_tracker_bug(self):
         if self.is_tracker_bug():
+            return False
+        if 'WeaknessTracking' in self.keywords:
+            # See e.g. https://issues.redhat.com/browse/OCPBUGS-5804. This is not to be regarded a tracking bug.
             return False
         has_cve_in_summary = bool(re.search(r'CVE-\d+-\d+', self.summary))
         has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
