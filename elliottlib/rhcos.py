@@ -50,14 +50,14 @@ def release_url(runtime, version, arch="x86_64", private=False):
 
 # this is hard to test with retries, so wrap testable method
 @retry(reraise=True, stop=stop_after_attempt(10), wait=wait_fixed(3))
-def latest_build_id(version, arch="x86_64", private=False):
-    return _latest_build_id(version, arch, private)
+def latest_build_id(runtime, version, arch="x86_64", private=False):
+    return _latest_build_id(runtime, version, arch, private)
 
 
-def _latest_build_id(version, arch="x86_64", private=False):
+def _latest_build_id(runtime, version, arch="x86_64", private=False):
     # returns the build id string or None (or raise exception)
     # (may want to return "schema-version" also if this ever gets more complex)
-    with request.urlopen(f"{release_url(version, arch, private)}/builds.json") as req:
+    with request.urlopen(f"{release_url(runtime, version, arch, private)}/builds.json") as req:
         data = json.loads(req.read().decode())
     if not data["builds"]:
         return None
@@ -104,17 +104,47 @@ def get_build_from_payload(payload_pullspec):
     out, _ = exectools.cmd_assert(["oc", "image", "info", "-o", "json", rhcos_pullspec])
     image_info = json.loads(out)
     build_id = image_info["config"]["config"]["Labels"]["version"]
-    arch = image_info["config"]["config"]["Labels"]["architecture"]
+    arch = image_info["config"]["architecture"]
     return build_id, arch
+
+
+def get_build_from_pullspec(rhcos_pullspec):
+    out, _ = exectools.cmd_assert(["oc", "image", "info", "-o", "json", rhcos_pullspec])
+    image_info = json.loads(out)
+    build_id = image_info["config"]["config"]["Labels"]["version"]
+    arch = image_info["config"]["architecture"]
+    return build_id, arch
+
+
+def get_rpms(runtime, build_id, version, arch, private=''):
+    commitmeta = get_build_meta(runtime, build_id, version, arch, private, meta_type="commitmeta")
+    rpm_list = commitmeta.get("rpmostree.rpmdb.pkglist")
+
+    # items like kernel-rt that are only present in extensions are not listed in the os
+    # metadata, so we need to add them in separately.
+    commitmeta = get_build_meta(runtime, build_id, version, arch, private, meta_type="meta")
+    try:
+        extensions = commitmeta['extensions']['manifest']
+    except KeyError:
+        extensions = dict()  # no extensions before 4.8; ignore missing
+    for name, vra in extensions.items():
+        # e.g. "kernel-rt-core": "4.18.0-372.32.1.rt7.189.el8_6.x86_64"
+        # or "qemu-img": "15:6.2.0-11.module+el8.6.0+16538+01ea313d.6.x86_64"
+        version, ra = vra.rsplit('-', 1)
+        # if epoch is not specified, just use 0. for some reason it's included in the version in
+        # RHCOS metadata as "epoch:version"; but if we query brew for it that way, it does not
+        # like the format, so we separate it out from the version.
+        epoch, version = version.split(':', 1) if ':' in version else ('0', version)
+        release, arch = ra.rsplit('.', 1)
+        rpm_list.append([name, epoch, version, release, arch])
+
+    return rpm_list
 
 
 def get_rpm_nvrs(runtime, build_id, version, arch, private=''):
     stream_name = f"{arch}{'-priv' if private else ''}"
     try:
-        commitmeta = get_build_meta(runtime, build_id, version, arch, private, meta_type="commitmeta")
-        rpm_list = commitmeta.get("rpmostree.rpmdb.pkglist")
-        if not rpm_list:
-            raise Exception(f"no pkglist in {commitmeta}")
+        rpm_list = get_rpms(runtime, build_id, version, arch, private)
 
     except Exception as ex:
         problem = f"{stream_name}: {ex}"
