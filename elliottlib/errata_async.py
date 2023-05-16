@@ -2,13 +2,11 @@ import asyncio
 import base64
 from typing import Dict, Iterable, List, Set, Union
 from urllib.parse import quote, urlparse
-from aiohttp import ClientResponseError
+from aiohttp import ClientResponseError, ClientTimeout
 
 import aiohttp
 import gssapi
 from elliottlib.exectools import limit_concurrency
-import re
-import semver
 
 from elliottlib.rpm_utils import parse_nvr
 from elliottlib import constants, util, logutil
@@ -19,7 +17,8 @@ _LOGGER = logutil.getLogger(__name__)
 class AsyncErrataAPI:
     def __init__(self, url: str = constants.errata_url):
         self._errata_url = urlparse(url).geturl()
-        self._session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True))
+        self._timeout = ClientTimeout(total=60 * 15)  # 900 seconds (15 min)
+        self._session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True), timeout=self._timeout)
         self._gssapi_client_ctx = None
         self._headers = {
             "Content-Type": "application/json",
