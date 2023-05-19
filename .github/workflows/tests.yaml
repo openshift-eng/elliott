@@ -1,0 +1,24 @@
+name: Unit tests
+
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: fedora:37
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: '0'
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      - name: Install packages
+        run: dnf install -y gcc krb5-devel
+      - name: Create venv and install dependencies
+        run: make venv
+      - name: Run tests
+        run: make test
