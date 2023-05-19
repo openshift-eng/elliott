@@ -194,8 +194,7 @@ class BugzillaBug(Bug):
             return False
         has_cve_in_summary = bool(re.search(r'CVE-\d+-\d+', self.summary))
         has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
-        has_whiteboard_component = bool(self.whiteboard_component)
-        return has_keywords or has_cve_in_summary or has_whiteboard_component
+        return has_keywords or has_cve_in_summary
 
     def all_advisory_ids(self):
         return ErrataBug(self.id).all_advisory_ids
@@ -242,9 +241,8 @@ class JIRABug(Bug):
             return False
         has_cve_in_summary = bool(re.search(r'CVE-\d+-\d+', self.summary))
         has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
-        has_whiteboard_component = bool(self.whiteboard_component)
         has_linked_flaw = bool(self.corresponding_flaw_bug_ids)
-        return has_keywords or has_cve_in_summary or has_whiteboard_component or has_linked_flaw
+        return has_keywords or has_cve_in_summary or has_linked_flaw
 
     @property
     def summary(self):
