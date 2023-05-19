@@ -65,6 +65,7 @@ from elliottlib.cli.advisory_commons_cli import advisory_commons_cli
 from elliottlib.cli.find_bugs_blocker_cli import find_bugs_blocker_cli
 from elliottlib.cli.remove_bugs_cli import remove_bugs_cli
 from elliottlib.cli.repair_bugs_cli import repair_bugs_cli
+from elliottlib.cli.find_unconsumed_rpms import find_unconsumed_rpms_cli
 
 # 3rd party
 import click
@@ -477,6 +478,7 @@ cli.add_command(advisory_commons_cli)
 cli.add_command(find_bugs_blocker_cli)
 cli.add_command(remove_bugs_cli)
 cli.add_command(repair_bugs_cli)
+cli.add_command(find_unconsumed_rpms_cli)
 
 
 # -----------------------------------------------------------------------------
