@@ -202,6 +202,7 @@ def _missing_references(runtime, bundles, available_shasums, omit_attached):
     ]
     green_print(f"Found {len(bundles)} bundles with {len(references)} references")
     missing = set()
+    missing_builds_by_advisory = {}
     for image_pullspec, build in references:
         # validate an image reference from a bundle is shipp(ed/ing) to the right repo
         repo, digest = image_pullspec.rsplit("@", 1)  # split off the @sha256:...
@@ -227,6 +228,11 @@ def _missing_references(runtime, bundles, available_shasums, omit_attached):
                 # if we passed above gates, it is attached to some other advisory;
                 # but cmdline option says to count that as missing.
                 red_print(f"{context} only found in omitted advisory {attached_advisories}")
+                for a in attached_advisories:
+                    if a in missing_builds_by_advisory:
+                        missing_builds_by_advisory[a].append(ref)
+                    else:
+                        missing_builds_by_advisory[a] = [ref]
             else:
                 green_print(f"{context} attached to separate advisory {attached_advisories}")
                 continue  # do not count it as missing
@@ -234,6 +240,13 @@ def _missing_references(runtime, bundles, available_shasums, omit_attached):
             # advisory lookup for brew build failed, fall through to count as missing
             red_print(f"{context} failed to look up in errata-tool: {ex}")
         missing.add(ref)  # ref is nvr if lookup worked, part of pullspec if not
+    if missing_builds_by_advisory:
+        print('To fix missing builds in other advisories:')
+        for a in missing_builds_by_advisory:
+            # -b build1 -b build2 -b build3
+            builds_args = " ".join([f"-b {b}" for b in missing_builds_by_advisory[a]])
+            print(f'Remove builds: find-builds -k image -a {a} {builds_args} --remove')
+            print('Add builds: Same command but without --remove and -a `<target_advisory>`')
     return missing
 
 
