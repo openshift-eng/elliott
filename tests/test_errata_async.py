@@ -62,7 +62,7 @@ class TestAsyncErrataAPI(IsolatedAsyncioTestCase):
             "ProductVersion2": {"builds": [{"c-1.0.0-1": {}}]}
         }
         actual = await api.get_builds(1)
-        _make_request.assert_awaited_once_with(ANY, "GET", "/api/v1/erratum/1/builds_list")
+        _make_request.assert_awaited_once_with(ANY, "GET", "/api/v1/erratum/1/builds")
         self.assertEqual(actual, _make_request.return_value)
 
     @patch("aiohttp.ClientSession", autospec=True)
@@ -74,7 +74,7 @@ class TestAsyncErrataAPI(IsolatedAsyncioTestCase):
             "ProductVersion2": {"builds": [{"c-1.0.0-1": {}}]}
         }
         actual = await api.get_builds_flattened(1)
-        _make_request.assert_awaited_once_with(ANY, "GET", "/api/v1/erratum/1/builds_list")
+        _make_request.assert_awaited_once_with(ANY, "GET", "/api/v1/erratum/1/builds")
         self.assertEqual(actual, {"a-1.0.0-1", "b-1.0.0-1", "c-1.0.0-1"})
 
     @patch("aiohttp.ClientSession", autospec=True)
