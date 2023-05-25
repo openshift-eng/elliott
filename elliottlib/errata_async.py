@@ -50,7 +50,9 @@ class AsyncErrataAPI:
         return await self._make_request(aiohttp.hdrs.METH_GET, path)
 
     async def get_builds(self, advisory: Union[int, str]):
-        path = f"/api/v1/erratum/{quote(str(advisory))}/builds_list"
+        # As of May 25, 2023, /api/v1/erratum/{id}/builds_list doesn't return all builds.
+        # Use /api/v1/erratum/{id}/builds instead.
+        path = f"/api/v1/erratum/{quote(str(advisory))}/builds"
         return await self._make_request(aiohttp.hdrs.METH_GET, path)
 
     async def get_builds_flattened(self, advisory: Union[int, str]) -> Set[str]:
