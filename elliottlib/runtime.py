@@ -13,7 +13,7 @@ import click
 import yaml
 
 from elliottlib import brew, constants, gitdata, logutil, util
-from elliottlib.assembly import assembly_basis_event, assembly_group_config
+from elliottlib.assembly import AssemblyTypes, assembly_basis_event, assembly_group_config, assembly_type
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.imagecfg import ImageMetadata
 from elliottlib.model import Missing, Model
@@ -59,6 +59,7 @@ class Runtime(object):
         self.assembly: Optional[str] = 'stream'
         self.assembly_basis_event: Optional[int] = None
         self.releases_config: Optional[Model] = None
+        self.assembly_type = AssemblyTypes.STREAM
 
         for key, val in kwargs.items():
             self.__dict__[key] = val
@@ -218,7 +219,7 @@ class Runtime(object):
         strict_mode = True
         if not self.assembly or self.assembly in ['stream', 'test']:
             strict_mode = False
-
+        self.assembly_type = assembly_type(self.get_releases_config(), self.assembly)
         self.assembly_basis_event = assembly_basis_event(self.get_releases_config(), self.assembly, strict=strict_mode)
         if self.assembly_basis_event:
             if self.brew_event:
