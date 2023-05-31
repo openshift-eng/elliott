@@ -170,12 +170,12 @@ async def get_bugs_sweep(runtime: Runtime, find_bugs_obj, brew_event, bug_tracke
         bugs = qualified_bugs
 
     # filter bugs that have been swept into other advisories
-    logger.info("Filtering bugs that haven't been attached to any advisories...")
-    attached_bugs = await bug_tracker.filter_attached_bugs(bugs)
-    if attached_bugs:
-        attached_bug_ids = {b.id for b in attached_bugs}
-        logger.warning("The following bugs have been attached to advisories: %s", attached_bug_ids)
-        bugs = [b for b in bugs if b.id not in attached_bug_ids]
+    # logger.info("Filtering bugs that haven't been attached to any advisories...")
+    # attached_bugs = await bug_tracker.filter_attached_bugs(bugs)
+    # if attached_bugs:
+    #     attached_bug_ids = {b.id for b in attached_bugs}
+    #     logger.warning("The following bugs have been attached to advisories: %s", attached_bug_ids)
+    #     bugs = [b for b in bugs if b.id not in attached_bug_ids]
 
     included_bug_ids, excluded_bug_ids = get_assembly_bug_ids(runtime, bug_tracker_type=bug_tracker.type)
     if included_bug_ids & excluded_bug_ids:

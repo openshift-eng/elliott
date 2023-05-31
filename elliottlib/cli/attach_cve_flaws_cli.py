@@ -77,10 +77,10 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
             if flaw_bugs:
                 _update_advisory(runtime, advisory, flaw_bugs, flaw_bug_tracker, noop)
                 # Associate builds with CVEs
-                runtime.logger.info('Associating CVEs with builds')
-                await errata_api.login()
-                await associate_builds_with_cves(errata_api, advisory, flaw_bugs, attached_trackers,
-                                                 tracker_flaws, noop)
+                # runtime.logger.info('Associating CVEs with builds')
+                # await errata_api.login()
+                # await associate_builds_with_cves(errata_api, advisory, flaw_bugs, attached_trackers,
+                #                                  tracker_flaws, noop)
             else:
                 pass  # TODO: convert RHSA back to RHBA
         except Exception as e:
