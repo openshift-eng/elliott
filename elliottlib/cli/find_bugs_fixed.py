@@ -30,12 +30,17 @@ async def find_bugs_fixed_cli(runtime: Runtime):
     major, minor = runtime.get_major_minor()
     find_bugs_obj = FindBugsSweep()
     bug_tracker = runtime.bug_trackers('jira')
-
+    runtime.logger.info("Searching bugs..")
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
+    runtime.logger.info(f"Found open bugs {len(bugs)}")
     tracker_bugs = [b for b in bugs if b.is_cve_in_summary()]
+    runtime.logger.info(f"Processing bugs({len(tracker_bugs)}) that look like tracker bugs")
     for b in tracker_bugs:
+        print(b.id, b.whiteboard_component)
+        c = b.whiteboard_component
+        if c and not c.endswith('-container'):
+            runtime.logger.info(f"Bug is an rpm bug")
         links = bug_tracker.get_bug_remote_links(b.id)
-
         for link in links:
             url = link.raw['object']['url']
             if not 'github.com/openshift/' in url:
@@ -47,71 +52,10 @@ async def find_bugs_fixed_cli(runtime: Runtime):
             try:
                 earliest_release = await PrInfo(repo, pr_id, f'{major}.{minor}', None, None).run()
             except Exception as e:
-                print(f'Error: {e}')
+                print(e)
                 continue
-            if earliest_release != '4.12.14':
-                print(f'Bug PR#{pr_id} {b.id}({b.status}) {b.summary} -- shipped in {earliest_release}')
+            print(f'Bug PR#{pr_id} {b.id}({b.status}) {b.summary} -- shipped in {earliest_release}')
 
-    # report = {}
-    # actionable_bugs = {}
-    # for b in look_like_trackers:
-    #     # "CVE-2022-23525 CVE-2022-23526 special-resource-operator-container: various flaws [openshift-4]"
-    #     # so we want to match CVE-2022-23525, CVE-2022-23526 into a list
-    #     # and get special-resource-operator-container as the component
-    #
-    #     match = re.search(r'((?:CVE-\d+-\d+ )+)((?:\w+-?)+):', b.summary)
-    #     component = match.group(2)
-    #     cve_list = [c.strip() for c in match.group(1).split()]
-    #
-    #     cve_url = "https://access.redhat.com/hydra/rest/securitydata/cve/{cve_name}.json"
-    #
-    #     flaw_ids = []
-    #     for cve in cve_list:
-    #         url = cve_url.format(cve_name=cve)
-    #         response = requests.get(url)
-    #         response.raise_for_status()
-    #         flaw_id = response.json()['bugzilla']['id']
-    #         flaw_ids.append(int(flaw_id))
-    #
-    #     issues = []
-    #     labels = []
-    #     if not b.is_tracker_bug():
-    #         issues.append(f"Missing tracker labels.")
-    #     if not b.whiteboard_component:
-    #         issues.append(f"Missing component label.")
-    #         labels.append(f"pscomponent:{component}")
-    #     if not b.corresponding_flaw_bug_ids:
-    #         issues.append(f"Missing flaw bug label.")
-    #         labels.extend([f"flaw:bz#{i}" for i in flaw_ids])
-    #     elif not set(flaw_ids).issubset(set(b.corresponding_flaw_bug_ids)):
-    #         issues.append(f"Flaw bug labels not found. Expected: {flaw_ids} to be in {b.corresponding_flaw_bug_ids}.")
-    #
-    #     if issues:
-    #         report[b.id] = {'issues': ' '.join(issues), 'labels': labels}
-    #         actionable_bugs[b.id] = b
-    #
-    # click.echo(f'Found {len(report)} bugs that are invalid')
-    # click.echo(json.dumps(report, indent=4))
-    #
-    # if not fix:
-    #     return
-    #
-    # for bug_id, data in report.items():
-    #     labels = data['labels']
-    #     if labels:
-    #         bug = actionable_bugs[bug_id]
-    #         click.echo(f'{bug.id}({bug.status}) - {bug.summary}')
-    #         if click.confirm(f"Add labels {labels} to bug {bug_id}?"):
-    #             bug = actionable_bugs[bug_id]
-    #             bug.bug.fields.labels.extend(labels)
-    #             bug.bug.update(fields={"labels": bug.bug.fields.labels})
-    #             click.echo(f"Added labels")
-
-
-    # bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug,
-    #                             with_target_release=False, custom_query=' AND "Target Version" is EMPTY AND '
-    #                                                                     'component != "Release"')
-    #click.echo(f'Found {len(bugs)} bugs with status={find_bugs_obj.status} and no Target Version set')
 
 RC_ARCH_TO_RHCOS_ARCH = {
     'amd64': 'x86_64',
@@ -123,15 +67,21 @@ RC_ARCH_TO_RHCOS_ARCH = {
 RELEASE_CONTROLLER_URL = Template('https://${arch}.ocp.releases.ci.openshift.org')
 GITHUB_API_OPENSHIFT = "https://api.github.com/repos/openshift"
 
+mappings_by_version = {}
+
 def github_distgit_mappings(version: str) -> dict:
     """
     Function to get the GitHub to Distgit mappings present in a particular OCP version.
 
     :version: OCP version
     """
+    global mappings_by_version
+    if version in mappings_by_version:
+        return mappings_by_version[version]
 
     rc, out, err = exectools.cmd_gather(
-        f"doozer --disable-gssapi -g openshift-{version} --assembly stream images:print --short '{{upstream_public}}: {{name}}'")
+        f"doozer --disable-gssapi -g openshift-{version} --assembly stream --brew-event 42 images:print --short '{{"
+        f"upstream_public}}: {{name}}'")
 
     if rc != 0:
         if "koji.GSSAPIAuthError" in err:
@@ -155,6 +105,7 @@ def github_distgit_mappings(version: str) -> dict:
     if not mappings:
         logger.warning('No github-distgit mapping found in %s', version)
         raise RuntimeError("No data from doozer command for github-distgit mapping")
+    mappings_by_version[version] = mappings
     return mappings
 
 def get_image_stream_tag(distgit_name: str, version: str):
@@ -204,13 +155,7 @@ class PrInfo:
         self.header = {"Authorization": f"token {os.environ['GITHUB_PERSONAL_ACCESS_TOKEN']}"}
 
     def get_distgit(self):
-        try:
-            mappings = github_distgit_mappings(self.version)
-        except Exception as e:
-            print('Exception raised while getting github/distgit mappings: %s', e)
-            print(f'Could not retrieve distgit name for {self.repo_name}')
-            return None
-
+        mappings = github_distgit_mappings(self.version)
         if self.repo_name not in mappings:
             print(f'Unable to find the distgit repo associated with `{self.repo_name}`: '
                         f'please check the query and try again')
