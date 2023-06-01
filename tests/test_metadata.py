@@ -3,7 +3,7 @@ import unittest
 import re
 import datetime
 
-from mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from elliottlib.metadata import Metadata
 from elliottlib.brew import BuildStates

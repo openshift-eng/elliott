@@ -1,6 +1,6 @@
 import base64
 from unittest import IsolatedAsyncioTestCase
-from mock import ANY, AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 from elliottlib.rpm_utils import parse_nvr
 from elliottlib.errata_async import AsyncErrataAPI, AsyncErrataUtils
 from elliottlib import constants
@@ -9,16 +9,17 @@ from elliottlib import constants
 class TestAsyncErrataAPI(IsolatedAsyncioTestCase):
     @patch("aiohttp.ClientSession", autospec=True)
     @patch("gssapi.SecurityContext", autospec=True)
-    async def test_login(self, SecurityContext: Mock, _):
+    async def test_generate_auth_header(self, SecurityContext: Mock, _):
         client_ctx = SecurityContext.return_value
         client_ctx.step.return_value = b"faketoken"
         api = AsyncErrataAPI("https://errata.example.com")
-        await api.login()
+        actual = api._generate_auth_header()
         client_ctx.step.assert_called_once_with(b"")
-        self.assertEqual(api._headers["Authorization"], 'Negotiate ' + base64.b64encode(b"faketoken").decode())
+        self.assertEqual(actual, 'Negotiate ' + base64.b64encode(b"faketoken").decode())
 
+    @patch("elliottlib.errata_async.AsyncErrataAPI._generate_auth_header", return_value='Negotiate abcdef')
     @patch("aiohttp.ClientSession")
-    async def test_make_request(self, session_mock: AsyncMock):
+    async def test_make_request(self, session_mock: AsyncMock, _generate_auth_header: Mock):
         request = session_mock.return_value.request
         fake_response = request.return_value.__aenter__.return_value
         fake_response.json.return_value = {"result": "fake"}
@@ -32,7 +33,8 @@ class TestAsyncErrataAPI(IsolatedAsyncioTestCase):
         fake_response.read.return_value = b"daedbeef"
         fake_response.raise_for_status.reset_mock()
         actual = await api._make_request("GET", "/api/path", headers=headers, parse_json=False)
-        request.assert_called_once_with("GET", "https://errata.example.com/api/path", headers=headers)
+        expected_headers = {**api._headers, **headers, **{"Authorization": 'Negotiate abcdef'}}
+        request.assert_called_once_with("GET", "https://errata.example.com/api/path", headers=expected_headers)
         fake_response.raise_for_status.assert_called_once_with()
         fake_response.read.assert_awaited_once_with()
         actual = await api._make_request("GET", "/api/path", parse_json=False)

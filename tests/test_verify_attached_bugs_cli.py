@@ -1,17 +1,16 @@
-import asynctest
-from asynctest import patch as async_patch
 from click.testing import CliRunner
 from errata_tool import Erratum
+from unittest.mock import patch
 from elliottlib.cli.common import cli, Runtime
 from elliottlib.cli.verify_attached_bugs_cli import BugValidator
 import elliottlib.cli.verify_attached_bugs_cli as verify_attached_bugs_cli
 from elliottlib.errata_async import AsyncErrataAPI
 from elliottlib.bzutil import JIRABugTracker, BugzillaBugTracker
-from elliottlib.cli.find_bugs_sweep_cli import FindBugsSweep
 from flexmock import flexmock
+from unittest import IsolatedAsyncioTestCase
 
 
-class VerifyAttachedBugs(asynctest.TestCase):
+class VerifyAttachedBugs(IsolatedAsyncioTestCase):
     async def test_validator_target_release(self):
         runtime = Runtime()
         flexmock(Runtime).should_receive("get_errata_config").and_return({})
@@ -58,8 +57,8 @@ class VerifyAttachedBugs(asynctest.TestCase):
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status MODIFIED',
                       result.output)
 
-    @async_patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
-    @async_patch('elliottlib.errata_async.AsyncErrataAPI.login')
+    @patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
+    @patch('elliottlib.errata_async.AsyncErrataAPI._generate_auth_header')
     def test_verify_attached_bugs_cli_fail(self, *_):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
@@ -103,8 +102,8 @@ class VerifyAttachedBugs(asynctest.TestCase):
         self.assertIn('Regression possible: ON_QA bug OCPBUGS-2 is a backport of bug OCPBUGS-3 which has status '
                       'MODIFIED', result.output)
 
-    @async_patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
-    @async_patch('elliottlib.errata_async.AsyncErrataAPI.login')
+    @patch('elliottlib.cli.verify_attached_bugs_cli.BugValidator.verify_bugs_multiple_advisories')
+    @patch('elliottlib.cli.verify_attached_bugs_cli.AsyncErrataAPI')
     def test_verify_attached_bugs_cli_fail_on_type(self, *_):
         runner = CliRunner()
         flexmock(Runtime).should_receive("initialize")
@@ -147,7 +146,7 @@ class VerifyAttachedBugs(asynctest.TestCase):
                       result.output)
 
 
-class TestBugValidator(asynctest.TestCase):
+class TestBugValidator(IsolatedAsyncioTestCase):
     async def test_get_attached_bugs_jira(self):
         runtime = Runtime()
         jira_bug_map = {
@@ -227,7 +226,3 @@ class TestBugValidator(asynctest.TestCase):
         }
         self.assertEqual(actual, expected)
         await validator.close()
-
-
-if __name__ == '__main__':
-    asynctest.main()

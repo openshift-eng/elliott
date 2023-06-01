@@ -1,11 +1,9 @@
 import traceback
 import unittest
-from asynctest import patch as async_patch
-from datetime import datetime, timezone
 
 from click.testing import CliRunner
 from flexmock import flexmock
-from mock import patch, MagicMock, Mock
+from unittest.mock import patch, MagicMock, Mock
 
 import elliottlib.cli.find_bugs_sweep_cli as sweep_cli
 from elliottlib import errata
@@ -115,7 +113,7 @@ class FindBugsSweepTestCase(unittest.IsolatedAsyncioTestCase):
 
     @patch('elliottlib.bzutil.JIRABugTracker.filter_attached_bugs')
     @patch('elliottlib.bzutil.BugzillaBugTracker.filter_attached_bugs')
-    @async_patch('elliottlib.cli.find_bugs_sweep_cli.get_sweep_cutoff_timestamp')
+    @patch('elliottlib.cli.find_bugs_sweep_cli.get_sweep_cutoff_timestamp')
     def test_find_bugs_sweep_brew_event(self, *_):
         runner = CliRunner()
         bugs = [flexmock(id='BZ1', status='ON_QA')]

@@ -1,6 +1,6 @@
 import unittest
 import os
-from mock import patch
+from unittest.mock import patch
 from click.testing import CliRunner
 from elliottlib.cli.common import cli, Runtime
 from elliottlib.cli.find_bugs_qe_cli import FindBugsQE

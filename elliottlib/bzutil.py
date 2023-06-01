@@ -759,7 +759,6 @@ class JIRABugTracker(BugTracker):
     async def filter_attached_bugs(self, bugs: Iterable):
         bugs = list(bugs)
         api = AsyncErrataAPI()
-        await api.login()
         results = await asyncio.gather(*[api.get_advisories_for_jira(bug.id, ignore_not_found=True) for bug in bugs])
         attached_bugs = [bug for bug, advisories in zip(bugs, results) if advisories]
         await api.close()
@@ -984,7 +983,6 @@ class BugzillaBugTracker(BugTracker):
     async def filter_attached_bugs(self, bugs: Iterable):
         bugs = list(bugs)
         api = AsyncErrataAPI()
-        await api.login()
         results = await asyncio.gather(*[api.get_advisories_for_bug(bug.id) for bug in bugs])
         attached_bugs = [bug for bug, advisories in zip(bugs, results) if advisories]
         await api.close()

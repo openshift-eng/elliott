@@ -18,29 +18,29 @@ class AsyncErrataAPI:
     def __init__(self, url: str = constants.errata_url):
         self._errata_url = urlparse(url).geturl()
         self._timeout = ClientTimeout(total=60 * 15)  # 900 seconds (15 min)
+        self._errata_gssapi_name = gssapi.Name(f"HTTP@{urlparse(self._errata_url).hostname}", gssapi.NameType.hostbased_service)
+        self._gssapi_flags = [gssapi.RequirementFlag.out_of_sequence_detection]
         self._session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=32, force_close=True), timeout=self._timeout)
-        self._gssapi_client_ctx = None
         self._headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
 
-    async def login(self):
-        if self._gssapi_client_ctx:
-            return  # already logged in
-        server_name = gssapi.Name(f"HTTP@{urlparse(self._errata_url).hostname}", gssapi.NameType.hostbased_service)
-        client_ctx = gssapi.SecurityContext(name=server_name, usage='initiate')
-        out_token = client_ctx.step(b"")
-        self._gssapi_client_ctx = client_ctx
-        self._headers["Authorization"] = 'Negotiate ' + base64.b64encode(out_token).decode()
-
     async def close(self):
         await self._session.close()
 
+    def _generate_auth_header(self):
+        client_ctx = gssapi.SecurityContext(name=self._errata_gssapi_name, usage='initiate', flags=self._gssapi_flags)
+        out_token = client_ctx.step(b"")
+        return f'Negotiate {base64.b64encode(out_token).decode()}'
+
     async def _make_request(self, method: str, path: str, parse_json: bool = True, **kwargs) -> Union[Dict, bytes]:
-        if "headers" not in kwargs:
-            kwargs["headers"] = self._headers
-        async with self._session.request(method, self._errata_url + path, **kwargs) as resp:
+        auth_header = self._generate_auth_header()
+        headers = self._headers.copy()
+        headers["Authorization"] = auth_header
+        if "headers" in kwargs:
+            headers.update(kwargs.pop("headers"))
+        async with self._session.request(method, self._errata_url + path, headers=headers, **kwargs) as resp:
             resp.raise_for_status()
             result = await (resp.json() if parse_json else resp.read())
         return result

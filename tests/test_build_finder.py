@@ -1,7 +1,7 @@
 import unittest
 
-from mock import MagicMock, Mock
-from mock.mock import patch
+from unittest.mock import MagicMock, Mock
+from unittest.mock import patch
 
 from elliottlib.model import Model
 from elliottlib.build_finder import BuildFinder

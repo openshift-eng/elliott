@@ -4,7 +4,7 @@ from elliottlib.brew import Build
 import elliottlib
 from flexmock import flexmock
 import json
-import mock
+from unittest import mock
 
 
 class TestFindBuildsCli(unittest.TestCase):

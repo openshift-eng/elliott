@@ -2,7 +2,7 @@
 Test errata models/controllers
 """
 import datetime
-import mock
+from unittest import mock
 import json
 from flexmock import flexmock
 import errata_tool

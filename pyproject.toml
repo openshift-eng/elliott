@@ -72,8 +72,6 @@ repository = "https://github.com/openshift-eng/elliott.git"
 tests = [
     # test reqs
     "flexmock",
-    "mock>=4.0.3",
-    "asynctest>=0.13.0",
     # tox reqs
     "coverage>=5.3",
     "flake8>=3.8.4",
