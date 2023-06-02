@@ -72,7 +72,6 @@ async def verify_attached_bugs_cli(runtime: Runtime, verify_bug_status: bool, ad
 async def verify_attached_bugs(runtime: Runtime, verify_bug_status: bool, advisory_id_map: Dict[str, int], verify_flaws:
                                bool, no_verify_blocking_bugs: bool, skip_multiple_advisories_check: bool):
     validator = BugValidator(runtime, output="text")
-    await validator.errata_api.login()
     advisory_bug_map = validator.get_attached_bugs(list(advisory_id_map.values()))
     bugs = {b for bugs in advisory_bug_map.values() for b in bugs}
 

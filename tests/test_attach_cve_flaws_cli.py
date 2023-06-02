@@ -1,7 +1,5 @@
 import unittest
-from mock import AsyncMock, Mock, patch
-
-import asynctest
+from unittest.mock import AsyncMock, Mock, patch
 
 from elliottlib.bzutil import BugzillaBug
 from elliottlib import constants
@@ -9,7 +7,7 @@ from elliottlib.cli import attach_cve_flaws_cli
 from elliottlib.errata_async import AsyncErrataAPI
 
 
-class TestAttachCVEFlawsCLI(asynctest.TestCase):
+class TestAttachCVEFlawsCLI(unittest.IsolatedAsyncioTestCase):
     def test_get_updated_advisory_rhsa(self):
         boilerplate = {
             'security_reviewer': 'some reviewer',

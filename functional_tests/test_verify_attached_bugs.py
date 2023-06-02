@@ -2,13 +2,12 @@ import asyncio
 import unittest
 from collections import namedtuple
 
-from mock import MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from functional_tests import constants
 import subprocess
 
 from elliottlib.cli.verify_attached_bugs_cli import BugValidator
-from elliottlib import bzutil
 
 
 class VerifyBugs(unittest.TestCase):
@@ -55,9 +54,7 @@ class VerifyBugs(unittest.TestCase):
         # Create event loop
         loop = asyncio.get_event_loop()
 
-        # Login with errata tool
         bv = BugValidator(self.runtime_fixture())
-        loop.run_until_complete(bv.errata_api.login())
 
         # Get attached bugs
         result = loop.run_until_complete(bv.get_attached_bugs([60085]))
@@ -74,9 +71,6 @@ class VerifyBugs(unittest.TestCase):
         bv = BugValidator(self.runtime_fixture())
         bv.product = "OpenShift Container Platform"
         bv.target_releases = ['4.5.0', '4.5.z']
-
-        # Login with errata tool
-        loop.run_until_complete(bv.errata_api.login())
 
         # Get attached bugs
         result = loop.run_until_complete(bv.get_attached_bugs([60089]))
@@ -100,9 +94,6 @@ class VerifyBugs(unittest.TestCase):
         bv = BugValidator(self.runtime_fixture())
         bv.product = "OpenShift Container Platform"
         bv.target_releases = ['4.5.0', '4.5.z']
-
-        # Login with errata tool
-        loop.run_until_complete(bv.errata_api.login())
 
         # Get attached bugs
         result = loop.run_until_complete(bv.get_attached_bugs([60089]))

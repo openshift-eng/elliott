@@ -1,11 +1,9 @@
-import asyncio
-import asynctest
 import logging
 import unittest
 import xmlrpc.client
 from datetime import datetime, timezone
 
-import mock
+from unittest import mock
 import requests
 from flexmock import flexmock
 
@@ -414,7 +412,7 @@ class TestBugzillaBug(unittest.TestCase):
         self.assertListEqual([1, 2, 4, 5, 7, 8], [bug.id for bug in actual])
 
 
-class TestBZUtil(asynctest.TestCase):
+class TestBZUtil(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         logging.disable(logging.CRITICAL)
 

@@ -5,7 +5,7 @@ Test the brew related functions/classes
 from flexmock import flexmock
 import platform
 import unittest
-import mock
+from unittest import mock
 
 from elliottlib import exceptions, constants, brew, errata
 from tests import test_structures

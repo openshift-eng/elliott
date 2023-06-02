@@ -6,9 +6,8 @@ Test functions related to controlled command execution
 import asyncio
 import unittest
 
-import asynctest
 from flexmock import flexmock
-import mock
+from unittest import mock
 
 from elliottlib import exectools
 
@@ -149,7 +148,7 @@ class TestCmdExec(unittest.TestCase):
         self.assertRaises(IOError, exectools.cmd_assert, "/usr/bin/false", 3, 1)
 
 
-class TestGather(asynctest.TestCase):
+class TestGather(unittest.IsolatedAsyncioTestCase):
     """
     """
 
