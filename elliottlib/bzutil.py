@@ -239,6 +239,12 @@ class JIRABug(Bug):
         if 'WeaknessTracking' in self.keywords:
             # See e.g. https://issues.redhat.com/browse/OCPBUGS-5804. This is not to be regarded a tracking bug.
             return False
+        if 'art:cloned-kernel-bug' in self.keywords:
+            # Bugs for advance-shipped kernel builds should not be regarded as a tracker. They might look like one,
+            # but they are not invalid.
+            # Context in this thread: https://redhat-internal.slack.com/archives/C04SCM5AYE4/p1685524912511489?thread_ts=1685489306.568039&cid=C04SCM5AYE4
+            # This is likely not the end state, but at least for the time being.
+            return False
         has_cve_in_summary = bool(re.search(r'CVE-\d+-\d+', self.summary))
         has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
         has_linked_flaw = bool(self.corresponding_flaw_bug_ids)
