@@ -313,6 +313,11 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
             # which applies to all our golang images
             packages.append(constants.GOLANG_BUILDER_CVE_COMPONENT)
 
+        if kind == 'microshift':
+            # microshift is special since it has a separate advisory, and it's build is attached
+            # after payload is promoted. So do not pre-emptively complain
+            packages.append('microshift')
+
         for bug in tracker_bugs:
             package_name = bug.whiteboard_component
             if package_name in packages:
