@@ -112,7 +112,7 @@ class FindBugsKernelClonesCli:
         issue_bug_ids: Dict[str, int] = {}
         for issue in issues:
             # extract bug id from labels: ["art:bz#12345"] -> 12345
-            bug_id = next(map(lambda m: int(m[1]), filter(bool, map(lambda label: re.fullmatch(r"art:bz#(\d+)", label), issue.fields.labels))), None)
+            bug_id = next(map(lambda m: int(m[1]), filter(bool, map(lambda label: re.fullmatch(r"art:bz#?(\d+)", label), issue.fields.labels))), None)
             if not bug_id:
                 raise ValueError(f"Jira clone {issue.key} doesn't have the required `art:bz#N` label")
             issue_bug_ids[issue.key] = bug_id
