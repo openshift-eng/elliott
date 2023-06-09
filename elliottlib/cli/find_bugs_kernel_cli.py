@@ -14,6 +14,7 @@ from elliottlib.cli.common import cli, click_coroutine
 from elliottlib.config_model import KernelBugSweepConfig
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import green_print
+from elliottlib.bzutil import JIRABugTracker
 
 
 class FindBugsKernelCli:
@@ -254,7 +255,7 @@ class FindBugsKernelCli:
             "description": description,
             "issuetype": {"name": "Bug"},
             "versions": [{"name": ocp_target_version[:ocp_target_version.rindex(".")]}],
-            "customfield_12319940": [{
+            f"{JIRABugTracker.FIELD_TARGET_VERSION}": [{
                 "name": ocp_target_version,
             }],
             "labels": ["art:cloned-kernel-bug", f"art:bz#{bug.id}"],

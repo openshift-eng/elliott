@@ -11,6 +11,7 @@ from elliottlib.assembly import AssemblyTypes
 from elliottlib.cli.find_bugs_kernel_cli import FindBugsKernelCli
 from elliottlib.config_model import KernelBugSweepConfig
 from elliottlib.runtime import Runtime
+from elliottlib.bzutil import JIRABugTracker
 
 
 class TestFindBugsKernelCli(IsolatedAsyncioTestCase):
@@ -101,7 +102,7 @@ class TestFindBugsKernelCli(IsolatedAsyncioTestCase):
             "description": "Cloned from https://example.com/1 by OpenShift ART Team:\n----\nfake description 1",
             "issuetype": {"name": "Bug"},
             "versions": [{"name": "4.14"}],
-            "customfield_12319940": [{"name": "4.14.z"}],
+            f"{JIRABugTracker.FIELD_TARGET_VERSION}": [{"name": "4.14.z"}],
             "labels": ["art:cloned-kernel-bug", "art:bz#1", "art:kmaint:TRACKER-1"]
         }
         jira_client.create_issue.assert_called_once_with(expected_fields)
@@ -144,7 +145,7 @@ class TestFindBugsKernelCli(IsolatedAsyncioTestCase):
             "description": "Cloned from https://example.com/1 by OpenShift ART Team:\n----\nfake description 1",
             "issuetype": {"name": "Bug"},
             "versions": [{"name": "4.14"}],
-            "customfield_12319940": [{"name": "4.14.z"}],
+            f"{JIRABugTracker.FIELD_TARGET_VERSION}": [{"name": "4.14.z"}],
             "labels": ["art:cloned-kernel-bug", "art:bz#1", "art:kmaint:TRACKER-1"]
         }
         found_issues[0].update.assert_called_once_with(expected_fields)
@@ -229,7 +230,7 @@ TRACKER-1	2	N/A	Verified	test bug 2
             "description": "Cloned from https://example.com/12345 by OpenShift ART Team:\n----\nfake description 12345",
             "issuetype": {"name": "Bug"},
             "versions": [{"name": "4.12"}],
-            "customfield_12319940": [{"name": "4.12.z"}],
+            f"{JIRABugTracker.FIELD_TARGET_VERSION}": [{"name": "4.12.z"}],
             "labels": ["art:cloned-kernel-bug", "art:bz#12345", "art:kmaint:TRACKER-1"],
         }
         self.assertEqual(actual, expected)
