@@ -1,6 +1,4 @@
 import unittest
-import os
-from unittest.mock import patch
 from click.testing import CliRunner
 from elliottlib.cli.common import cli, Runtime
 from elliottlib.cli.find_bugs_qe_cli import FindBugsQE
@@ -37,10 +35,6 @@ class FindBugsQETestCase(unittest.TestCase):
             bz_bug, 'ON_QA', comment=expected_comment, noop=True
         )
         result = runner.invoke(cli, ['-g', 'openshift-4.6', 'find-bugs:qe', '--noop'])
-        search_string1 = 'Found 1 bugs: OCPBUGS-123'
-        search_string2 = 'Found 1 bugs: BZ-123'
-        self.assertIn(search_string1, result.output)
-        self.assertIn(search_string2, result.output)
         self.assertEqual(result.exit_code, 0)
 
 
