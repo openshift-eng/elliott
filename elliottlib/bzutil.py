@@ -568,7 +568,7 @@ class BugTracker:
 class JIRABugTracker(BugTracker):
     JIRA_BUG_BATCH_SIZE = 50
     FIELD_BLOCKED_BY_BZ = 'customfield_12322152'  # "Blocked by Bugzilla Bug"
-    FIELD_TARGET_VERSION = 'customfield_12319940'  # "Target Version"
+    FIELD_TARGET_VERSION = 'customfield_12323140'  # "Target Version"
     FIELD_RELEASE_BLOCKER = 'customfield_12319743'  # "Release Blocker"
     FIELD_BLOCKED_REASON = 'customfield_12316544'  # "Blocked Reason"
     FIELD_SEVERITY = 'customfield_12316142'  # "Severity"
