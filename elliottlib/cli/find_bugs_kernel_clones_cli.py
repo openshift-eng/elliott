@@ -12,6 +12,7 @@ from elliottlib.cli.common import cli, click_coroutine
 from elliottlib.config_model import KernelBugSweepConfig
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import green_print
+from elliottlib.bzutil import JIRABugTracker
 
 
 class FindBugsKernelClonesCli:
@@ -78,9 +79,10 @@ class FindBugsKernelClonesCli:
             components = {c.name for c in issue.fields.components}
             if config.target_jira.component not in components:
                 raise ValueError(f"Jira {key} is not set to component {config.target_jira.component}")
-            target_releases = {t.name for t in issue.fields.customfield_12319940}
+            target_versions = getattr(issue.fields, JIRABugTracker.FIELD_TARGET_VERSION)
+            target_releases = {t.name for t in target_versions}
             if config.target_jira.target_release not in target_releases:
-                raise ValueError(f"Jira {key} has invalid target version: {issue.fields.customfield_12319940.name}")
+                raise ValueError(f"Jira {key} has invalid target version: {target_versions}")
             found_issues.append(issue)
         return found_issues
 

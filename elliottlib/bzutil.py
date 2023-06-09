@@ -278,8 +278,7 @@ class JIRABug(Bug):
 
     @property
     def blocked_by_bz(self):
-        # field "Blocked by Bugzilla Bug"
-        url = self.bug.fields.customfield_12322152
+        url = getattr(self.bug.fields, JIRABugTracker.FIELD_BLOCKED_BY_BZ)
         if not url:
             return None
         bug_id = re.search(r"id=(\d+)", url)
@@ -289,8 +288,7 @@ class JIRABug(Bug):
 
     @property
     def target_release(self):
-        # field "Target Version"
-        tr_field = self.bug.fields.customfield_12319940
+        tr_field = getattr(self.bug.fields, JIRABugTracker.FIELD_TARGET_VERSION)
         if not tr_field:
             raise ValueError(f'bug {self.id} does not have `Target Version` field set')
         return [x.name for x in tr_field]
@@ -351,24 +349,27 @@ class JIRABug(Bug):
 
     def _get_release_blocker(self):
         # release blocker can be ['None','Approved'=='+','Proposed'=='?','Rejected'=='-']
-        if self.bug.fields.customfield_12319743:
-            return self.bug.fields.customfield_12319743.value == 'Approved'
+        field = getattr(self.bug.fields, JIRABugTracker.FIELD_RELEASE_BLOCKER)
+        if field:
+            return field.value == 'Approved'
         return False
 
     def _get_blocked_reason(self):
-        if self.bug.fields.customfield_12316544:
-            return self.bug.fields.customfield_12316544.value
+        field = getattr(self.bug.fields, JIRABugTracker.FIELD_BLOCKED_REASON)
+        if field:
+            return field.value
         return None
 
     def _get_severity(self):
-        if self.bug.fields.customfield_12316142:
-            if "Urgent" in self.bug.fields.customfield_12316142.value:
+        field = getattr(self.bug.fields, JIRABugTracker.FIELD_SEVERITY)
+        if field:
+            if "Urgent" in field.value:
                 return "Urgent"
-            if "High" in self.bug.fields.customfield_12316142.value:
+            if "High" in field.value:
                 return "High"
-            if "Medium" in self.bug.fields.customfield_12316142.value:
+            if "Medium" in field.value:
                 return "Medium"
-            if "Low" in self.bug.fields.customfield_12316142.value:
+            if "Low" in field.value:
                 return "Low"
         return None
 
@@ -566,6 +567,11 @@ class BugTracker:
 
 class JIRABugTracker(BugTracker):
     JIRA_BUG_BATCH_SIZE = 50
+    FIELD_BLOCKED_BY_BZ = 'customfield_12322152'  # "Blocked by Bugzilla Bug"
+    FIELD_TARGET_VERSION = 'customfield_12323140'  # "Target Version"
+    FIELD_RELEASE_BLOCKER = 'customfield_12319743'  # "Release Blocker"
+    FIELD_BLOCKED_REASON = 'customfield_12316544'  # "Blocked Reason"
+    FIELD_SEVERITY = 'customfield_12316142'  # "Severity"
 
     @staticmethod
     def get_config(runtime) -> Dict:
@@ -647,7 +653,7 @@ class JIRABugTracker(BugTracker):
             'issuetype': {'name': 'Bug'},
             'components': [{'name': 'Release'}],
             'versions': [{'name': self.config.get('version')[0]}],  # Affects Version/s
-            'customfield_12319940': [{'name': self.config.get('target_release')[0]}],  # Target Version
+            self.FIELD_TARGET_VERSION: [{'name': self.config.get('target_release')[0]}],  # Target Version
             'summary': bug_title,
             'labels': keywords,
             'description': bug_description

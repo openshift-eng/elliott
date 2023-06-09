@@ -8,6 +8,7 @@ from jira import JIRA, Issue
 from elliottlib.assembly import AssemblyTypes
 from elliottlib.cli.find_bugs_kernel_clones_cli import FindBugsKernelClonesCli
 from elliottlib.config_model import KernelBugSweepConfig
+from elliottlib.bzutil import JIRABugTracker
 
 
 class TestFindBugsKernelClonesCli(IsolatedAsyncioTestCase):
@@ -45,7 +46,7 @@ class TestFindBugsKernelClonesCli(IsolatedAsyncioTestCase):
             "fields.labels": ["art:cloned-kernel-bug"],
             "fields.project.key": "OCPBUGS",
             "fields.components": [component],
-            "fields.customfield_12319940": [target_release],
+            f"fields.{JIRABugTracker.FIELD_TARGET_VERSION}": [target_release],
         })
         actual = cli._get_jira_issues(jira_client, ["FOO-1", "FOO-2", "FOO-3"], self._config)
         self.assertEqual([issue.key for issue in actual], ["FOO-1", "FOO-2", "FOO-3"])
