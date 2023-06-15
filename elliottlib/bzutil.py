@@ -476,11 +476,14 @@ class BugTracker:
 
     def update_bug_status(self, bug: Bug, target_status: str,
                           comment: Optional[str] = None, log_comment: bool = True, noop=False):
+        """ Update bug status and optionally leave a comment
+        :return: True if but status has been actually updated
+        """
         current_status = bug.status
         action = f'changed {bug.id} from {current_status} to {target_status}'
         if current_status == target_status:
             click.echo(f'{bug.id} is already on {target_status}')
-            return
+            return False
         elif noop:
             click.echo(f"Would have {action}")
         else:
@@ -494,6 +497,7 @@ class BugTracker:
             comment_lines.append(comment)
         if comment_lines:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
+        return True
 
     @staticmethod
     def get_corresponding_flaw_bugs(tracker_bugs: List[Bug], flaw_bug_tracker, brew_api,
