@@ -294,7 +294,7 @@ def get_golang_version_from_build_log(log):
     # if we get a result like:
     #   "golang-bin               x86_64  1.14.12-1.module+el8.3.0+8784+380394dc"
     if len(s) > 1:
-        go_version = s[2]
+        go_version = s[-1]
     else:
         # if we get a result like (more common for RHEL7 build logs):
         #   "go-toolset-1.14-golang-1.14.9-2.el7.x86_64"
