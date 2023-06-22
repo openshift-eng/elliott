@@ -33,7 +33,10 @@ async def find_bugs_invalid_cli(runtime: Runtime, fix):
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
 
-    look_like_trackers = [b for b in bugs if b.is_cve_in_summary()]
+    def has_cve_in_summary(b):
+        return bool(re.search(r'CVE-\d+-\d+', b.summary))
+
+    look_like_trackers = [b for b in bugs if has_cve_in_summary(b)]
     report = {}
     actionable_bugs = {}
     for b in look_like_trackers:
