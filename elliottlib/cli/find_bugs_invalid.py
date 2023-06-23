@@ -61,12 +61,12 @@ async def find_bugs_invalid_cli(runtime: Runtime, fix):
         issues = []
         labels = []
         if not b.is_tracker_bug():
-            issues.append(f"Missing tracker labels.")
+            issues.append("Missing tracker labels.")
         if not b.whiteboard_component:
-            issues.append(f"Missing component label.")
+            issues.append("Missing component label.")
             labels.append(f"pscomponent:{component}")
         if not b.corresponding_flaw_bug_ids:
-            issues.append(f"Missing flaw bug label.")
+            issues.append("Missing flaw bug label.")
             labels.extend([f"flaw:bz#{i}" for i in flaw_ids])
         elif not set(flaw_ids).issubset(set(b.corresponding_flaw_bug_ids)):
             issues.append(f"Flaw bug labels not found. Expected: {flaw_ids} to be in {b.corresponding_flaw_bug_ids}.")
@@ -90,10 +90,4 @@ async def find_bugs_invalid_cli(runtime: Runtime, fix):
                 bug = actionable_bugs[bug_id]
                 bug.bug.fields.labels.extend(labels)
                 bug.bug.update(fields={"labels": bug.bug.fields.labels})
-                click.echo(f"Added labels")
-
-
-    # bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug,
-    #                             with_target_release=False, custom_query=' AND "Target Version" is EMPTY AND '
-    #                                                                     'component != "Release"')
-    #click.echo(f'Found {len(bugs)} bugs with status={find_bugs_obj.status} and no Target Version set')
+                click.echo("Added labels")
