@@ -28,7 +28,8 @@ LOGGER = logutil.getLogger(__name__)
     "--noop", "--dry-run",
     is_flag=True, default=False,
     help="Don't change anything")
-def move_builds_cli(from_advisory, to_advisory, kind, only, noop):
+@click.pass_obj
+def move_builds_cli(runtime, from_advisory, to_advisory, kind, only, noop):
     """
     Move attached builds from one advisory to another.
     Default is moving all attached builds. Specify builds using --only.
@@ -38,12 +39,15 @@ def move_builds_cli(from_advisory, to_advisory, kind, only, noop):
     $ elliott move-builds --from 123 --to 456 -k image --only nvr1,nvr2
     """
 
+    runtime.initialize(no_group=True)
     ensure_erratatool_auth()
 
+    LOGGER.info(f'Fetching all builds from {from_advisory}')
     attached_builds = errata.get_brew_builds(from_advisory)
     build_nvrs = [b.nvr for b in attached_builds]
 
     if only:
+        LOGGER.info(f'Filtering to only specified builds')
         only_nvrs = []
         for n in only.split(','):
             if n not in build_nvrs:
@@ -51,6 +55,7 @@ def move_builds_cli(from_advisory, to_advisory, kind, only, noop):
             else:
                 only_nvrs.append(n)
         build_nvrs = only_nvrs
+        attached_builds = [b for b in attached_builds if b.nvr in build_nvrs]
 
     if noop:
         LOGGER.info(f"[DRY-RUN] Would've removed {len(attached_builds)} builds from {from_advisory} and added to"
