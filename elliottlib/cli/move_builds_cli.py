@@ -1,7 +1,7 @@
+import sys
 import click
-import elliottlib
 
-from elliottlib import Runtime, errata, logutil
+from elliottlib import errata, logutil
 from elliottlib.cli.common import cli
 from elliottlib.util import ensure_erratatool_auth
 
@@ -47,9 +47,10 @@ def move_builds_cli(runtime, from_advisory, to_advisory, kind, only, noop):
     build_nvrs = [b.nvr for b in attached_builds]
 
     if only:
-        LOGGER.info(f'Filtering to only specified builds')
+        temp = only.split(',')
+        LOGGER.info(f'Filtering to only specified builds ({len(temp)})')
         only_nvrs = []
-        for n in only.split(','):
+        for n in temp:
             if n not in build_nvrs:
                 LOGGER.warning(f"{n} not found attached to advisory {from_advisory}")
             else:
@@ -57,13 +58,16 @@ def move_builds_cli(runtime, from_advisory, to_advisory, kind, only, noop):
         build_nvrs = only_nvrs
         attached_builds = [b for b in attached_builds if b.nvr in build_nvrs]
 
+    if not build_nvrs:
+        LOGGER.error("No eligible builds found")
+        sys.exit(1)
+
     if noop:
-        LOGGER.info(f"[DRY-RUN] Would've removed {len(attached_builds)} builds from {from_advisory} and added to"
-                    f" {to_advisory}")
-        exit(0)
+        LOGGER.info(f"[DRY-RUN] Would've moved {len(build_nvrs)} builds from {from_advisory} to {to_advisory}")
+        sys.exit(0)
 
     # remove builds
-    from_erratum = elliottlib.errata.Advisory(errata_id=from_advisory)
+    from_erratum = errata.Advisory(errata_id=from_advisory)
     old_state = from_erratum.errata_state
     from_erratum.ensure_state('NEW_FILES')
     from_erratum.remove_builds(build_nvrs)
@@ -71,7 +75,7 @@ def move_builds_cli(runtime, from_advisory, to_advisory, kind, only, noop):
         from_erratum.ensure_state(old_state)
 
     # add builds
-    to_erratum = elliottlib.errata.Advisory(errata_id=to_advisory)
+    to_erratum = errata.Advisory(errata_id=to_advisory)
     old_state = to_erratum.errata_state
     to_erratum.ensure_state('NEW_FILES')
     to_erratum.attach_builds(attached_builds, kind)
