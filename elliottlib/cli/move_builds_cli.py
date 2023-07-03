@@ -1,14 +1,11 @@
 import click
-from errata_tool import ErrataException
-
 import elliottlib
+
 from elliottlib import Runtime, errata, logutil
 from elliottlib.cli.common import cli
-from elliottlib.util import (ensure_erratatool_auth, red_print)
+from elliottlib.util import ensure_erratatool_auth
 
 LOGGER = logutil.getLogger(__name__)
-
-pass_runtime = click.make_pass_decorator(Runtime)
 
 
 @cli.command('move-builds', short_help='Move builds from one advisory to another')
@@ -25,16 +22,20 @@ pass_runtime = click.make_pass_decorator(Runtime)
     type=click.Choice(['rpm', 'image']),
     help='Builds of the given KIND [rpm, image]')
 @click.option(
+    '--only', metavar='NVR',
+    help='Only move these builds. Comma separated Build NVRs')
+@click.option(
     "--noop", "--dry-run",
-    is_flag=True,
-    default=False,
+    is_flag=True, default=False,
     help="Don't change anything")
-@pass_runtime
-def move_builds_cli(runtime: Runtime, from_advisory, to_advisory, kind, noop):
+def move_builds_cli(from_advisory, to_advisory, kind, only, noop):
     """
-    Move attached builds from one advisory to another
+    Move attached builds from one advisory to another.
+    Default is moving all attached builds. Specify builds using --only.
 
     $ elliott move-builds --from 123 --to 456 --kind image
+
+    $ elliott move-builds --from 123 --to 456 -k image --only nvr1,nvr2
     """
 
     ensure_erratatool_auth()
@@ -42,8 +43,18 @@ def move_builds_cli(runtime: Runtime, from_advisory, to_advisory, kind, noop):
     attached_builds = errata.get_brew_builds(from_advisory)
     build_nvrs = [b.nvr for b in attached_builds]
 
+    if only:
+        only_nvrs = []
+        for n in only.split(','):
+            if n not in build_nvrs:
+                LOGGER.warning(f"{n} not found attached to advisory {from_advisory}")
+            else:
+                only_nvrs.append(n)
+        build_nvrs = only_nvrs
+
     if noop:
-        click.echo(f"[DRY-RUN] Would've removed {len(attached_builds)} builds from {from_advisory} and added to {to_advisory}")
+        LOGGER.info(f"[DRY-RUN] Would've removed {len(attached_builds)} builds from {from_advisory} and added to"
+                    f" {to_advisory}")
         exit(0)
 
     # remove builds
