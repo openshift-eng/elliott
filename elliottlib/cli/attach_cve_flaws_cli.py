@@ -161,9 +161,10 @@ async def associate_builds_with_cves(errata_api: AsyncErrataAPI, advisory: Errat
         for flaw_id in tracker_flaws[tracker.id]:
             if flaw_id not in flaw_id_bugs:
                 continue  # non-first-fix
-            if len(flaw_id_bugs[flaw_id].alias) != 1:
-                raise ValueError(f"Bug {flaw_id} should have exactly 1 alias.")
-            cve = flaw_id_bugs[flaw_id].alias[0]
+            alias = [k for k in flaw_id_bugs[flaw_id].alias if k.startswith('CVE-')]
+            if len(alias) != 1:
+                raise ValueError(f"Bug {flaw_id} should have exactly 1 CVE alias.")
+            cve = alias[0]
             cve_components_mapping.setdefault(cve, set()).add(component_name)
 
     await AsyncErrataUtils.associate_builds_with_cves(errata_api, advisory.errata_id, attached_builds, cve_components_mapping, dry_run=dry_run)
