@@ -46,16 +46,18 @@ def move_builds_cli(runtime: Runtime, from_advisory, to_advisory, kind, noop):
         click.echo(f"[DRY-RUN] Would've removed {len(attached_builds)} builds from {from_advisory} and added to {to_advisory}")
         exit(0)
 
-    try:
-        # remove builds
-        from_erratum = elliottlib.errata.Advisory(errata_id=from_advisory)
-        from_erratum.ensure_state('NEW_FILES')
-        from_erratum.remove_builds(build_nvrs)
+    # remove builds
+    from_erratum = elliottlib.errata.Advisory(errata_id=from_advisory)
+    old_state = from_erratum.errata_state
+    from_erratum.ensure_state('NEW_FILES')
+    from_erratum.remove_builds(build_nvrs)
+    if old_state != 'NEW_FILES':
+        from_erratum.ensure_state(old_state)
 
-        # add builds
-        to_erratum = elliottlib.errata.Advisory(errata_id=to_advisory)
-        to_erratum.ensure_state('NEW_FILES')
-        to_erratum.attach_builds(attached_builds, kind)
-    except ErrataException as e:
-        red_print(e)
-        exit(1)
+    # add builds
+    to_erratum = elliottlib.errata.Advisory(errata_id=to_advisory)
+    old_state = to_erratum.errata_state
+    to_erratum.ensure_state('NEW_FILES')
+    to_erratum.attach_builds(attached_builds, kind)
+    if old_state != 'NEW_FILES':
+        to_erratum.ensure_state(old_state)
