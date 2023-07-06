@@ -16,18 +16,25 @@ from elliottlib.util import green_print
 from elliottlib.bzutil import JIRABugTracker
 
 
+# [lmeyer] I like terms to distinguish between the two types of Jira issues we deal with here.
+# trackers: the KMAINT issues the kernel team creates for tracking these special releases.
+# bugs: OCPBUGS issues that clone the actual kernel bugs driving the need for a special OCP build.
+# issues: when we are dealing with Jira issues generically that may be one or the other.
+# Historically, bugs were called "issues" here and so they are still called this in command I/Os.
+
+
 class FindBugsKernelClonesCli:
-    def __init__(self, runtime: Runtime, trackers: Sequence[str], issues: Sequence[str],
+    def __init__(self, runtime: Runtime, trackers: Sequence[str], bugs: Sequence[str],
                  move: bool, comment: bool, dry_run: bool):
         self._runtime = runtime
         self._logger = runtime.logger
         self.trackers = list(trackers)
-        self.issues = list(issues)
+        self.bugs = list(bugs)
         self.move = move
         self.comment = comment
         self.dry_run = dry_run
 
-    async def run(self):
+    def run(self):
         logger = self._logger
         if self.comment and not self.move:
             raise ElliottFatalError("--comment must be used with --move")
@@ -45,52 +52,54 @@ class FindBugsKernelClonesCli:
 
         # Search for Jiras
         report = {"jira_issues": []}
-        if self.issues:
-            logger.info("Getting specified Jira issues %s...", self.issues)
-            found_issues = self._get_jira_issues(jira_client, self.issues, config)
+        if self.bugs:
+            logger.info("Getting specified Jira bugs %s...", self.bugs)
+            found_bugs = self._get_jira_bugs(jira_client, self.bugs, config)
         else:
             logger.info("Searching for bug clones in Jira project %s...", config.target_jira.project)
-            found_issues = self._search_for_jira_issues(jira_client, self.trackers, config)
-        issue_keys = [issue.key for issue in found_issues]
-        logger.info("Found %s Jira(s) in %s: %s", len(issue_keys), config.target_jira.project, issue_keys)
+            found_bugs = self._search_for_jira_bugs(jira_client, self.trackers, config)
+        bug_keys = [bug.key for bug in found_bugs]
+        logger.info("Found %s Jira(s) in %s: %s", len(bug_keys), config.target_jira.project, bug_keys)
 
-        # Update JIRA issues
-        if self.move and found_issues:
+        # Update JIRA bugs
+        if self.move and found_bugs:
             logger.info("Moving bug clones...")
-            self._update_jira_issues(jira_client, found_issues, koji_api, config)
+            self._update_jira_bugs(jira_client, found_bugs, koji_api, config)
             logger.info("Done.")
 
         # Print a report
         report["jira_issues"] = [{
-            "key": issue.key,
-            "summary": issue.fields.summary,
-            "status": str(issue.fields.status.name),
-        } for issue in found_issues]
+            "key": bug.key,
+            "summary": bug.fields.summary,
+            "status": str(bug.fields.status.name),
+        } for bug in found_bugs]
         self._print_report(report, sys.stdout)
 
-    def _get_jira_issues(self, jira_client: JIRA, issue_keys: List[str], config: KernelBugSweepConfig):
-        found_issues: List[Issue] = []
+    def _get_jira_bugs(self, jira_client: JIRA, bug_keys: List[str], config: KernelBugSweepConfig):
+        # get a specified list of jira bugs we created previously as clones of the original kernel bugs
+        found_bugs: List[Issue] = []
         labels = {"art:cloned-kernel-bug"}
-        for key in issue_keys:
-            issue = jira_client.issue(key)
-            if not labels.issubset(set(issue.fields.labels)):
+        for key in bug_keys:
+            bug = jira_client.issue(key)
+            if not labels.issubset(set(bug.fields.labels)):
                 raise ValueError(f"Jira {key} doesn't have all required labels {labels}")
-            if issue.fields.project.key != config.target_jira.project:
+            if bug.fields.project.key != config.target_jira.project:
                 raise ValueError(f"Jira {key} doesn't belong to project {config.target_jira.project}")
-            components = {c.name for c in issue.fields.components}
+            components = {c.name for c in bug.fields.components}
             if config.target_jira.component not in components:
                 raise ValueError(f"Jira {key} is not set to component {config.target_jira.component}")
-            target_versions = getattr(issue.fields, JIRABugTracker.FIELD_TARGET_VERSION)
+            target_versions = getattr(bug.fields, JIRABugTracker.FIELD_TARGET_VERSION)
             target_releases = {t.name for t in target_versions}
             if config.target_jira.target_release not in target_releases:
                 raise ValueError(f"Jira {key} has invalid target version: {target_versions}")
-            found_issues.append(issue)
-        return found_issues
+            found_bugs.append(bug)
+        return found_bugs
 
     @staticmethod
     @retry(reraise=True, stop=stop_after_attempt(10), wait=wait_fixed(30))
-    def _search_for_jira_issues(jira_client: JIRA, trackers: Optional[List[str]],
-                                config: KernelBugSweepConfig):
+    def _search_for_jira_bugs(jira_client: JIRA, trackers: Optional[List[str]],
+                              config: KernelBugSweepConfig):
+        # search for jira bugs we created previously as clones of the original kernel bugs
         conditions = [
             "labels = art:cloned-kernel-bug",
             f"project = {config.target_jira.project}",
@@ -101,29 +110,26 @@ class FindBugsKernelClonesCli:
             condition = ' OR '.join(map(lambda t: f"labels = art:kmaint:{t}", trackers))
             conditions.append(f"({condition})")
         jql_str = f'{" AND ".join(conditions)} order by created DESC'
-        found_issues = jira_client.search_issues(jql_str, maxResults=0)
-        return cast(List[Issue], found_issues)
+        found_bugs = jira_client.search_issues(jql_str, maxResults=0)
+        return cast(List[Issue], found_bugs)
 
-    def _update_jira_issues(self, jira_client: JIRA,
-                            issues: List[Issue],
-                            koji_api: koji.ClientSession,
-                            config: KernelBugSweepConfig):
-        logger = self._runtime.logger
-        candidate_brew_tag = config.target_jira.candidate_brew_tag
-        prod_brew_tag = config.target_jira.prod_brew_tag
+    def _find_trackers_for_bugs(self,
+                                config: KernelBugSweepConfig,
+                                bugs: List[Issue],
+                                jira_client: JIRA,
+                                ) -> (Dict[str, Issue], Dict[str, List[Issue]]):
+        # find relevant KMAINT trackers given the Jira bugs we previously made for them
         trackers: Dict[str, Issue] = {}
-        tracker_issues: Dict[str, List[Issue]] = {}
-        issue_bug_ids: Dict[str, int] = {}
-        for issue in issues:
+        tracker_bugs: Dict[str, List[Issue]] = {}
+        for bug in bugs:
             # extract bug id from labels: ["art:bz#12345"] -> 12345
-            bug_id = next(map(lambda m: int(m[1]), filter(bool, map(lambda label: re.fullmatch(r"art:bz#(\d+)", label), issue.fields.labels))), None)
+            bug_id = next(map(lambda m: int(m[1]), filter(bool, map(lambda label: re.fullmatch(r"art:bz#(\d+)", label), bug.fields.labels))), None)
             if not bug_id:
-                raise ValueError(f"Jira clone {issue.key} doesn't have the required `art:bz#N` label")
-            issue_bug_ids[issue.key] = bug_id
+                raise ValueError(f"Jira clone {bug.key} doesn't have the required `art:bz#N` label")
             # extract KMAINT tracker key from labels: ["art:kmaint:KMAINT-1"] -> KMAINT-1
-            tracker_key = next(map(lambda m: str(m[1]), filter(bool, map(lambda label: re.fullmatch(r"art:kmaint:(\S+)", label), issue.fields.labels))), None)
+            tracker_key = next(map(lambda m: str(m[1]), filter(bool, map(lambda label: re.fullmatch(r"art:kmaint:(\S+)", label), bug.fields.labels))), None)
             if not tracker_key:
-                raise ValueError(f"Jira clone {issue.key} doesn't have the required `art:kmaint:*` label")
+                raise ValueError(f"Jira clone {bug.key} doesn't have the required `art:kmaint:*` label")
             tracker = trackers.get(tracker_key)
             if not tracker:
                 tracker = trackers[tracker_key] = jira_client.issue(tracker_key)
@@ -131,78 +137,110 @@ class FindBugsKernelClonesCli:
                     raise ValueError(f"KMAINT tracker {tracker_key} is not in project {config.tracker_jira.project}")
                 if not set(config.tracker_jira.labels).issubset(set(tracker.fields.labels)):
                     raise ValueError(f"KMAINT tracker {tracker_key} doesn't have required labels {config.tracker_jira.labels}")
-            tracker_issues.setdefault(tracker.key, []).append(issue)
+            tracker_bugs.setdefault(tracker.key, []).append(bug)
+        return trackers, tracker_bugs
+
+    def _process_shipped_bugs(self, logger, bug_keys, bugs, jira_client: JIRA, nvrs, prod_brew_tag) -> str:
+        # when NVRs are shipped, ensure the associated bugs are closed with a comment
+        logger.info("Build(s) %s shipped (tagged into %s). Moving bug Jira(s) %s to CLOSED...", nvrs, prod_brew_tag, bug_keys)
+        for bug in bugs:
+            current_status: str = bug.fields.status.name
+            if current_status.lower() != "closed":
+                new_status = 'CLOSED'
+                message = f"Elliott changed bug status from {current_status} to {new_status} because {nvrs} was/were already shipped and tagged into {prod_brew_tag}."
+                self._move_jira(jira_client, bug, new_status, message)
+            else:
+                logger.info("No need to move %s because its status is %s", bug.key, current_status)
+        return f"Build(s) {nvrs} was/were already shipped and tagged into {prod_brew_tag}."  # see wording NOTE
+
+    def _process_shipped_tracker(self, logger, tracker, jira_client: JIRA, nvrs) -> List[str]:
+        # when NVRs are shipped, ensure the associated tracker is closed with a comment
+        logger.info("Build(s) %s shipped (tagged into %s). Looking for advisories...", nvrs)
+        tracker_messages = []
+
+        logger.info("Moving tracker Jira %s to CLOSED...")
+        current_status: str = tracker.fields.status.name
+        if current_status.lower() != "closed":
+            self._move_jira(jira_client, tracker, "CLOSED")
+        else:
+            logger.info("No need to move %s because its status is %s", tracker.key, current_status)
+
+        return tracker_messages
+
+    def _process_candidate_bugs(self, logger, bug_keys, bugs, jira_client: JIRA, nvrs, candidate_brew_tag) -> str:
+        # when NVRs are tagged, ensure the associated bugs are modified with a comment
+        logger.info("Build(s) %s tagged into %s. Moving Jira(s) %s to MODIFIED...", nvrs, candidate_brew_tag, bug_keys)
+        for bug in bugs:
+            current_status: str = bug.fields.status.name
+            if current_status.lower() in {"new", "assigned", "post"}:
+                new_status = 'MODIFIED'
+                message = f"Elliott changed bug status from {current_status} to {new_status} because {nvrs} was/were already tagged into {candidate_brew_tag}."
+                self._move_jira(jira_client, bug, new_status, message)
+            else:
+                logger.info("No need to move %s because its status is %s", bug.key, current_status)
+        return f"Build(s) {nvrs} was/were already tagged into {candidate_brew_tag}."  # see wording NOTE
+
+    def _update_jira_bugs(self, jira_client: JIRA, found_bugs: List[Issue], koji_api: koji.ClientSession, config: KernelBugSweepConfig):
+        logger = self._runtime.logger
+        candidate_brew_tag = config.target_jira.candidate_brew_tag
+        prod_brew_tag = config.target_jira.prod_brew_tag
+        trackers, tracker_bugs = self._find_trackers_for_bugs(config, found_bugs, jira_client)
 
         for tracker_id, tracker in trackers.items():
             # Determine which NVRs have the fix. e.g. ["kernel-5.14.0-284.14.1.el9_2"]
-            nvrs = re.findall(r"(kernel(?:-rt)?-\S+-\S+)", tracker.fields.summary)
+            nvrs = sorted(re.findall(r"(kernel(?:-rt)?-\S+-\S+)", tracker.fields.summary))
             if not nvrs:
-                raise ValueError("Couldn't determine build NVRs for bug %s. Bug status will not be moved.", bug_id)
-            nvrs = sorted(nvrs)
-            issues = tracker_issues[tracker_id]
-            issue_keys = [issue.key for issue in issues]
+                raise ValueError(f"Couldn't determine build NVRs for tracker {tracker_id}. Bug status will not be moved.")
+            bugs = tracker_bugs[tracker_id]
+            bug_keys = [bug.key for bug in bugs]
             # Check if nvrs are already tagged into OCP
             logger.info("Getting Brew tags for build(s) %s...", nvrs)
             build_tags = brew.get_builds_tags(nvrs, koji_api)
             shipped = all([any(map(lambda t: t["name"] == prod_brew_tag, tags)) for tags in build_tags])
-            tracker_message = None
+            candidate = all([any(map(lambda t: t["name"] == candidate_brew_tag, tags)) for tags in build_tags])
+            tracker_message = []
             if shipped:
-                logger.info("Build(s) %s shipped (tagged into %s). Moving Jira(s) %s to CLOSED...", nvrs, prod_brew_tag, issue_keys)
-                for issue in issues:
-                    current_status: str = issue.fields.status.name
-                    new_status = 'CLOSED'
-                    if current_status.lower() != "closed":
-                        new_status = 'CLOSED'
-                        message = f"Elliott changed bug status from {current_status} to {new_status} because {nvrs} was/were already shipped and tagged into {prod_brew_tag}."
-                        self._move_jira(jira_client, issue, new_status, message)
-                    else:
-                        logger.info("No need to move %s because its status is %s", issue.key, current_status)
-                tracker_message = f"Build(s) {nvrs} was/were already shipped and tagged into {prod_brew_tag}."
-            else:
-                modified = all([any(map(lambda t: t["name"] == candidate_brew_tag, tags)) for tags in build_tags])
-                if modified:
-                    logger.info("Build(s) %s tagged into %s. Moving Jira(s) %s to MODIFIED...", nvrs, candidate_brew_tag, issue_keys)
-                    for issue in issues:
-                        current_status: str = issue.fields.status.name
-                        if current_status.lower() in {"new", "assigned", "post"}:
-                            new_status = 'MODIFIED'
-                            message = f"Elliott changed bug status from {current_status} to {new_status} because {nvrs} was/were already tagged into {candidate_brew_tag}."
-                            self._move_jira(jira_client, issue, new_status, message)
-                        else:
-                            logger.info("No need to move %s because its status is %s", issue.key, current_status)
-                    tracker_message = f"Build(s) {nvrs} was/were already tagged into {candidate_brew_tag}."
+                tracker_message.append(self._process_shipped_bugs(logger, bug_keys, bugs, jira_client, nvrs, prod_brew_tag))
+                tracker_message.extend(self._process_shipped_tracker(logger, tracker, jira_client, nvrs))
+            elif candidate:
+                tracker_message.append(self._process_candidate_bugs(logger, bug_keys, bugs, jira_client, nvrs, candidate_brew_tag))
+
             if self.comment and tracker_message:
                 logger.info("Checking if making a comment on tracker %s is needed", tracker.key)
+                # wording NOTE: this logic will re-comment on past bugs if the wording is not
+                # exactly as previously commented. think long and hard before changing the wording
+                # of any of these comments.
                 comments = jira_client.comments(tracker.key)
-                if any(map(lambda comment: comment.body == tracker_message, comments)):
-                    logger.info("A comment was already made on %s", tracker.key)
-                    continue
-                logger.info("Making a comment on tracker %s", tracker.key)
-                if not self.dry_run:
-                    jira_client.add_comment(tracker.key, tracker_message)
-                    logger.info("Left a comment on tracker %s", tracker.key)
-                else:
-                    logger.warning("[DRY RUN] Would have left a comment on tracker %s", tracker.key)
+                for message in tracker_message:
+                    if any(map(lambda comment: comment.body == message, comments)):
+                        logger.info("A comment was already made on %s", tracker.key)
+                        continue
+                    logger.info("Making a comment on tracker %s", tracker.key)
+                    if self.dry_run:
+                        logger.warning("[DRY RUN] Would have left a comment on tracker %s", tracker.key)
+                    else:
+                        jira_client.add_comment(tracker.key, message)
+                        logger.info("Left a comment on tracker %s", tracker.key)
 
     def _move_jira(self, jira_client: JIRA, issue: Issue, new_status: str, comment: Optional[str]):
         logger = self._runtime.logger
         current_status: str = issue.fields.status.name
         logger.info("Moving %s from %s to %s", issue.key, current_status, new_status)
-        if not self.dry_run:
+        if self.dry_run:
+            logger.warning("[DRY RUN] Would have moved Jira %s from %s to %s", issue.key, current_status, new_status)
+        else:
             jira_client.assign_issue(issue.key, jira_client.current_user())
             jira_client.transition_issue(issue.key, new_status)
             if comment:
                 jira_client.add_comment(issue.key, comment)
             logger.info("Moved %s from %s to %s", issue.key, current_status, new_status)
-        else:
-            logger.warning("[DRY RUN] Would have moved Jira %s from %s to %s", issue.key, current_status, new_status)
 
     @staticmethod
     def _print_report(report: Dict, out: TextIO):
         print_func = green_print if out.isatty() else print  # use green_print if out is a TTY
-        jira_issues = sorted(report.get("jira_issues", []), key=lambda issue: issue["key"])
-        for issue in jira_issues:
-            text = f"{issue['key']}\t{issue['status']}\t{issue['summary']}"
+        jira_bugs = sorted(report.get("jira_issues", []), key=lambda bug: bug["key"])
+        for bug in jira_bugs:
+            text = f"{bug['key']}\t{bug['status']}\t{bug['summary']}"
             print_func(text, file=out)
 
 
@@ -224,8 +262,7 @@ class FindBugsKernelClonesCli:
               default=False,
               help="Don't change anything")
 @click.pass_obj
-@click_coroutine
-async def find_bugs_kernel_clones_cli(
+def find_bugs_kernel_clones_cli(
         runtime: Runtime, trackers: Tuple[str, ...], issues: Tuple[str, ...],
         move: bool, comment: bool, dry_run: bool):
     """Find cloned kernel bugs in JIRA for weekly kernel release through OCP.
@@ -246,9 +283,9 @@ async def find_bugs_kernel_clones_cli(
     cli = FindBugsKernelClonesCli(
         runtime=runtime,
         trackers=trackers,
-        issues=issues,
+        bugs=issues,
         move=move,
         comment=comment,
         dry_run=dry_run
     )
-    await cli.run()
+    cli.run()
