@@ -22,6 +22,7 @@ from elliottlib.bzutil import JIRABugTracker
 def _search_issues(jira_client, *args, **kwargs):
     return jira_client.search_issues(*args, **kwargs)
 
+
 class FindBugsKernelCli:
     def __init__(self, runtime: Runtime, trackers: Sequence[str],
                  clone: bool, reconcile: bool, comment: bool, dry_run: bool):
