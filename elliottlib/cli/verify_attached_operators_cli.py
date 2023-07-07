@@ -14,7 +14,7 @@ from elliottlib import brew, constants, exectools, errata
 from elliottlib.cli.common import cli, pass_runtime
 from elliottlib.exceptions import ElliottFatalError, BrewBuildException
 from elliottlib.runtime import Runtime
-from elliottlib.util import (exit_unauthenticated, red_print, green_print)
+from elliottlib.util import red_print, green_print
 
 
 @cli.command("verify-attached-operators", short_help="Verify attached operator bundle references are (being) shipped")
@@ -243,10 +243,8 @@ def _missing_references(runtime, bundles, available_shasums, omit_attached):
     if missing_builds_by_advisory:
         print('To fix missing builds in other advisories:')
         for a in missing_builds_by_advisory:
-            # -b build1 -b build2 -b build3
-            builds_args = " ".join([f"-b {b}" for b in missing_builds_by_advisory[a]])
-            print(f'Remove builds: find-builds -k image -a {a} {builds_args} --remove')
-            print('Add builds: Same command but without --remove and -a `<target_advisory>`')
+            builds_args = ",".join([b for b in missing_builds_by_advisory[a]])
+            print(f'elliott move-builds -k image --from {a} --to <target_advisory> --only {builds_args}')
     return missing
 
 
