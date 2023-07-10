@@ -7,6 +7,7 @@ import koji
 from bugzilla import Bugzilla
 from bugzilla.bug import Bug
 from jira import JIRA, Issue
+from tenacity import retry, stop_after_attempt
 
 from elliottlib import Runtime, brew
 from elliottlib.assembly import AssemblyTypes
@@ -15,6 +16,11 @@ from elliottlib.config_model import KernelBugSweepConfig
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.util import green_print
 from elliottlib.bzutil import JIRABugTracker
+
+
+@retry(reraise=True, stop=stop_after_attempt(3))
+def _search_issues(jira_client, *args, **kwargs):
+    return jira_client.search_issues(*args, **kwargs)
 
 
 class FindBugsKernelCli:
@@ -106,7 +112,7 @@ class FindBugsKernelCli:
             conditions.extend([f"labels = \"{label}\"" for label in labels])
         jql = f'{" AND ".join(conditions)} ORDER BY created DESC'
         # 50 most recently created KMAINT trackers should be more than enough
-        matched_issues = jira_client.search_issues(jql, maxResults=50)
+        matched_issues = _search_issues(jira_client, jql, maxResults=50)
         return cast(List[Issue], matched_issues)
 
     def _find_bugs(self, jira_client: JIRA, tracker: Issue, bz_client: Bugzilla, bz_target_releases: Sequence[str]):
@@ -158,7 +164,7 @@ class FindBugsKernelCli:
             kmaint_tracker_key = kmaint_tracker.key if kmaint_tracker else None
             logger.info("Checking if %s was already cloned to OCP %s...", bug_id, ocp_target_release)
             jql_str = f'project = {conf.project} and component = {conf.component} and labels = art:cloned-kernel-bug and labels = "art:bz#{bug_id}" and "Target Version" = "{ocp_target_release}" order by created DESC'
-            found_issues = cast(List[Issue], jira_client.search_issues(jql_str=jql_str))
+            found_issues = cast(List[Issue], _search_issues(jira_client, jql_str=jql_str))
             if not found_issues:  # this bug is not already cloned into OCP Jira
                 logger.info("Creating JIRA for bug %s...", bug.weburl)
                 fields = self._new_jira_fields_from_bug(bug, ocp_target_release, kmaint_tracker_key, conf)
