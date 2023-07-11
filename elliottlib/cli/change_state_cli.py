@@ -67,10 +67,12 @@ unless Bugzilla Bugs or JIRA Issues have been attached.
     for advisory in advisories:
         try:
             e = Erratum(errata_id=advisory)
-
             if e.errata_state == state:
                 green_prefix(f"No Change ({advisory}): ")
                 click.echo(f"Target state is same as current state: {state}")
+            if e.errata_builds == {}:
+                green_prefix(f"No Change ({advisory}): ")
+                click.echo(f"There is no build attached to this advisory")
             else:
                 if noop:
                     green_prefix(f"NOOP ({advisory}): ")

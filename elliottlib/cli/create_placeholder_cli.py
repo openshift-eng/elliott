@@ -49,19 +49,15 @@ def create_placeholder_cli(runtime, kind, advisory_id, default_advisory_type, no
 
 
 def create_placeholder(kind, advisory_id, bug_tracker, noop):
-    newbug = bug_tracker.create_placeholder(kind, noop)
-    if noop:
+    if not advisory_id or noop:
         return
-
-    click.echo(f"Created Bug: {newbug.id} {newbug.weburl}")
-
-    if not advisory_id:
-        return
-
     advisory = Erratum(errata_id=advisory_id)
-
     if advisory is False:
         raise ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
+    if advisory.errata_builds == {}:
+        click.echo(f"There is no build attached to this advisory, skip create placeholder bug")
 
+    newbug = bug_tracker.create_placeholder(kind, noop)
+    click.echo(f"Created Bug: {newbug.id} {newbug.weburl}")
     click.echo("Attaching bug to advisory...")
     bug_tracker.attach_bugs([newbug.id], advisory_obj=advisory)
