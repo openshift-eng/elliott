@@ -308,30 +308,30 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
             continue
         attached_builds = errata.get_advisory_nvrs(advisory)
         packages = list(attached_builds.keys())
-        exception_packages = []
         if kind == 'image':
             # golang builder is a special tracker component
             # which applies to all our golang images
-            exception_packages.append(constants.GOLANG_BUILDER_CVE_COMPONENT)
-
-        if kind == 'microshift':
-            # microshift is special since it has a separate advisory, and it's build is attached
-            # after payload is promoted. So do not pre-emptively complain
-            exception_packages.append('microshift')
+            packages.append(constants.GOLANG_BUILDER_CVE_COMPONENT)
 
         for bug in tracker_bugs:
             package_name = bug.whiteboard_component
-            if (package_name in packages) or (package_name in exception_packages):
+            if (package_name in packages):
                 if package_name in packages:
                     logger.info(f"{kind} build found for #{bug.id}, {package_name} ")
-                if package_name in exception_packages:
-                    logger.info(f"{package_name} bugs included by default")
                 found.add(bug)
                 bugs_by_type[kind].add(bug)
 
     not_found = set(tracker_bugs) - found
-    if not_found:
-        not_found_with_component = [(b.id, b.whiteboard_component) for b in not_found]
+    not_found_with_component = []
+    for b in not_found:
+        if b.whiteboard_component == "microshift" and len(errata.get_advisory_nvrs(advisory_id_map.get("microshift"))) == 0:
+            # microshift is special since it has a separate advisory, and it's build is attached
+            # after payload is promoted. So do not pre-emptively complain
+            logger.info(f"{b} is microshift bug and advisory has no builds attached")
+        else:
+            not_found_with_component.append((b.id, b.whiteboard_component))
+
+    if not_found_with_component:
         red_prefix("Tracker Bugs Warning: ")
         click.echo("The following (tracker bug, package) were found BUT not attached,"
                    " since no corresponding brew build was found attached to any advisory. "
