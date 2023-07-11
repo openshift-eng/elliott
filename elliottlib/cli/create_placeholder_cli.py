@@ -56,6 +56,7 @@ def create_placeholder(kind, advisory_id, bug_tracker, noop):
         raise ElliottFatalError(f"Error: Could not locate advisory {advisory_id}")
     if advisory.errata_builds == {}:
         click.echo(f"There is no build attached to this advisory, skip create placeholder bug")
+        return
 
     newbug = bug_tracker.create_placeholder(kind, noop)
     click.echo(f"Created Bug: {newbug.id} {newbug.weburl}")
