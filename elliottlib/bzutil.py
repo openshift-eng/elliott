@@ -571,6 +571,8 @@ class BugTracker:
 
 class JIRABugTracker(BugTracker):
     JIRA_BUG_BATCH_SIZE = 50
+
+    # Prefer to query by user visible Field Name. Context: https://issues.redhat.com/browse/ART-7053
     FIELD_BLOCKED_BY_BZ = 'customfield_12322152'  # "Blocked by Bugzilla Bug"
     FIELD_TARGET_VERSION = 'customfield_12323140'  # "Target Version"
     FIELD_RELEASE_BLOCKER = 'customfield_12319743'  # "Release Blocker"
