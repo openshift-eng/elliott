@@ -319,7 +319,7 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
             if package_name == "microshift" and len(packages) == 0:
                 # microshift is special since it has a separate advisory, and it's build is attached
                 # after payload is promoted. So do not pre-emptively complain
-                logger.info(f"skip attach microshift bug {bug.id} to {advisory} becase this advisory has no builds attached")
+                logger.info(f"skip attach microshift bug {bug.id} to {advisory} because this advisory has no builds attached")
                 found.add(bug)
             elif (package_name in packages) or (package_name in exception_packages):
                 if package_name in packages:
@@ -330,7 +330,6 @@ def categorize_bugs_by_type(bugs: List[Bug], advisory_id_map: Dict[str, int], ma
                 bugs_by_type[kind].add(bug)
 
     not_found = set(tracker_bugs) - found
-    not_found_with_component = []
     if not_found:
         not_found_with_component = [(b.id, b.whiteboard_component) for b in not_found]
         red_prefix("Tracker Bugs Warning: ")
