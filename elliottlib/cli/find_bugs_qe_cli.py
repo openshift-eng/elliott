@@ -58,4 +58,12 @@ def find_bugs_qe(runtime, find_bugs_obj, noop, bug_tracker):
         "An ART build cycle completed after this fix was made, which usually means it can be"
         f" expected in the next created {major_version}.{minor_version} nightly and release.")
     for bug in bugs:
-        bug_tracker.update_bug_status(bug, 'ON_QA', comment=release_comment, noop=noop)
+        updated = bug_tracker.update_bug_status(bug, 'ON_QA', comment=release_comment, noop=noop)
+        if updated and bug.is_tracker_bug():
+            # leave a special comment for QE
+            comment = """Note for QE:
+This is a CVE bug. Please plan on verifying this bug ASAP.
+A CVE bug shouldn't be dropped from an advisory if QE doesn't have enough time to verify.
+Contact ProdSec if you have questions.
+"""
+            bug_tracker.add_comment(bug.id, comment, private=True, noop=noop)

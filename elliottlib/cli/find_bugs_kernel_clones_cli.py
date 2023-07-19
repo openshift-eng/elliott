@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Sequence, TextIO, Tuple, cast
 import click
 import koji
 from jira import JIRA, Issue
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from elliottlib import Runtime, brew
 from elliottlib.assembly import AssemblyTypes
@@ -87,6 +88,7 @@ class FindBugsKernelClonesCli:
         return found_issues
 
     @staticmethod
+    @retry(reraise=True, stop=stop_after_attempt(10), wait=wait_fixed(30))
     def _search_for_jira_issues(jira_client: JIRA, trackers: Optional[List[str]],
                                 config: KernelBugSweepConfig):
         conditions = [

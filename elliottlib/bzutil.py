@@ -476,11 +476,14 @@ class BugTracker:
 
     def update_bug_status(self, bug: Bug, target_status: str,
                           comment: Optional[str] = None, log_comment: bool = True, noop=False):
+        """ Update bug status and optionally leave a comment
+        :return: True if but status has been actually updated
+        """
         current_status = bug.status
         action = f'changed {bug.id} from {current_status} to {target_status}'
         if current_status == target_status:
             logger.info(f'{bug.id} is already on {target_status}')
-            return
+            return False
         elif noop:
             logger.info(f"Would have {action}")
         else:
@@ -494,6 +497,7 @@ class BugTracker:
             comment_lines.append(comment)
         if comment_lines:
             self.add_comment(bug.id, '\n'.join(comment_lines), private=True, noop=noop)
+        return True
 
     @staticmethod
     def get_corresponding_flaw_bugs(tracker_bugs: List[Bug], flaw_bug_tracker, brew_api,
@@ -567,6 +571,8 @@ class BugTracker:
 
 class JIRABugTracker(BugTracker):
     JIRA_BUG_BATCH_SIZE = 50
+
+    # Prefer to query by user visible Field Name. Context: https://issues.redhat.com/browse/ART-7053
     FIELD_BLOCKED_BY_BZ = 'customfield_12322152'  # "Blocked by Bugzilla Bug"
     FIELD_TARGET_VERSION = 'customfield_12323140'  # "Target Version"
     FIELD_RELEASE_BLOCKER = 'customfield_12319743'  # "Release Blocker"
