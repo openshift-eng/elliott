@@ -5,7 +5,7 @@ import traceback
 from elliottlib import (Runtime, logutil)
 from elliottlib.cli.common import cli
 from elliottlib.cli.find_bugs_sweep_cli import FindBugsMode
-from elliottlib.util import green_prefix
+
 
 LOGGER = logutil.getLogger(__name__)
 
@@ -39,8 +39,8 @@ def find_bugs_qe_cli(runtime: Runtime, noop):
         try:
             find_bugs_qe(runtime, find_bugs_obj, noop, b)
         except Exception as e:
-            runtime.logger.error(traceback.format_exc())
-            runtime.logger.error(f'exception with {b.type} bug tracker: {e}')
+            LOGGER.error(traceback.format_exc())
+            LOGGER.error(f'exception with {b.type} bug tracker: {e}')
             exit_code = 1
     sys.exit(exit_code)
 
@@ -49,10 +49,10 @@ def find_bugs_qe(runtime, find_bugs_obj, noop, bug_tracker):
     major_version, minor_version = runtime.get_major_minor()
     statuses = sorted(find_bugs_obj.status)
     tr = bug_tracker.target_release()
-    green_prefix(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}\n")
+    LOGGER.info(f"Searching {bug_tracker.type} for bugs with status {statuses} and target releases: {tr}")
 
     bugs = find_bugs_obj.search(bug_tracker_obj=bug_tracker, verbose=runtime.debug)
-    click.echo(f"Found {len(bugs)} bugs: {', '.join(sorted(str(b.id) for b in bugs))}")
+    LOGGER.info(f"Found {len(bugs)} bugs: {', '.join(sorted(str(b.id) for b in bugs))}")
 
     release_comment = (
         "An ART build cycle completed after this fix was made, which usually means it can be"

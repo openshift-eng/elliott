@@ -482,13 +482,13 @@ class BugTracker:
         current_status = bug.status
         action = f'changed {bug.id} from {current_status} to {target_status}'
         if current_status == target_status:
-            click.echo(f'{bug.id} is already on {target_status}')
+            logger.info(f'{bug.id} is already on {target_status}')
             return False
         elif noop:
-            click.echo(f"Would have {action}")
+            logger.info(f"Would have {action}")
         else:
             self._update_bug_status(bug.id, target_status)
-            click.echo(action)
+            logger.info(action)
 
         comment_lines = []
         if log_comment:
@@ -676,7 +676,7 @@ class JIRABugTracker(BugTracker):
 
     def add_comment(self, bugid: str, comment: str, private: bool, noop=False):
         if noop:
-            click.echo(f"Would have added a private={private} comment to {bugid}")
+            logger.info(f"Would have added a private={private} comment to {bugid}")
             return
         if private:
             self._client.add_comment(bugid, comment, visibility={'type': 'group', 'value': 'Red Hat Employee'})
@@ -724,7 +724,7 @@ class JIRABugTracker(BugTracker):
 
     def _search(self, query, verbose=False) -> List[JIRABug]:
         if verbose:
-            click.echo(query)
+            logger.info(query)
         results = self._client.search_issues(query, maxResults=0)
         return [JIRABug(j) for j in results]
 
@@ -832,7 +832,7 @@ class BugzillaBugTracker(BugTracker):
             return []
         if 'verbose' in kwargs:
             if kwargs.pop('verbose'):
-                click.echo(f'get_bugs called with bugids: {bugids}, permissive: {permissive} and kwargs: {kwargs}')
+                logger.info(f'get_bugs called with bugids: {bugids}, permissive: {permissive} and kwargs: {kwargs}')
         bugs = [BugzillaBug(b) for b in self._client.getbugs(bugids, permissive=permissive, **kwargs)]
         if len(bugs) < len(bugids):
             bugids_not_found = set(bugids) - {b.id for b in bugs}
@@ -859,7 +859,7 @@ class BugzillaBugTracker(BugTracker):
 
     def _search(self, query, verbose=False):
         if verbose:
-            click.echo(query)
+            logger.info(query)
         return [BugzillaBug(b) for b in _perform_query(self._client, query)]
 
     def remove_bugs(self, advisory_obj, bugids: List, noop=False):
