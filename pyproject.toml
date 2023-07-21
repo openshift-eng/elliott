@@ -1,15 +1,11 @@
 [build-system]
 requires = [
     "setuptools>=65.5.1",  # not directly required, pinned by Snyk to avoid a vulnerability
-    "setuptools_scm[toml]>=6.2",
 ]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["elliottlib"]
-
-[tool.setuptools_scm]
-write_to = "elliottlib/_version.py"
 
 [project]
 dynamic = ["version"]
