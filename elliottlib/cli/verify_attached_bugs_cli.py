@@ -261,10 +261,10 @@ class BugValidator:
             for flaw_id in flaw_ids:
                 if flaw_id not in flaw_id_bugs:  # This means associated flaw wasn't considered a first fix
                     continue
-
-                if len(flaw_id_bugs[flaw_id].alias) != 1:
-                    raise ValueError(f"Flaw bug {flaw_id} should have exact 1 alias.")
-                cve = flaw_id_bugs[flaw_id].alias[0]
+                alias = [k for k in flaw_id_bugs[flaw_id].alias if k.startswith('CVE-')]
+                if len(alias) != 1:
+                    raise ValueError(f"Bug {flaw_id} should have exactly 1 CVE alias.")
+                cve = alias[0]
                 cve_components_mapping.setdefault(cve, set()).add(component_name)
 
         attached_builds = await self.errata_api.get_builds_flattened(advisory_id)
