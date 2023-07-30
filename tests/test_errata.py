@@ -141,36 +141,6 @@ class TestErrata(unittest.TestCase):
 
         self.assertEqual(product_version_map, {'rhaos-4.1-rhel-8-candidate': 'OSE-4.1-RHEL-8'})
 
-    def test_get_rpmdiff_runs(self):
-        advisory_id = 12345
-        responses = [
-            {
-                "data": [
-                    {"id": 1},
-                    {"id": 2},
-                ]
-            },
-            {
-                "data": [
-                    {"id": 3},
-                ]
-            },
-            {
-                "data": []
-            },
-        ]
-        session = mock.MagicMock()
-
-        def mock_response(*args, **kwargs):
-            page_number = kwargs["params"]["page[number]"]
-            resp = mock.MagicMock()
-            resp.json.return_value = responses[page_number - 1]
-            return resp
-
-        session.get.side_effect = mock_response
-        actual = errata.get_rpmdiff_runs(advisory_id, None, session)
-        self.assertEqual(len(list(actual)), 3)
-
 
 class TestAdvisoryImages(unittest.TestCase):
 

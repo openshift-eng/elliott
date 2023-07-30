@@ -10,15 +10,16 @@ import requests
 from errata_tool import ErrataException
 
 import elliottlib
-from elliottlib import Runtime, brew, constants, errata, logutil
-from elliottlib import exectools
+from elliottlib import Runtime, brew, constants, logutil, errata
+from elliottlib import exectools, util
 from elliottlib.assembly import assembly_metadata_config, assembly_rhcos_config
 from elliottlib.build_finder import BuildFinder
 from elliottlib.cli.common import (cli, find_default_advisory,
                                    use_default_advisory_option, click_coroutine)
 from elliottlib.exceptions import ElliottFatalError
 from elliottlib.imagecfg import ImageMetadata
-from elliottlib.util import (ensure_erratatool_auth, exit_unauthenticated,
+from elliottlib.cli.rhcos_cli import get_build_id_from_rhcos_pullspec
+from elliottlib.util import (ensure_erratatool_auth,
                              get_release_version, green_prefix, green_print,
                              isolate_el_version_in_brew_tag,
                              parallel_results_with_progress, pbar_header, progress_func,
@@ -36,7 +37,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
 
 @cli.command('find-builds', short_help='Find or attach builds to ADVISORY')
 @click.option(
-    '--attach', '-a', 'advisory',
+    '--attach', '-a', 'advisory_id',
     type=int, metavar='ADVISORY',
     help='Attach the builds to ADVISORY (by default only a list of builds are displayed)')
 @use_default_advisory_option
@@ -46,8 +47,8 @@ pass_runtime = click.make_pass_decorator(Runtime)
     help='Add build NVR_OR_ID to ADVISORY [MULTIPLE]')
 @click.option(
     '--kind', '-k', metavar='KIND', required=True,
-    type=click.Choice(['rpm', 'image']),
-    help='Find builds of the given KIND [rpm, image]')
+    type=click.Choice(['rpm', 'image', 'rhcos']),
+    help='Find builds of the given KIND [rpm, image, rhcos]')
 @click.option(
     '--from-diff', '--between',
     required=False,
@@ -79,7 +80,7 @@ pass_runtime = click.make_pass_decorator(Runtime)
     help='(For rpms) Only sweep member rpms')
 @click_coroutine
 @pass_runtime
-async def find_builds_cli(runtime: Runtime, advisory, default_advisory_type, builds, kind, from_diff, as_json,
+async def find_builds_cli(runtime: Runtime, advisory_id, default_advisory_type, builds, kind, from_diff, as_json,
                           remove, clean, no_cdn_repos, payload, non_payload, include_shipped, member_only: bool):
     '''Automatically or manually find or attach/remove viable rpm or image builds
 to ADVISORY. Default behavior searches Brew for viable builds in the
@@ -133,7 +134,7 @@ PRESENT advisory. Here are some examples:
         raise click.BadParameter('Option --remove only support removing specific build with -b.')
     if from_diff and kind != "image":
         raise click.BadParameter('Option --from-diff/--between should be used with --kind/-k image.')
-    if advisory and default_advisory_type:
+    if advisory_id and default_advisory_type:
         raise click.BadParameter('Use only one of --use-default-advisory or --attach')
     if payload and non_payload:
         raise click.BadParameter('Use only one of --payload or --non-payload.')
@@ -144,7 +145,7 @@ PRESENT advisory. Here are some examples:
     tag_pv_map = et_data.get('brew_tag_product_version_mapping')
 
     if default_advisory_type is not None:
-        advisory = find_default_advisory(runtime, default_advisory_type)
+        advisory_id = find_default_advisory(runtime, default_advisory_type)
 
     ensure_erratatool_auth()  # before we waste time looking up builds we can't process
 
@@ -158,7 +159,7 @@ PRESENT advisory. Here are some examples:
         green_prefix('Fetching builds...')
         unshipped_nvrps = _fetch_nvrps_by_nvr_or_id(builds, tag_pv_map, ignore_product_version=remove, brew_session=brew_session)
     elif clean:
-        unshipped_builds = errata.get_brew_builds(advisory)
+        unshipped_builds = errata.get_brew_builds(advisory_id)
     elif from_diff:
         unshipped_nvrps = _fetch_builds_from_diff(from_diff[0], from_diff[1], tag_pv_map)
     else:
@@ -167,13 +168,34 @@ PRESENT advisory. Here are some examples:
                                                                 non_payload, include_shipped)
         elif kind == 'rpm':
             unshipped_nvrps = await _fetch_builds_by_kind_rpm(runtime, tag_pv_map, brew_session, include_shipped, member_only)
+        elif kind == 'rhcos':
+            rhcos_config = assembly_rhcos_config(runtime.get_releases_config(), runtime.assembly)
+            build_ids_by_arch = dict()
+            nvrs = []
+            for _, tag_config in rhcos_config.items():
+                for arch, pullspec in tag_config['images'].items():
+                    build_id = get_build_id_from_rhcos_pullspec(pullspec, runtime.logger)
+                    if arch not in build_ids_by_arch:
+                        build_ids_by_arch[arch] = set()
+                    build_ids_by_arch[arch].add(build_id)
+
+            for arch, builds in build_ids_by_arch.items():
+                for build_id in builds:
+                    nvr = f'rhcos-{arch}-{build_id}'
+                    if brew_session.getBuild(nvr):
+                        runtime.logger.info(f'Found rhcos nvr: {nvr}')
+                        nvrs.append(nvr)
+                    else:
+                        runtime.logger.info(f'rhcos nvr not found: {nvr}')
+
+            unshipped_nvrps = _fetch_nvrps_by_nvr_or_id(nvrs, tag_pv_map, brew_session=brew_session)
 
     pbar_header(
         'Fetching builds from Errata: ',
         'Hold on a moment, fetching buildinfos from Errata Tool...',
         unshipped_builds if clean else unshipped_nvrps)
 
-    if not clean and not remove:
+    if not (clean or remove):
         # if is --clean then batch fetch from Erratum no need to fetch them individually
         # if is not for --clean fetch individually using nvrp tuples then get specific
         # elliottlib.brew.Build Objects by get_brew_build()
@@ -182,10 +204,11 @@ PRESENT advisory. Here are some examples:
         # Build(atomic-openshift-descheduler-container-v4.3.23-202005250821).
         unshipped_builds = parallel_results_with_progress(
             unshipped_nvrps,
-            lambda nvrp: elliottlib.errata.get_brew_build('{}-{}-{}'.format(nvrp[0], nvrp[1], nvrp[2]), nvrp[3], session=requests.Session())
+            lambda nvrp: errata.get_brew_build(f'{nvrp[0]}-{nvrp[1]}-{nvrp[2]}',
+                                               nvrp[3], session=requests.Session())
         )
         previous = len(unshipped_builds)
-        unshipped_builds = _filter_out_inviable_builds(kind, unshipped_builds, elliottlib.errata)
+        unshipped_builds = _filter_out_inviable_builds(unshipped_builds)
         if len(unshipped_builds) != previous:
             click.echo(f'Filtered out {previous - len(unshipped_builds)} inviable build(s)')
 
@@ -195,7 +218,7 @@ PRESENT advisory. Here are some examples:
             green_print('No builds needed to be attached.')
             return
 
-    if not advisory:
+    if not advisory_id:
         click.echo('The following {n} builds '.format(n=len(unshipped_builds)), nl=False)
         if not (remove or clean):
             click.secho('may be attached', bold=True, nl=False)
@@ -212,7 +235,7 @@ PRESENT advisory. Here are some examples:
         return
 
     try:
-        erratum = elliottlib.errata.Advisory(errata_id=advisory)
+        erratum = errata.Advisory(errata_id=advisory_id)
         erratum.ensure_state('NEW_FILES')
         if remove:
             to_remove = [f"{nvrp[0]}-{nvrp[1]}-{nvrp[2]}" for nvrp in unshipped_nvrps]
@@ -222,12 +245,31 @@ PRESENT advisory. Here are some examples:
         if to_remove:
             erratum.remove_builds(to_remove)
         else:  # attach
-            erratum.attach_builds(unshipped_builds, kind)
+            erratum.attach_builds(unshipped_builds, 'image' if kind == 'rhcos' else kind)
             cdn_repos = et_data.get('cdn_repos')
-            if cdn_repos and not no_cdn_repos and kind == "image":
+            if kind == 'image' and cdn_repos and not no_cdn_repos:
                 erratum.set_cdn_repos(cdn_repos)
+
+            if kind == 'rhcos':
+                file_meta = errata.get_file_meta(advisory_id)
+                runtime.logger.info('Setting rhcos file metadata..')
+                rhcos_file_meta = []
+                for f in file_meta:
+                    # path is something like `/mnt/redhat/brewroot/packages/rhcos-x86_64/413.92.202307260246/0/images
+                    # /coreos-assembler-git.tar.gz`
+                    if 'rhcos' in f['path']:
+                        arch = None
+                        for a in util.brew_arches:
+                            if a in f['path']:
+                                arch = a
+                                break
+                        title = f'RHCOS Image metadata ({arch})'
+                        rhcos_file_meta.append({'file': f['id'], 'title': title})
+                if rhcos_file_meta:
+                    errata.put_file_meta(advisory_id, rhcos_file_meta)
+
     except ErrataException as e:
-        red_print(f'Cannot change advisory {advisory}: {e}')
+        red_print(f'Cannot change advisory {advisory_id}: {e}')
         exit(1)
 
 
@@ -431,10 +473,10 @@ async def _fetch_builds_by_kind_rpm(runtime: Runtime, tag_pv_map: Dict[str, str]
     return nvrps
 
 
-def _filter_out_inviable_builds(kind, results, errata):
+def _filter_out_inviable_builds(build_objects):
     unshipped_builds = []
     errata_version_cache = {}  # avoid reloading the same errata for multiple builds
-    for b in results:
+    for b in build_objects:
         # check if build is attached to any existing advisory for this version
         in_same_version = False
         for eid in [e['id'] for e in b.all_errata]:
