@@ -35,15 +35,5 @@ pipeline {
                 }
             }
         }
-        stage("Publish to PyPI") {
-            when {
-                buildingTag()
-            }
-            steps {
-                sh "python3 setup.py bdist_wheel --universal"
-                sh "python3 -m twine check dist/*"
-                script { publishToPyPI() }
-            }
-        }
     }
 }
