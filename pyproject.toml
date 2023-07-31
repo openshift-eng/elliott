@@ -5,7 +5,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["elliottlib"]
+packages = ["elliottlib", "elliottlib.cli"]
 
 [project]
 dynamic = ["version"]
