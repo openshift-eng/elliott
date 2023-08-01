@@ -7,7 +7,7 @@ import koji
 from jira import JIRA, Issue
 from tenacity import retry, stop_after_attempt, wait_fixed
 
-from elliottlib import Runtime, brew
+from elliottlib import Runtime, brew, early_kernel
 from elliottlib.assembly import AssemblyTypes
 from elliottlib.cli.common import cli, click_coroutine
 from elliottlib.config_model import KernelBugSweepConfig
@@ -155,6 +155,7 @@ class FindBugsKernelClonesCli:
 
     def _process_shipped_tracker(self, logger, tracker, jira_client: JIRA, nvrs) -> List[str]:
         # when NVRs are shipped, ensure the associated tracker is closed with a comment
+        # and a link to any advisory that shipped them
         logger.info("Build(s) %s shipped (tagged into %s). Looking for advisories...", nvrs)
         tracker_messages = []
 
@@ -182,28 +183,18 @@ class FindBugsKernelClonesCli:
 
     def _update_jira_bugs(self, jira_client: JIRA, found_bugs: List[Issue], koji_api: koji.ClientSession, config: KernelBugSweepConfig):
         logger = self._runtime.logger
-        candidate_brew_tag = config.target_jira.candidate_brew_tag
-        prod_brew_tag = config.target_jira.prod_brew_tag
         trackers, tracker_bugs = self._find_trackers_for_bugs(config, found_bugs, jira_client)
 
         for tracker_id, tracker in trackers.items():
-            # Determine which NVRs have the fix. e.g. ["kernel-5.14.0-284.14.1.el9_2"]
-            nvrs = sorted(re.findall(r"(kernel(?:-rt)?-\S+-\S+)", tracker.fields.summary))
-            if not nvrs:
-                raise ValueError(f"Couldn't determine build NVRs for tracker {tracker_id}. Bug status will not be moved.")
+            nvrs, candidate, shipped = early_kernel.get_tracker_builds_and_tags(logger, tracker, koji_api, config.target_jira)
             bugs = tracker_bugs[tracker_id]
             bug_keys = [bug.key for bug in bugs]
-            # Check if nvrs are already tagged into OCP
-            logger.info("Getting Brew tags for build(s) %s...", nvrs)
-            build_tags = brew.get_builds_tags(nvrs, koji_api)
-            shipped = all([any(map(lambda t: t["name"] == prod_brew_tag, tags)) for tags in build_tags])
-            candidate = all([any(map(lambda t: t["name"] == candidate_brew_tag, tags)) for tags in build_tags])
             tracker_message = []
             if shipped:
-                tracker_message.append(self._process_shipped_bugs(logger, bug_keys, bugs, jira_client, nvrs, prod_brew_tag))
+                tracker_message.append(self._process_shipped_bugs(logger, bug_keys, bugs, jira_client, nvrs, shipped))
                 tracker_message.extend(self._process_shipped_tracker(logger, tracker, jira_client, nvrs))
             elif candidate:
-                tracker_message.append(self._process_candidate_bugs(logger, bug_keys, bugs, jira_client, nvrs, candidate_brew_tag))
+                tracker_message.append(self._process_candidate_bugs(logger, bug_keys, bugs, jira_client, nvrs, candidate))
 
             if self.comment and tracker_message:
                 logger.info("Checking if making a comment on tracker %s is needed", tracker.key)

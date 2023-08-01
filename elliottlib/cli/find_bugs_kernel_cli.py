@@ -9,7 +9,7 @@ from bugzilla.bug import Bug
 from jira import JIRA, Issue
 from tenacity import retry, stop_after_attempt
 
-from elliottlib import Runtime, brew
+from elliottlib import Runtime, brew, early_kernel
 from elliottlib.assembly import AssemblyTypes
 from elliottlib.cli.common import cli, click_coroutine
 from elliottlib.config_model import KernelBugSweepConfig
@@ -208,22 +208,13 @@ class FindBugsKernelCli:
                             conf: KernelBugSweepConfig.TargetJiraConfig):
         logger = self._runtime.logger
         # Determine which NVRs have the fix. e.g. ["kernel-5.14.0-284.14.1.el9_2"]
-        nvrs = re.findall(r"(kernel(?:-rt)?-\S+-\S+)", tracker.fields.summary)
-        if not nvrs:
-            raise ValueError("Couldn't determine build NVRs for tracker %s", tracker.key)
-        nvrs = sorted(nvrs)
-        # Check if nvrs are already tagged into OCP
-        logger.info("Getting Brew tags for build(s) %s...", nvrs)
-        candidate_brew_tag = conf.candidate_brew_tag
-        prod_brew_tag = conf.prod_brew_tag
-        build_tags = brew.get_builds_tags(nvrs, koji_api)
-        shipped = all([any(map(lambda t: t["name"] == prod_brew_tag, tags)) for tags in build_tags])
-        modified = all([any(map(lambda t: t["name"] == candidate_brew_tag, tags)) for tags in build_tags])
+        nvrs, candidate, shipped = early_kernel.get_tracker_builds_and_tags(logger, tracker, koji_api, conf)
+
         tracker_message = None
         if shipped:
-            tracker_message = f"Build(s) {nvrs} was/were already shipped and tagged into {prod_brew_tag}."
-        elif modified:
-            tracker_message = f"Build(s) {nvrs} was/were already tagged into {candidate_brew_tag}."
+            tracker_message = f"Build(s) {nvrs} was/were already shipped and tagged into {shipped}."
+        elif candidate:
+            tracker_message = f"Build(s) {nvrs} was/were already tagged into {candidate}."
         if not tracker_message:
             logger.info("No need to make a comment on %s", tracker.key)
             return
