@@ -59,7 +59,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
     else:
         advisories = [advisory_id]
     exit_code = 0
-    flaw_bug_tracker = runtime.bug_trackers('bugzilla')
+    flaw_bug_tracker = runtime.get_bug_tracker('bugzilla')
     errata_config = runtime.get_errata_config()
     errata_api = AsyncErrataAPI(errata_config.get("server", constants.errata_url))
     brew_api = runtime.build_retrying_koji_client()
@@ -68,7 +68,7 @@ async def attach_cve_flaws_cli(runtime: Runtime, advisory_id: int, noop: bool, d
         advisory = Erratum(errata_id=advisory_id)
 
         attached_trackers = []
-        for bug_tracker in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
+        for bug_tracker in [runtime.get_bug_tracker('jira'), runtime.get_bug_tracker('bugzilla')]:
             attached_trackers.extend(get_attached_trackers(advisory, bug_tracker, runtime.logger))
 
         tracker_flaws, flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, brew_api, runtime.logger)

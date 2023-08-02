@@ -69,11 +69,11 @@ def create_textonly_cli(runtime, errata_type, date, assigned_to, manager, packag
     # we give priority to jira in case both are in use
     if runtime.use_jira:
         create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
-                        description, solution, bugtitle, bugdescription, yes, runtime.bug_trackers('jira'))
+                        description, solution, bugtitle, bugdescription, yes, runtime.get_bug_tracker('jira'))
 
     else:
         create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis,
-                        description, solution, bugtitle, bugdescription, yes, runtime.bug_trackers('bugzilla'))
+                        description, solution, bugtitle, bugdescription, yes, runtime.get_bug_tracker('bugzilla'))
 
 
 def create_textonly(runtime, errata_type, date, assigned_to, manager, package_owner, topic, synopsis, description,

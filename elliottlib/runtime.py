@@ -18,7 +18,7 @@ from elliottlib.exceptions import ElliottFatalError
 from elliottlib.imagecfg import ImageMetadata
 from elliottlib.model import Missing, Model
 from elliottlib.rpmcfg import RPMMetadata
-from elliottlib.bzutil import BugzillaBugTracker, JIRABugTracker
+from elliottlib.bzutil import BugTracker, BugzillaBugTracker, JIRABugTracker
 
 
 def remove_tmp_working_dir(runtime):
@@ -284,7 +284,7 @@ class Runtime(object):
     def rpm_metas(self):
         return list(self.rpm_map.values())
 
-    def bug_trackers(self, bug_tracker_type):
+    def get_bug_tracker(self, bug_tracker_type) -> BugTracker:
         if bug_tracker_type in self._bug_trackers:
             return self._bug_trackers[bug_tracker_type]
         if bug_tracker_type == 'bugzilla':
