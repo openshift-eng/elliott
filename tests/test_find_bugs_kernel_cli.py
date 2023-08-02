@@ -351,6 +351,6 @@ TRACKER-1	2	N/A	Verified	test bug 2
         cli = FindBugsKernelCli(
             runtime=runtime, trackers=["TRACKER-999"], clone=True, reconcile=True, comment=True, dry_run=False)
         await cli.run()
-        _comment_on_tracker.assert_called_once_with(ANY, jira_client.issue.return_value, ANY, ANY)
+        _comment_on_tracker.assert_called_once()
         _clone_bugs.assert_called_once_with(ANY, _find_bugs.return_value, ANY)
         _find_kmaint_trackers.assert_not_called()

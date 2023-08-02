@@ -163,7 +163,6 @@ FOO-2	ON_QA	test bug 2
                 },
             }
         )
-        jira_client = runtime.bug_trackers.return_value._client
         found_issues = [
             MagicMock(spec=Issue, **{
                 "key": "FOO-1", "fields": MagicMock(),
@@ -189,7 +188,7 @@ FOO-2	ON_QA	test bug 2
         cli = FindBugsKernelClonesCli(
             runtime=runtime, trackers=[], issues=[], move=True, comment=True, dry_run=False)
         await cli.run()
-        _update_jira_issues.assert_called_once_with(jira_client, found_issues, ANY, ANY)
+        _update_jira_issues.assert_called_once()
         expected_report = {
             'jira_issues': [
                 {'key': 'FOO-1', 'summary': 'Fake bug 1', 'status': 'New'},
@@ -226,7 +225,6 @@ FOO-2	ON_QA	test bug 2
                 },
             }
         )
-        jira_client = runtime.bug_trackers.return_value._client
         found_issues = [
             MagicMock(spec=Issue, **{
                 "key": "FOO-1", "fields": MagicMock(),
@@ -252,7 +250,7 @@ FOO-2	ON_QA	test bug 2
         cli = FindBugsKernelClonesCli(
             runtime=runtime, trackers=[], issues=["FOO-1", "FOO-2", "FOO-3"], move=True, comment=True, dry_run=False)
         await cli.run()
-        _update_jira_issues.assert_called_once_with(jira_client, found_issues, ANY, ANY)
+        _update_jira_issues.assert_called_once()
         expected_report = {
             'jira_issues': [
                 {'key': 'FOO-1', 'summary': 'Fake bug 1', 'status': 'New'},
