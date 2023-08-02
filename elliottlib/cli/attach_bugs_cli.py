@@ -61,9 +61,9 @@ For attaching use --advisory or --use-default-advisory <TYPE>
 
     jira_ids, bz_ids = get_jira_bz_bug_ids(bug_ids)
     if jira_ids:
-        attach_bugs(runtime, advisory, jira_ids, report, output, noop, runtime.bug_trackers('jira'))
+        attach_bugs(runtime, advisory, jira_ids, report, output, noop, runtime.get_bug_tracker('jira'))
     if bz_ids:
-        attach_bugs(runtime, advisory, bz_ids, report, output, noop, runtime.bug_trackers('bugzilla'))
+        attach_bugs(runtime, advisory, bz_ids, report, output, noop, runtime.get_bug_tracker('bugzilla'))
 
 
 def attach_bugs(runtime, advisory, bug_ids, report, output, noop, bug_tracker):

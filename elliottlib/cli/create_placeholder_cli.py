@@ -45,7 +45,7 @@ def create_placeholder_cli(runtime, kind, advisory_id, default_advisory_type, no
     if not kind:
         raise click.BadParameter("--kind must be specified when not using --use-default-advisory")
 
-    create_placeholder(kind, advisory_id, runtime.bug_trackers('jira'), noop)
+    create_placeholder(kind, advisory_id, runtime.get_bug_tracker('jira'), noop)
 
 
 def create_placeholder(kind, advisory_id, bug_tracker, noop):

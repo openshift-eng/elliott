@@ -67,9 +67,9 @@ def remove_bugs_cli(runtime, advisory_id, default_advisory_type, bug_ids, remove
         bz_ids = set(bz_ids) & set(attached_bz_ids)
 
     if jira_ids:
-        remove_bugs(advisory, jira_ids, runtime.bug_trackers('jira'), noop)
+        remove_bugs(advisory, jira_ids, runtime.get_bug_tracker('jira'), noop)
     if bz_ids:
-        remove_bugs(advisory, bz_ids, runtime.bug_trackers('bugzilla'), noop)
+        remove_bugs(advisory, bz_ids, runtime.get_bug_tracker('bugzilla'), noop)
 
 
 def remove_bugs(advisory, bug_ids, bug_tracker, noop):

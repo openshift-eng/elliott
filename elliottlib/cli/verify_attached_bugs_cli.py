@@ -139,7 +139,7 @@ async def verify_bugs(runtime, verify_bug_status, output, no_verify_blocking_bug
     find_bugs_obj = FindBugsSweep(cve_only=False)
     ocp_bugs = []
     logger.info(f'Using {runtime.assembly} assembly to search bugs')
-    for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
+    for b in [runtime.get_bug_tracker('jira'), runtime.get_bug_tracker('bugzilla')]:
         bugs = find_bugs_obj.search(bug_tracker_obj=b, verbose=runtime.debug)
         logger.info(f"Found {len(bugs)} {b.type} bugs: {[b.id for b in bugs]}")
         ocp_bugs.extend(bugs)
@@ -159,7 +159,7 @@ class BugValidator:
 
     def __init__(self, runtime: Runtime, output: str = 'text'):
         self.runtime = runtime
-        self.target_releases: List[str] = runtime.bug_trackers('jira').config['target_release']
+        self.target_releases: List[str] = runtime.get_bug_tracker('jira').config['target_release']
         self.et_data: Dict[str, Any] = runtime.get_errata_config()
         self.errata_api = AsyncErrataAPI(self.et_data.get("server", constants.errata_url))
         self.problems: List[str] = []
@@ -219,7 +219,7 @@ class BugValidator:
         await asyncio.gather(*futures)
 
     async def _verify_attached_flaws_for(self, advisory_id: int, attached_trackers: Iterable[Bug], attached_flaws: Iterable[Bug]):
-        flaw_bug_tracker = self.runtime.bug_trackers('bugzilla')
+        flaw_bug_tracker = self.runtime.get_bug_tracker('bugzilla')
         brew_api = self.runtime.build_retrying_koji_client()
         tracker_flaws, first_fix_flaw_bugs = get_flaws(flaw_bug_tracker, attached_trackers, brew_api,
                                                        self.runtime.logger)
@@ -309,7 +309,7 @@ class BugValidator:
 
         attached_bug_map = {advisory_id: set() for advisory_id in advisory_ids}
         for bug_tracker_type in ['jira', 'bugzilla']:
-            bug_tracker = self.runtime.bug_trackers(bug_tracker_type)
+            bug_tracker = self.runtime.get_bug_tracker(bug_tracker_type)
             advisory_bug_id_map = {advisory.errata_id: bug_tracker.advisory_bug_ids(advisory)
                                    for advisory in advisories}
             bug_map = bug_tracker.get_bugs_map([bug_id for bug_list in advisory_bug_id_map.values()
@@ -349,16 +349,16 @@ class BugValidator:
             return pattern.match(target_v) and minor_version_tuple(target_v) == next_version
 
         def managed_by_art(b: Bug):
-            components_not_managed_by_art = self.runtime.bug_trackers('jira').component_filter()
+            components_not_managed_by_art = self.runtime.get_bug_tracker('jira').component_filter()
             return b.component not in components_not_managed_by_art
 
         # retrieve blockers and filter to those with correct product and target version
         blockers = []
         if jira_ids:
-            blockers.extend(self.runtime.bug_trackers('jira')
+            blockers.extend(self.runtime.get_bug_tracker('jira')
                             .get_bugs(jira_ids))
         if bz_ids:
-            blockers.extend(self.runtime.bug_trackers('bugzilla')
+            blockers.extend(self.runtime.get_bug_tracker('bugzilla')
                             .get_bugs(bz_ids))
         logger.debug(f"Candidate Blocker bugs found: {[b.id for b in blockers]}")
         blocking_bugs = {}

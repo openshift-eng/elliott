@@ -114,10 +114,10 @@ providing an advisory with the -a/--advisory option.
 
     if jira_ids:
         repair_bugs(jira_ids, original_state, new_state, comment, close_placeholder, noop,
-                    runtime.bug_trackers('jira'))
+                    runtime.get_bug_tracker('jira'))
     if bz_ids:
         repair_bugs(bz_ids, original_state, new_state, comment, close_placeholder, noop,
-                    runtime.bug_trackers('bugzilla'))
+                    runtime.get_bug_tracker('bugzilla'))
 
 
 def repair_bugs(bug_ids, original_state, new_state, comment, close_placeholder, noop, bug_tracker: BugTracker):

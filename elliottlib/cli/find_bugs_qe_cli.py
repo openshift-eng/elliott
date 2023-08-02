@@ -35,7 +35,7 @@ def find_bugs_qe_cli(runtime: Runtime, noop):
     runtime.initialize()
     find_bugs_obj = FindBugsQE()
     exit_code = 0
-    for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
+    for b in [runtime.get_bug_tracker('jira'), runtime.get_bug_tracker('bugzilla')]:
         try:
             find_bugs_qe(runtime, find_bugs_obj, noop, b)
         except Exception as e:
@@ -59,11 +59,21 @@ def find_bugs_qe(runtime, find_bugs_obj, noop, bug_tracker):
         f" expected in the next created {major_version}.{minor_version} nightly and release.")
     for bug in bugs:
         updated = bug_tracker.update_bug_status(bug, 'ON_QA', comment=release_comment, noop=noop)
-        if updated and bug.is_tracker_bug():
-            # leave a special comment for QE
-            comment = """Note for QE:
-This is a CVE bug. Please plan on verifying this bug ASAP.
-A CVE bug shouldn't be dropped from an advisory if QE doesn't have enough time to verify.
-Contact ProdSec if you have questions.
-"""
-            bug_tracker.add_comment(bug.id, comment, private=True, noop=noop)
+        if updated:
+            if bug.is_tracker_bug():
+                # leave a special comment for QE
+                comment = """Note for QE:
+    This is a CVE bug. Please plan on verifying this bug ASAP.
+    A CVE bug shouldn't be dropped from an advisory if QE doesn't have enough time to verify.
+    Contact ProdSec if you have questions.
+    """
+                bug_tracker.add_comment(bug.id, comment, private=True, noop=noop)
+
+            elif bug_tracker.type == 'jira':
+                # If a security level is specified, the bug won't be visible on advisories
+                # Make this explicit in the bug comment. Not applicable for security trackers/flaw bugs
+                security_level = bug.security_level
+                if security_level:
+                    comment = "This is not a public issue, the customer visible advisory will not link the fix." \
+                              "Setting the Security Level to public before the advisory ships will have it included"
+                    bug_tracker.add_comment(bug.id, comment, private=True, noop=noop)

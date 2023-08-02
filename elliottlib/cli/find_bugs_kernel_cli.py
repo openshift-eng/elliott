@@ -48,9 +48,9 @@ class FindBugsKernelCli:
             logger.warning("kernel_bug_sweep is not defined in bug.yml")
             return
         config = KernelBugSweepConfig.parse_obj(raw_config)
-        jira_tracker = self._runtime.bug_trackers("jira")
+        jira_tracker = self._runtime.get_bug_tracker("jira")
         jira_client: JIRA = jira_tracker._client
-        bz_tracker = self._runtime.bug_trackers("bugzilla")
+        bz_tracker = self._runtime.get_bug_tracker("bugzilla")
         bz_client: Bugzilla = bz_tracker._client
         koji_api = self._runtime.build_retrying_koji_client(caching=True)
 

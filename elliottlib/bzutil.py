@@ -227,6 +227,13 @@ class JIRABug(Bug):
     def status(self):
         return self.bug.fields.status.name
 
+    @property
+    def security_level(self):
+        try:
+            return self.bug.fields.security
+        except AttributeError:
+            return None
+
     def is_tracker_bug(self):
         has_keywords = set(constants.TRACKER_BUG_KEYWORDS).issubset(set(self.keywords))
         has_whiteboard_component = bool(self.whiteboard_component)

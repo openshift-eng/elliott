@@ -61,7 +61,7 @@ Use --exclude_status to filter out from default status list.
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
     exit_code = 0
-    for b in [runtime.bug_trackers('jira'), runtime.bug_trackers('bugzilla')]:
+    for b in [runtime.get_bug_tracker('jira'), runtime.get_bug_tracker('bugzilla')]:
         try:
             find_bugs_blocker(runtime, output, find_bugs_obj, b)
         except Exception as e:
