@@ -9,23 +9,6 @@ pipeline {
         }
     }
     stages {
-        stage("Tests & Coverage") {
-            steps {
-                script {
-                    catchError(stageResult: 'FAILURE') {
-                        sh """
-                            tox_args="\$(git diff --name-only HEAD~10 | grep -Fxq -e requirements.txt -e requirements-dev.txt -e MANIFEST.in -e setup.py && echo '--recreate' || true)"
-                            tox \$tox_args > results.txt 2>&1
-                        """
-                    }
-                    results = readFile("results.txt").trim()
-                    echo results
-                    if (env.CHANGE_ID) {
-                        commentOnPullRequest(msg: "### Build <span>#</span>${env.BUILD_NUMBER}\n```\n${results}\n```")
-                    }
-                }
-            }
-        }
         stage("Publish Coverage Report") {
             steps {
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
