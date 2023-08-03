@@ -25,13 +25,13 @@ def _search_issues(jira_client, *args, **kwargs):
 
 class FindBugsKernelCli:
     def __init__(self, runtime: Runtime, trackers: Sequence[str],
-                 clone: bool, reconcile: bool, comment: bool, dry_run: bool):
+                 clone: bool, reconcile: bool, update_tracker: bool, dry_run: bool):
         self._runtime = runtime
         self._logger = runtime.logger
         self.trackers = list(trackers)
         self.clone = clone
         self.reconcile = reconcile
-        self.comment = comment
+        self.update_tracker = update_tracker
         self.dry_run = dry_run
         self._id_bugs: Dict[int, Bug] = {}  # cache for kernel bug; key is bug_id, value is Bug object
         self._tracker_map: Dict[int, Issue] = {}  # bug_id -> KMAINT jira mapping
@@ -57,17 +57,17 @@ class FindBugsKernelCli:
         # Getting KMAINT trackers
         trackers_keys = self.trackers
         trackers: List[Issue] = []
-        if not trackers_keys:
-            logger.info("Searching for open trackers...")
-            trackers = self._find_kmaint_trackers(jira_client, config.tracker_jira.project, config.tracker_jira.labels)
-            trackers_keys = [t.key for t in trackers]
-            logger.info("Found %s tracker(s): %s", len(trackers_keys), trackers_keys)
-        else:
+        if trackers_keys:
             logger.info("Find kernel bugs linked from KMAINT tracker(s): %s", trackers_keys)
             for key in trackers_keys:
                 logger.info("Getting tracker JIRA %s...", key)
                 tracker = jira_client.issue(key)
                 trackers.append(tracker)
+        else:
+            logger.info("Searching for open trackers...")
+            trackers = self._find_kmaint_trackers(jira_client, config.tracker_jira.project, config.tracker_jira.labels)
+            trackers_keys = [t.key for t in trackers]
+            logger.info("Found %s tracker(s): %s", len(trackers_keys), trackers_keys)
 
         # Get kernel bugs linked from KMAINT trackers
         report: Dict[str, Any] = {"kernel_bugs": []}
@@ -86,9 +86,8 @@ class FindBugsKernelCli:
                     "summary": bug.summary,
                     "tracker": tracker,
                 })
-            if self.comment:
-                logger.info("Checking if making a comment on tracker %s is needed...", tracker.key)
-                self._comment_on_tracker(jira_client, tracker, koji_api, config.target_jira)
+            if self.update_tracker:
+                self._update_tracker(jira_client, tracker, koji_api, config.target_jira)
 
         if self.clone and self._id_bugs:
             # Clone kernel bugs into OCP Jira
@@ -175,7 +174,7 @@ class FindBugsKernelCli:
                         jira_client.create_issue_link("Blocks", issue.key, kmaint_tracker)
                     result[bug_id] = [issue]
                 else:
-                    logger.warning("[DRY RUN] Would have created Jira for bug %s", bug_id)
+                    logger.info("[DRY RUN] Would have created Jira for bug %s", bug_id)
             else:  # this bug is already cloned into OCP Jira
                 logger.info("Bug %s is already cloned into OCP: %s", bug_id, [issue.key for issue in found_issues])
                 result[bug_id] = found_issues
@@ -190,7 +189,7 @@ class FindBugsKernelCli:
                     if not self.dry_run:
                         issue.update(fields)
                     else:
-                        logger.warning("[DRY RUN] Would have updated Jira %s to match bug %s", issue.key, bug_id)
+                        logger.info("[DRY RUN] Would have updated Jira %s to match bug %s", issue.key, bug_id)
 
         return result
 
@@ -204,30 +203,24 @@ class FindBugsKernelCli:
             text = f"{bug['tracker']}\t{bug['id']}\t{'N/A' if not cloned_issues else ','.join(cloned_issues)}\t{bug['status']}\t{bug['summary']}"
             print_func(text, file=out)
 
-    def _comment_on_tracker(self, jira_client: JIRA, tracker: Issue, koji_api: koji.ClientSession,
-                            conf: KernelBugSweepConfig.TargetJiraConfig):
+    def _update_tracker(self, jira_client: JIRA, tracker: Issue, koji_api: koji.ClientSession,
+                        conf: KernelBugSweepConfig.TargetJiraConfig):
         logger = self._runtime.logger
+        logger.info("Checking if an update to tracker %s is needed...", tracker.key)
         # Determine which NVRs have the fix. e.g. ["kernel-5.14.0-284.14.1.el9_2"]
         nvrs, candidate, shipped = early_kernel.get_tracker_builds_and_tags(logger, tracker, koji_api, conf)
 
-        tracker_message = None
         if shipped:
-            tracker_message = f"Build(s) {nvrs} was/were already shipped and tagged into {shipped}."
+            early_kernel.process_shipped_tracker(logger, self.dry_run, jira_client, tracker, nvrs, shipped)
         elif candidate:
-            tracker_message = f"Build(s) {nvrs} was/were already tagged into {candidate}."
-        if not tracker_message:
-            logger.info("No need to make a comment on %s", tracker.key)
-            return
-        comments = jira_client.comments(tracker.key)
-        if any(map(lambda comment: comment.body == tracker_message, comments)):
-            logger.info("A comment was already made on %s", tracker.key)
-            return
-        logger.info("Making a comment on tracker %s", tracker.key)
-        if not self.dry_run:
-            jira_client.add_comment(tracker.key, tracker_message)
-            logger.info("Left a comment on tracker %s", tracker.key)
+            early_kernel.comment_on_tracker(
+                logger, self.dry_run, jira_client, tracker,
+                [f"Build(s) {nvrs} was/were already tagged into {candidate}."]
+                # do not reword, see NOTE in method
+            )
         else:
-            logger.warning("[DRY RUN] Would have left a comment on tracker %s", tracker.key)
+            logger.info("No need to update tracker %s", tracker.key)
+            return
 
     @staticmethod
     def _new_jira_fields_from_bug(bug: Bug, ocp_target_version: str, kmaint_tracker: Optional[str], conf: KernelBugSweepConfig.TargetJiraConfig):
@@ -294,10 +287,10 @@ class FindBugsKernelCli:
               is_flag=True,
               default=False,
               help="Update summary, description, etc for already cloned Jira bugs. Must be used with --clone")
-@click.option("--comment",
+@click.option("--update-tracker",
               is_flag=True,
               default=False,
-              help="Make comments on KMAINT trackers")
+              help="Update KMAINT trackers state, links, and comments")
 @click.option("--dry-run",
               is_flag=True,
               default=False,
@@ -306,7 +299,7 @@ class FindBugsKernelCli:
 @click_coroutine
 async def find_bugs_kernel_cli(
         runtime: Runtime, trackers: Tuple[str, ...], clone: bool,
-        reconcile: bool, comment: bool, dry_run: bool):
+        reconcile: bool, update_tracker: bool, dry_run: bool):
     """Find kernel bugs in Bugzilla for weekly kernel release through OCP.
 
     Example 1: Find kernel bugs and print them out
@@ -327,7 +320,7 @@ async def find_bugs_kernel_cli(
         trackers=trackers,
         clone=clone,
         reconcile=reconcile,
-        comment=comment,
+        update_tracker=update_tracker,
         dry_run=dry_run
     )
     await cli.run()

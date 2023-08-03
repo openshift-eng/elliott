@@ -12,6 +12,7 @@ from elliottlib.cli.find_bugs_kernel_cli import FindBugsKernelCli
 from elliottlib.config_model import KernelBugSweepConfig
 from elliottlib.runtime import Runtime
 from elliottlib.bzutil import JIRABugTracker
+from elliottlib import early_kernel
 
 
 class TestFindBugsKernelCli(IsolatedAsyncioTestCase):
@@ -27,7 +28,7 @@ class TestFindBugsKernelCli(IsolatedAsyncioTestCase):
     def test_get_and_filter_bugs(self):
         runtime = MagicMock()
         cli = FindBugsKernelCli(
-            runtime=runtime, trackers=[], clone=True, reconcile=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=[], clone=True, reconcile=True, update_tracker=True, dry_run=False)
         bz_client = MagicMock(spec=Bugzilla)
         bz_client.getbugs.return_value = [
             MagicMock(spec=Bug, id=1, weburl="irrelevant", cf_zstream_target_release=None),
@@ -45,7 +46,7 @@ class TestFindBugsKernelCli(IsolatedAsyncioTestCase):
     def test_find_bugs(self, _get_and_filter_bugs: Mock):
         runtime = MagicMock()
         cli = FindBugsKernelCli(
-            runtime=runtime, trackers=[], clone=True, reconcile=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=[], clone=True, reconcile=True, update_tracker=True, dry_run=False)
         bz_client = MagicMock(spec=Bugzilla)
         tracker = MagicMock(spec=Issue, key="TRACKER-1", fields=MagicMock(
             summary="foo-1.0.1-1.el8_6 and bar-1.0.1-1.el8_6 early delivery via OCP",
@@ -72,7 +73,7 @@ class TestFindBugsKernelCli(IsolatedAsyncioTestCase):
         # Test cloning a bug that has not already been cloned
         runtime = MagicMock()
         cli = FindBugsKernelCli(
-            runtime=runtime, trackers=[], clone=True, reconcile=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=[], clone=True, reconcile=True, update_tracker=True, dry_run=False)
         jira_client = MagicMock(spec=JIRA)
         bugs = [
             MagicMock(spec=Bug, id=1, weburl="https://example.com/1",
@@ -112,7 +113,7 @@ class TestFindBugsKernelCli(IsolatedAsyncioTestCase):
         # Test cloning a bug that has already been cloned
         runtime = MagicMock()
         cli = FindBugsKernelCli(
-            runtime=runtime, trackers=[], clone=True, reconcile=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=[], clone=True, reconcile=True, update_tracker=True, dry_run=False)
         jira_client = MagicMock(spec=JIRA)
         bugs = [
             MagicMock(spec=Bug, id=1, weburl="https://example.com/1",
@@ -168,42 +169,6 @@ TRACKER-1	1	BUG-1	Verified	test bug 1
 TRACKER-1	2	N/A	Verified	test bug 2
 """.strip())
 
-    @patch("elliottlib.brew.get_builds_tags")
-    def test_comment_on_tracker(self, get_builds_tags: Mock):
-        runtime = MagicMock()
-        cli = FindBugsKernelCli(
-            runtime=runtime, trackers=[], clone=True, reconcile=True, comment=True, dry_run=False)
-        jira_client = MagicMock(spec=JIRA)
-        conf = KernelBugSweepConfig.TargetJiraConfig(
-            project="TARGET-PROJECT",
-            component="Target Component",
-            version="4.14", target_release="4.14.z",
-            candidate_brew_tag="fake-candidate", prod_brew_tag="fake-prod")
-        tracker = MagicMock(spec=Issue, key="TRACKER-1", fields=MagicMock(
-            summary="kernel-1.0.1-1.fake and kernel-rt-1.0.1-1.fake early delivery via OCP",
-            description="Fixes bugzilla.redhat.com/show_bug.cgi?id=5 and bz6.",
-        ))
-        koji_api = MagicMock(spec=koji.ClientSession)
-        get_builds_tags.return_value = [
-            [{"name": "irrelevant-1"}, {"name": "fake-candidate"}],
-            [{"name": "irrelevant-2"}, {"name": "fake-candidate"}],
-        ]
-        jira_client.comments.return_value = []
-
-        # Test 1: making a comment
-        cli._comment_on_tracker(jira_client, tracker, koji_api, conf)
-        jira_client.add_comment.assert_called_once_with("TRACKER-1", "Build(s) ['kernel-1.0.1-1.fake', 'kernel-rt-1.0.1-1.fake'] was/were already tagged into fake-candidate.")
-
-        # Test 2: not making a comment because a comment has been made
-        jira_client.comments.return_value = [
-            MagicMock(body="irrelevant 1"),
-            MagicMock(body="Build(s) ['kernel-1.0.1-1.fake', 'kernel-rt-1.0.1-1.fake'] was/were already tagged into fake-candidate."),
-            MagicMock(body="irrelevant 2"),
-        ]
-        jira_client.add_comment.reset_mock()
-        cli._comment_on_tracker(jira_client, tracker, koji_api, conf)
-        jira_client.add_comment.assert_not_called()
-
     def test_new_jira_fields_from_bug(self):
         bug = MagicMock(spec=Bug, id=12345, cf_zstream_target_release="8.6.0",
                         weburl="https://example.com/12345",
@@ -242,11 +207,11 @@ TRACKER-1	2	N/A	Verified	test bug 2
 
     @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._print_report")
     @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._clone_bugs")
-    @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._comment_on_tracker")
+    @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._update_tracker")
     @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._find_bugs")
     @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._find_kmaint_trackers")
     async def test_run_without_specified_trackers(
-            self, _find_kmaint_trackers: Mock, _find_bugs: Mock, _comment_on_tracker: Mock,
+            self, _find_kmaint_trackers: Mock, _find_bugs: Mock, _update_tracker: Mock,
             _clone_bugs: Mock, _print_report: Mock):
         runtime = MagicMock(
             autospec=Runtime, assembly_type=AssemblyTypes.STREAM,
@@ -292,18 +257,18 @@ TRACKER-1	2	N/A	Verified	test bug 2
                       summary="fake summary 10003", description="fake description 10003"),
         ]
         cli = FindBugsKernelCli(
-            runtime=runtime, trackers=[], clone=True, reconcile=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=[], clone=True, reconcile=True, update_tracker=True, dry_run=False)
         await cli.run()
-        _comment_on_tracker.assert_called_once_with(ANY, _find_kmaint_trackers.return_value[0], ANY, ANY)
+        _update_tracker.assert_called_once_with(ANY, _find_kmaint_trackers.return_value[0], ANY, ANY)
         _clone_bugs.assert_called_once_with(ANY, _find_bugs.return_value, ANY)
 
     @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._print_report")
     @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._clone_bugs")
-    @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._comment_on_tracker")
+    @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._update_tracker")
     @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._find_bugs")
     @patch("elliottlib.cli.find_bugs_kernel_cli.FindBugsKernelCli._find_kmaint_trackers")
     async def test_run_with_specified_trackers(
-            self, _find_kmaint_trackers: Mock, _find_bugs: Mock, _comment_on_tracker: Mock,
+            self, _find_kmaint_trackers: Mock, _find_bugs: Mock, _update_tracker: Mock,
             _clone_bugs: Mock, _print_report: Mock):
         runtime = MagicMock(
             autospec=Runtime, assembly_type=AssemblyTypes.STREAM,
@@ -349,8 +314,8 @@ TRACKER-1	2	N/A	Verified	test bug 2
                       summary="fake summary 10003", description="fake description 10003"),
         ]
         cli = FindBugsKernelCli(
-            runtime=runtime, trackers=["TRACKER-999"], clone=True, reconcile=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=["TRACKER-999"], clone=True, reconcile=True, update_tracker=True, dry_run=False)
         await cli.run()
-        _comment_on_tracker.assert_called_once()
+        _update_tracker.assert_called_once()
         _clone_bugs.assert_called_once_with(ANY, _find_bugs.return_value, ANY)
         _find_kmaint_trackers.assert_not_called()

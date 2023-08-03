@@ -9,6 +9,7 @@ from elliottlib.assembly import AssemblyTypes
 from elliottlib.cli.find_bugs_kernel_clones_cli import FindBugsKernelClonesCli
 from elliottlib.config_model import KernelBugSweepConfig
 from elliottlib.bzutil import JIRABugTracker
+from elliottlib import early_kernel
 
 
 class TestFindBugsKernelClonesCli(IsolatedAsyncioTestCase):
@@ -34,7 +35,7 @@ class TestFindBugsKernelClonesCli(IsolatedAsyncioTestCase):
     def test_get_jira_bugs(self):
         runtime = MagicMock()
         cli = FindBugsKernelClonesCli(
-            runtime=runtime, trackers=[], bugs=[], move=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=[], bugs=[], move=True, update_tracker=True, dry_run=False)
         jira_client = MagicMock(spec=JIRA)
         component = MagicMock()
         component.configure_mock(name="RHCOS")
@@ -64,12 +65,14 @@ class TestFindBugsKernelClonesCli(IsolatedAsyncioTestCase):
         jira_client.search_issues.assert_called_once_with(expected_jql, maxResults=0)
         self.assertEqual([issue.key for issue in actual], ["FOO-1", "FOO-2", "FOO-3"])
 
-    @patch("elliottlib.cli.find_bugs_kernel_clones_cli.FindBugsKernelClonesCli._move_jira")
+    @patch("elliottlib.early_kernel.process_shipped_tracker")
+    @patch("elliottlib.early_kernel.move_jira")
     @patch("elliottlib.brew.get_builds_tags")
-    def test_update_jira_bugs(self, get_builds_tags: Mock, _move_jira: Mock):
+    def test_update_jira_bugs(self, get_builds_tags: Mock, _move_jira: Mock,
+                              process_shipped_tracker: Mock):
         runtime = MagicMock()
         jira_client = MagicMock(spec=JIRA)
-        jira_client.issue.return_value = MagicMock(spec=Issue, ** {
+        tracker = jira_client.issue.return_value = MagicMock(spec=Issue, ** {
             "key": "KMAINT-1",
             "fields": MagicMock(),
             "fields.project.key": "KMAINT",
@@ -78,7 +81,7 @@ class TestFindBugsKernelClonesCli(IsolatedAsyncioTestCase):
             "fields.description": "Fixes bugzilla.redhat.com/show_bug.cgi?id=5 and bz6.",
         })
         cli = FindBugsKernelClonesCli(
-            runtime=runtime, trackers=[], bugs=[], move=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=[], bugs=[], move=True, update_tracker=True, dry_run=False)
         bugs = [
             MagicMock(spec=Issue, **{
                 "key": "FOO-1", "fields": MagicMock(),
@@ -103,24 +106,19 @@ class TestFindBugsKernelClonesCli(IsolatedAsyncioTestCase):
             [{"name": "irrelevant-2"}, {"name": "rhaos-4.14-rhel-9-candidate"}],
         ]
         cli._update_jira_bugs(jira_client, bugs, koji_api, self._config)
-        _move_jira.assert_any_call(jira_client, bugs[0], "MODIFIED", ANY)
-        _move_jira.assert_any_call(jira_client, bugs[1], "MODIFIED", ANY)
+        _move_jira.assert_any_call(ANY, False, jira_client, bugs[0], "MODIFIED", ANY)
+        _move_jira.assert_any_call(ANY, False, jira_client, bugs[1], "MODIFIED", ANY)
 
-    def test_move_jira(self):
-        runtime = MagicMock()
-        jira_client = MagicMock(spec=JIRA)
-        cli = FindBugsKernelClonesCli(
-            runtime=runtime, trackers=[], bugs=[], move=True, comment=True, dry_run=False)
-        comment = "Test message"
-        issue = MagicMock(spec=Issue, **{
-            "key": "FOO-1", "fields": MagicMock(),
-            "fields.labels": ["art:bz#1", "art:kmaint:KMAINT-1"],
-            "fields.status.name": "New",
-        })
-        jira_client.current_user.return_value = "fake-user"
-        cli._move_jira(jira_client, issue, "MODIFIED", comment)
-        jira_client.assign_issue.assert_called_once_with("FOO-1", "fake-user")
-        jira_client.transition_issue.assert_called_once_with("FOO-1", "MODIFIED")
+        # now with shipped
+        _move_jira.reset_mock()
+        get_builds_tags.return_value = [
+            [{"name": "rhaos-4.14-rhel-9"}, {"name": "rhaos-4.14-rhel-9-candidate"}],
+            [{"name": "rhaos-4.14-rhel-9"}, {"name": "rhaos-4.14-rhel-9-candidate"}],
+        ]
+        cli._update_jira_bugs(jira_client, bugs, koji_api, self._config)
+        _move_jira.assert_any_call(ANY, False, jira_client, bugs[0], "CLOSED", ANY)
+        process_shipped_tracker.assert_called_once_with(ANY, False, ANY, tracker, ANY,
+                                                        "rhaos-4.14-rhel-9")
 
     def test_print_report(self):
         report = {
@@ -163,7 +161,6 @@ FOO-2	ON_QA	test bug 2
                 },
             }
         )
-        jira_client = runtime.bug_trackers.return_value._client
         found_bugs = [
             MagicMock(spec=Issue, **{
                 "key": "FOO-1", "fields": MagicMock(),
@@ -187,9 +184,9 @@ FOO-2	ON_QA	test bug 2
         ]
         _search_for_jira_bugs.return_value = found_bugs
         cli = FindBugsKernelClonesCli(
-            runtime=runtime, trackers=[], bugs=[], move=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=[], bugs=[], move=True, update_tracker=True, dry_run=False)
         cli.run()
-        _update_jira_bugs.assert_called_once_with(jira_client, found_bugs, ANY, ANY)
+        _update_jira_bugs.assert_called_once_with(ANY, found_bugs, ANY, ANY)
         expected_report = {
             'jira_issues': [
                 {'key': 'FOO-1', 'summary': 'Fake bug 1', 'status': 'New'},
@@ -226,7 +223,6 @@ FOO-2	ON_QA	test bug 2
                 },
             }
         )
-        jira_client = runtime.bug_trackers.return_value._client
         found_bugs = [
             MagicMock(spec=Issue, **{
                 "key": "FOO-1", "fields": MagicMock(),
@@ -250,9 +246,10 @@ FOO-2	ON_QA	test bug 2
         ]
         _get_jira_bugs.return_value = found_bugs
         cli = FindBugsKernelClonesCli(
-            runtime=runtime, trackers=[], bugs=["FOO-1", "FOO-2", "FOO-3"], move=True, comment=True, dry_run=False)
+            runtime=runtime, trackers=[], bugs=["FOO-1", "FOO-2", "FOO-3"], move=True,
+            update_tracker=True, dry_run=False)
         cli.run()
-        _update_jira_bugs.assert_called_once_with(jira_client, found_bugs, ANY, ANY)
+        _update_jira_bugs.assert_called_once_with(ANY, found_bugs, ANY, ANY)
         expected_report = {
             'jira_issues': [
                 {'key': 'FOO-1', 'summary': 'Fake bug 1', 'status': 'New'},

@@ -25,19 +25,19 @@ from elliottlib.bzutil import JIRABugTracker
 
 class FindBugsKernelClonesCli:
     def __init__(self, runtime: Runtime, trackers: Sequence[str], bugs: Sequence[str],
-                 move: bool, comment: bool, dry_run: bool):
+                 move: bool, update_tracker: bool, dry_run: bool):
         self._runtime = runtime
         self._logger = runtime.logger
         self.trackers = list(trackers)
         self.bugs = list(bugs)
         self.move = move
-        self.comment = comment
+        self.update_tracker = update_tracker
         self.dry_run = dry_run
 
     def run(self):
         logger = self._logger
-        if self.comment and not self.move:
-            raise ElliottFatalError("--comment must be used with --move")
+        if self.update_tracker and not self.move:
+            raise ElliottFatalError("--update-tracker must be used with --move")
         if self._runtime.assembly_type is not AssemblyTypes.STREAM:
             raise ElliottFatalError("This command only supports stream assembly.")
         group_config = self._runtime.group_config
@@ -140,7 +140,7 @@ class FindBugsKernelClonesCli:
             tracker_bugs.setdefault(tracker.key, []).append(bug)
         return trackers, tracker_bugs
 
-    def _process_shipped_bugs(self, logger, bug_keys, bugs, jira_client: JIRA, nvrs, prod_brew_tag) -> str:
+    def _process_shipped_bugs(self, logger, bug_keys, bugs, jira_client: JIRA, nvrs, prod_brew_tag):
         # when NVRs are shipped, ensure the associated bugs are closed with a comment
         logger.info("Build(s) %s shipped (tagged into %s). Moving bug Jira(s) %s to CLOSED...", nvrs, prod_brew_tag, bug_keys)
         for bug in bugs:
@@ -148,27 +148,11 @@ class FindBugsKernelClonesCli:
             if current_status.lower() != "closed":
                 new_status = 'CLOSED'
                 message = f"Elliott changed bug status from {current_status} to {new_status} because {nvrs} was/were already shipped and tagged into {prod_brew_tag}."
-                self._move_jira(jira_client, bug, new_status, message)
+                early_kernel.move_jira(logger, self.dry_run, jira_client, bug, new_status, message)
             else:
                 logger.info("No need to move %s because its status is %s", bug.key, current_status)
-        return f"Build(s) {nvrs} was/were already shipped and tagged into {prod_brew_tag}."  # see wording NOTE
 
-    def _process_shipped_tracker(self, logger, tracker, jira_client: JIRA, nvrs) -> List[str]:
-        # when NVRs are shipped, ensure the associated tracker is closed with a comment
-        # and a link to any advisory that shipped them
-        logger.info("Build(s) %s shipped (tagged into %s). Looking for advisories...", nvrs)
-        tracker_messages = []
-
-        logger.info("Moving tracker Jira %s to CLOSED...")
-        current_status: str = tracker.fields.status.name
-        if current_status.lower() != "closed":
-            self._move_jira(jira_client, tracker, "CLOSED")
-        else:
-            logger.info("No need to move %s because its status is %s", tracker.key, current_status)
-
-        return tracker_messages
-
-    def _process_candidate_bugs(self, logger, bug_keys, bugs, jira_client: JIRA, nvrs, candidate_brew_tag) -> str:
+    def _process_candidate_bugs(self, logger, bug_keys, bugs, jira_client: JIRA, nvrs, candidate_brew_tag):
         # when NVRs are tagged, ensure the associated bugs are modified with a comment
         logger.info("Build(s) %s tagged into %s. Moving Jira(s) %s to MODIFIED...", nvrs, candidate_brew_tag, bug_keys)
         for bug in bugs:
@@ -176,10 +160,9 @@ class FindBugsKernelClonesCli:
             if current_status.lower() in {"new", "assigned", "post"}:
                 new_status = 'MODIFIED'
                 message = f"Elliott changed bug status from {current_status} to {new_status} because {nvrs} was/were already tagged into {candidate_brew_tag}."
-                self._move_jira(jira_client, bug, new_status, message)
+                early_kernel.move_jira(logger, self.dry_run, jira_client, bug, new_status, message)
             else:
                 logger.info("No need to move %s because its status is %s", bug.key, current_status)
-        return f"Build(s) {nvrs} was/were already tagged into {candidate_brew_tag}."  # see wording NOTE
 
     def _update_jira_bugs(self, jira_client: JIRA, found_bugs: List[Issue], koji_api: koji.ClientSession, config: KernelBugSweepConfig):
         logger = self._runtime.logger
@@ -189,42 +172,18 @@ class FindBugsKernelClonesCli:
             nvrs, candidate, shipped = early_kernel.get_tracker_builds_and_tags(logger, tracker, koji_api, config.target_jira)
             bugs = tracker_bugs[tracker_id]
             bug_keys = [bug.key for bug in bugs]
-            tracker_message = []
             if shipped:
-                tracker_message.append(self._process_shipped_bugs(logger, bug_keys, bugs, jira_client, nvrs, shipped))
-                tracker_message.extend(self._process_shipped_tracker(logger, tracker, jira_client, nvrs))
+                self._process_shipped_bugs(logger, bug_keys, bugs, jira_client, nvrs, shipped)
+                if self.update_tracker:
+                    early_kernel.process_shipped_tracker(logger, self.dry_run, jira_client, tracker, nvrs, shipped)
             elif candidate:
-                tracker_message.append(self._process_candidate_bugs(logger, bug_keys, bugs, jira_client, nvrs, candidate))
-
-            if self.comment and tracker_message:
-                logger.info("Checking if making a comment on tracker %s is needed", tracker.key)
-                # wording NOTE: this logic will re-comment on past bugs if the wording is not
-                # exactly as previously commented. think long and hard before changing the wording
-                # of any of these comments.
-                comments = jira_client.comments(tracker.key)
-                for message in tracker_message:
-                    if any(map(lambda comment: comment.body == message, comments)):
-                        logger.info("A comment was already made on %s", tracker.key)
-                        continue
-                    logger.info("Making a comment on tracker %s", tracker.key)
-                    if self.dry_run:
-                        logger.warning("[DRY RUN] Would have left a comment on tracker %s", tracker.key)
-                    else:
-                        jira_client.add_comment(tracker.key, message)
-                        logger.info("Left a comment on tracker %s", tracker.key)
-
-    def _move_jira(self, jira_client: JIRA, issue: Issue, new_status: str, comment: Optional[str]):
-        logger = self._runtime.logger
-        current_status: str = issue.fields.status.name
-        logger.info("Moving %s from %s to %s", issue.key, current_status, new_status)
-        if self.dry_run:
-            logger.warning("[DRY RUN] Would have moved Jira %s from %s to %s", issue.key, current_status, new_status)
-        else:
-            jira_client.assign_issue(issue.key, jira_client.current_user())
-            jira_client.transition_issue(issue.key, new_status)
-            if comment:
-                jira_client.add_comment(issue.key, comment)
-            logger.info("Moved %s from %s to %s", issue.key, current_status, new_status)
+                self._process_candidate_bugs(logger, bug_keys, bugs, jira_client, nvrs, candidate)
+                if self.update_tracker:
+                    early_kernel.comment_on_tracker(
+                        logger, self.dry_run, jira_client, tracker,
+                        [f"Build(s) {nvrs} was/were already tagged into {candidate}."]
+                        # do not reword, see NOTE in method
+                    )
 
     @staticmethod
     def _print_report(report: Dict, out: TextIO):
@@ -244,10 +203,10 @@ class FindBugsKernelClonesCli:
               is_flag=True,
               default=False,
               help="Auto move Jira bugs to MODIFIED or CLOSED")
-@click.option("--comment",
+@click.option("--update-tracker",
               is_flag=True,
               default=False,
-              help="Make comments on KMAINT trackers")
+              help="Update KMAINT trackers state, links, and comments")
 @click.option("--dry-run",
               is_flag=True,
               default=False,
@@ -255,7 +214,7 @@ class FindBugsKernelClonesCli:
 @click.pass_obj
 def find_bugs_kernel_clones_cli(
         runtime: Runtime, trackers: Tuple[str, ...], issues: Tuple[str, ...],
-        move: bool, comment: bool, dry_run: bool):
+        move: bool, update_tracker: bool, dry_run: bool):
     """Find cloned kernel bugs in JIRA for weekly kernel release through OCP.
 
     Example 1: List all bugs in JIRA
@@ -266,9 +225,9 @@ def find_bugs_kernel_clones_cli(
     \b
         $ elliott -g openshift-4.14 find-bugs:kernel-clones --move
 
-    Example 3: Move bugs and leave a comment on the KMAINT tracker
+    Example 3: Move bugs and update the KMAINT tracker
     \b
-        $ elliott -g openshift-4.14 find-bugs:kernel-clones --move --comment
+        $ elliott -g openshift-4.14 find-bugs:kernel-clones --move --update-tracker
     """
     runtime.initialize(mode="none")
     cli = FindBugsKernelClonesCli(
@@ -276,7 +235,7 @@ def find_bugs_kernel_clones_cli(
         trackers=trackers,
         bugs=issues,
         move=move,
-        comment=comment,
+        update_tracker=update_tracker,
         dry_run=dry_run
     )
     cli.run()
