@@ -218,8 +218,7 @@ class FindBugsSweepTestCase(unittest.IsolatedAsyncioTestCase):
             self.fail(t)
 
     @patch('elliottlib.bzutil.JIRABugTracker.filter_attached_bugs')
-    @patch('elliottlib.bzutil.BugzillaBugTracker.filter_attached_bugs')
-    def test_find_bugs_sweep_default_advisories(self, bugzilla_filter_mock, jira_filter_mock):
+    def test_find_bugs_sweep_default_advisories(self, jira_filter_mock):
         runner = CliRunner()
         image_bugs = [flexmock(id=1), flexmock(id=2)]
         rpm_bugs = [flexmock(id=3), flexmock(id=4)]
@@ -236,13 +235,6 @@ class FindBugsSweepTestCase(unittest.IsolatedAsyncioTestCase):
         })
         flexmock(Runtime).should_receive("get_default_advisories").and_return({'image': 123, 'rpm': 123, 'extras': 123,
                                                                               'metadata': 123})
-
-        # bz mocks
-        flexmock(BugzillaBugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})
-        flexmock(BugzillaBugTracker).should_receive("login")
-        flexmock(BugzillaBugTracker).should_receive("search").and_return(image_bugs + rpm_bugs + extras_bugs)
-        flexmock(BugzillaBugTracker).should_receive("attach_bugs").times(3).and_return()
-        bugzilla_filter_mock.return_value = []
 
         # jira mocks
         flexmock(JIRABugTracker).should_receive("get_config").and_return({'target_release': ['4.6.z']})

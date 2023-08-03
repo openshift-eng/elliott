@@ -33,16 +33,7 @@ def find_bugs_qe_cli(runtime: Runtime, noop):
 
 """
     runtime.initialize()
-    find_bugs_obj = FindBugsQE()
-    exit_code = 0
-    for b in [runtime.get_bug_tracker('jira'), runtime.get_bug_tracker('bugzilla')]:
-        try:
-            find_bugs_qe(runtime, find_bugs_obj, noop, b)
-        except Exception as e:
-            LOGGER.error(traceback.format_exc())
-            LOGGER.error(f'exception with {b.type} bug tracker: {e}')
-            exit_code = 1
-    sys.exit(exit_code)
+    find_bugs_qe(runtime, FindBugsQE(), noop, runtime.get_bug_tracker('jira'))
 
 
 def find_bugs_qe(runtime, find_bugs_obj, noop, bug_tracker):

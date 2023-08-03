@@ -125,19 +125,8 @@ advisory with the --add option.
     find_bugs_obj.include_status(include_status)
     find_bugs_obj.exclude_status(exclude_status)
 
-    bugs: type_bug_list = []
-    errors = []
-    for b in [runtime.get_bug_tracker('jira'), runtime.get_bug_tracker('bugzilla')]:
-        try:
-            bugs.extend(await find_and_attach_bugs(runtime, advisory_id, default_advisory_type, major_version, find_bugs_obj,
-                        output, brew_event, noop, count_advisory_attach_flags, b))
-        except Exception as e:
-            errors.append(e)
-            logger.error(traceback.format_exc())
-            logger.error(f'exception with {b.type} bug tracker: {e}')
-
-    if errors:
-        raise ElliottFatalError(f"Error finding or attaching bugs: {errors}. See logs for more information.")
+    bugs = await find_and_attach_bugs(runtime, advisory_id, default_advisory_type, major_version, find_bugs_obj,
+                                      output, brew_event, noop, count_advisory_attach_flags, runtime.get_bug_tracker('jira'))
 
     if not bugs:
         logger.info('No bugs found')
